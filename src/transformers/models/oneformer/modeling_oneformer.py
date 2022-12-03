@@ -14,42 +14,43 @@
 # limitations under the License.
 """ PyTorch OneFormer model."""
 import copy
-import collections.abc
 import math
+import warnings
 from dataclasses import dataclass
-from collections import OrderedDict
 from numbers import Number
 from typing import Dict, List, Optional, Tuple
-import torch.nn.functional as F
-import warnings
+
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-import torch.distributed as dist
 from torch.cuda.amp import autocast
-from transformers.utils import logging
-from timm.models.layers import trunc_normal_
+
 from einops import rearrange
+from timm.models.layers import trunc_normal_
+from transformers.utils import logging
+
 from ...activations import ACT2FN
-from ...modeling_outputs import  BaseModelOutput
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_ninja_available,
     is_scipy_available,
     is_torch_cuda_available,
-    is_ninja_available,
     replace_return_docstrings,
     requires_backends,
 )
-from .backbone_swin_oneformer import OneFormerSwinModel, OneFormerSwinEncoder
 from .backbone_dinat_oneformer import OneFormerDinatModel
+from .backbone_swin_oneformer import OneFormerSwinEncoder, OneFormerSwinModel
 from .configuration_oneformer import OneFormerConfig
 from .load_custom import load_cuda_kernels
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -62,14 +63,13 @@ ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all OneFormer models at https://huggingface.co/models?filter=oneformer
 ]
 
-################## Utilities #################
+# Utilities #
 
-# Copied from transformers.models.maskformer.modeling_maskformer
+
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr
 if is_torch_cuda_available() and is_ninja_available():
     logger.info("Loading custom CUDA kernels...")
     try:
@@ -86,7 +86,6 @@ def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-# Copied from transformers.models.detr.modeling_deformable_detr.ms_deform_attn_core_pytorch
 def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations, attention_weights):
     # for debug and test only,
     # need to use cuda version instead
@@ -97,16 +96,17 @@ def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations,
     sampling_value_list = []
     for lid_, (H_, W_) in enumerate(value_spatial_shapes):
         # N_, H_*W_, M_, D_ -> N_, H_*W_, M_*D_ -> N_, M_*D_, H_*W_ -> N_*M_, D_, H_, W_
-        value_l_ = value_list[lid_].flatten(2).transpose(1, 2).reshape(N_*M_, D_, H_, W_)
+        value_l_ = value_list[lid_].flatten(2).transpose(1, 2).reshape(N_ * M_, D_, H_, W_)
         # N_, Lq_, M_, P_, 2 -> N_, M_, Lq_, P_, 2 -> N_*M_, Lq_, P_, 2
         sampling_grid_l_ = sampling_grids[:, :, :, lid_].transpose(1, 2).flatten(0, 1)
         # N_*M_, D_, Lq_, P_
-        sampling_value_l_ = F.grid_sample(value_l_, sampling_grid_l_,
-                                          mode='bilinear', padding_mode='zeros', align_corners=False)
+        sampling_value_l_ = F.grid_sample(
+            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+        )
         sampling_value_list.append(sampling_value_l_)
     # (N_, Lq_, M_, L_, P_) -> (N_, M_, Lq_, L_, P_) -> (N_, M_, 1, Lq_, L_*P_)
-    attention_weights = attention_weights.transpose(1, 2).reshape(N_*M_, 1, Lq_, L_*P_)
-    output = (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights).sum(-1).view(N_, M_*D_, Lq_)
+    attention_weights = attention_weights.transpose(1, 2).reshape(N_ * M_, 1, Lq_, L_ * P_)
+    output = (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights).sum(-1).view(N_, M_ * D_, Lq_)
     return output.transpose(1, 2).contiguous()
 
 
@@ -114,7 +114,7 @@ def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations,
 def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     r"""
     Compute the DICE loss, similar to generalized IOU for masks as follows:
-    
+
     $$ \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}} $$
 
     In practice, since `labels` is a binary mask, (only 0s and 1s), dice can be computed as follow
@@ -139,6 +139,7 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     loss = 1 - (numerator + 1) / (denominator + 1)
     loss = loss.sum() / num_masks
     return loss
+
 
 # refactored from original implementation
 def sigmoid_ce_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
@@ -204,15 +205,9 @@ def pair_wise_sigmoid_ce_loss(inputs: Tensor, labels: Tensor) -> Tensor:
         `torch.Tensor`: The computed loss between each pairs.
     """
     hw = inputs.shape[1]
-    pos = F.binary_cross_entropy_with_logits(
-        inputs, torch.ones_like(inputs), reduction="none"
-    )
-    neg = F.binary_cross_entropy_with_logits(
-        inputs, torch.zeros_like(inputs), reduction="none"
-    )
-    loss = torch.einsum("nc,mc->nm", pos, labels) + torch.einsum(
-        "nc,mc->nm", neg, (1 - labels)
-    )
+    pos = F.binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
+    neg = F.binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
+    loss = torch.einsum("nc,mc->nm", pos, labels) + torch.einsum("nc,mc->nm", neg, (1 - labels))
     return loss / hw
 
 
@@ -222,8 +217,8 @@ def calculate_uncertainty(logits):
         foreground class in `classes`.
     Args:
         logits (Tensor): A tensor of shape (R, 1, ...) for class-specific or
-            class-agnostic, where R is the total number of predicted masks in all images and C is
-            the number of foreground classes. The values are logits.
+            class-agnostic, where R is the total number of predicted masks in all images and C is the number of
+            foreground classes. The values are logits.
     Returns:
         scores (Tensor): A tensor of shape (R, 1, ...) that contains uncertainty scores with
             the most uncertain locations having the highest uncertainty score.
@@ -235,17 +230,16 @@ def calculate_uncertainty(logits):
 
 def point_sample(input, point_coords, **kwargs):
     """
-    A wrapper around :function:`torch.nn.functional.grid_sample` to support 3D point_coords tensors.
-    Unlike :function:`torch.nn.functional.grid_sample` it assumes `point_coords` to lie inside
-    [0, 1] x [0, 1] square.
     Args:
-        input (Tensor): A tensor of shape (N, C, H, W) that contains features map on a H x W grid.
-        point_coords (Tensor): A tensor of shape (N, P, 2) or (N, Hgrid, Wgrid, 2) that contains
-        [0, 1] x [0, 1] normalized point coordinates.
+    A wrapper around :function:`torch.nn.functional.grid_sample` to support 3D point_coords tensors. Unlike
+    :function:`torch.nn.functional.grid_sample` it assumes `point_coords` to lie inside [0, 1] x [0, 1] square.
+        input (Tensor): A tensor of shape (N, C, H, W) that contains features map on a H x W grid. point_coords
+        (Tensor): A tensor of shape (N, P, 2) or (N, Hgrid, Wgrid, 2) that contains [0, 1] x [0, 1] normalized point
+        coordinates.
     Returns:
         output (Tensor): A tensor of shape (N, C, P) or (N, C, Hgrid, Wgrid) that contains
-            features for points in `point_coords`. The features are obtained via bilinear
-            interplation from `input` the same way as :function:`torch.nn.functional.grid_sample`.
+            features for points in `point_coords`. The features are obtained via bilinear interplation from `input` the
+            same way as :function:`torch.nn.functional.grid_sample`.
     """
     add_dim = False
     if point_coords.dim() == 3:
@@ -256,22 +250,20 @@ def point_sample(input, point_coords, **kwargs):
         output = output.squeeze(3)
     return output
 
+
 def get_uncertain_point_coords_with_randomness(
     coarse_logits, uncertainty_func, num_points, oversample_ratio, importance_sample_ratio
 ):
     """
     Sample points in [0, 1] x [0, 1] coordinate space based on their uncertainty. The unceratinties
-        are calculated for each point using 'uncertainty_func' function that takes point's logit
-        prediction as input.
-    See PointRend paper for details.
+        are calculated for each point using 'uncertainty_func' function that takes point's logit prediction as input.
     Args:
+    See PointRend paper for details.
         coarse_logits (Tensor): A tensor of shape (N, C, Hmask, Wmask) or (N, 1, Hmask, Wmask) for
             class-specific or class-agnostic prediction.
         uncertainty_func: A function that takes a Tensor of shape (N, C, P) or (N, 1, P) that
-            contains logit predictions for P points and returns their uncertainties as a Tensor of
-            shape (N, 1, P).
-        num_points (int): The number of points P to sample.
-        oversample_ratio (int): Oversampling parameter.
+            contains logit predictions for P points and returns their uncertainties as a Tensor of shape (N, 1, P).
+        num_points (int): The number of points P to sample. oversample_ratio (int): Oversampling parameter.
         importance_sample_ratio (float): Ratio of points that are sampled via importnace sampling.
     Returns:
         point_coords (Tensor): A tensor of shape (N, P, 2) that contains the coordinates of P
@@ -296,9 +288,7 @@ def get_uncertain_point_coords_with_randomness(
     idx = torch.topk(point_uncertainties[:, 0, :], k=num_uncertain_points, dim=1)[1]
     shift = num_sampled * torch.arange(num_boxes, dtype=torch.long, device=coarse_logits.device)
     idx += shift[:, None]
-    point_coords = point_coords.view(-1, 2)[idx.view(-1), :].view(
-        num_boxes, num_uncertain_points, 2
-    )
+    point_coords = point_coords.view(-1, 2)[idx.view(-1), :].view(num_boxes, num_uncertain_points, 2)
     if num_random_points > 0:
         point_coords = torch.cat(
             [
@@ -309,7 +299,8 @@ def get_uncertain_point_coords_with_randomness(
         )
     return point_coords
 
-################## Loss and Matcher Classes #################
+
+# Loss and Matcher Classes #
 
 # refactored from original implementation
 class OneFormerHungarianMatcher(nn.Module):
@@ -320,7 +311,9 @@ class OneFormerHungarianMatcher(nn.Module):
     un-matched (and thus treated as non-objects).
     """
 
-    def __init__(self, cost_class: float = 1.0, cost_mask: float = 1.0, cost_dice: float = 1.0, num_points: int = 12544):
+    def __init__(
+        self, cost_class: float = 1.0, cost_mask: float = 1.0, cost_dice: float = 1.0, num_points: int = 12544
+    ):
         """Creates the matcher
 
         Params:
@@ -383,7 +376,7 @@ class OneFormerHungarianMatcher(nn.Module):
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class = -pred_probs[:, labels]
-            
+
             pred_mask = pred_mask[:, None]
             target_mask = target_mask[:, None].to(pred_mask.device)
 
@@ -412,7 +405,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 # Compute the dice loss
                 cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
                 # final cost matrix
-                cost_matrix = (self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice)
+                cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
                 cost_matrix = cost_matrix.reshape(num_queries, -1).cpu()
                 # do the assigmented using the hungarian algorithm in scipy
                 assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
@@ -444,10 +437,10 @@ class OneFormerLoss(nn.Module):
         matcher: OneFormerHungarianMatcher,
         weight_dict: Dict[str, float],
         eos_coef: float,
-        num_points: int, 
-        oversample_ratio: float, 
-        importance_sample_ratio: float, 
-        contrastive_temperature: float = None
+        num_points: int,
+        oversample_ratio: float,
+        importance_sample_ratio: float,
+        contrastive_temperature: float = None,
     ):
         """
         The OneFormer Loss.
@@ -530,8 +523,6 @@ class OneFormerLoss(nn.Module):
         """
 
         image_queries = contrastive_queries_logits.float()
-        
-        batch_size = image_queries.shape[0]
 
         # [B, C]
         image_queries = F.normalize(image_queries.flatten(1), dim=-1)
@@ -619,7 +610,7 @@ class OneFormerLoss(nn.Module):
         pred_masks = nn.functional.interpolate(
             pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
         )
-        
+
         pred_masks = pred_masks[:, None]
         target_masks = target_masks[:, None]
 
@@ -709,7 +700,7 @@ class OneFormerLoss(nn.Module):
             if `use_auxiliary_loss` was set to `true` in [`OneFormerConfig`], the dictionary contains addional losses
             for each auxiliary predictions.
         """
-        
+
         # retrieve the matching between the outputs of the last layer and the labels
         indices = self.matcher(masks_queries_logits, class_queries_logits, mask_labels, class_labels)
         # compute the average number of target masks for normalization purposes
@@ -727,7 +718,15 @@ class OneFormerLoss(nn.Module):
             for idx, aux_outputs in enumerate(auxiliary_predictions):
                 masks_queries_logits = aux_outputs["masks_queries_logits"]
                 class_queries_logits = aux_outputs["class_queries_logits"]
-                loss_dict = self.forward(masks_queries_logits, class_queries_logits, None, mask_labels, class_labels, None, calculate_contrastive_loss=False)
+                loss_dict = self.forward(
+                    masks_queries_logits,
+                    class_queries_logits,
+                    None,
+                    mask_labels,
+                    class_labels,
+                    None,
+                    calculate_contrastive_loss=False,
+                )
                 loss_dict = {f"{key}_{idx}": value for key, value in loss_dict.items()}
                 losses.update(loss_dict)
 
@@ -740,16 +739,17 @@ class OneFormerLoss(nn.Module):
         num_masks = sum([len(classes) for classes in class_labels])
         num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         return num_masks_pt
-    
 
-################## Data Classes #################
 
-@dataclass    
+# Data Classes #
+
+
+@dataclass
 class OneFormerTransformerDecoderOutput(BaseModelOutput):
     """
-    Base class for outputs of the Transformer decoder. This class adds attributes for class predictions, 
-    mask predictions and contrastive logits to BaseModelOutputWithCrossAttentions.
     Args:
+    Base class for outputs of the Transformer decoder. This class adds attributes for class predictions, mask
+    predictions and contrastive logits to BaseModelOutputWithCrossAttentions.
         object_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
             Queries representation for the region proposals.
         contrastive_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
@@ -772,8 +772,8 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
 @dataclass
 class OneFormerPixelDecoderOutput(ModelOutput):
     """
-    OneFormer's pixel decoder module output, practically a MSDeformAttn based decoder. It returns the mask features
-    and the multiscale features.
+    OneFormer's pixel decoder module output, practically a MSDeformAttn based decoder. It returns the mask features and
+    the multiscale features.
 
     Args:
         multi_scale_features (List of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -784,25 +784,26 @@ class OneFormerPixelDecoderOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights from pixel decoder.
     """
+
     multi_scale_features: List[torch.FloatTensor] = None
     mask_features: torch.FloatTensor = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerPixelLevelModuleOutput with Mask->One
 @dataclass
 class OneFormerPixelLevelModuleOutput(ModelOutput):
     """
     OneFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
-    `encoder` and `decoder`. By default, the `encoder` is a Swin/Dinat Backbone and the `decoder` is a MSDeformAttn based decoder.
+    `encoder` and `decoder`. By default, the `encoder` is a Swin/Dinat Backbone and the `decoder` is a MSDeformAttn
+    based decoder.
 
     Args:
         encoder_features (List of `(torch.FloatTensor)`):
-            List of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`. 
-            Hidden-states (also called feature maps) of the model at the output of each stage.
+            List of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`. Hidden-states (also
+            called feature maps) of the model at the output of each stage.
         decoder_features (List of `(torch.FloatTensor)`):
-            List of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`. 
-            Hidden-states (also called feature maps) of the model at the output of each stage.
+            List of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`. Hidden-states (also
+            called feature maps) of the model at the output of each stage.
         decoder_last_feature (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)):
             1/4 scale features from the last Pixel Decoder Layer.
     """
@@ -811,7 +812,7 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
     decoder_features: List[torch.FloatTensor] = None
     decoder_last_feature: torch.FloatTensor = None
 
-    
+
 @dataclass
 class OneFormerModelOutput(ModelOutput):
     """
@@ -836,7 +837,7 @@ class OneFormerModelOutput(ModelOutput):
             Contrastive queries from the transformer decoder.
         transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
             Mask Predictions from the last layer in the transformer decoder.
-        transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`)
+        transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
             Class Predictions from the last layer in the transformer decoder.
         transformer_decoder_auxiliary_predictions (Tuple of Dict of `str, torch.FloatTensor`, *optional*):
             Tuple of class and mask predictions from each layer of the transformer decoder.
@@ -861,7 +862,10 @@ class OneFormerModelOutput(ModelOutput):
     task_token: torch.FloatTensor = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
+
 dataclass
+
+
 class OneFormerForUniversalSegmentationOutput(ModelOutput):
     """
     Class for outputs of [`OneFormerForUniversalSegmentationOutput`].
@@ -900,7 +904,7 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
             Contrastive queries from the transformer decoder.
         transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
             Mask Predictions from the last layer in the transformer decoder.
-        transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`)
+        transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
             Class Predictions from the last layer in the transformer decoder.
         transformer_decoder_auxiliary_predictions (List of Dict of `str, torch.FloatTensor`, *optional*):
             List of class and mask predictions from each layer of the transformer decoder.
@@ -930,9 +934,8 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
-################## Dinat Backbone Classes #################
+# Dinat Backbone Classes #
 
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinTransformerBackbone with Mask->One    
 class OneFormerDinatBackbone(nn.Module):
     """
     This class uses [`OneFormerDinatModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
@@ -967,9 +970,9 @@ class OneFormerDinatBackbone(nn.Module):
             hidden_states_permuted.append(hidden_state_permuted)
         return hidden_states_permuted
 
-################## Swin Backbone Classes #################
 
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinTransformerBackbone with Mask->One    
+# Swin Backbone Classes #
+
 class OneFormerSwinTransformerBackbone(nn.Module):
     """
     This class uses [`OneFormerSwinModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
@@ -1015,7 +1018,8 @@ class OneFormerSwinTransformerBackbone(nn.Module):
     def outputs_shapes(self) -> List[int]:
         return [layer.dim for layer in self.model.encoder.layers]
 
-################## Pixel Decoder Classes #################
+
+# Pixel Decoder Classes #
 
 # Copied from transformers.models.maskformer.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
@@ -1233,7 +1237,6 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-# Copied from transformers.models.detr.modeling_deformable_detr.DeformableDetrEncoderLayer with DeformableDetrEncoder->OneFormerPixelDecoder
 class OneFormerPixelDecoderEncoderLayer(nn.Module):
     def __init__(self, config: OneFormerConfig):
         super().__init__()
@@ -1328,8 +1331,8 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
 # Modified from from transformers.models.detr.modeling_deformable_detr.DeformableDetrEncoder with DeformableDetrEncoder->OneFormerPixelDecoderEncoderOnly
 class OneFormerPixelDecoderEncoderOnly(nn.Module):
     """
-    Transformer encoder consisting of *config.decoder_config["encoder_layers"]* deformable attention layers. Each layer is a
-    [`OneFormerPixelDecoderEncoderLayer`].
+    Transformer encoder consisting of *config.decoder_config["encoder_layers"]* deformable attention layers. Each layer
+    is a [`OneFormerPixelDecoderEncoderLayer`].
 
     The encoder updates the flattened multi-scale feature maps through multiple deformable attention layers.
 
@@ -1342,7 +1345,9 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
 
         self.config = config
         self.dropout = config.decoder_config["dropout"]
-        self.layers = nn.ModuleList([OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.decoder_config["encoder_layers"])])
+        self.layers = nn.ModuleList(
+            [OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.decoder_config["encoder_layers"])]
+        )
 
         self._reset_parameters()
 
@@ -1371,9 +1376,10 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         """
         reference_points_list = []
         for lvl, (H_, W_) in enumerate(spatial_shapes):
-
-            ref_y, ref_x = torch.meshgrid(torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
-                                          torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device))
+            ref_y, ref_x = torch.meshgrid(
+                torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
+                torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device),
+            )
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
             ref = torch.stack((ref_x, ref_y), -1)
@@ -1381,7 +1387,6 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         reference_points = torch.cat(reference_points_list, 1)
         reference_points = reference_points[:, :, None] * valid_ratios[:, None]
         return reference_points
-        
 
     def forward(
         self,
@@ -1452,14 +1457,13 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
-        
+
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
 
-
-# Modified from from transformers.models.detr.modeling_deformable_detr.DeformableDetrModel with DeformableDetrModel->OneFormerPixelDecoder    
+# Modified from from transformers.models.detr.modeling_deformable_detr.DeformableDetrModel with DeformableDetrModel->OneFormerPixelDecoder
 class OneFormerPixelDecoder(nn.Module):
     def __init__(self, config: OneFormerConfig):
         super().__init__()
@@ -1467,10 +1471,12 @@ class OneFormerPixelDecoder(nn.Module):
         self.config = config
 
         #  positional encoding
-        self.position_embedding = OneFormerSinePositionEmbedding(num_pos_feats=config.decoder_config["conv_dim"] // 2, normalize=True)
+        self.position_embedding = OneFormerSinePositionEmbedding(
+            num_pos_feats=config.decoder_config["conv_dim"] // 2, normalize=True
+        )
         self.num_feature_levels = 3
-        transformer_in_channels = config.backbone_config["feature_channels"][-self.num_feature_levels:]
-        self.transformer_feature_strides = config.backbone_config["strides"][-self.num_feature_levels:]
+        transformer_in_channels = config.backbone_config["feature_channels"][-self.num_feature_levels :]
+        self.transformer_feature_strides = config.backbone_config["strides"][-self.num_feature_levels :]
         self.feature_channels = config.backbone_config["feature_channels"]
         self.level_embed = nn.Parameter(torch.Tensor(self.num_feature_levels, config.decoder_config["conv_dim"]))
 
@@ -1504,7 +1510,7 @@ class OneFormerPixelDecoder(nn.Module):
             stride=1,
             padding=0,
         )
-        
+
         self.common_stride = config.decoder_config["common_stride"]
 
         # extra fpn levels
@@ -1514,19 +1520,18 @@ class OneFormerPixelDecoder(nn.Module):
         lateral_convs = []
         output_convs = []
 
-        for idx, in_channels in enumerate(self.feature_channels[:self.num_fpn_levels]):
-
+        for idx, in_channels in enumerate(self.feature_channels[: self.num_fpn_levels]):
             lateral_conv = nn.Sequential(
-                    nn.Conv2d(
-                    in_channels, 
-                    config.decoder_config["conv_dim"], 
-                    kernel_size=1, 
+                nn.Conv2d(
+                    in_channels,
+                    config.decoder_config["conv_dim"],
+                    kernel_size=1,
                     bias=False,
                 ),
-                    nn.GroupNorm(32, config.decoder_config["conv_dim"]),
+                nn.GroupNorm(32, config.decoder_config["conv_dim"]),
             )
             output_conv = nn.Sequential(
-                    nn.Conv2d(
+                nn.Conv2d(
                     config.decoder_config["conv_dim"],
                     config.decoder_config["conv_dim"],
                     kernel_size=3,
@@ -1534,8 +1539,8 @@ class OneFormerPixelDecoder(nn.Module):
                     padding=1,
                     bias=False,
                 ),
-                    nn.GroupNorm(32, config.decoder_config["conv_dim"]),
-                    nn.ReLU(),
+                nn.GroupNorm(32, config.decoder_config["conv_dim"]),
+                nn.ReLU(),
             )
             self.add_module("adapter_{}".format(idx + 1), lateral_conv)
             self.add_module("layer_{}".format(idx + 1), output_conv)
@@ -1546,7 +1551,7 @@ class OneFormerPixelDecoder(nn.Module):
         # to make the top-down computation in forward clearer.
         self.lateral_convs = lateral_convs[::-1]
         self.output_convs = output_convs[::-1]
-        
+
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -1585,13 +1590,13 @@ class OneFormerPixelDecoder(nn.Module):
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         sources = []
         position_embeddings_list = []
-        for level, source in enumerate(features[::-1][:self.num_feature_levels]):
+        for level, source in enumerate(features[::-1][: self.num_feature_levels]):
             x = source.float()
             sources.append(self.input_projections[level](x))
             position_embeddings_list.append(self.position_embedding(x))
 
         masks = [torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in sources]
-        
+
         # Prepare encoder inputs (by flattening)
         source_flatten = []
         mask_flatten = []
@@ -1630,7 +1635,7 @@ class OneFormerPixelDecoder(nn.Module):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        
+
         y = encoder_outputs.last_hidden_state
         bs = y.shape[0]
 
@@ -1650,7 +1655,7 @@ class OneFormerPixelDecoder(nn.Module):
 
         # append `out` with extra FPN levels
         # Reverse feature maps into top-down order (from low to high resolution)
-        for idx, x in enumerate(features[:self.num_fpn_levels][::-1]):
+        for idx, x in enumerate(features[: self.num_fpn_levels][::-1]):
             x = x.float()
             lateral_conv = self.lateral_convs[idx]
             output_conv = self.output_convs[idx]
@@ -1666,17 +1671,18 @@ class OneFormerPixelDecoder(nn.Module):
                 num_cur_levels += 1
 
         return OneFormerPixelDecoderOutput(
-            mask_features=self.mask_projection(out[-1]), multi_scale_features=multi_scale_features, attentions=encoder_outputs.attentions
+            mask_features=self.mask_projection(out[-1]),
+            multi_scale_features=multi_scale_features,
+            attentions=encoder_outputs.attentions,
         )
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerPixelLevelModule with Mask->One    
 class OneFormerPixelLevelModule(nn.Module):
     def __init__(self, config: OneFormerConfig):
         """
-        It runs the input image through a backbone and a pixel decoder, returning mask_features and multi_scale_features 
-        to be fed into the transformer decoder.
-        
+        It runs the input image through a backbone and a pixel decoder, returning mask_features and
+        multi_scale_features to be fed into the transformer decoder.
+
         Args:
             config ([`OneFormerConfig`]):
                 The configuration used to instantiate this model.
@@ -1697,14 +1703,15 @@ class OneFormerPixelLevelModule(nn.Module):
             decoder_last_feature=decoder_output.mask_features,
         )
 
-################## Transformer Decoder Classes #################
+
+# Transformer Decoder Classes #
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrAttention with Detr->OneFormer
 class OneFormerAttention(nn.Module):
     """
-    Multi-headed attention from 'Attention Is All You Need' paper.
-    Here, we add position embeddings to the queries and keys (as explained in the DETR paper).
+    Multi-headed attention from 'Attention Is All You Need' paper. Here, we add position embeddings to the queries and
+    keys (as explained in the DETR paper).
     """
 
     def __init__(
@@ -1749,12 +1756,13 @@ class OneFormerAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        
         hidden_states = hidden_states.permute(1, 0, 2) if hidden_states is not None else None
         position_embeddings = position_embeddings.permute(1, 0, 2) if position_embeddings is not None else None
         key_value_states = key_value_states.permute(1, 0, 2) if key_value_states is not None else None
-        key_value_position_embeddings = key_value_position_embeddings.permute(1, 0, 2) if key_value_position_embeddings is not None else None
-        
+        key_value_position_embeddings = (
+            key_value_position_embeddings.permute(1, 0, 2) if key_value_position_embeddings is not None else None
+        )
+
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -1796,7 +1804,6 @@ class OneFormerAttention(nn.Module):
                 f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
                 f" {attn_weights.size()}"
             )
-        
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size * self.num_heads, target_len, source_len):
@@ -1836,15 +1843,11 @@ class OneFormerAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
-class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
 
-    def __init__(self, embed_dim, num_heads, dropout=0.0,
-                 activation="relu", normalize_before=False):
+class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
+    def __init__(self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False):
         super().__init__()
-        self.self_attn = OneFormerAttention(embed_dim=embed_dim, 
-                                num_heads=num_heads, 
-                                dropout=dropout, 
-                                is_decoder=True)
+        self.self_attn = OneFormerAttention(embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, is_decoder=True)
 
         self.norm = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
@@ -1853,7 +1856,7 @@ class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
         self.normalize_before = normalize_before
 
         self._reset_parameters()
-    
+
     def _reset_parameters(self):
         for p in self.parameters():
             if p.dim() > 1:
@@ -1862,51 +1865,50 @@ class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
 
-    def forward_post(self, output,
-                     output_mask: Optional[Tensor] = None,
-                     output_key_padding_mask: Optional[Tensor] = None,
-                     query_pos: Optional[Tensor] = None):
+    def forward_post(
+        self,
+        output,
+        output_mask: Optional[Tensor] = None,
+        output_key_padding_mask: Optional[Tensor] = None,
+        query_pos: Optional[Tensor] = None,
+    ):
         output2, attention_weights = self.self_attn(
-                                            hidden_states=output,
-                                            position_embeddings=query_pos,
-                                            attention_mask=output_mask,
-                                            output_attentions=True
-                                        )
+            hidden_states=output, position_embeddings=query_pos, attention_mask=output_mask, output_attentions=True
+        )
         output = output + self.dropout(output2)
         output = self.norm(output)
 
         return output, attention_weights
 
-    def forward_pre(self, output,
-                    output_mask: Optional[Tensor] = None,
-                    output_key_padding_mask: Optional[Tensor] = None,
-                    query_pos: Optional[Tensor] = None):
+    def forward_pre(
+        self,
+        output,
+        output_mask: Optional[Tensor] = None,
+        output_key_padding_mask: Optional[Tensor] = None,
+        query_pos: Optional[Tensor] = None,
+    ):
         output2 = self.norm(output)
         output2, attention_weights = self.self_attn(
-                                        hidden_states=output2,
-                                        position_embeddings=query_pos,
-                                        attention_mask=output_mask,
-                                        output_attentions=True
-                                    )
+            hidden_states=output2, position_embeddings=query_pos, attention_mask=output_mask, output_attentions=True
+        )
         output = output + self.dropout(output2)
-        
+
         return output, attention_weights
 
-    def forward(self, output,
-                output_mask: Optional[Tensor] = None,
-                output_key_padding_mask: Optional[Tensor] = None,
-                query_pos: Optional[Tensor] = None):
+    def forward(
+        self,
+        output,
+        output_mask: Optional[Tensor] = None,
+        output_key_padding_mask: Optional[Tensor] = None,
+        query_pos: Optional[Tensor] = None,
+    ):
         if self.normalize_before:
-            return self.forward_pre(output, output_mask,
-                                    output_key_padding_mask, query_pos)
-        return self.forward_post(output, output_mask,
-                                 output_key_padding_mask, query_pos)
+            return self.forward_pre(output, output_mask, output_key_padding_mask, query_pos)
+        return self.forward_post(output, output_mask, output_key_padding_mask, query_pos)
 
 
 class OneFormerTransformerDecoderCrossAttentionLayer(nn.Module):
-
-    def __init__(self, embed_dim, num_heads, dropout=0.0,
-                 activation="relu", normalize_before=False):
+    def __init__(self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False):
         super().__init__()
         self.multihead_attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout)
 
@@ -1917,7 +1919,7 @@ class OneFormerTransformerDecoderCrossAttentionLayer(nn.Module):
         self.normalize_before = normalize_before
 
         self._reset_parameters()
-    
+
     def _reset_parameters(self):
         for p in self.parameters():
             if p.dim() > 1:
@@ -1926,50 +1928,64 @@ class OneFormerTransformerDecoderCrossAttentionLayer(nn.Module):
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
 
-    def forward_post(self, output, memory,
-                     memory_mask: Optional[Tensor] = None,
-                     memory_key_padding_mask: Optional[Tensor] = None,
-                     pos: Optional[Tensor] = None,
-                     query_pos: Optional[Tensor] = None):
-        output2, attention_weights = self.multihead_attn(query=self.with_pos_embed(output, query_pos),
-                                   key=self.with_pos_embed(memory, pos),
-                                   value=memory, attn_mask=memory_mask,
-                                   key_padding_mask=memory_key_padding_mask)
+    def forward_post(
+        self,
+        output,
+        memory,
+        memory_mask: Optional[Tensor] = None,
+        memory_key_padding_mask: Optional[Tensor] = None,
+        pos: Optional[Tensor] = None,
+        query_pos: Optional[Tensor] = None,
+    ):
+        output2, attention_weights = self.multihead_attn(
+            query=self.with_pos_embed(output, query_pos),
+            key=self.with_pos_embed(memory, pos),
+            value=memory,
+            attn_mask=memory_mask,
+            key_padding_mask=memory_key_padding_mask,
+        )
         output = output + self.dropout(output2)
         output = self.norm(output)
-        
+
         return output, attention_weights
 
-    def forward_pre(self, output, memory,
-                    memory_mask: Optional[Tensor] = None,
-                    memory_key_padding_mask: Optional[Tensor] = None,
-                    pos: Optional[Tensor] = None,
-                    query_pos: Optional[Tensor] = None):
+    def forward_pre(
+        self,
+        output,
+        memory,
+        memory_mask: Optional[Tensor] = None,
+        memory_key_padding_mask: Optional[Tensor] = None,
+        pos: Optional[Tensor] = None,
+        query_pos: Optional[Tensor] = None,
+    ):
         output2 = self.norm(output)
-        output2, attention_weights = self.multihead_attn(query=self.with_pos_embed(output2, query_pos),
-                                   key=self.with_pos_embed(memory, pos),
-                                   value=memory, attn_mask=memory_mask,
-                                   key_padding_mask=memory_key_padding_mask)
+        output2, attention_weights = self.multihead_attn(
+            query=self.with_pos_embed(output2, query_pos),
+            key=self.with_pos_embed(memory, pos),
+            value=memory,
+            attn_mask=memory_mask,
+            key_padding_mask=memory_key_padding_mask,
+        )
         output = output + self.dropout(output2)
 
         return output, attention_weights
 
-    def forward(self, output, memory,
-                memory_mask: Optional[Tensor] = None,
-                memory_key_padding_mask: Optional[Tensor] = None,
-                pos: Optional[Tensor] = None,
-                query_pos: Optional[Tensor] = None):
+    def forward(
+        self,
+        output,
+        memory,
+        memory_mask: Optional[Tensor] = None,
+        memory_key_padding_mask: Optional[Tensor] = None,
+        pos: Optional[Tensor] = None,
+        query_pos: Optional[Tensor] = None,
+    ):
         if self.normalize_before:
-            return self.forward_pre(output, memory, memory_mask,
-                                    memory_key_padding_mask, pos, query_pos)
-        return self.forward_post(output, memory, memory_mask,
-                                 memory_key_padding_mask, pos, query_pos)
+            return self.forward_pre(output, memory, memory_mask, memory_key_padding_mask, pos, query_pos)
+        return self.forward_post(output, memory, memory_mask, memory_key_padding_mask, pos, query_pos)
 
 
 class OneFormerTransformerDecoderFFNLayer(nn.Module):
-
-    def __init__(self, d_model, dim_feedforward=2048, dropout=0.0,
-                 activation="relu", normalize_before=False):
+    def __init__(self, d_model, dim_feedforward=2048, dropout=0.0, activation="relu", normalize_before=False):
         super().__init__()
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
@@ -1982,7 +1998,7 @@ class OneFormerTransformerDecoderFFNLayer(nn.Module):
         self.normalize_before = normalize_before
 
         self._reset_parameters()
-    
+
     def _reset_parameters(self):
         for p in self.parameters():
             if p.dim() > 1:
@@ -2049,7 +2065,7 @@ class OneFormerMLPPredictionHead(nn.Module):
         return hidden_state
 
 
-# refactored from original implementation    
+# refactored from original implementation
 class OneFormerTransformerDecoderLayer(nn.Module):
     def __init__(self, config: OneFormerConfig):
         super().__init__()
@@ -2071,11 +2087,11 @@ class OneFormerTransformerDecoderLayer(nn.Module):
         )
 
         self.ffn = OneFormerTransformerDecoderFFNLayer(
-                    d_model=self.embed_dim,
-                    dim_feedforward=config.decoder_config["dim_feedforward"],
-                    dropout=0.0,
-                    normalize_before=config.decoder_config["pre_norm"],
-                )
+            d_model=self.embed_dim,
+            dim_feedforward=config.decoder_config["dim_feedforward"],
+            dropout=0.0,
+            normalize_before=config.decoder_config["pre_norm"],
+        )
 
     def forward(
         self,
@@ -2092,7 +2108,8 @@ class OneFormerTransformerDecoderLayer(nn.Module):
             index (`int`): index of the layer in the Transformer decoder.
             output (`torch.FloatTensor`): the object queries of shape `(N, batch, hidden_dim)`
             multi_stage_features (`List[torch.Tensor]`): the multi-scale features from the pixel decoder.
-            multi_stage_positional_embeddings (`List[torch.Tensor]`): positional embeddings for the multi_stage_features
+            multi_stage_positional_embeddings (`List[torch.Tensor]`):
+                positional embeddings for the multi_stage_features
             attention_mask (`torch.FloatTensor`): attention mask for the masked cross attention layer
             query_embeddings (`torch.FloatTensor`, *optional*):
                 position embeddings that are added to the queries and keys in the self-attention layer.
@@ -2100,25 +2117,28 @@ class OneFormerTransformerDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        
+
         level_index = index % self.num_feature_levels
         attention_mask[torch.where(attention_mask.sum(-1) == attention_mask.shape[-1])] = False
 
-         # Masked Cross Attention
+        # Masked Cross Attention
         output, cross_attn_weights = self.cross_attn(
-            output, multi_stage_features[level_index],
-                memory_mask=attention_mask,
-                memory_key_padding_mask=None,  # here we do not apply masking on padded region
-                pos=multi_stage_positional_embeddings[level_index], query_pos=query_embeddings
+            output,
+            multi_stage_features[level_index],
+            memory_mask=attention_mask,
+            memory_key_padding_mask=None,  # here we do not apply masking on padded region
+            pos=multi_stage_positional_embeddings[level_index],
+            query_pos=query_embeddings,
         )
 
         # Self Attention
         output, self_attn_weights = self.self_attn(
-            output, output_mask=None,
-                output_key_padding_mask=None,
-                query_pos=query_embeddings,
+            output,
+            output_mask=None,
+            output_key_padding_mask=None,
+            query_pos=query_embeddings,
         )
-        
+
         # Fully Connected
         output = self.ffn(output)
 
@@ -2126,7 +2146,7 @@ class OneFormerTransformerDecoderLayer(nn.Module):
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
-        
+
         return outputs
 
 
@@ -2149,7 +2169,6 @@ class OneFormerTransformerDecoderQueryTransformerDecoder(nn.Module):
         pos: Optional[Tensor] = None,
         query_pos: Optional[Tensor] = None,
     ):
-
         intermediate = []
 
         for layer in self.layers:
@@ -2221,9 +2240,9 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
         query_pos: Optional[Tensor] = None,
     ):
         q = k = self.with_pos_embed(output, query_pos)
-        output2 = self.self_attn(
-            q, k, value=output, attn_mask=output_mask, key_padding_mask=output_key_padding_mask
-        )[0]
+        output2 = self.self_attn(q, k, value=output, attn_mask=output_mask, key_padding_mask=output_key_padding_mask)[
+            0
+        ]
         output = output + self.dropout1(output2)
         output = self.norm1(output)
         output2 = self.multihead_attn(
@@ -2253,9 +2272,9 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
     ):
         output2 = self.norm1(output)
         q = k = self.with_pos_embed(output2, query_pos)
-        output2 = self.self_attn(
-            q, k, value=output2, attn_mask=output_mask, key_padding_mask=output_key_padding_mask
-        )[0]
+        output2 = self.self_attn(q, k, value=output2, attn_mask=output_mask, key_padding_mask=output_key_padding_mask)[
+            0
+        ]
         output = output + self.dropout1(output2)
         output2 = self.norm2(output)
         output2 = self.multihead_attn(
@@ -2304,7 +2323,7 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
             query_pos,
         )
 
-    
+
 class OneFormerTransformerDecoderQueryTransformer(nn.Module):
     def __init__(
         self,
@@ -2348,21 +2367,19 @@ class OneFormerTransformerDecoderQueryTransformer(nn.Module):
         query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
         if mask is not None:
             mask = mask.flatten(1)
-            
+
         if task_token is None:
             queries = torch.zeros_like(query_embed)
         else:
             queries = task_token.repeat(query_embed.shape[0], 1, 1)
-   
-        queries = self.decoder(
-            queries, src, memory_key_padding_mask=mask, pos=pos_embed, query_pos=query_embed
-        )
+
+        queries = self.decoder(queries, src, memory_key_padding_mask=mask, pos=pos_embed, query_pos=query_embed)
         return queries.transpose(1, 2)
-    
+
 
 class OneFormerTransformerDecoder(nn.Module):
     """
-    Transformer decoder 
+    Transformer decoder
     """
 
     def __init__(self, in_channels: int, config: OneFormerConfig):
@@ -2389,12 +2406,19 @@ class OneFormerTransformerDecoder(nn.Module):
 
         self.num_feature_levels = 3
 
-        self.layers = nn.ModuleList([OneFormerTransformerDecoderLayer(config) for _ in range(config.decoder_config["decoder_layers"]-1)])
+        self.layers = nn.ModuleList(
+            [OneFormerTransformerDecoderLayer(config) for _ in range(config.decoder_config["decoder_layers"] - 1)]
+        )
 
         self.query_input_projection = nn.Conv2d(in_channels, config.decoder_config["hidden_dim"], kernel_size=1)
 
         self.class_embed = nn.Linear(config.decoder_config["hidden_dim"], config.general_config["num_classes"] + 1)
-        self.mask_embed = OneFormerMLPPredictionHead(config.decoder_config["hidden_dim"], config.decoder_config["hidden_dim"], config.decoder_config["mask_dim"], 3)
+        self.mask_embed = OneFormerMLPPredictionHead(
+            config.decoder_config["hidden_dim"],
+            config.decoder_config["hidden_dim"],
+            config.decoder_config["mask_dim"],
+            3,
+        )
 
     def forward(
         self,
@@ -2408,17 +2432,19 @@ class OneFormerTransformerDecoder(nn.Module):
         size_list=None,
         output_attentions=None,
     ):
-
         if self.use_task_norm:
             task_token = self.decoder_norm(task_token)
 
-        object_queries = self.query_transformer(query_features, None, 
-                                    query_embedder.weight[:-1], 
-                                    self.query_input_projection(mask_features),
-                                    task_token if self.use_task_norm else None)
+        object_queries = self.query_transformer(
+            query_features,
+            None,
+            query_embedder.weight[:-1],
+            self.query_input_projection(mask_features),
+            task_token if self.use_task_norm else None,
+        )
 
         object_queries = object_queries[0].permute(1, 0, 2)
-        
+
         queries = torch.cat([object_queries, task_token], dim=0)
 
         output = queries.clone()
@@ -2427,8 +2453,9 @@ class OneFormerTransformerDecoder(nn.Module):
         intermediate_mask_predictions = []
 
         # prediction heads on learnable query features
-        outputs_class, outputs_mask, attention_mask = self.forward_prediction_heads(output, mask_features, 
-                                                        attention_mask_target_size=size_list[0])
+        outputs_class, outputs_mask, attention_mask = self.forward_prediction_heads(
+            output, mask_features, attention_mask_target_size=size_list[0]
+        )
         intermediate_class_predictions.append(outputs_class)
         intermediate_mask_predictions.append(outputs_mask)
 
@@ -2442,19 +2469,20 @@ class OneFormerTransformerDecoder(nn.Module):
                 multi_stage_positional_embeddings=multi_stage_positional_embeddings,
                 attention_mask=attention_mask,
                 query_embeddings=query_embeddings,
-                output_attentions=output_attentions
+                output_attentions=output_attentions,
             )
-            
+
             output = layer_outputs[0]
             attentions += (layer_outputs[1:],)
 
-            outputs_class, outputs_mask, attention_mask = self.forward_prediction_heads(output, 
-                            mask_features, attention_mask_target_size=size_list[(index + 1) % self.num_feature_levels])
+            outputs_class, outputs_mask, attention_mask = self.forward_prediction_heads(
+                output, mask_features, attention_mask_target_size=size_list[(index + 1) % self.num_feature_levels]
+            )
             intermediate_class_predictions.append(outputs_class)
             intermediate_mask_predictions.append(outputs_mask)
-            
+
         assert len(intermediate_mask_predictions) == len(self.layers) + 1
-        
+
         object_queries = layer_outputs[0].permute(1, 0, 2)
 
         contrastive_logits = queries.permute(1, 0, 2)
@@ -2464,11 +2492,12 @@ class OneFormerTransformerDecoder(nn.Module):
             contrastive_logits=contrastive_logits,
             prediction_masks=intermediate_mask_predictions[-1],
             prediction_class=intermediate_class_predictions[-1],
-            auxiliary_predictions=self._get_aux_predictions(intermediate_class_predictions, 
-                                                        intermediate_mask_predictions) if self.use_auxiliary_loss else None,
+            auxiliary_predictions=self._get_aux_predictions(
+                intermediate_class_predictions, intermediate_mask_predictions
+            )
+            if self.use_auxiliary_loss
+            else None,
             attentions=attentions,
-
-
         )
 
     def forward_prediction_heads(self, output, mask_features, attention_mask_target_size):
@@ -2480,11 +2509,15 @@ class OneFormerTransformerDecoder(nn.Module):
 
         # NOTE: prediction is of higher-resolution
         # [B, Q, H, W] -> [B, Q, H*W] -> [B, h, Q, H*W] -> [B*h, Q, HW]
-        attention_mask = F.interpolate(outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False)
-        
+        attention_mask = F.interpolate(
+            outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False
+        )
+
         # must use bool type
         # If a BoolTensor is provided, positions with ``True`` are not allowed to attend while ``False`` values will be unchanged.
-        attention_mask = (attention_mask.sigmoid().flatten(2).unsqueeze(1).repeat(1, self.num_heads, 1, 1).flatten(0, 1) < 0.5).bool()
+        attention_mask = (
+            attention_mask.sigmoid().flatten(2).unsqueeze(1).repeat(1, self.num_heads, 1, 1).flatten(0, 1) < 0.5
+        ).bool()
         attention_mask = attention_mask.detach()
 
         return outputs_class, outputs_mask, attention_mask
@@ -2499,9 +2532,8 @@ class OneFormerTransformerDecoder(nn.Module):
             for a, b in zip(outputs_class[:-1], outputs_seg_masks[:-1])
         ]
         return tuple(aux_list)
-    
 
-# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerTransformerModule with Mask->One
+
 class OneFormerTransformerModule(nn.Module):
     """
     The OneFormer's transformer module.
@@ -2520,14 +2552,17 @@ class OneFormerTransformerModule(nn.Module):
                 self.input_projections.append(nn.Conv2d(in_features, hidden_dim, kernel_size=1))
             else:
                 self.input_projections.append(nn.Sequential())
-        
+
         self.decoder = OneFormerTransformerDecoder(in_channels=in_features, config=config)
         self.level_embed = nn.Embedding(self.num_feature_levels, hidden_dim)
 
     def forward(
-        self, multi_scale_features: List[Tensor], mask_features: Tensor, task_token: Tensor, output_attentions: bool = False
+        self,
+        multi_scale_features: List[Tensor],
+        mask_features: Tensor,
+        task_token: Tensor,
+        output_attentions: bool = False,
     ) -> OneFormerTransformerDecoderOutput:
-        
         assert len(multi_scale_features) == self.num_feature_levels
         multi_stage_features = []
         multi_stage_positional_embeddings = []
@@ -2536,7 +2571,10 @@ class OneFormerTransformerModule(nn.Module):
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
             multi_stage_positional_embeddings.append(self.position_embedder(multi_scale_features[i], None).flatten(2))
-            multi_stage_features.append(self.input_projections[i](multi_scale_features[i]).flatten(2) + self.level_embed.weight[i][None, :, None])
+            multi_stage_features.append(
+                self.input_projections[i](multi_scale_features[i]).flatten(2)
+                + self.level_embed.weight[i][None, :, None]
+            )
 
             # flatten NxCxHxW to HWxNxC
             multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].permute(2, 0, 1)
@@ -2547,9 +2585,9 @@ class OneFormerTransformerModule(nn.Module):
         # QxNxC
         query_embeddings = self.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
         task_token = task_token.unsqueeze(0)
-        
+
         query_features = self.position_embedder(mask_features, None)
-        
+
         decoder_output: OneFormerTransformerDecoderOutput = self.decoder(
             task_token=task_token,
             multi_stage_features=multi_stage_features,
@@ -2562,15 +2600,15 @@ class OneFormerTransformerModule(nn.Module):
             output_attentions=output_attentions,
         )
         return decoder_output
-    
+
 
 # Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with Mask->One
 class OneFormerSinePositionEmbedding(nn.Module):
     """
-    This is a more standard version of the position embedding, very similar to the one
-    used by the Attention is all you need paper, generalized to work on images.
+    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
+    need paper, generalized to work on images.
     """
-    
+
     def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):
         super().__init__()
         self.num_pos_feats = num_pos_feats
@@ -2598,14 +2636,11 @@ class OneFormerSinePositionEmbedding(nn.Module):
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack(
-            (pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4
-        ).flatten(3)
-        pos_y = torch.stack(
-            (pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4
-        ).flatten(3)
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
 
 # Copied from transformers.models.maskformer.modeling_maskformer.PredictionBlock
 class PredictionBlock(nn.Module):
@@ -2622,15 +2657,17 @@ class PredictionBlock(nn.Module):
             hidden_state = layer(hidden_state)
         return hidden_state
 
-################## Text Mapper Classes #################
+
+# Text Mapper Classes #
+
 
 class OneFormerTextMapperAttention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.0, proj_drop=0.0):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
-        self.scale = qk_scale or head_dim ** -0.5
+        self.scale = qk_scale or head_dim**-0.5
 
         self.q_proj = nn.Linear(dim, dim, bias=qkv_bias)
         self.k_proj = nn.Linear(dim, dim, bias=qkv_bias)
@@ -2648,11 +2685,11 @@ class OneFormerTextMapperAttention(nn.Module):
         k = self.k_proj(k).reshape(B, M, self.num_heads, C // self.num_heads)
         v = self.v_proj(v).reshape(B, M, self.num_heads, C // self.num_heads)
 
-        attn = torch.einsum('bnkc,bmkc->bknm', q, k) * self.scale
+        attn = torch.einsum("bnkc,bmkc->bknm", q, k) * self.scale
 
         attn = attn.softmax(dim=-1)
 
-        x = torch.einsum('bknm,bmkc->bnkc', attn, v).reshape(B, N, C)
+        x = torch.einsum("bknm,bmkc->bnkc", attn, v).reshape(B, N, C)
 
         x = self.proj(x)
         x = self.proj_drop(x)
@@ -2676,10 +2713,7 @@ class OneFormerTextTransformerDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         self.mlp = nn.Sequential(
-            nn.Linear(d_model, d_model * 4),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_model * 4, d_model)
+            nn.Linear(d_model, d_model * 4), nn.GELU(), nn.Dropout(dropout), nn.Linear(d_model * 4, d_model)
         )
 
     def forward(self, x, mem):
@@ -2692,13 +2726,9 @@ class OneFormerTextTransformerDecoderLayer(nn.Module):
 
 
 class OneFormerTextContextDecoder(nn.Module):
-    def __init__(self,
-                 transformer_width=256,
-                 transformer_heads=4,
-                 transformer_layers=6,
-                 visual_dim=1024,
-                 dropout=0.1,
-                 **kwargs):
+    def __init__(
+        self, transformer_width=256, transformer_heads=4, transformer_layers=6, visual_dim=1024, dropout=0.1, **kwargs
+    ):
         super().__init__()
 
         self.memory_proj = nn.Sequential(
@@ -2712,27 +2742,26 @@ class OneFormerTextContextDecoder(nn.Module):
             nn.Linear(visual_dim, transformer_width),
         )
 
-        self.decoder = nn.ModuleList([
-                    OneFormerTextTransformerDecoderLayer(transformer_width, transformer_heads, dropout) for _ in range(transformer_layers)
-                ])
-        
-        self.out_proj = nn.Sequential(
-            nn.LayerNorm(transformer_width),
-            nn.Linear(transformer_width, visual_dim)
+        self.decoder = nn.ModuleList(
+            [
+                OneFormerTextTransformerDecoderLayer(transformer_width, transformer_heads, dropout)
+                for _ in range(transformer_layers)
+            ]
         )
+
+        self.out_proj = nn.Sequential(nn.LayerNorm(transformer_width), nn.Linear(transformer_width, visual_dim))
 
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    
     def forward(self, text, visual):
         B, N, C = visual.shape
         visual = self.memory_proj(visual)
@@ -2740,11 +2769,10 @@ class OneFormerTextContextDecoder(nn.Module):
 
         for layer in self.decoder:
             x = layer(x, visual)
-        
+
         return self.out_proj(x)
 
 
-# Copied from transformers.models.groupvit..modeling_groupvit.GroupViTMLP with GroupViT->OneFormerText
 class OneFormerTextMLP(nn.Module):
     def __init__(
         self,
@@ -2767,7 +2795,6 @@ class OneFormerTextMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.groupvit..modeling_groupvit.GroupViTEncoderLayer with GroupViTEncoderLaye->OneFormerTextTransformer
 class OneFormerTextTransformerLayer(nn.Module):
     def __init__(self, width: int, heads: int, attn_mask: torch.Tensor):
         super().__init__()
@@ -2782,7 +2809,6 @@ class OneFormerTextTransformerLayer(nn.Module):
         hidden_states: torch.Tensor,
         key_padding_mask: Optional[torch.Tensor] = None,
     ) -> torch.FloatTensor:
-    
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -2804,15 +2830,14 @@ class OneFormerTextTransformerLayer(nn.Module):
 
 
 class OneFormerTextTransformer(nn.Module):
-
     def __init__(self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, use_checkpoint=False):
         super().__init__()
         self.width = width
         self.num_layers = layers
         self.layers = nn.Sequential(*[OneFormerTextTransformerLayer(width, heads, attn_mask) for _ in range(layers)])
-        proj_std = (self.width**-0.5) * ((2 * self.num_layers)**-0.5)
+        proj_std = (self.width**-0.5) * ((2 * self.num_layers) ** -0.5)
         attn_std = self.width**-0.5
-        fc_std = (2 * self.width)**-0.5
+        fc_std = (2 * self.width) ** -0.5
         for layer in self.layers:
             nn.init.normal_(layer.self_attn.in_proj_weight, std=attn_std)
             nn.init.normal_(layer.self_attn.out_proj.weight, std=proj_std)
@@ -2831,7 +2856,6 @@ class OneFormerTextTransformer(nn.Module):
 
 
 class OneFormerTextEncoder(nn.Module):
-
     def __init__(
         self,
         context_length: int,
@@ -2840,7 +2864,6 @@ class OneFormerTextEncoder(nn.Module):
         vocab_size,
         use_checkpoint=False,
     ):
-
         super().__init__()
         heads = width // 64
         self.context_length = context_length
@@ -2850,7 +2873,8 @@ class OneFormerTextEncoder(nn.Module):
             layers=layers,
             heads=heads,
             attn_mask=self.build_attention_mask(),
-            use_checkpoint=use_checkpoint)
+            use_checkpoint=use_checkpoint,
+        )
 
         self.positional_embedding = nn.Parameter(torch.empty(self.context_length, width))
         self.ln_final = nn.LayerNorm(width)
@@ -2864,7 +2888,7 @@ class OneFormerTextEncoder(nn.Module):
         # lazily create causal attention mask, with full attention between the vision tokens
         # pytorch uses additive attention mask; fill with -inf
         mask = torch.empty(self.context_length, self.context_length)
-        mask.fill_(float('-inf'))
+        mask.fill_(float("-inf"))
         mask.triu_(1)  # zero out the lower diagonal
         return mask
 
@@ -2882,21 +2906,28 @@ class OneFormerTextEncoder(nn.Module):
 
         return x
 
-    
+
 class OneFormerTextMapper(nn.Module):
     def __init__(self, config: OneFormerConfig):
         super().__init__()
-        self.text_encoder = OneFormerTextEncoder(context_length=config.text_encoder_config["text_encoder_context_length"],
-                                    width=config.text_encoder_config["text_encoder_width"],
-                                    layers=config.text_encoder_config["text_encoder_num_layers"],
-                                    vocab_size=config.text_encoder_config["text_encoder_vocab_size"],)
-        
-        self.text_projector = OneFormerMLPPredictionHead(config.text_encoder_config["text_encoder_width"], 
-                                    config.decoder_config["hidden_dim"],
-                                    config.decoder_config["hidden_dim"],
-                                    config.text_encoder_config["text_encoder_proj_layers"],)
+        self.text_encoder = OneFormerTextEncoder(
+            context_length=config.text_encoder_config["text_encoder_context_length"],
+            width=config.text_encoder_config["text_encoder_width"],
+            layers=config.text_encoder_config["text_encoder_num_layers"],
+            vocab_size=config.text_encoder_config["text_encoder_vocab_size"],
+        )
+
+        self.text_projector = OneFormerMLPPredictionHead(
+            config.text_encoder_config["text_encoder_width"],
+            config.decoder_config["hidden_dim"],
+            config.decoder_config["hidden_dim"],
+            config.text_encoder_config["text_encoder_proj_layers"],
+        )
         if config.text_encoder_config["text_encoder_n_ctx"] > 0:
-            self.prompt_ctx = nn.Embedding(config.text_encoder_config["text_encoder_n_ctx"], config.text_encoder_config["text_encoder_width"],)
+            self.prompt_ctx = nn.Embedding(
+                config.text_encoder_config["text_encoder_n_ctx"],
+                config.text_encoder_config["text_encoder_width"],
+            )
         else:
             self.prompt_ctx = None
 
@@ -2907,15 +2938,14 @@ class OneFormerTextMapper(nn.Module):
         text_queries = self.encode_text(inputs)
 
         return text_queries
-    
+
     def encode_text(self, text):
         assert text.ndim in [2, 3], text.ndim
-        b = text.shape[0]
         squeeze_dim = False
         num_text = 1
         if text.ndim == 3:
             num_text = text.shape[1]
-            text = rearrange(text, 'b n l -> (b n) l', n=num_text)
+            text = rearrange(text, "b n l -> (b n) l", n=num_text)
             squeeze_dim = True
 
         # [B, C]
@@ -2924,20 +2954,23 @@ class OneFormerTextMapper(nn.Module):
         text_x = self.text_projector(x)
 
         if squeeze_dim:
-            text_x = rearrange(text_x, '(b n) c -> b n c', n=num_text)
+            text_x = rearrange(text_x, "(b n) c -> b n c", n=num_text)
             if self.prompt_ctx is not None:
                 text_ctx = self.prompt_ctx.weight.unsqueeze(0).repeat(text_x.shape[0], 1, 1)
                 text_x = torch.cat([text_x, text_ctx], dim=1)
-        
+
         return text_x
-    
+
 
 class OneFormerTaskModel(nn.Module):
-
     def __init__(self, config: OneFormerConfig):
         super().__init__()
-        self.task_mlp = OneFormerMLPPredictionHead(config.text_encoder_config["task_seq_len"], config.decoder_config["hidden_dim"], 
-                            config.decoder_config["hidden_dim"], 2)
+        self.task_mlp = OneFormerMLPPredictionHead(
+            config.text_encoder_config["task_seq_len"],
+            config.decoder_config["hidden_dim"],
+            config.decoder_config["hidden_dim"],
+            2,
+        )
 
     def forward(
         self,
@@ -2945,7 +2978,7 @@ class OneFormerTaskModel(nn.Module):
     ) -> Tensor:
         task_tokens = self.task_mlp(inputs.float())
         return task_tokens
-    
+
 
 ONEFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
@@ -2981,6 +3014,7 @@ ONEFORMER_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~OneFormerModelOutput`] instead of a plain tuple.
 """
+
 
 class OneFormerPreTrainedModel(PreTrainedModel):
     config_class = OneFormerConfig
@@ -3060,8 +3094,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             module.in_proj_weight.data.normal_(mean=0.0, std=std)
             module.in_proj_bias.data.zero_()
 
-                
-
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, OneFormerSwinEncoder):
             module.gradient_checkpointing = value
@@ -3071,10 +3103,9 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     "The bare OneFormer Model outputting raw hidden-states without any specific head on top.",
     ONEFORMER_START_DOCSTRING,
 )
-
-
 class OneFormerModel(OneFormerPreTrainedModel):
     main_input_name = ["pixel_values", "task_inputs"]
+
     def __init__(self, config: OneFormerConfig):
         super().__init__(config)
         self.pixel_level_module = OneFormerPixelLevelModule(config)
@@ -3083,7 +3114,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         )
         self.task_encoder = OneFormerTaskModel(config)
         self.is_train = config.general_config["is_train"]
-        
+
         if self.is_train:
             self.text_mapper = OneFormerTextMapper(config)
         else:
@@ -3104,8 +3135,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OneFormerModelOutput:
         r"""
-        Returns:
-        Examples:
+        Returns: Examples:
         ```python
         >>> import torch
         >>> from PIL import Image
@@ -3122,17 +3152,13 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> inputs = feature_extractor(image, ["semantic"], return_tensors="pt")
 
         >>> with torch.no_grad():
-        ...    outputs = model(**inputs)
+        ...     outputs = model(**inputs)
 
         >>> mask_predictions = outputs.transformer_decoder_mask_predictions
         >>> class_predictions = outputs.transformer_decoder_class_predictions
 
-        >>> f'👉 Mask Predictions Shape: {list(mask_predictions.shape)}, Class Predictions Shape: {list(class_predictions.shape)}'
+        >>> f"👉 Mask Predictions Shape: {list(mask_predictions.shape)}, Class Predictions Shape: {list(class_predictions.shape)}"
         '👉 Mask Predictions Shape: [1, 150, 128, 176], Class Predictions Shape: [1, 150, 151]'
-
-
-
-
         ```"""
 
         if pixel_values is None:
@@ -3152,7 +3178,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         pixel_level_module_output: OneFormerPixelLevelModuleOutput = self.pixel_level_module(
             pixel_values, output_hidden_states
         )
-        
+
         multi_scale_features = pixel_level_module_output.decoder_features
         mask_features = pixel_level_module_output.decoder_last_feature
 
@@ -3164,7 +3190,10 @@ class OneFormerModel(OneFormerPreTrainedModel):
             text_queries = None
 
         transformer_module_output: OneFormerTransformerDecoderOutput = self.transformer_module(
-            multi_scale_features=multi_scale_features, mask_features=mask_features, task_token=task_token, output_attentions=output_attentions,
+            multi_scale_features=multi_scale_features,
+            mask_features=mask_features,
+            task_token=task_token,
+            output_attentions=output_attentions,
         )
 
         queries = transformer_module_output.object_queries
@@ -3175,7 +3204,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
 
         if output_hidden_states:
             encoder_hidden_states = pixel_level_module_output.encoder_features
-            pixel_decoder_hidden_states = (pixel_level_module_output.decoder_last_feature, )
+            pixel_decoder_hidden_states = (pixel_level_module_output.decoder_last_feature,)
             for f in pixel_level_module_output.decoder_features:
                 pixel_decoder_hidden_states += (f,)
             transformer_decoder_hidden_states = transformer_module_output.auxiliary_predictions
@@ -3198,17 +3227,20 @@ class OneFormerModel(OneFormerPreTrainedModel):
             output = tuple(v for v in output.values())
 
         return output
-    
+
 
 class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
     main_input_name = ["pixel_values", "task_inputs"]
+
     def __init__(self, config: OneFormerConfig):
         super().__init__(config)
         self.model = OneFormerModel(config)
 
         self.matcher = OneFormerHungarianMatcher(
-            cost_class=config.general_config["class_weight"], cost_dice=config.general_config["dice_weight"], 
-            cost_mask=config.general_config["mask_weight"], num_points=config.general_config["train_num_points"]
+            cost_class=config.general_config["class_weight"],
+            cost_dice=config.general_config["dice_weight"],
+            cost_mask=config.general_config["mask_weight"],
+            num_points=config.general_config["train_num_points"],
         )
 
         self.weight_dict: Dict[str, float] = {
@@ -3223,9 +3255,9 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             matcher=self.matcher,
             weight_dict=self.weight_dict,
             eos_coef=config.general_config["no_object_weight"],
-            num_points=config.general_config["train_num_points"], 
-            oversample_ratio=config.general_config["oversample_ratio"], 
-            importance_sample_ratio=config.general_config["importance_sample_ratio"], 
+            num_points=config.general_config["train_num_points"],
+            oversample_ratio=config.general_config["oversample_ratio"],
+            importance_sample_ratio=config.general_config["importance_sample_ratio"],
             contrastive_temperature=config.general_config["contrastive_temperature"],
         )
 
@@ -3243,14 +3275,14 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         calculate_contrastive_loss: bool,
     ) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(
-                    masks_queries_logits=masks_queries_logits, 
-                    class_queries_logits=class_queries_logits, 
-                    contrastive_queries_logits=contrastive_queries_logits, 
-                    mask_labels=mask_labels, 
-                    class_labels=class_labels, 
-                    text_queries=text_queries,
-                    auxiliary_predictions=auxiliary_predictions,
-                    calculate_contrastive_loss=calculate_contrastive_loss,
+            masks_queries_logits=masks_queries_logits,
+            class_queries_logits=class_queries_logits,
+            contrastive_queries_logits=contrastive_queries_logits,
+            mask_labels=mask_labels,
+            class_labels=class_labels,
+            text_queries=text_queries,
+            auxiliary_predictions=auxiliary_predictions,
+            calculate_contrastive_loss=calculate_contrastive_loss,
         )
 
         # weight each loss by `self.weight_dict[<LOSS_NAME>]` including auxiliary losses
@@ -3305,7 +3337,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> model = OneFormerForUniversalSegmentation.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
 
         >>> url = (
-        ...    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
+        ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -3313,7 +3345,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> inputs = feature_extractor(image, ["semantic"], return_tensors="pt")
 
         >>> with torch.no_grad():
-        ...    outputs = model(**inputs)
+        ...     outputs = model(**inputs)
         >>> # model predicts class_queries_logits of shape `(batch_size, num_queries)`
         >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
         >>> class_queries_logits = outputs.class_queries_logits
@@ -3321,11 +3353,10 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
 
         >>> # you can pass them to feature_extractor for semantic postprocessing
         >>> predicted_semantic_map = feature_extractor.post_process_semantic_segmentation(
-        ...    outputs, target_sizes=[image.size[::-1]]
+        ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]
-        >>> f'👉 Semantic Predictions Shape: {list(predicted_semantic_map.shape)}'
+        >>> f"👉 Semantic Predictions Shape: {list(predicted_semantic_map.shape)}"
         '👉 Semantic Predictions Shape: [512, 683]'
-
 
         >>> ######## Instance Segmentation ########
         >>> inputs = feature_extractor(image, ["instance"], return_tensors="pt")
@@ -3339,16 +3370,16 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
 
         >>> # you can pass them to feature_extractor for instance postprocessing
         >>> predicted_instance_map = feature_extractor.post_process_instance_segmentation(
-        ...    outputs, target_sizes=[image.size[::-1]]
+        ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
-        >>> f'👉 Instance Predictions Shape: {list(predicted_instance_map.shape)}'
+        >>> f"👉 Instance Predictions Shape: {list(predicted_instance_map.shape)}"
         '👉 Instance Predictions Shape: [512, 683]'
 
         >>> ######## Panoptic Segmentation ########
         >>> inputs = feature_extractor(image, ["panoptic"], return_tensors="pt")
 
         >>> with torch.no_grad():
-        ...    outputs = model(**inputs)
+        ...     outputs = model(**inputs)
         >>> # model predicts class_queries_logits of shape `(batch_size, num_queries)`
         >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
         >>> class_queries_logits = outputs.class_queries_logits
@@ -3356,15 +3387,13 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
 
         >>> # you can pass them to feature_extractor for panoptic postprocessing
         >>> predicted_panoptic_map = feature_extractor.post_process_panoptic_segmentation(
-        ...    outputs, target_sizes=[image.size[::-1]]
+        ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
-        >>> f'👉 Panoptic Predictions Shape: {list(predicted_panoptic_map.shape)}'
+        >>> f"👉 Panoptic Predictions Shape: {list(predicted_panoptic_map.shape)}"
         '👉 Panoptic Predictions Shape: [512, 683]'
-
+        
         🎉 Congratulations on successfully running OneFormer
         📖 For more information, checkout the official repo: https://github.com/SHI-Labs/OneFormer
-
-
         ```
         """
 
@@ -3386,7 +3415,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
 
         loss, loss_dict, auxiliary_predictions = None, None, None
 
-        class_queries_logits = outputs.transformer_decoder_class_predictions 
+        class_queries_logits = outputs.transformer_decoder_class_predictions
         masks_queries_logits = outputs.transformer_decoder_mask_predictions
         contrastive_queries_logits = outputs.transformer_decoder_contrastive_queries
         auxiliary_predictions = outputs.transformer_decoder_auxiliary_predictions
@@ -3394,19 +3423,21 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
 
         if mask_labels is not None and class_labels is not None:
             loss_dict: Dict[str, Tensor] = self.get_loss_dict(
-                    masks_queries_logits=masks_queries_logits,
-                    class_queries_logits=class_queries_logits,
-                    contrastive_queries_logits=contrastive_queries_logits,
-                    mask_labels=mask_labels,
-                    class_labels=class_labels,
-                    text_queries=text_queries,
-                    auxiliary_predictions=auxiliary_predictions,
-                    calculate_contrastive_loss=self.config.general_config["contrastive_temperature"] is not None,
+                masks_queries_logits=masks_queries_logits,
+                class_queries_logits=class_queries_logits,
+                contrastive_queries_logits=contrastive_queries_logits,
+                mask_labels=mask_labels,
+                class_labels=class_labels,
+                text_queries=text_queries,
+                auxiliary_predictions=auxiliary_predictions,
+                calculate_contrastive_loss=self.config.general_config["contrastive_temperature"] is not None,
             )
             loss = self.get_loss(loss_dict)
 
         output_auxiliary_logits = (
-            self.config.general_config["output_auxiliary_logits"] if output_auxiliary_logits is None else output_auxiliary_logits
+            self.config.general_config["output_auxiliary_logits"]
+            if output_auxiliary_logits is None
+            else output_auxiliary_logits
         )
         if not output_auxiliary_logits:
             auxiliary_predictions = None

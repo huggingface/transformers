@@ -21,16 +21,10 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_utils import ModuleUtilsMixin
 from ...activations import ACT2FN
+from ...modeling_utils import ModuleUtilsMixin
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    OptionalDependencyNotAvailable,
-    is_natten_available,
-    requires_backends,
-    logging,
-)
+from ...utils import ModelOutput, OptionalDependencyNotAvailable, is_natten_available, logging, requires_backends
 from .configuration_oneformer import OneFormerConfig
 
 
@@ -49,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 # drop_path and DinatDropPath are from the timm library.
 
-################## Data Classes #################
 
 @dataclass
 # Copied from transformers.models.dinat.modeling_dinat.DinatEncoderOutput with Dinat->OneFormerDinat
@@ -86,7 +79,6 @@ class OneFormerDinatEncoderOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.dinat.modeling_dinat.DinatModelOutput with Dinat->OneFormerDinat
 class OneFormerDinatModelOutput(ModelOutput):
     """
     Dinat model's outputs.
@@ -104,12 +96,11 @@ class OneFormerDinatModelOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
+
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
-################## DiNAT Backbone Classes #################
 
-# Copied from transformers.models.dinat.modeling_dinat.DinatEmbeddings with Dinat->OneFormerDinat
 class OneFormerDinatEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings.
@@ -132,7 +123,6 @@ class OneFormerDinatEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.dinat.modeling_dinat.DinatPatchEmbeddings with Dinat->OneFormerDinat
 class OneFormerDinatPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -229,7 +219,6 @@ class OneFormerDinatDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-# Copied from transformers.models.dinat.modeling_dinat.NeighborhoodAttention with NeighborhoodAttention->OneFormerNeighborhoodAttention
 class OneFormerNeighborhoodAttention(nn.Module):
     def __init__(self, config, dim, num_heads, kernel_size, dilation):
         super().__init__()
@@ -264,7 +253,6 @@ class OneFormerNeighborhoodAttention(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -294,7 +282,6 @@ class OneFormerNeighborhoodAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.dinat.modeling_dinat.NeighborhoodAttentionOutput with Neighborhood->OneFormerNeighborhood
 class OneFormerNeighborhoodAttentionOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -347,7 +334,6 @@ class OneFormerNeighborhoodAttentionModule(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.dinat.modeling_dinat.DinatIntermediate with Dinat->OneFormerDinat
 class OneFormerDinatIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -363,7 +349,6 @@ class OneFormerDinatIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.dinat.modeling_dinat.DinatOutput with Dinat->OneFormerDinat
 class OneFormerDinatOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -376,7 +361,6 @@ class OneFormerDinatOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.dinat.modeling_dinat.DinatLayer with Dinat->OneFormerDinat
 class OneFormerDinatLayer(nn.Module):
     def __init__(self, config, dim, num_heads, dilation, drop_path_rate=0.0):
         super().__init__()
@@ -499,13 +483,15 @@ class OneFormerDinatStage(nn.Module):
         return stage_outputs
 
 
-# Copied from transformers.models.dinat.modeling_dinat.DinatEncoder with Dinat->OneFormerDinat
 class OneFormerDinatEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_levels = len(config.backbone_config["depths"])
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.backbone_config["drop_path_rate"], sum(config.backbone_config["depths"]))]
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, config.backbone_config["drop_path_rate"], sum(config.backbone_config["depths"]))
+        ]
         self.levels = nn.ModuleList(
             [
                 OneFormerDinatStage(
@@ -514,7 +500,11 @@ class OneFormerDinatEncoder(nn.Module):
                     depth=config.backbone_config["depths"][i_layer],
                     num_heads=config.backbone_config["num_heads"][i_layer],
                     dilations=config.backbone_config["dilations"][i_layer],
-                    drop_path_rate=dpr[sum(config.backbone_config["depths"][:i_layer]) : sum(config.backbone_config["depths"][: i_layer + 1])],
+                    drop_path_rate=dpr[
+                        sum(config.backbone_config["depths"][:i_layer]) : sum(
+                            config.backbone_config["depths"][: i_layer + 1]
+                        )
+                    ],
                     downsample=OneFormerDinatDownsampler if (i_layer < self.num_levels - 1) else None,
                 )
                 for i_layer in range(self.num_levels)
@@ -562,7 +552,6 @@ class OneFormerDinatEncoder(nn.Module):
         )
 
 
-# Modified from transformers.models.dinat.modeling_dinat.DinatModel with Dinat->OneFormerDinat, NAT->DINAT
 class OneFormerDinatModel(nn.Module, ModuleUtilsMixin):
     def __init__(self, config: OneFormerConfig, add_pooling_layer=True):
         super().__init__()

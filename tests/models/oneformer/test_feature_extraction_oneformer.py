@@ -15,10 +15,10 @@
 
 
 import unittest
+
 import numpy as np
 from datasets import load_dataset
 
-from huggingface_hub import hf_hub_download
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -30,9 +30,9 @@ if is_torch_available():
 
     if is_vision_available():
         from transformers import OneFormerFeatureExtractor
+        from transformers.models.oneformer.dataset_info_oneformer import ADE20K_150_CATEGORIES
         from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle
         from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
-        from transformers.models.oneformer.dataset_info_oneformer import ADE20K_150_CATEGORIES
 
 if is_vision_available():
     from PIL import Image
@@ -93,7 +93,7 @@ class OneFormerFeatureExtractionTester(unittest.TestCase):
         self.metadata = prepare_metadata(class_info)
         self.num_text = num_text
         self.repo_path = repo_path
-        
+
         # for the post_process_functions
         self.batch_size = 2
         self.num_queries = 10
@@ -151,7 +151,7 @@ class OneFormerFeatureExtractionTester(unittest.TestCase):
                 expected_values.append((expected_height, expected_width, expected_sequence_length))
             expected_height = max(expected_values, key=lambda item: item[0])[0]
             expected_width = max(expected_values, key=lambda item: item[1])[1]
-        
+
         expected_sequence_length = self.max_seq_length
 
         return expected_height, expected_width, expected_sequence_length
@@ -167,7 +167,6 @@ class OneFormerFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = OneFormerFeatureExtractor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
@@ -207,7 +206,9 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
 
-        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(image_inputs)
+        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(
+            image_inputs
+        )
 
         self.assertEqual(
             encoded_images.shape,
@@ -215,16 +216,20 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         )
 
         tokenized_task_inputs = feature_extractor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
-        
+
         self.assertEqual(
             tokenized_task_inputs.shape,
             (1, expected_sequence_length),
         )
 
         # Test batched
-        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(image_inputs, batched=True)
+        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(
+            image_inputs, batched=True
+        )
 
-        encoded_images = feature_extractor(image_inputs, ["semantic"]*len(image_inputs), return_tensors="pt").pixel_values
+        encoded_images = feature_extractor(
+            image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
+        ).pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -235,14 +240,13 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
 
-        tokenized_task_inputs = feature_extractor(image_inputs, ["semantic"]*len(image_inputs), return_tensors="pt").task_inputs
-        
+        tokenized_task_inputs = feature_extractor(
+            image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
+        ).task_inputs
+
         self.assertEqual(
             tokenized_task_inputs.shape,
-            (
-                self.feature_extract_tester.batch_size, 
-                expected_sequence_length
-            ),
+            (self.feature_extract_tester.batch_size, expected_sequence_length),
         )
 
     def test_call_numpy(self):
@@ -252,11 +256,13 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
-        
+
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
 
-        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(image_inputs)
+        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(
+            image_inputs
+        )
 
         self.assertEqual(
             encoded_images.shape,
@@ -264,16 +270,20 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         )
 
         tokenized_task_inputs = feature_extractor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
-        
+
         self.assertEqual(
             tokenized_task_inputs.shape,
             (1, expected_sequence_length),
         )
 
         # Test batched
-        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(image_inputs, batched=True)
+        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(
+            image_inputs, batched=True
+        )
 
-        encoded_images = feature_extractor(image_inputs, ["semantic"]*len(image_inputs), return_tensors="pt").pixel_values
+        encoded_images = feature_extractor(
+            image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
+        ).pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -284,14 +294,13 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
 
-        tokenized_task_inputs = feature_extractor(image_inputs, ["semantic"]*len(image_inputs), return_tensors="pt").task_inputs
-        
+        tokenized_task_inputs = feature_extractor(
+            image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
+        ).task_inputs
+
         self.assertEqual(
             tokenized_task_inputs.shape,
-            (
-                self.feature_extract_tester.batch_size, 
-                expected_sequence_length
-            ),
+            (self.feature_extract_tester.batch_size, expected_sequence_length),
         )
 
     def test_call_pytorch(self):
@@ -305,7 +314,9 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
 
-        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(image_inputs)
+        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(
+            image_inputs
+        )
 
         self.assertEqual(
             encoded_images.shape,
@@ -313,16 +324,20 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         )
 
         tokenized_task_inputs = feature_extractor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
-        
+
         self.assertEqual(
             tokenized_task_inputs.shape,
             (1, expected_sequence_length),
         )
 
         # Test batched
-        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(image_inputs, batched=True)
+        expected_height, expected_width, expected_sequence_length = self.feature_extract_tester.get_expected_values(
+            image_inputs, batched=True
+        )
 
-        encoded_images = feature_extractor(image_inputs, ["semantic"]*len(image_inputs), return_tensors="pt").pixel_values
+        encoded_images = feature_extractor(
+            image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
+        ).pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -333,23 +348,28 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
 
-        tokenized_task_inputs = feature_extractor(image_inputs, ["semantic"]*len(image_inputs), return_tensors="pt").task_inputs
-        
+        tokenized_task_inputs = feature_extractor(
+            image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
+        ).task_inputs
+
         self.assertEqual(
             tokenized_task_inputs.shape,
-            (
-                self.feature_extract_tester.batch_size, 
-                expected_sequence_length
-            ),
+            (self.feature_extract_tester.batch_size, expected_sequence_length),
         )
 
     def test_equivalence_pad_and_create_pixel_mask(self):
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
         feature_extractor_2 = self.feature_extraction_class(
-            do_resize=False, do_normalize=False, do_rescale=False, 
-            num_labels=self.feature_extract_tester.num_classes, max_seq_length=77, task_seq_length=77, 
-            class_info=ADE20K_150_CATEGORIES, num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny"
+            do_resize=False,
+            do_normalize=False,
+            do_rescale=False,
+            num_labels=self.feature_extract_tester.num_classes,
+            max_seq_length=77,
+            task_seq_length=77,
+            class_info=ADE20K_150_CATEGORIES,
+            num_text=self.feature_extract_tester.num_text,
+            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
@@ -357,8 +377,10 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             self.assertIsInstance(image, torch.Tensor)
 
         # Test whether the method "pad_and_return_pixel_mask" and calling the feature extractor return the same tensors
-        encoded_images_with_method = feature_extractor_1.encode_inputs(image_inputs, ["semantic"]*len(image_inputs), return_tensors="pt")
-        encoded_images = feature_extractor_2(image_inputs, ["semantic"]*len(image_inputs), return_tensors="pt")
+        encoded_images_with_method = feature_extractor_1.encode_inputs(
+            image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
+        )
+        encoded_images = feature_extractor_2(image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt")
 
         self.assertTrue(
             torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
@@ -391,7 +413,7 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
 
         inputs = feature_extractor(
             image_inputs,
-            ["semantic"]*len(image_inputs),
+            ["semantic"] * len(image_inputs),
             annotations,
             return_tensors="pt",
             instance_id_to_semantic_id=instance_id_to_semantic_id,
@@ -471,9 +493,16 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         # create a feature extractor
-        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=0, size=(512, 512),
-                                            max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
-                                            num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
+        feature_extractor = OneFormerFeatureExtractor(
+            reduce_labels=True,
+            ignore_index=0,
+            size=(512, 512),
+            max_seq_length=77,
+            task_seq_length=77,
+            class_info=ADE20K_150_CATEGORIES,
+            num_text=self.feature_extract_tester.num_text,
+            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+        )
 
         # prepare the images and annotations
         pixel_values_list = [np.moveaxis(np.array(image1), -1, 0), np.moveaxis(np.array(image2), -1, 0)]
@@ -551,9 +580,16 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         # create a feature extractor
-        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=0, size=(512, 512),
-                                            max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
-                                            num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
+        feature_extractor = OneFormerFeatureExtractor(
+            reduce_labels=True,
+            ignore_index=0,
+            size=(512, 512),
+            max_seq_length=77,
+            task_seq_length=77,
+            class_info=ADE20K_150_CATEGORIES,
+            num_text=self.feature_extract_tester.num_text,
+            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+        )
 
         # prepare the images and annotations
         pixel_values_list = [np.moveaxis(np.array(image1), -1, 0), np.moveaxis(np.array(image2), -1, 0)]
@@ -598,7 +634,7 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         self.assertEqual(inputs["mask_labels"][1].shape, (57, 512, 711))
         self.assertEqual(inputs["mask_labels"][0].sum().item(), 35040.0)
         self.assertEqual(inputs["mask_labels"][1].sum().item(), 98228.0)
-    
+
     def test_integration_panoptic_segmentation(self):
         # load 2 images and corresponding panoptic annotations from the hub
         dataset = load_dataset("nielsr/ade20k-panoptic-demo")
@@ -631,9 +667,16 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         # create a feature extractor
-        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=0, size=(512, 512),
-                                            max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
-                                            num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
+        feature_extractor = OneFormerFeatureExtractor(
+            reduce_labels=True,
+            ignore_index=0,
+            size=(512, 512),
+            max_seq_length=77,
+            task_seq_length=77,
+            class_info=ADE20K_150_CATEGORIES,
+            num_text=self.feature_extract_tester.num_text,
+            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+        )
 
         # prepare the images and annotations
         pixel_values_list = [np.moveaxis(np.array(image1), -1, 0), np.moveaxis(np.array(image2), -1, 0)]
@@ -691,9 +734,14 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         self.assertEqual(rle[1], 45)
 
     def test_post_process_sem_seg_output(self):
-        fature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes,
-                                            max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
-                                            num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
+        fature_extractor = self.feature_extraction_class(
+            num_labels=self.feature_extract_tester.num_classes,
+            max_seq_length=77,
+            task_seq_length=77,
+            class_info=ADE20K_150_CATEGORIES,
+            num_text=self.feature_extract_tester.num_text,
+            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+        )
         outputs = self.feature_extract_tester.get_fake_oneformer_outputs()
         segmentation = fature_extractor.post_process_sem_seg_output(outputs)
 
@@ -716,9 +764,14 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         )
 
     def test_post_process_semantic_segmentation(self):
-        fature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes,
-                                            max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
-                                            num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
+        fature_extractor = self.feature_extraction_class(
+            num_labels=self.feature_extract_tester.num_classes,
+            max_seq_length=77,
+            task_seq_length=77,
+            class_info=ADE20K_150_CATEGORIES,
+            num_text=self.feature_extract_tester.num_text,
+            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+        )
         outputs = self.feature_extract_tester.get_fake_oneformer_outputs()
 
         segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
@@ -736,11 +789,16 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(segmentation[0].shape, target_sizes[0])
-    
+
     def test_post_process_instance_segmentation(self):
-        feature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes,
-                                            max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
-                                            num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
+        feature_extractor = self.feature_extraction_class(
+            num_labels=self.feature_extract_tester.num_classes,
+            max_seq_length=77,
+            task_seq_length=77,
+            class_info=ADE20K_150_CATEGORIES,
+            num_text=self.feature_extract_tester.num_text,
+            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+        )
         outputs = self.feature_extract_tester.get_fake_oneformer_outputs()
         segmentation = feature_extractor.post_process_instance_segmentation(outputs, threshold=0)
 
@@ -754,9 +812,14 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             )
 
     def test_post_process_panoptic_segmentation(self):
-        feature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes,
-                                            max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
-                                            num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
+        feature_extractor = self.feature_extraction_class(
+            num_labels=self.feature_extract_tester.num_classes,
+            max_seq_length=77,
+            task_seq_length=77,
+            class_info=ADE20K_150_CATEGORIES,
+            num_text=self.feature_extract_tester.num_text,
+            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+        )
         outputs = self.feature_extract_tester.get_fake_oneformer_outputs()
         segmentation = feature_extractor.post_process_panoptic_segmentation(outputs, threshold=0)
 

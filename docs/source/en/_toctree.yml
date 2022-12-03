@@ -331,6 +331,8 @@
         title: NLLB
       - local: model_doc/nystromformer
         title: Nyströmformer
+      - local: model_doc/oneformer
+        title: OneFormer
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus

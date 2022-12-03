@@ -14,9 +14,10 @@
 # limitations under the License.
 """ Testing suite for the PyTorch OneFormer model. """
 
+import copy
 import inspect
 import unittest
-import copy
+
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
@@ -46,6 +47,7 @@ def _config_zero_init(config):
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
     return configs_no_init
+
 
 class OneFormerModelTester:
     def __init__(
@@ -81,15 +83,15 @@ class OneFormerModelTester:
             torch_device
         )
 
-        task_inputs = torch.randint(high=49408, size=(self.batch_size, self.sequence_length)).to(
-            torch_device
-        ).long()
+        task_inputs = torch.randint(high=49408, size=(self.batch_size, self.sequence_length)).to(torch_device).long()
 
         pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
 
-        text_inputs = torch.randint(high=49408, size=(self.batch_size, self.num_queries-self.n_ctx, self.sequence_length)).to( 
-            torch_device
-        ).long()
+        text_inputs = (
+            torch.randint(high=49408, size=(self.batch_size, self.num_queries - self.n_ctx, self.sequence_length))
+            .to(torch_device)
+            .long()
+        )
 
         mask_labels = (
             torch.rand([self.batch_size, self.num_labels, self.min_size, self.max_size], device=torch_device) > 0.5
@@ -106,16 +108,16 @@ class OneFormerModelTester:
 
         config.general_config["num_queries"] = self.num_queries
         config.general_config["num_classes"] = self.num_labels
-        
+
         config.backbone_config["depths"] = [1, 1, 1, 1]
         config.backbone_config["num_channels"] = self.num_channels
-        
+
         config.decoder_config["encoder_feedforward_dim"] = 64
         config.decoder_config["dim_feedforward"] = 128
         config.decoder_config["hidden_dim"] = self.mask_feature_size
         config.decoder_config["mask_dim"] = self.mask_feature_size
         config.decoder_config["conv_dim"] = self.mask_feature_size
-        
+
         config.text_encoder_config["text_encoder_width"] = self.mask_feature_size
         config.text_encoder_config["task_seq_len"] = self.sequence_length
         config.text_encoder_config["max_seq_len"] = self.sequence_length
@@ -136,9 +138,11 @@ class OneFormerModelTester:
 
         self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone_config["depths"]))
         self.parent.assertTrue(len(pixel_decoder_hidden_states), config.decoder_config["encoder_layers"])
-        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_config["decoder_layers"]-1)
+        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_config["decoder_layers"] - 1)
 
-    def create_and_check_oneformer_model(self, config, pixel_values, task_inputs, pixel_mask, output_hidden_states=False):
+    def create_and_check_oneformer_model(
+        self, config, pixel_values, task_inputs, pixel_mask, output_hidden_states=False
+    ):
         with torch.no_grad():
             model = OneFormerModel(config=config)
             model.to(torch_device)
@@ -162,7 +166,6 @@ class OneFormerModelTester:
     def create_and_check_oneformer_universal_segmentation_head_model(
         self, config, pixel_values, task_inputs, text_inputs, pixel_mask, mask_labels, class_labels
     ):
-    
         model = OneFormerForUniversalSegmentation(config=config)
         model.to(torch_device)
         model.eval()
@@ -189,7 +192,6 @@ class OneFormerModelTester:
 
             comm_check_on_output(result)
 
-            
         config.general_config["is_train"] = True
         model = OneFormerForUniversalSegmentation(config=config)
         model.to(torch_device)
@@ -197,8 +199,12 @@ class OneFormerModelTester:
 
         with torch.no_grad():
             result = model(
-                pixel_values=pixel_values, task_inputs=task_inputs, pixel_mask=pixel_mask, 
-                mask_labels=mask_labels, class_labels=class_labels, text_inputs=text_inputs
+                pixel_values=pixel_values,
+                task_inputs=task_inputs,
+                pixel_mask=pixel_mask,
+                mask_labels=mask_labels,
+                class_labels=class_labels,
+                text_inputs=text_inputs,
             )
 
         comm_check_on_output(result)
@@ -209,7 +215,6 @@ class OneFormerModelTester:
 
 @require_torch
 class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (OneFormerModel, OneFormerForUniversalSegmentation) if is_torch_available() else ()
 
     is_encoder_decoder = False
@@ -231,14 +236,14 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_oneformer_universal_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_oneformer_universal_segmentation_head_model(*config_and_inputs)
-    
+
     def test_model_main_input_name(self):
         for model_class in self.all_model_classes:
             model_signature = inspect.signature(getattr(model_class, "forward"))
             # The main input is the name of the argument after `self`
             observed_main_input_name = list(model_signature.parameters.keys())[1:3]
             self.assertEqual(model_class.main_input_name, observed_main_input_name)
-    
+
     @unittest.skip(reason="OneFormer uses two main inputs")
     def test_torchscript_simple(self):
         pass
@@ -320,7 +325,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config).to(torch_device)
             outputs = model(**inputs, output_attentions=True)
             self.assertTrue(outputs.attentions is not None)
-    
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.general_config["contrastive_temperature"] = 1
@@ -341,20 +346,38 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
             return
         # only OneFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
-        config, pixel_values, task_inputs, text_inputs, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
+        (
+            config,
+            pixel_values,
+            task_inputs,
+            text_inputs,
+            pixel_mask,
+            mask_labels,
+            class_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
         config.general_config["is_train"] = True
 
         model = model_class(config)
         model.to(torch_device)
         model.train()
 
-        loss = model(pixel_values, task_inputs, text_inputs=text_inputs, mask_labels=mask_labels, class_labels=class_labels).loss
+        loss = model(
+            pixel_values, task_inputs, text_inputs=text_inputs, mask_labels=mask_labels, class_labels=class_labels
+        ).loss
         loss.backward()
 
     def test_retain_grad_hidden_states_attentions(self):
         # only OneFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
-        config, pixel_values, task_inputs, text_inputs, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
+        (
+            config,
+            pixel_values,
+            task_inputs,
+            text_inputs,
+            pixel_mask,
+            mask_labels,
+            class_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
         config.output_hidden_states = True
         config.output_attentions = True
         config.general_config["is_train"] = True
@@ -363,14 +386,16 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
         model.to(torch_device)
         model.train()
 
-        outputs = model(pixel_values, task_inputs, text_inputs=text_inputs, mask_labels=mask_labels, class_labels=class_labels)
+        outputs = model(
+            pixel_values, task_inputs, text_inputs=text_inputs, mask_labels=mask_labels, class_labels=class_labels
+        )
 
         encoder_hidden_states = outputs.encoder_hidden_states[0]
         encoder_hidden_states.retain_grad()
 
         pixel_decoder_hidden_states = outputs.pixel_decoder_hidden_states[0]
         pixel_decoder_hidden_states.retain_grad()
-       
+
         transformer_decoder_class_predictions = outputs.transformer_decoder_class_predictions
         transformer_decoder_class_predictions.retain_grad()
 
@@ -387,6 +412,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(transformer_decoder_class_predictions.grad)
         self.assertIsNotNone(transformer_decoder_mask_predictions.grad)
         self.assertIsNotNone(attentions.grad)
+
 
 TOLERANCE = 1e-4
 
@@ -424,7 +450,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(**inputs)
-        
+
         expected_slice_hidden_state = torch.tensor(
             [[0.2389, 0.6014, 0.4428], [1.1968, 1.0971, 1.0077], [1.0039, 0.5138, 0.5313]]
         ).to(torch_device)
@@ -469,31 +495,37 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         # masks_queries_logits
         masks_queries_logits = outputs.masks_queries_logits
         self.assertEqual(
-            masks_queries_logits.shape, (1, model.config.general_config["num_queries"], inputs_shape[-2] // 4, inputs_shape[-1] // 4)
+            masks_queries_logits.shape,
+            (1, model.config.general_config["num_queries"], inputs_shape[-2] // 4, inputs_shape[-1] // 4),
         )
-        expected_slice = [
-           [[2.7239, 3.5821, 3.8680], [2.8230, 3.4890, 3.8843], [2.5708, 2.9101, 3.4645]]
-        ]
+        expected_slice = [[[2.7239, 3.5821, 3.8680], [2.8230, 3.4890, 3.8843], [2.5708, 2.9101, 3.4645]]]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
-        self.assertEqual(class_queries_logits.shape, (1, model.config.general_config["num_queries"], model.config.general_config["num_classes"] + 1))
+        self.assertEqual(
+            class_queries_logits.shape,
+            (1, model.config.general_config["num_queries"], model.config.general_config["num_classes"] + 1),
+        )
         expected_slice = torch.tensor(
-            [[ 2.7761, -2.1867, -3.6433], [3.4408, -3.3945, -5.5952], [2.2712, -5.0023, -4.6808]]
+            [[2.7761, -2.1867, -3.6433], [3.4408, -3.3945, -5.5952], [2.2712, -5.0023, -4.6808]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_with_segmentation_maps_and_loss(self):
         dummy_model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
         feature_extractor = self.default_feature_extractor
-        feature_extractor.num_text = dummy_model.config.general_config["num_queries"] - dummy_model.config.text_encoder_config["text_encoder_n_ctx"]
+        feature_extractor.num_text = (
+            dummy_model.config.general_config["num_queries"]
+            - dummy_model.config.text_encoder_config["text_encoder_n_ctx"]
+        )
         dummy_model.config.general_config["is_train"] = True
         model = OneFormerForUniversalSegmentation(dummy_model.config).to(torch_device).eval()
         del dummy_model
 
         inputs = feature_extractor(
-            [np.zeros((3, 512, 640)), np.zeros((3, 512, 640))], ["semantic", "semantic"],
+            [np.zeros((3, 512, 640)), np.zeros((3, 512, 640))],
+            ["semantic", "semantic"],
             segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
             return_tensors="pt",
         )
