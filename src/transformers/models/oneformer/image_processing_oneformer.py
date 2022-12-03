@@ -331,7 +331,7 @@ def prepare_metadata(class_info):
 
 class OneFormerImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a OnekFormer image processor. The image processor can be used to prepare image(s) and optional targets
+    Constructs a OneFormer image processor. The image processor can be used to prepare image(s), task input(s) and optional text inputs and targets
     for the model.
 
     This image processor inherits from [`BaseImageProcessor`] which contains most of the main methods. Users should
@@ -1139,13 +1139,49 @@ class OneFormerImageProcessor(BaseImageProcessor):
         outputs,
         task_type: str = "instance",
         is_demo: bool = True,
-        is_panoptic: bool = False,
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
     ):
+        """
+        Converts the output of [`OneFormerForUniversalSegmentationOutput`] into image instance segmentation
+        predictions. Only supports PyTorch.
+
+        Args:
+            outputs ([`OneFormerForUniversalSegmentationOutput`]):
+                The outputs from [`OneFormerForUniversalSegmentationOutput`].
+            task_type (`str`, *optional)*, defaults to "instance"):
+                The post processing depends on the task token input. If the `task_type` is "panoptic", we need to ignore the stuff predictions.
+            is_demo (`bool`, *optional)*, defaults to `True`):
+                Whether the model is in demo mode. If true, use threshold to predict final masks.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            target_sizes (`List[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction in batch. If left to None, predictions will not be
+                resized.
+            return_coco_annotation (`bool`, *optional)*, defaults to `False`):
+                Whether to return predictions in COCO format.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`, set
+              to `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized
+              to the corresponding `target_sizes` entry.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
+                - **id** -- an integer representing the `segment_id`.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
+                - **was_fused** -- a boolean, `True` if `label_id` was in `label_ids_to_fuse`, `False` otherwise.
+                  Multiple instances of the same class / label were fused and assigned a single `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
+        """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
@@ -1177,7 +1213,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 mask_pred = mask_pred[keep]
 
             # if this is panoptic segmentation, we only keep the "thing" classes
-            if is_panoptic:
+            if task_type == "panoptic":
                 keep = torch.zeros_like(scores_per_image).bool()
                 for i, lab in enumerate(labels_per_image):
                     keep[i] = lab in self.metadata["thing_ids"]

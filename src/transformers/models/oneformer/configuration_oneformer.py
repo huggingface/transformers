@@ -31,152 +31,32 @@ ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class OneFormerConfig(PretrainedConfig):
     r"""
+    This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate 
+    a OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the OneFormer 
+    [shi-labs/oneformer_ade20k_swin_tiny](https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny) architecture trained on
+    [ADE20k-150](https://huggingface.co/datasets/scene_parse_150). 
+    
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the 
+    documentation from [`PretrainedConfig`] for more information. 
+    
+    Currently, OneFormer supports the [Swin Transformer](swin) and [Dilated Neighborhood Attention Transformer](dinat) as backbones.
+    
     Args:
-    This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate a
-    OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the OneFormer.
-    [shi-labs/swin_t_oneformer_ade20k](https:
-        //huggingface.co/shi-labs/swin_t_oneformer_ade20k) architecture trained on
-    [ADE20k-150](https://huggingface.co/datasets/scene_parse_150). Configuration objects inherit from
-    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]:
-    for more information. Currently, OneFormer supports the [Swin Transformer](swin) and [DiNAT](dinat) as backbones.
         output_attentions (`bool`, *optional*, defaults to `True`):
             Whether to output attention weights.
         output_hidden_states (`bool`, *optional*, defaults to `True`):
             Whether to output intermediate predictions.
-        use_return_dict (`bool`, *optional*, defaults to `True`):
+        return_dict (`bool`, *optional*, defaults to `True`):
             Whether to return output as tuples or dataclass objects.
         general_config (`dict`, *optional*, defaults to a dictionary with the following keys)
             Dictionary containing general configuration like backbone_type, loss weights, number of classes, etc.
-                backbone_type (`str`, *optional*, defaults to 'swin'):
-                    Backbone Type, can be chosen from ['swin', 'dinat'].
-                ignore_value (`int`, *optional*, defaults to 255):
-                    Category ID to be ignored in the ground-truth during training.
-                num_classes (`int`, *optional*, defaults to 150):
-                    Number of classes in the training set.
-                num_queries (`int`, *optional*, defaults to 150):
-                    Number of segments, i.e. segmentation slots. This is the maximal number of segments that can be
-                    detected in the image.
-                no_object_weight (`float`, *optional*, defaults to 0.1):
-                    Weight to apply to the null (no object) class.
-                deep_supervision(`bool`, *optional*, defaults to `True`):
-                    If `True` [`OneFormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed
-                    using the logits from each decoder's stage.
-                class_weight (`float`, *optional*, defaults to 2.0):
-                    The weight for the classification loss.
-                mask_weight (`float`, *optional*, defaults to 5.0):
-                    The weight for the binary CE loss.
-                dice_weight (`float`, *optional*, defaults to 5.0):
-                    The weight for the dice loss.
-                contrastive_weight (`float`, *optional*, defaults to 0.5):
-                    The weight for the query-text contrastive loss.
-                contrastive_temperature (`float`, *optional*, defaults to 0.07):
-                    The learnable temperature to scale contrastive logits.
-                train_num_points (`int`, *optional*, defaults to 12544):
-                    Number of sample points inside the hungarian matcher for dice and mask loss
-                oversample_ratio (`int`, *optional*, defaults to 3.0):
-                    Point sampling
-                importance_sample_ratio (`int`, *optional*, defaults to 0.75):
-                    Point sampling
-                init_std (`float`, *optional*, defaults to 0.02):
-                    The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-                init_xavier_std (`float`, *optional*, defaults to 1):
-                    The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-                layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-                    The epsilon used by the layer normalization layers.
-                is_train (`bool`, *optional*, defaults to `False`):
-                    Running model in training or inference mode.
-                use_auxiliary_loss (`bool`, *optional*, defaults to `True`):
-                    Whether to calculate auxiliary losses during training.
-                output_auxiliary_logits (`bool`, *optional*, defaults to `True`):
-                    Whether to return intermediate predictions from the transformer decoder layers.
-
         backbone_config (`dict`, *optional*, defaults to a dictionary with the following keys)
             Dictionary containing configuration for the backbone module like patch size, num_heads, etc.
-                image_size (`int`, *optional*, defaults to 224):
-                    The size (resolution) of each image.
-                num_channels (`int`, *optional*, defaults to 3):
-                    The number of channels in the input image.
-                hidden_act (`str` , *optional*, defaults to "gelu"):
-                    The activation layer to be used in swin transformer layer
-                patch_size (`int`, *optional*, defaults to 4):
-                    The size (resolution) of each patch.
-                embed_dim (`int`, *optional*, defaults to 96):
-                    Dimensionality of patch embedding.
-                strides ('list(int)', *optional*, defaults to [4, 8, 16, 32]):
-                    Feature strides for different stages.
-                depths ('list(int)', *optional*, defaults to [2, 2, 6, 2]):
-                    Depth of each layer in the Transformer encoder.
-                num_heads ('list(int)', *optional*, defaults to [3, 6, 12, 24]):
-                    Number of attention heads in each layer of the Transformer encoder.
-                window_size (`int`, *optional*, defaults to 7):
-                    Size of windows.
-                mlp_ratio (`float`, *optional*, defaults to 4.0):
-                    Ratio of MLP hidden dimensionality to embedding dimensionality.
-                qkv_bias (`bool`, *optional*, defaults to True):
-                    Whether or not a learnable bias should be added to the queries, keys and values.
-                hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-                    The dropout probability for all fully connected layers in the embeddings and encoder.
-                attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-                    The dropout ratio for the attention probabilities.
-                drop_path_rate (`float`, *optional*, defaults to 0.3):
-                    Stochastic depth rate.
-                use_absolute_embeddings (`bool`, *optional*, defaults to False):
-                    Whether or not to add absolute position embeddings to the patch embeddings.
-                patch_norm (`bool`, *optional*, defaults to True):
-                    Whether or not to add layer normalization after patch embedding.
-                encoder_stride (`int`, `optional`, defaults to 32):
-                    Size divisibility for feature maps in backbone.
-
         text_encoder_config (`dict`, *optional*, defaults to a dictionary with the following keys)
             Dictionary containing configuration for the text-mapper module and task encoder like sequence length,
             number of linear layers in MLP, etc.
-                task_seq_len (`int`, *optional*, defaults to 77):
-                    Sequence length for tokenizer for the task input.
-                max_seq_len (`int`, *optional*, defaults to 77):
-                    Sequence length for tokenizer for the text query list input.
-                text_encoder_width (`int`, *optional*, deafults to 256):
-                    Channel number for the text representations inside the text encoder. Must match the mask_dim in the
-                    transformer decoder.
-                text_encoder_context_len (`int`, *optional*, defaults to 77):
-                    Sequence length for the tokenized text representations inside the text encoder. Must match
-                    max_seq_len
-                text_encoder_num_layers (`int`, *optional*, deafults to 6):
-                    Number of transformer layers inside the text encoder
-                text_encoder_vocab_size (`int`, *optional*, defaults to 49408):
-                    Vocabulary size for the input text.
-                text_encoder_proj_layers (`int`, *optional*, defaults to 2):
-                    Number of layers inside the text projector
-                text_encoder_n_ctx (`int`, *optional*, defaults to 16):
-                    Number of learnable text context queries
 
-        text_encoder_config (`dict`, *optional*, defaults to a dictionary with the following keys)
-            Dictionary containing configuration for the pixel decoder and transformer decoder like number of decoder
-            layers, etc.
-                conv_dim (`int`, *optional*, defaults to 256):
-                    The number of output channels for the intermediate conv layers inside pixel decoder.
-                mask_dim (`int`, *optional*, defaults to 256):
-                    The number of output channels for final conv layer in pixel decoder.
-                norm (`str`, *optional*, defaults to "GN"):
-                    Normalization layer used inside the attention modules in the decoders.
-                encoder_layers (`int`, *optional*, defaults to 6):
-                    Number of layers inside the pixel decoder.
-                decoder_layers (`int`, *optional*, defaults to 10):
-                    Number of layers inside the transformer decoder.
-                use_task_norm (`bool`, *optional*, default=`True`):
-                    Normalize the mapped task token value before initializing the queries.
-                num_heads (`int`, *optional*, defaults to 8):
-                    Number of heads for multi-head attention inside the transformer layers.
-                dropout (`float`, *optional*, defaults to 0.1):
-                    Dropout prob for attention layers.
-                dim_feedforward (`int`, *optional*, defaults to 2048):
-                    Dropout prob for attention layers.
-                pre_norm (`bool`, *optional*, defaults to `False`):
-                    Pre-Normalization for queries inside the attention layers.
-                enforce_input_proj (`bool`, *optional*, defaults to `False`):
-                    Add input project 1x1 conv even if input channels and hidden dim is identical
-                task_dec_layers (`int`, *optional*, defaults to 2):
-                    Number of layers inside transformer to initialize and update queries with task token.
     Raises:
         `ValueError`:
             Raised if the backbone model type selected is not in `["swin", "dinat"]`
