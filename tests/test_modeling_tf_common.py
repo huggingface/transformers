@@ -162,7 +162,6 @@ class TFModelTesterMixin:
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
-
         if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
             inputs_dict = {
                 k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1))
@@ -170,6 +169,13 @@ class TFModelTesterMixin:
                 else v
                 for k, v in inputs_dict.items()
             }
+
+        if model_class.__name__ == "TFBartForSequenceClassification":
+            # Append EOS token
+            logger.warn(f"MODEL CLASS {model_class}")
+            input_ids = inputs_dict['input_ids'][:,:-1]
+            input_ids = tf.concat([input_ids, tf.ones((tf.shape(input_ids)[0], 1), dtype=tf.int32) * 2], axis=1)
+            inputs_dict['input_ids'] = input_ids
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
@@ -1230,7 +1236,6 @@ class TFModelTesterMixin:
         if not self.test_resize_embeddings:
             return
         config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
             # create a model with resized (expended) embeddings
             new_tokens_size = 10

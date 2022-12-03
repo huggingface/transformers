@@ -1573,13 +1573,12 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
 
         last_hidden_state = outputs[0]
         eos_mask = tf.equal(input_ids, self.config.eos_token_id)
-        # tf.ragged maintains the masked shape and to_tensor pads
         # out the rows with False where present.  Then verify all the final
         # entries are True
-        self_masked = tf.ragged.boolean_mask(eos_mask, eos_mask).to_tensor()
+        self_masked = tf.reshape(tf.boolean_mask(eos_mask, eos_mask), (tf.shape(input_ids)[0], -1))
         tf.Assert(tf.reduce_all(self_masked[:, -1]), ["All examples must have the same number of <eos> tokens."])
 
-        masked = tf.ragged.boolean_mask(last_hidden_state, eos_mask).to_tensor()
+        masked = tf.reshape(tf.boolean_mask(last_hidden_state, eos_mask), (tf.shape(input_ids)[0], tf.shape(self_masked)[1], tf.shape(last_hidden_state)[-1]))
 
         sentence_representation = masked[:, -1, :]
         logits = self.classification_head(sentence_representation)

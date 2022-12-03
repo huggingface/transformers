@@ -263,6 +263,40 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
             model(inputs)
 
+    # TFBartForSequenceClassification does not support inputs_embeds
+    @slow
+    def test_graph_mode_with_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in (TFBartForConditionalGeneration, TFBartModel):
+            model = model_class(config)
+
+            inputs = copy.deepcopy(inputs_dict)
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
+            else:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
+
+            inputs = self._prepare_for_class(inputs, model_class)
+
+            @tf.function
+            def run_in_graph_mode():
+                return model(inputs)
+
+            outputs = run_in_graph_mode()
+            self.assertIsNotNone(outputs)
+
 
 def _long_tensor(tok_lst):
     return tf.constant(tok_lst, dtype=tf.int32)
