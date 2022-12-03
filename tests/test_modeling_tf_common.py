@@ -174,7 +174,7 @@ class TFModelTesterMixin:
             # Replace last id with EOS token
             input_ids = inputs_dict["input_ids"][:, :-1]
             input_ids = tf.concat([input_ids, tf.ones((tf.shape(input_ids)[0], 1), dtype=tf.int32) * 2], axis=1)
-            inputs_dict['input_ids'] = input_ids
+            inputs_dict["input_ids"] = input_ids
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):

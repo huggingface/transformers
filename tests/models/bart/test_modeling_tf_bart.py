@@ -369,7 +369,7 @@ class TFBartForSequenceClassificationTest(unittest.TestCase):
         model = TFBartForSequenceClassification(config)
         inputs = {
             "input_ids": tf.constant([[1, 2, 2, 2], [1, 3, 2, 2], [2, 2, 3, 3]]),
-            "attention_mask": tf.constant([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]])
+            "attention_mask": tf.constant([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]]),
         }
         with self.assertRaises(tf.errors.InvalidArgumentError):
             model(inputs)
