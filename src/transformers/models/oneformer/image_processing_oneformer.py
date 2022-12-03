@@ -331,8 +331,8 @@ def prepare_metadata(class_info):
 
 class OneFormerImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a OneFormer image processor. The image processor can be used to prepare image(s), task input(s) and optional text inputs and targets
-    for the model.
+    Constructs a OneFormer image processor. The image processor can be used to prepare image(s), task input(s) and
+    optional text inputs and targets for the model.
 
     This image processor inherits from [`BaseImageProcessor`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -1153,7 +1153,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
             outputs ([`OneFormerForUniversalSegmentationOutput`]):
                 The outputs from [`OneFormerForUniversalSegmentationOutput`].
             task_type (`str`, *optional)*, defaults to "instance"):
-                The post processing depends on the task token input. If the `task_type` is "panoptic", we need to ignore the stuff predictions.
+                The post processing depends on the task token input. If the `task_type` is "panoptic", we need to
+                ignore the stuff predictions.
             is_demo (`bool`, *optional)*, defaults to `True`):
                 Whether the model is in demo mode. If true, use threshold to predict final masks.
             threshold (`float`, *optional*, defaults to 0.5):

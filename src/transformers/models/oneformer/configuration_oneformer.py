@@ -31,17 +31,18 @@ ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class OneFormerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate 
-    a OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the OneFormer 
-    [shi-labs/oneformer_ade20k_swin_tiny](https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny) architecture trained on
-    [ADE20k-150](https://huggingface.co/datasets/scene_parse_150). 
-    
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the 
-    documentation from [`PretrainedConfig`] for more information. 
-    
-    Currently, OneFormer supports the [Swin Transformer](swin) and [Dilated Neighborhood Attention Transformer](dinat) as backbones.
-    
+    This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate a
+    OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the OneFormer
+    [shi-labs/oneformer_ade20k_swin_tiny](https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny) architecture
+    trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Currently, OneFormer supports the [Swin Transformer](swin) and [Dilated Neighborhood Attention Transformer](dinat)
+    as backbones.
+
     Args:
         output_attentions (`bool`, *optional*, defaults to `True`):
             Whether to output attention weights.
