@@ -3135,7 +3135,10 @@ class OneFormerModel(OneFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OneFormerModelOutput:
         r"""
-        Returns: Examples:
+        Returns: 
+            `OneFormerModelOutput`
+        Example:
+        
         ```python
         >>> import torch
         >>> from PIL import Image
