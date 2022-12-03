@@ -936,6 +936,7 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
 
 # Dinat Backbone Classes #
 
+
 class OneFormerDinatBackbone(nn.Module):
     """
     This class uses [`OneFormerDinatModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
@@ -972,6 +973,7 @@ class OneFormerDinatBackbone(nn.Module):
 
 
 # Swin Backbone Classes #
+
 
 class OneFormerSwinTransformerBackbone(nn.Module):
     """
@@ -3135,10 +3137,10 @@ class OneFormerModel(OneFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OneFormerModelOutput:
         r"""
-        Returns: 
+        Returns:
             `OneFormerModelOutput`
         Example:
-        
+
         ```python
         >>> import torch
         >>> from PIL import Image
