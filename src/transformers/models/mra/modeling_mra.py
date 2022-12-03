@@ -23,7 +23,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.utils.cpp_extension import load
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -51,65 +50,61 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MRA models at https://huggingface.co/models?filter=mra
 ]
 
+from torch.utils.cpp_extension import load
 
 curr_path = os.path.dirname(os.path.realpath(__file__))
-src_files = ["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"]
+src_files = ['cuda_kernel.cu', 'cuda_launch.cu', 'torch_extension.cpp']
 src_files = [os.path.join(curr_path, file) for file in src_files]
-cuda_kernel = load("cuda_kernel", src_files, verbose=True)
+cuda_kernel = load('cuda_kernel', src_files, verbose = True)
 
 import cuda_kernel
-
 
 def sparse_max_cuda(sparse_C, indices, A_num_block, B_num_block):
     assert len(sparse_C.size()) == 4
     assert len(indices.size()) == 2
     assert sparse_C.size(2) == 32
     assert sparse_C.size(3) == 32
-
-    index_vals = sparse_C.max(dim=-2).values.transpose(-1, -2)
+    
+    index_vals = sparse_C.max(dim = -2).values.transpose(-1, -2)
     if not index_vals.is_contiguous():
         index_vals = index_vals.contiguous()
-
+        
     indices = indices.int()
     if not indices.is_contiguous():
         indices = indices.contiguous()
 
     max_vals, max_vals_scatter = cuda_kernel.index_max(index_vals, indices, A_num_block, B_num_block)
     max_vals_scatter = max_vals_scatter.transpose(-1, -2)[:, :, None, :]
-
+    
     return max_vals, max_vals_scatter
-
 
 def sparse_max(sparse_C, indices, A_num_block, B_num_block):
     return sparse_max_cuda(sparse_C, indices, A_num_block, B_num_block)
 
-
-def sparse_mask_B(mask, indices, block_size=32):
+def sparse_mask_B(mask, indices, block_size = 32):
     # mask = [batch_size, num_block * block_size]
     # indices = [batch_size, num_block]
-
+    
     assert len(mask.size()) == 2
     assert len(indices.size()) == 2
     assert mask.shape[0] == indices.shape[0]
-
+    
     batch_size, seq_len = mask.shape
     num_block = seq_len // block_size
-
-    batch_idx = torch.arange(indices.size(0), dtype=torch.long, device=indices.device)
+    
+    batch_idx = torch.arange(indices.size(0), dtype = torch.long, device = indices.device)
     mask = mask.reshape(batch_size, num_block, block_size)
     mask = mask[batch_idx[:, None], (indices % num_block).long(), :]
-
+    
     return mask
 
-
-def sparse_to_dense(sparse_A, indices, A_num_block, block_size=32):
+def sparse_to_dense(sparse_A, indices, A_num_block, block_size = 32):
     batch_size, _, _, _ = sparse_A.shape
-    eyes = torch.eye(A_num_block * block_size, device=sparse_A.device).repeat(batch_size, 1, 1)
+    eyes = torch.eye(A_num_block * block_size, device = sparse_A.device).repeat(batch_size, 1, 1)
     eyes = eyes.reshape(batch_size, A_num_block, block_size, A_num_block * block_size).transpose(-1, -2)
     dense_A = sparse_dense_mm_torch(sparse_A, indices, eyes, A_num_block)
     dense_A = dense_A.transpose(-1, -2).reshape(batch_size, A_num_block * block_size, A_num_block * block_size)
     return dense_A
-
 
 def mm_to_sparse_cuda(dense_A, dense_B, indices):
 
@@ -139,8 +134,7 @@ def mm_to_sparse_cuda(dense_A, dense_B, indices):
 
     return cuda_kernel.mm_to_sparse(dense_A, dense_B, indices.int())
 
-
-def mm_to_sparse_torch(dense_A, dense_B, indices, block_size=32):
+def mm_to_sparse_torch(dense_A, dense_B, indices, block_size = 32):
 
     # dense_A = [batch_size, A_num_block, dim, block_size]
     # dense_B = [batch_size, B_num_block, dim, block_size]
@@ -152,16 +146,15 @@ def mm_to_sparse_torch(dense_A, dense_B, indices, block_size=32):
 
     _, B_num_block, _, _ = dense_B.size()
 
-    batch_idx = torch.arange(indices.size(0), dtype=torch.long, device=indices.device)
-    dense_A = dense_A[batch_idx[:, None], torch.div(indices, B_num_block, rounding_mode="floor").long(), :, :]
+    batch_idx = torch.arange(indices.size(0), dtype = torch.long, device = indices.device)
+    dense_A = dense_A[batch_idx[:, None], torch.div(indices, B_num_block, rounding_mode = 'floor').long(), :, :]
     dense_B = dense_B[batch_idx[:, None], (indices % B_num_block).long(), :, :]
 
     sparse_C = torch.matmul(dense_B.transpose(-1, -2), dense_A)
 
     return sparse_C
 
-
-def mm_to_sparse(dense_A, dense_B, indices, block_size=32, cuda=True):
+def mm_to_sparse(dense_A, dense_B, indices, block_size = 32, cuda = True):
     batch_size, A_size, dim = dense_A.size()
     _, B_size, dim = dense_B.size()
     assert A_size % block_size == 0
@@ -173,7 +166,6 @@ def mm_to_sparse(dense_A, dense_B, indices, block_size=32, cuda=True):
         return mm_to_sparse_cuda(dense_A, dense_B, indices)
     else:
         return mm_to_sparse_torch(dense_A, dense_B, indices)
-
 
 def sparse_dense_mm_cuda(sparse_A, indices, dense_B, A_num_block):
 
@@ -204,7 +196,6 @@ def sparse_dense_mm_cuda(sparse_A, indices, dense_B, A_num_block):
 
     return cuda_kernel.sparse_dense_mm(sparse_A, indices, dense_B, A_num_block)
 
-
 def sparse_dense_mm_torch(sparse_A, indices, dense_B, A_num_block):
 
     # sparse_A = [batch_size, num_block, block_size, block_size]
@@ -218,21 +209,18 @@ def sparse_dense_mm_torch(sparse_A, indices, dense_B, A_num_block):
     batch_size, num_block = indices.size()
     _, B_num_block, dim, block_size = dense_B.size()
 
-    batch_idx = torch.arange(indices.size(0), dtype=torch.long, device=indices.device)
+    batch_idx = torch.arange(indices.size(0), dtype = torch.long, device = indices.device)
     dense_B = dense_B[batch_idx[:, None], (indices % B_num_block).long(), :, :]
 
     dense_C = torch.matmul(dense_B, sparse_A)
     dense_C = dense_C.reshape(batch_size * num_block, dim * block_size)
-    global_idxes = (
-        torch.div(indices, B_num_block, rounding_mode="floor").long() + batch_idx[:, None] * A_num_block
-    ).reshape(batch_size * num_block)
-    temp = torch.zeros((batch_size * A_num_block, dim * block_size), dtype=dense_C.dtype, device=dense_C.device)
+    global_idxes = (torch.div(indices, B_num_block, rounding_mode = 'floor').long() + batch_idx[:, None] * A_num_block).reshape(batch_size * num_block)
+    temp = torch.zeros((batch_size * A_num_block, dim * block_size), dtype = dense_C.dtype, device = dense_C.device)
     dense_C = temp.index_add(0, global_idxes, dense_C).reshape(batch_size, A_num_block, dim, block_size)
 
     return dense_C
 
-
-def sparse_dense_mm(sparse_A, indices, dense_B, A_num_block, block_size=32, cuda=True):
+def sparse_dense_mm(sparse_A, indices, dense_B, A_num_block, block_size = 32, cuda = True):
     batch_size, B_size, dim = dense_B.size()
 
     assert B_size % block_size == 0
@@ -246,7 +234,6 @@ def sparse_dense_mm(sparse_A, indices, dense_B, A_num_block, block_size=32, cuda
         dense_C = sparse_dense_mm_torch(sparse_A, indices, dense_B, A_num_block)
     dense_C = dense_C.transpose(-1, -2).reshape(batch_size, A_num_block * block_size, dim)
     return dense_C
-
 
 def reduce_sum_cuda(sparse_A, indices, A_num_block, B_num_block):
 
@@ -270,7 +257,6 @@ def reduce_sum_cuda(sparse_A, indices, A_num_block, B_num_block):
 
     return cuda_kernel.reduce_sum(sparse_A, indices, A_num_block, B_num_block)
 
-
 def reduce_sum_torch(sparse_A, indices, A_num_block, B_num_block):
 
     # sparse_A = [batch_size, num_block, block_size, block_size]
@@ -282,19 +268,16 @@ def reduce_sum_torch(sparse_A, indices, A_num_block, B_num_block):
     _, _, block_size, _ = sparse_A.size()
     batch_size, num_block = indices.size()
 
-    sparse_A = sparse_A.sum(dim=2).reshape(batch_size * num_block, block_size)
+    sparse_A = sparse_A.sum(dim = 2).reshape(batch_size * num_block, block_size)
 
-    batch_idx = torch.arange(indices.size(0), dtype=torch.long, device=indices.device)
-    global_idxes = (
-        torch.div(indices, B_num_block, rounding_mode="floor").long() + batch_idx[:, None] * A_num_block
-    ).reshape(batch_size * num_block)
-    temp = torch.zeros((batch_size * A_num_block, block_size), dtype=sparse_A.dtype, device=sparse_A.device)
+    batch_idx = torch.arange(indices.size(0), dtype = torch.long, device = indices.device)
+    global_idxes = (torch.div(indices, B_num_block, rounding_mode = 'floor').long() + batch_idx[:, None] * A_num_block).reshape(batch_size * num_block)
+    temp = torch.zeros((batch_size * A_num_block, block_size), dtype = sparse_A.dtype, device = sparse_A.device)
     output = temp.index_add(0, global_idxes, sparse_A).reshape(batch_size, A_num_block, block_size)
 
     return output
 
-
-def reduce_sum(sparse_A, indices, A_num_block, B_num_block, cuda=False):
+def reduce_sum(sparse_A, indices, A_num_block, B_num_block, cuda = False):
     batch_size, num_block, block_size, _ = sparse_A.size()
 
     # if block_size == 32 and cuda:
@@ -305,10 +288,8 @@ def reduce_sum(sparse_A, indices, A_num_block, B_num_block, cuda=False):
     output = output.reshape(batch_size, A_num_block * block_size)
     return output
 
-
 def transpose_indices(indices, dim_1_block, dim_2_block):
-    return ((indices % dim_2_block) * dim_1_block + torch.div(indices, dim_2_block, rounding_mode="floor")).long()
-
+    return ((indices % dim_2_block) * dim_1_block + torch.div(indices, dim_2_block, rounding_mode='floor')).long()
 
 class SampledDenseMM(torch.autograd.Function):
     @staticmethod
@@ -330,9 +311,8 @@ class SampledDenseMM(torch.autograd.Function):
         return grad_A, grad_B, None, None
 
     @staticmethod
-    def operator_call(dense_A, dense_B, indices, block_size=32):
+    def operator_call(dense_A, dense_B, indices, block_size = 32):
         return SampledDenseMM.apply(dense_A, dense_B, indices, block_size)
-
 
 class SparseDenseMM(torch.autograd.Function):
     @staticmethod
@@ -356,76 +336,57 @@ class SparseDenseMM(torch.autograd.Function):
     def operator_call(sparse_A, indices, dense_B, A_num_block):
         return SparseDenseMM.apply(sparse_A, indices, dense_B, A_num_block)
 
-
-class ReduceSum:
+class ReduceSum():
     @staticmethod
     def operator_call(sparse_A, indices, A_num_block, B_num_block):
         return reduce_sum(sparse_A, indices, A_num_block, B_num_block)
 
-
-def get_low_resolution_logit(Q, K, block_size, mask=None, V=None):
+def get_low_resolution_logit(Q, K, block_size, mask = None, V = None):
     batch_size, seq_len, head_dim = Q.size()
 
     num_block_per_row = seq_len // block_size
 
     V_hat = None
     if mask is not None:
-        token_count = mask.reshape(batch_size, num_block_per_row, block_size).sum(dim=-1)
-        Q_hat = Q.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim=-2) / (
-            token_count[:, :, None] + 1e-6
-        )
-        K_hat = K.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim=-2) / (
-            token_count[:, :, None] + 1e-6
-        )
+        token_count = mask.reshape(batch_size, num_block_per_row, block_size).sum(dim = -1)
+        Q_hat = Q.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim = -2) / (token_count[:, :, None] + 1e-6)
+        K_hat = K.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim = -2) / (token_count[:, :, None] + 1e-6)
         if V is not None:
-            V_hat = V.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim=-2) / (
-                token_count[:, :, None] + 1e-6
-            )
+            V_hat = V.reshape(batch_size, num_block_per_row, block_size, head_dim).sum(dim = -2) / (token_count[:, :, None] + 1e-6)
     else:
-        token_count = block_size * torch.ones(batch_size, num_block_per_row, dtype=torch.float, device=Q.device)
-        Q_hat = Q.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim=-2)
-        K_hat = K.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim=-2)
+        token_count = block_size * torch.ones(batch_size, num_block_per_row, dtype = torch.float, device = Q.device)
+        Q_hat = Q.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim = -2)
+        K_hat = K.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim = -2)
         if V is not None:
-            V_hat = V.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim=-2)
+            V_hat = V.reshape(batch_size, num_block_per_row, block_size, head_dim).mean(dim = -2)
 
     low_resolution_logit = torch.matmul(Q_hat, K_hat.transpose(-1, -2)) / math.sqrt(head_dim)
 
-    low_resolution_logit_row_max = low_resolution_logit.max(dim=-1, keepdims=True).values
+    low_resolution_logit_row_max = low_resolution_logit.max(dim = -1, keepdims = True).values
 
     if mask is not None:
-        low_resolution_logit = (
-            low_resolution_logit - 1e4 * ((token_count[:, None, :] * token_count[:, :, None]) < 0.5).float()
-        )
+        low_resolution_logit = low_resolution_logit - 1e4 * ((token_count[:, None, :] * token_count[:, :, None]) < 0.5).float()
 
     return low_resolution_logit, token_count, low_resolution_logit_row_max, V_hat
 
-
-def get_block_idxes(
-    low_resolution_logit, num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks
-):
+def get_block_idxes(low_resolution_logit, num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks):
     batch_size, total_blocks_per_row, _ = low_resolution_logit.shape
 
     if initial_prior_diagonal_n_blocks > 0:
         offset = initial_prior_diagonal_n_blocks // 2
-        temp_mask = torch.ones(total_blocks_per_row, total_blocks_per_row, device=low_resolution_logit.device)
-        diagonal_mask = torch.tril(torch.triu(temp_mask, diagonal=-offset), diagonal=offset)
+        temp_mask = torch.ones(total_blocks_per_row, total_blocks_per_row, device = low_resolution_logit.device)
+        diagonal_mask = torch.tril(torch.triu(temp_mask, diagonal = -offset), diagonal = offset)
         low_resolution_logit = low_resolution_logit + diagonal_mask[None, :, :] * 5e3
 
     if initial_prior_first_n_blocks > 0:
-        low_resolution_logit[:, :initial_prior_first_n_blocks, :] = (
-            low_resolution_logit[:, :initial_prior_first_n_blocks, :] + 5e3
-        )
-        low_resolution_logit[:, :, :initial_prior_first_n_blocks] = (
-            low_resolution_logit[:, :, :initial_prior_first_n_blocks] + 5e3
-        )
+        low_resolution_logit[:, :initial_prior_first_n_blocks, :] = low_resolution_logit[:, :initial_prior_first_n_blocks, :] + 5e3
+        low_resolution_logit[:, :, :initial_prior_first_n_blocks] = low_resolution_logit[:, :, :initial_prior_first_n_blocks] + 5e3
 
-    top_k_vals = torch.topk(
-        low_resolution_logit.reshape(batch_size, -1), num_blocks, dim=-1, largest=True, sorted=False
-    )
+    top_k_vals = torch.topk(low_resolution_logit.reshape(batch_size, -1), num_blocks, dim = -1, largest = True, sorted = False)
     indices = top_k_vals.indices
-
+    
     if approx_mode == "full":
-        threshold = top_k_vals.values.min(dim=-1).values
+        threshold = top_k_vals.values.min(dim = -1).values
         high_resolution_mask = (low_resolution_logit >= threshold[:, None, None]).float()
     elif approx_mode == "sparse":
         high_resolution_mask = None
@@ -434,17 +395,12 @@ def get_block_idxes(
 
     return indices, high_resolution_mask
 
-
 def mra2_attention(
-    Q,
-    K,
-    V,
-    mask,
-    num_blocks,
+    Q, K, V, mask, num_blocks,
     approx_mode,
-    block_size=32,
-    initial_prior_first_n_blocks=0,
-    initial_prior_diagonal_n_blocks=0,
+    block_size = 32,
+    initial_prior_first_n_blocks = 0,
+    initial_prior_diagonal_n_blocks = 0
 ):
 
     batch_size, num_head, seq_len, head_dim = Q.size()
@@ -456,9 +412,7 @@ def mra2_attention(
     Q = Q.reshape(meta_batch, seq_len, head_dim)
     K = K.reshape(meta_batch, seq_len, head_dim)
     V = V.reshape(meta_batch, seq_len, head_dim)
-    mask = (
-        None if torch.all(mask == 1).item() else mask[:, None, :].repeat(1, num_head, 1).reshape(meta_batch, seq_len)
-    )
+    mask = None if torch.all(mask == 1).item() else mask[:, None, :].repeat(1, num_head, 1).reshape(meta_batch, seq_len)
 
     if mask is not None:
         Q = Q * mask[:, :, None]
@@ -466,52 +420,37 @@ def mra2_attention(
         V = V * mask[:, :, None]
 
     if approx_mode == "full":
-        low_resolution_logit, token_count, low_resolution_logit_row_max, V_hat = get_low_resolution_logit(
-            Q, K, block_size, mask, V
-        )
+        low_resolution_logit, token_count, low_resolution_logit_row_max, V_hat = get_low_resolution_logit(Q, K, block_size, mask, V)
     elif approx_mode == "sparse":
         with torch.no_grad():
-            low_resolution_logit, token_count, low_resolution_logit_row_max, _ = get_low_resolution_logit(
-                Q, K, block_size, mask
-            )
+            low_resolution_logit, token_count, low_resolution_logit_row_max, _ = get_low_resolution_logit(Q, K, block_size, mask)
     else:
         raise Exception()
 
     with torch.no_grad():
         low_resolution_logit_normalized = low_resolution_logit - low_resolution_logit_row_max
-        indices, high_resolution_mask = get_block_idxes(
-            low_resolution_logit_normalized,
-            num_blocks,
-            approx_mode,
-            initial_prior_first_n_blocks,
-            initial_prior_diagonal_n_blocks,
-        )
+        #print('low_resolution_logit_normalized', low_resolution_logit_normalized)
+        print(num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks)
+        indices, high_resolution_mask = get_block_idxes(low_resolution_logit_normalized, num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks)
 
-    high_resolution_logit = SampledDenseMM.operator_call(Q, K, indices, block_size=block_size) / math.sqrt(head_dim)
+    #print('low_resolution_logit_normalized', low_resolution_logit_normalized)
+    #print('indices', indices)
+
+    high_resolution_logit = SampledDenseMM.operator_call(Q, K, indices, block_size = block_size) / math.sqrt(head_dim)
     max_vals, max_vals_scatter = sparse_max(high_resolution_logit, indices, num_block_per_row, num_block_per_row)
     high_resolution_logit = high_resolution_logit - max_vals_scatter
     if mask is not None:
         high_resolution_logit = high_resolution_logit - 1e4 * (1 - sparse_mask_B(mask, indices)[:, :, :, None])
     high_resolution_attn = torch.exp(high_resolution_logit)
     high_resolution_attn_out = SparseDenseMM.operator_call(high_resolution_attn, indices, V, num_block_per_row)
-    high_resolution_normalizer = ReduceSum.operator_call(
-        high_resolution_attn, indices, num_block_per_row, num_block_per_row
-    )
+    high_resolution_normalizer = ReduceSum.operator_call(high_resolution_attn, indices, num_block_per_row, num_block_per_row)
+    #print('high resoltuion', high_resolution_normalizer)
 
     if approx_mode == "full":
-        low_resolution_attn = (
-            torch.exp(low_resolution_logit - low_resolution_logit_row_max - 1e4 * high_resolution_mask)
-            * token_count[:, None, :]
-        )
+        low_resolution_attn = torch.exp(low_resolution_logit - low_resolution_logit_row_max - 1e4 * high_resolution_mask) * token_count[:, None, :]
 
-        low_resolution_attn_out = (
-            torch.matmul(low_resolution_attn, V_hat)[:, :, None, :]
-            .repeat(1, 1, block_size, 1)
-            .reshape(meta_batch, seq_len, head_dim)
-        )
-        low_resolution_normalizer = (
-            low_resolution_attn.sum(dim=-1)[:, :, None].repeat(1, 1, block_size).reshape(meta_batch, seq_len)
-        )
+        low_resolution_attn_out = torch.matmul(low_resolution_attn, V_hat)[:, :, None, :].repeat(1, 1, block_size, 1).reshape(meta_batch, seq_len, head_dim)
+        low_resolution_normalizer = low_resolution_attn.sum(dim = -1)[:, :, None].repeat(1, 1, block_size).reshape(meta_batch, seq_len)
 
         log_correction = low_resolution_logit_row_max.repeat(1, 1, block_size).reshape(meta_batch, seq_len) - max_vals
         if mask is not None:
@@ -521,13 +460,11 @@ def mra2_attention(
         low_resolution_attn_out = low_resolution_attn_out * low_resolution_corr[:, :, None]
         low_resolution_normalizer = low_resolution_normalizer * low_resolution_corr
 
-        high_resolution_corr = torch.exp(-log_correction * (log_correction > 0).float())
+        high_resolution_corr = torch.exp(- log_correction * (log_correction > 0).float())
         high_resolution_attn_out = high_resolution_attn_out * high_resolution_corr[:, :, None]
         high_resolution_normalizer = high_resolution_normalizer * high_resolution_corr
 
-        attn = (high_resolution_attn_out + low_resolution_attn_out) / (
-            high_resolution_normalizer[:, :, None] + low_resolution_normalizer[:, :, None] + 1e-6
-        )
+        attn = (high_resolution_attn_out + low_resolution_attn_out) / (high_resolution_normalizer[:, :, None] + low_resolution_normalizer[:, :, None] + 1e-6)
 
     elif approx_mode == "sparse":
         attn = high_resolution_attn_out / (high_resolution_normalizer[:, :, None] + 1e-6)
@@ -590,13 +527,15 @@ class MRAEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+            #print('inputs_embeds', inputs_embeds)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
+        #print('token type', token_type_embeddings)
+        #embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
-
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-
+            #print('position embedding', position_embeddings)
+            embeddings = inputs_embeds + position_embeddings + token_type_embeddings
+            #print('sum', embeddings)
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -625,10 +564,34 @@ class MRASelfAttention(nn.Module):
             position_embedding_type if position_embedding_type is not None else config.position_embedding_type
         )
 
+        self.use_expectation = config.use_expectation
+        self.hash_code_len = config.hash_code_len
+        self.use_conv = config.conv_window is not None
+        self.use_fast_hash = config.use_fast_hash
+        self.num_hash = config.num_hash
+        self.lsh_backward = config.lsh_backward
+
         self.num_block = config.num_block
         self.approx_mode = config.approx_mode
         self.initial_prior_first_n_blocks = config.initial_prior_first_n_blocks
         self.initial_prior_diagonal_n_blocks = config.initial_prior_diagonal_n_blocks
+
+        self.lsh_config = {
+            "hash_code_len": self.hash_code_len,
+            "use_fast_hash": self.use_fast_hash,
+            "num_hash": self.num_hash,
+            "lsh_backward": self.lsh_backward,
+        }
+
+        if config.conv_window is not None:
+            self.conv = nn.Conv2d(
+                in_channels=config.num_attention_heads,
+                out_channels=config.num_attention_heads,
+                kernel_size=(config.conv_window, 1),
+                padding=(config.conv_window // 2, 0),
+                bias=False,
+                groups=config.num_attention_heads,
+            )
 
     def transpose_for_scores(self, layer):
         new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -636,6 +599,10 @@ class MRASelfAttention(nn.Module):
         return layer.permute(0, 2, 1, 3)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+        print('hidden_states', hidden_states)
+        print('linear weight', self.query.weight)
+        #print('linear bias', self.query.bias)
+        print('query trans', self.query(hidden_states))
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -646,6 +613,10 @@ class MRASelfAttention(nn.Module):
             conv_value_layer = self.conv(value_layer * attention_mask[:, None, :, None])
 
         batch_size, num_heads, seq_len, head_dim = query_layer.size()
+
+        #query_layer = query_layer.reshape(batch_size * num_heads, seq_len, head_dim)
+        #key_layer = key_layer.reshape(batch_size * num_heads, seq_len, head_dim)
+        #value_layer = value_layer.reshape(batch_size * num_heads, seq_len, head_dim)
 
         # revert changes made by get_extended_attention_mask
         attention_mask = 1.0 + attention_mask / 10000.0
@@ -681,19 +652,21 @@ class MRASelfAttention(nn.Module):
                 ],
                 dim=-1,
             )
+        
+        #print('query', query_layer)
 
-        context_layer = mra2_attention(
-            query_layer.float(),
-            key_layer.float(),
-            value_layer.float(),
-            attention_mask.float(),
-            self.num_block,
-            approx_mode=self.approx_mode,
-            initial_prior_first_n_blocks=self.initial_prior_first_n_blocks,
-            initial_prior_diagonal_n_blocks=self.initial_prior_diagonal_n_blocks,
-        )
+        #print(self.num_block, self.approx_mode, self.initial_prior_first_n_blocks, self.initial_prior_diagonal_n_blocks)
 
-        if head_dim < gpu_warp_size:
+        context_layer =  mra2_attention(
+                query_layer.float(), key_layer.float(), value_layer.float(), attention_mask.float(), self.num_block,
+                approx_mode = self.approx_mode,
+                initial_prior_first_n_blocks = self.initial_prior_first_n_blocks,
+                initial_prior_diagonal_n_blocks = self.initial_prior_diagonal_n_blocks
+            )
+
+        #print('context', context_layer)
+
+        if (not self.use_expectation) and head_dim < gpu_warp_size:
             context_layer = context_layer[:, :, :head_dim]
 
         context_layer = context_layer.reshape(batch_size, num_heads, seq_len, head_dim)
@@ -1108,12 +1081,15 @@ class MRAModel(MRAPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
+        print('input_ids', input_ids, 'position_ids', position_ids, 'token_type_ids', token_type_ids)
+
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+        print('emb\n', embedding_output)
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
