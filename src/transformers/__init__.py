@@ -2163,6 +2163,15 @@ else:
             "VisualBertPreTrainedModel",
         ]
     )
+    _import_structure["models.videomae"].extend(
+        [
+            "TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFVideoMAEForPreTraining",
+            "TFVideoMAEModel",
+            "TFVideoMAEPreTrainedModel",
+            "TFVideoMAEForVideoClassification",
+        ]
+    )
     _import_structure["models.vit"].extend(
         [
             "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5627,6 +5636,13 @@ if TYPE_CHECKING:
             TFTransfoXLMainLayer,
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
+        )
+        from .models.videomae import (
+            TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFVideoMAEForPreTraining,
+            TFVideoMAEForVideoClassification,
+            TFVideoMAEModel,
+            TFVideoMAEPreTrainedModel,
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel

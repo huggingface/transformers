@@ -2397,11 +2397,35 @@ class TFVisionEncoderDecoderModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFViTForImageClassification(metaclass=DummyObject):
+TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFVideoMAEForPreTraining(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+
+class TFVideoMAEForVideoClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFVideoMAEModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFVideoMAEPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class TFViTModel(metaclass=DummyObject):

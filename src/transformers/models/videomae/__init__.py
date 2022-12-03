@@ -17,7 +17,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -37,7 +43,19 @@ else:
         "VideoMAEPreTrainedModel",
         "VideoMAEForVideoClassification",
     ]
-
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_videomae"] = [
+        "TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFVideoMAEForPreTraining",
+        "TFVideoMAEModel",
+        "TFVideoMAEPreTrainedModel",
+        "TFVideoMAEForVideoClassification",
+    ]
 try:
     if not is_vision_available():
         raise OptionalDependencyNotAvailable()
@@ -62,6 +80,19 @@ if TYPE_CHECKING:
             VideoMAEForVideoClassification,
             VideoMAEModel,
             VideoMAEPreTrainedModel,
+        )
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_videomae import (
+            TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFVideoMAEForPreTraining,
+            TFVideoMAEForVideoClassification,
+            TFVideoMAEModel,
+            TFVideoMAEPreTrainedModel,
         )
 
     try:

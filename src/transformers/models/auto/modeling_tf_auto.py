@@ -79,6 +79,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
         ("transfo-xl", "TFTransfoXLModel"),
+        ("videomae", "TFVideoMAEModel"),
         ("vit", "TFViTModel"),
         ("vit_mae", "TFViTMAEModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
@@ -112,7 +113,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("t5", "TFT5ForConditionalGeneration"),
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
-        ("vit_mae", "TFViTMAEForPreTraining"),
+        ("videomae", "TFVideoMAEForPreTraining")("vit_mae", "TFViTMAEForPreTraining"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
         ("xlnet", "TFXLNetLMHeadModel"),
@@ -205,6 +206,12 @@ TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "TFData2VecVisionForSemanticSegmentation"),
         ("mobilevit", "TFMobileViTForSemanticSegmentation"),
         ("segformer", "TFSegformerForSemanticSegmentation"),
+    ]
+)
+
+MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("videomae", "TFVideoMAEForVideoClassification"),
     ]
 )
 

@@ -31,7 +31,8 @@ alt="drawing" width="600"/>
 
 <small> VideoMAE pre-training. Taken from the <a href="https://arxiv.org/abs/2203.12602">original paper</a>. </small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of the model 
+was contributed by [sayakpaul](https://huggingface.co/sayakpaul).
 The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
 
 
@@ -63,3 +64,18 @@ The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
 
 [[autodoc]] transformers.VideoMAEForVideoClassification
     - forward
+
+## TFVideoMAEModel
+
+[[autodoc]] TFVideoMAEModel
+    - call
+
+## TFVideoMAEForPreTraining
+
+[[autodoc]] transformers.VideoMAEForPreTraining
+    - call
+
+## TFVideoMAEForVideoClassification
+
+[[autodoc]] transformers.VideoMAEForVideoClassification
+    - call
