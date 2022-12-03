@@ -444,9 +444,7 @@ class BioGptModel(BioGptPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, self.embed_dim, self.padding_idx)
         self.embed_positions = BioGptLearnedPositionalEmbedding(config.max_position_embeddings, self.embed_dim)
 
-        self.layers = nn.ModuleList(
-            [BioGptDecoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )  # type: List[BioGptDecoderLayer]
+        self.layers = nn.ModuleList([BioGptDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.gradient_checkpointing = False
