@@ -108,6 +108,7 @@ from . import (
     mobilenet_v2,
     mobilevit,
     mpnet,
+    mra,
     mt5,
     mvp,
     nat,
