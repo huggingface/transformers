@@ -18,7 +18,7 @@ src/transformers/generation/utils.py
 src/transformers/models/albert/configuration_albert.py
 src/transformers/models/albert/modeling_albert.py
 src/transformers/models/albert/modeling_tf_albert.py
-src/transformers/models/audio_spectogram_transformer/modeling_audio_spectogram_transformer.py
+src/transformers/models/audio_spectrogram_transformer/modeling_audio_spectrogram_transformer.py
 src/transformers/models/bart/configuration_bart.py
 src/transformers/models/bart/modeling_bart.py
 src/transformers/models/beit/configuration_beit.py
@@ -79,6 +79,7 @@ src/transformers/models/electra/modeling_tf_electra.py
 src/transformers/models/ernie/configuration_ernie.py
 src/transformers/models/flava/configuration_flava.py
 src/transformers/models/fnet/configuration_fnet.py
+src/transformers/models/fsmt/configuration_fsmt.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/configuration_gpt2.py
 src/transformers/models/gpt2/modeling_gpt2.py

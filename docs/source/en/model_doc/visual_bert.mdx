@@ -53,7 +53,7 @@ vectors to a standard BERT model. The text input is concatenated in the front of
 layer, and is expected to be bound by [CLS] and a [SEP] tokens, as in BERT. The segment IDs must also be set
 appropriately for the textual and visual parts.
 
-The [`BertTokenizer`] is used to encode the text. A custom detector/feature extractor must be used
+The [`BertTokenizer`] is used to encode the text. A custom detector/image processor must be used
 to get the visual embeddings. The following example notebooks show how to use VisualBERT with Detectron-like models:
 
 - [VisualBERT VQA demo notebook](https://github.com/huggingface/transformers/tree/main/examples/research_projects/visual_bert) : This notebook
