@@ -1539,6 +1539,8 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
