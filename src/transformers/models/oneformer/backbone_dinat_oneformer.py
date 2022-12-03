@@ -554,9 +554,6 @@ class OneFormerDinatEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions += layer_outputs[2:]
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-
         return OneFormerDinatEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -614,13 +611,6 @@ class OneFormerDinatModel(nn.Module, ModuleUtilsMixin):
             output_hidden_states=True,
             return_dict=True,
         )
-
-        if not return_dict:
-            output = (encoder_outputs.reshaped_hidden_states,)
-            if output_attentions:
-                output += (encoder_outputs.attentions,)
-            return output
-
 
         return OneFormerDinatModelOutput(
             hidden_states=encoder_outputs.reshaped_hidden_states,

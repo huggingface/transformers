@@ -777,12 +777,6 @@ class OneFormerSwinModel(nn.Module, ModuleUtilsMixin):
 
         hidden_states_spatial_dimensions = (input_dimensions,) + encoder_outputs.hidden_states_spatial_dimensions
 
-        if not return_dict:
-            output = (encoder_outputs.hidden_states, hidden_states_spatial_dimensions,)
-            if output_attentions:
-                output += (encoder_outputs.attentions,)
-            return output
-
         return OneFormerSwinModelOutput(
             hidden_states=encoder_outputs.hidden_states,
             hidden_states_spatial_dimensions=hidden_states_spatial_dimensions,

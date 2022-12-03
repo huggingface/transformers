@@ -38,6 +38,12 @@ class OneFormerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
     Currently, OneFormer supports the [Swin Transformer](swin) and [DiNAT](dinat) as backbones.
     Args:
+        output_attentions (`bool`, *optional*, defaults to `True`):
+            Whether to output attention weights.
+        output_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to output intermediate predictions.
+        use_return_dict (`bool`, *optional*, defaults to `True`):
+            Whether to return output as tuples or dataclass objects.
         general_config (`dict`, *optional*, defaults to a dictionary with the following keys)
             Dictionary containing general configuration like backbone_type, loss weights, number of classes, etc.
                 backbone_type (`str`, *optional*, defaults to 'swin'):
@@ -79,12 +85,6 @@ class OneFormerConfig(PretrainedConfig):
                     Running model in training or inference mode.
                 use_auxiliary_loss (`bool`, *optional*, defaults to `True`):
                     Whether to calculate auxiliary losses during training.
-                output_attentions (`bool`, *optional*, defaults to `True`):
-                    Whether to output attention weights.
-                output_hidden_states (`bool`, *optional*, defaults to `True`):
-                    Whether to output intermediate predictions.
-                use_return_dict (`bool`, *optional*, defaults to `True`):
-                    Whether to return output as tuples or dataclass objects.
                 output_auxiliary_logits (`bool`, *optional*, defaults to `True`):
                     Whether to return intermediate predictions from the transformer decoder layers.
             
@@ -213,12 +213,11 @@ class OneFormerConfig(PretrainedConfig):
         self.text_encoder_config = text_encoder_config
         self.decoder_config = decoder_config
 
-        self.return_dict = self.general_config["use_return_dict"]
         self.hidden_size = self.decoder_config["hidden_dim"]
-        self.output_attentions = self.general_config["output_attentions"]
         self.num_attention_heads = self.decoder_config["num_heads"]
         self.num_hidden_layers = self.decoder_config["decoder_layers"]
-        self.output_hidden_states = self.general_config["output_hidden_states"]
+        self.init_std = self.general_config["init_std"]
+        self.init_xavier_std = self.general_config["init_xavier_std"]
         
         super().__init__(**kwargs)
     
@@ -251,9 +250,6 @@ class OneFormerConfig(PretrainedConfig):
             general_config["layer_norm_eps"] = 1e-05
             general_config["is_train"] = False
             general_config["use_auxiliary_loss"] = True
-            general_config["output_attentions"] = True
-            general_config["output_hidden_states"] = True
-            general_config["use_return_dict"] = True
             general_config["output_auxiliary_logits"] = True
         
         if backbone_config is None:

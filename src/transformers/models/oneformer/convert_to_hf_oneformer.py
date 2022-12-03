@@ -161,6 +161,9 @@ class OriginalOneFormerConfigToOursConverter:
 
 
         config: OneFormerConfig = OneFormerConfig(
+            output_attentions=True,
+            output_hidden_states=True,
+            return_dict=True,
             general_config=dict(
                 backbone_type="swin" if is_swin else "dinat",
                 ignore_value=model.SEM_SEG_HEAD.IGNORE_VALUE,
@@ -181,9 +184,6 @@ class OriginalOneFormerConfigToOursConverter:
                 layer_norm_eps=1e-05,
                 is_train=False,
                 use_auxiliary_loss=model.ONE_FORMER.DEEP_SUPERVISION,
-                output_attentions=True,
-                output_hidden_states=True,
-                use_return_dict=True,
                 output_auxiliary_logits=True,
             ),
             backbone_config=backbone_config,
@@ -640,7 +640,32 @@ class OriginalOneFormerCheckpointToOursConverter:
         
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
-    # Transformer Decoder 
+    # Transformer Decoder
+    def replace_keys_qkv_transformer_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+        dst_prefix: str = "transformer_module.decoder.layers"
+        src_prefix: str = "sem_seg_head.predictor"
+        for i in range(self.config.decoder_config["decoder_layers"]-1):
+            # read in weights + bias of input projection layer of self-attention
+            in_proj_weight = src_state_dict.pop(f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_weight")
+            in_proj_bias = src_state_dict.pop(f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_bias")
+            # next, add query, keys and values (in that order) to the state dict
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.q_proj.bias"] = in_proj_bias[:256]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.bias"] = in_proj_bias[256:512]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+            # # read in weights + bias of input projection layer of cross-attention
+            # in_proj_weight_cross_attn = src_state_dict.pop(f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.in_proj_weight")
+            # in_proj_bias_cross_attn = src_state_dict.pop(f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.in_proj_bias")
+            # # next, add query, keys and values (in that order) of cross-attention to the state dict
+            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.q_proj.weight"] = in_proj_weight_cross_attn[:256, :]
+            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.q_proj.bias"] = in_proj_bias_cross_attn[:256]
+            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.k_proj.weight"] = in_proj_weight_cross_attn[256:512, :]
+            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.k_proj.bias"] = in_proj_bias_cross_attn[256:512]
+            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.v_proj.weight"] = in_proj_weight_cross_attn[-256:, :]
+            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
+
     def replace_transformer_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module"
         src_prefix: str = "sem_seg_head.predictor"
@@ -656,6 +681,12 @@ class OriginalOneFormerCheckpointToOursConverter:
                 (f"{src_prefix}.in_proj_bias", f"{dst_prefix}.in_proj_bias"),
                 (f"{src_prefix}.in_proj_weight", f"{dst_prefix}.in_proj_weight")
             ]
+            attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"))
+
+            return attn_keys
+        
+        def rename_keys_for_self_attn(src_prefix: str, dst_prefix: str):
+            attn_keys = []
             attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"))
 
             return attn_keys
@@ -705,7 +736,7 @@ class OriginalOneFormerCheckpointToOursConverter:
             self_attn_layer_keys = []
             
             self_attn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm"))
-            self_attn_layer_keys.extend(rename_keys_for_attn(f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn"))
+            self_attn_layer_keys.extend(rename_keys_for_self_attn(f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn"))
 
             return self_attn_layer_keys
         
@@ -786,6 +817,7 @@ class OriginalOneFormerCheckpointToOursConverter:
             )
         
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
+        self.replace_keys_qkv_transformer_decoder(dst_state_dict, src_state_dict)
 
     def replace_task_mlp(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "task_encoder"
