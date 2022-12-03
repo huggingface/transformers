@@ -736,6 +736,22 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(segmentation[0].shape, target_sizes[0])
+    
+    def test_post_process_instance_segmentation(self):
+        feature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes,
+                                            max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
+                                            num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
+        outputs = self.feature_extract_tester.get_fake_oneformer_outputs()
+        segmentation = feature_extractor.post_process_instance_segmentation(outputs, threshold=0)
+
+        self.assertTrue(len(segmentation) == self.feature_extract_tester.batch_size)
+        for el in segmentation:
+            self.assertTrue("segmentation" in el)
+            self.assertTrue("segments_info" in el)
+            self.assertEqual(type(el["segments_info"]), list)
+            self.assertEqual(
+                el["segmentation"].shape, (self.feature_extract_tester.height, self.feature_extract_tester.width)
+            )
 
     def test_post_process_panoptic_segmentation(self):
         feature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes,
