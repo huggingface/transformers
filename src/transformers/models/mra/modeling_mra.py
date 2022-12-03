@@ -527,13 +527,13 @@ class MRAEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-            #print('inputs_embeds', inputs_embeds)
+            print('inputs_embeds', inputs_embeds)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        #print('token type', token_type_embeddings)
+        print('token type', token_type_embeddings)
         #embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
-            #print('position embedding', position_embeddings)
+            print('position embedding', position_embeddings)
             embeddings = inputs_embeds + position_embeddings + token_type_embeddings
             print('sum', embeddings)
         embeddings = self.LayerNorm(embeddings)
