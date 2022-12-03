@@ -186,7 +186,7 @@ def prepare_bart_inputs_dict(
 
 @require_tf
 class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
+    all_model_classes = (TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
