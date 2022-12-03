@@ -535,7 +535,7 @@ class MRAEmbeddings(nn.Module):
             position_embeddings = self.position_embeddings(position_ids)
             #print('position embedding', position_embeddings)
             embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-            #print('sum', embeddings)
+            print('sum', embeddings)
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
