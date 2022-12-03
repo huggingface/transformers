@@ -375,6 +375,8 @@ class OneFormerHungarianMatcher(nn.Module):
         preds_probs = class_queries_logits
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(preds_probs, preds_masks, mask_labels, class_labels):
+            # downsample the target mask, save memory
+            target_mask = nn.functional.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
 
             pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
@@ -610,8 +612,13 @@ class OneFormerLoss(nn.Module):
         pred_masks = masks_queries_logits[src_idx]
         # shape (batch_size, num_queries, height, width)
         # pad all and stack the targets to the num_labels dimension
+        # upsample predictions to the target size, we have to add one dim to use interpolate
         target_masks, _ = self._pad_images_to_max_in_batch(mask_labels)
         target_masks = target_masks[tgt_idx]
+
+        pred_masks = nn.functional.interpolate(
+            pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
         
         pred_masks = pred_masks[:, None]
         target_masks = target_masks[:, None]
@@ -3120,11 +3127,12 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> mask_predictions = outputs.transformer_decoder_mask_predictions
         >>> class_predictions = outputs.transformer_decoder_class_predictions
 
-        >>> f'\n👉 Mask Predictions Shape: {list(mask_predictions.shape)}, Class Predictions Shape: {list(class_predictions.shape)}'
-        👉 Mask Predictions Shape: [1, 150, 128, 176], Class Predictions Shape: [1, 150, 151]
+        >>> f'👉 Mask Predictions Shape: {list(mask_predictions.shape)}, Class Predictions Shape: {list(class_predictions.shape)}'
+        '👉 Mask Predictions Shape: [1, 150, 128, 176], Class Predictions Shape: [1, 150, 151]'
 
-        🎉 Congratulations on successfully running OneFormer
-        📖 For more information, checkout the official repo: https://github.com/SHI-Labs/OneFormer
+
+
+
         ```"""
 
         if pixel_values is None:
@@ -3315,26 +3323,26 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> predicted_semantic_map = feature_extractor.post_process_semantic_segmentation(
         ...    outputs, target_sizes=[image.size[::-1]]
         ... )[0]
-        >>> f'\n👉 Semantic Predictions Shape: {list(predicted_semantic_map.shape)}'
-        Semantic Predictions Shape: [512, 683]
+        >>> f'👉 Semantic Predictions Shape: {list(predicted_semantic_map.shape)}'
+        '👉 Semantic Predictions Shape: [512, 683]'
 
 
         >>> ######## Instance Segmentation ########
         >>> inputs = feature_extractor(image, ["instance"], return_tensors="pt")
 
         >>> with torch.no_grad():
-        ...    outputs = model(**inputs)
-        >>>  # model predicts class_queries_logits of shape `(batch_size, num_queries)`
-        >>>  # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
-        >>>  class_queries_logits = outputs.class_queries_logits
-        >>>  masks_queries_logits = outputs.masks_queries_logits
+        ...     outputs = model(**inputs)
+        >>> # model predicts class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
 
         >>> # you can pass them to feature_extractor for instance postprocessing
         >>> predicted_instance_map = feature_extractor.post_process_instance_segmentation(
-        ...    outputs, "instance", target_sizes=[image.size[::-1]]
+        ...    outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
-        >>> print(f'\n👉 Instance Predictions Shape: {list(predicted_instance_map.shape)}')
-        Instance Predictions Shape: [512, 683]
+        >>> f'👉 Instance Predictions Shape: {list(predicted_instance_map.shape)}'
+        '👉 Instance Predictions Shape: [512, 683]'
 
         >>> ######## Panoptic Segmentation ########
         >>> inputs = feature_extractor(image, ["panoptic"], return_tensors="pt")
@@ -3351,10 +3359,12 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ...    outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
         >>> f'👉 Panoptic Predictions Shape: {list(predicted_panoptic_map.shape)}'
-        👉 Panoptic Predictions Shape: [512, 683]
+        '👉 Panoptic Predictions Shape: [512, 683]'
 
         🎉 Congratulations on successfully running OneFormer
         📖 For more information, checkout the official repo: https://github.com/SHI-Labs/OneFormer
+
+
         ```
         """
 

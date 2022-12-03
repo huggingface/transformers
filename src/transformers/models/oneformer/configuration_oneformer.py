@@ -182,6 +182,11 @@ class OneFormerConfig(PretrainedConfig):
     >>> model = OneFormerModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
+
+
+
+
+
     ```
     """
     model_type = "oneformer"

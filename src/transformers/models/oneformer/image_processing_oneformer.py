@@ -1079,11 +1079,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
-        Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
+        Converts the output of [`OneFormerForUniversalSegmentationOutput`] into semantic segmentation maps. Only supports
         PyTorch.
 
         Args:
-            outputs ([`MaskFormerForInstanceSegmentation`]):
+            outputs ([`OneFormerForUniversalSegmentationOutput`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
@@ -1197,6 +1197,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 labels_per_image,
                 mask_threshold,
                 overlap_mask_area_threshold,
+                set(),
                 target_size,
             )
 
@@ -1217,12 +1218,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
+        Converts the output of [`OneFormerForUniversalSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
 
         Args:
-            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`].
+            outputs ([`OneFormerForUniversalSegmentationOutput`]):
+                The outputs from [`OneFormerForUniversalSegmentationOutput`].
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
             mask_threshold (`float`, *optional*, defaults to 0.5):
