@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 
 import numpy as np
@@ -29,7 +30,7 @@ from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFBartForConditionalGeneration, TFBartModel, TFBartForSequenceClassification
+    from transformers import TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel
 
 
 @require_tf
@@ -302,7 +303,6 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
-
 
 
 def _long_tensor(tok_lst):

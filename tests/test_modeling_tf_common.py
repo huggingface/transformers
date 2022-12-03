@@ -171,8 +171,8 @@ class TFModelTesterMixin:
             }
 
         if model_class.__name__ == "TFBartForSequenceClassification":
-            # Append EOS token
-            logger.warn(f"MODEL CLASS {model_class}")
+            # Replace last id with EOS token
+            input_ids = inputs_dict["input_ids"][:, :-1]
             input_ids = tf.concat([input_ids, tf.ones((tf.shape(input_ids)[0], 1), dtype=tf.int32) * 2], axis=1)
             inputs_dict['input_ids'] = input_ids
 
