@@ -105,12 +105,14 @@ class DualEncoderRetriever(BaseRetriever):
         return self._embed(*args, **kwargs)
 
 
-class UntiedDualEncoderRetriever(BaseRetriever):
+
+
+class UntiedDualEncoder(BaseRetriever):
     """Like DualEncoderRetriever, but dedicated encoders for passage and query embedding"""
 
     def __init__(self, opt, query_encoder, passage_encoder=None):
         """Create the module: if passage_encoder is none, one will be created as a deep copy of query_encoder"""
-        super(UntiedDualEncoderRetriever, self).__init__()
+        super(UntiedDualEncoder, self).__init__()
         self.opt = opt
         self.query_contriever = query_encoder
         if passage_encoder is None:
@@ -121,15 +123,14 @@ class UntiedDualEncoderRetriever(BaseRetriever):
         return self.query_contriever(*args, **kwargs)
 
     def embed_passages(self, *args, **kwargs):
-        if self.opt.query_side_retriever_training:
-            is_train = self.passage_contriever.training
-            self.passage_contriever.eval()
-            with torch.no_grad():
-                passage_emb = self.passage_contriever(*args, **kwargs)
-            if is_train:
-                self.passage_contriever.train()
-
-        else:
-            passage_emb = self.passage_contriever(*args, **kwargs)
+        # if self.opt.query_side_retriever_training:
+        #     is_train = self.passage_contriever.training
+        #     self.passage_contriever.eval()
+        #     with torch.no_grad():
+        #         passage_emb = self.passage_contriever(*args, **kwargs)
+        #     if is_train:
+        #         self.passage_contriever.train()
+        # else:
+        passage_emb = self.passage_contriever(*args, **kwargs)
 
         return passage_emb
