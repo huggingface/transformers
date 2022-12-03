@@ -324,7 +324,7 @@ Aquí obtendrás un gran número de frames mostrados - tantos como forward calls
 Por ejemplo, si un problema comienza a ocurrir en el batch 150. Entonces puede mostrar las trazas de los batches 149 y 150 y comparar dónde
 los números empezaron a divergir.
 
-También puede especificar el número de batch después del cual se debe detener el entrenamiento, con:
+También puedes especificar el número de batch después del cual se debe detener el entrenamiento, con:
 
 ```python
 debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
