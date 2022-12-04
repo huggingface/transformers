@@ -91,6 +91,7 @@ In Computer Vision:
 - [Object Detection with DETR](https://huggingface.co/facebook/detr-resnet-50)
 - [Semantic Segmentation with SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
 - [Panoptic Segmentation with DETR](https://huggingface.co/facebook/detr-resnet-50-panoptic)
+- [Universal Segmentation with OneFormer (Semantic, Instance and Panoptic Segmentation with a single model)](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 
 In Audio:
 - [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
