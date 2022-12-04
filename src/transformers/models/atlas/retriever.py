@@ -10,9 +10,6 @@ import torch
 
 from ..bert.modeling_bert import BertModel
 
-EMBEDDINGS_DIM: int = 768
-
-
 class Contriever(BertModel):
     def __init__(self, config, pooling="average", **kwargs):
         super().__init__(config, add_pooling_layer=False)
@@ -61,6 +58,7 @@ class Contriever(BertModel):
 
 
 class BaseRetriever(torch.nn.Module):
+    # TODO: Convert to transformers model
     """A retriever needs to be able to embed queries and passages, and have a forward function"""
 
     def __init__(self, *args, **kwargs):
@@ -90,9 +88,9 @@ class BaseRetriever(torch.nn.Module):
 class DualEncoderRetriever(BaseRetriever):
     """Wrapper for standard contriever, or other dual encoders that parameter-share"""
 
-    def __init__(self, opt, contriever):
+    def __init__(self, config, contriever):
         super(DualEncoderRetriever, self).__init__()
-        self.opt = opt
+        self.config = config
         self.contriever = contriever
 
     def _embed(self, *args, **kwargs):
@@ -107,13 +105,13 @@ class DualEncoderRetriever(BaseRetriever):
 
 
 
-class UntiedDualEncoder(BaseRetriever):
+class UntiedDualEncoderRetriever(BaseRetriever):
     """Like DualEncoderRetriever, but dedicated encoders for passage and query embedding"""
 
-    def __init__(self, opt, query_encoder, passage_encoder=None):
+    def __init__(self, config, query_encoder, passage_encoder=None):
         """Create the module: if passage_encoder is none, one will be created as a deep copy of query_encoder"""
-        super(UntiedDualEncoder, self).__init__()
-        self.opt = opt
+        super(UntiedDualEncoderRetriever, self).__init__()
+        self.config = config
         self.query_contriever = query_encoder
         if passage_encoder is None:
             passage_encoder = copy.deepcopy(query_encoder) if hasattr(query_encoder, "module") else query_encoder
@@ -123,14 +121,14 @@ class UntiedDualEncoder(BaseRetriever):
         return self.query_contriever(*args, **kwargs)
 
     def embed_passages(self, *args, **kwargs):
-        # if self.opt.query_side_retriever_training:
-        #     is_train = self.passage_contriever.training
-        #     self.passage_contriever.eval()
-        #     with torch.no_grad():
-        #         passage_emb = self.passage_contriever(*args, **kwargs)
-        #     if is_train:
-        #         self.passage_contriever.train()
-        # else:
-        passage_emb = self.passage_contriever(*args, **kwargs)
+        if self.config.query_side_retriever_training:
+            is_train = self.passage_contriever.training
+            self.passage_contriever.eval()
+            with torch.no_grad():
+                passage_emb = self.passage_contriever(*args, **kwargs)
+            if is_train:
+                self.passage_contriever.train()
+        else:
+            passage_emb = self.passage_contriever(*args, **kwargs)
 
         return passage_emb

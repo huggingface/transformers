@@ -23,7 +23,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_atlas": ["AtlasConfig"],
-    "retrieval_atlas": ["AtlasRetriever"],
     "tokenization_atlas": ["AtlasTokenizer"],
 }
 
@@ -36,13 +35,10 @@ else:
     _import_structure["modeling_atlas"] = [
         "AtlasModel",
         "AtlasPreTrainedModel",
-        "AtlasSequenceForGeneration",
-        "AtlasTokenForGeneration",
     ]
 
 if TYPE_CHECKING:
     from .configuration_atlas import AtlasConfig
-    from .retrieval_atlas import AtlasRetriever
     from .tokenization_atlas import AtlasTokenizer
 
     try:
@@ -51,7 +47,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_atlas import AtlasModel, AtlasPreTrainedModel, AtlasSequenceForGeneration, AtlasTokenForGeneration
+        from .modeling_atlas import AtlasModel, AtlasPreTrainedModel
 
 else:
     import sys
