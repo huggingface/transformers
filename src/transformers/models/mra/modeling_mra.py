@@ -573,14 +573,7 @@ class MRASelfAttention(nn.Module):
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        if self.use_conv:
-            conv_value_layer = self.conv(value_layer * attention_mask[:, None, :, None])
-
         batch_size, num_heads, seq_len, head_dim = query_layer.size()
-
-        #query_layer = query_layer.reshape(batch_size * num_heads, seq_len, head_dim)
-        #key_layer = key_layer.reshape(batch_size * num_heads, seq_len, head_dim)
-        #value_layer = value_layer.reshape(batch_size * num_heads, seq_len, head_dim)
 
         # revert changes made by get_extended_attention_mask
         attention_mask = 1.0 + attention_mask / 10000.0
@@ -628,9 +621,6 @@ class MRASelfAttention(nn.Module):
             context_layer = context_layer[:, :, :head_dim]
 
         context_layer = context_layer.reshape(batch_size, num_heads, seq_len, head_dim)
-
-        if self.use_conv:
-            context_layer += conv_value_layer
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
