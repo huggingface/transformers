@@ -3389,9 +3389,6 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ... )[0]["segmentation"]
         >>> f"👉 Panoptic Predictions Shape: {list(predicted_panoptic_map.shape)}"
         '👉 Panoptic Predictions Shape: [512, 683]'
-        
-        🎉 Congratulations on successfully running OneFormer
-        📖 For more information, checkout the official repo: https://github.com/SHI-Labs/OneFormer
         ```
         """
 
