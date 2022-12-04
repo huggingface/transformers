@@ -25,12 +25,15 @@ from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
+    MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
     AutoFeatureExtractor,
     AutoModelForImageSegmentation,
     AutoModelForInstanceSegmentation,
+    AutoModelForUniversalSegmentation,
     DetrForSegmentation,
     ImageSegmentationPipeline,
     MaskFormerForInstanceSegmentation,
+    OneFormerForUniversalSegmentation,
     is_vision_available,
     pipeline,
 )
@@ -78,6 +81,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
         + (MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items() if MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING else [])
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
+        + (MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING.items() if MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING else [])
     }
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
@@ -88,15 +92,22 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         ]
 
     def run_pipeline_test(self, image_segmenter, examples):
+
+        if isinstance(image_segmenter.model, OneFormerForUniversalSegmentation):
+            task_inputs = ["panoptic"]
+        else:
+            task_inputs = None
+
         outputs = image_segmenter(
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            task_inputs=task_inputs,
             threshold=0.0,
             mask_threshold=0,
             overlap_mask_area_threshold=0,
         )
         self.assertIsInstance(outputs, list)
         n = len(outputs)
-        if isinstance(image_segmenter.model, (MaskFormerForInstanceSegmentation, DetrForSegmentation)):
+        if isinstance(image_segmenter.model, (OneFormerForUniversalSegmentation, MaskFormerForInstanceSegmentation, DetrForSegmentation)):
             # Instance segmentation (maskformer, and detr) have a slot for null class
             # and can output nothing even with a low threshold
             self.assertGreaterEqual(n, 0)
@@ -109,15 +120,15 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         # RGBA
-        outputs = image_segmenter(dataset[0]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(dataset[0]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # LA
-        outputs = image_segmenter(dataset[1]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(dataset[1]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # L
-        outputs = image_segmenter(dataset[2]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(dataset[2]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
 
@@ -139,7 +150,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
         outputs = image_segmenter(
-            batch, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0, batch_size=batch_size
+            batch, task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0, batch_size=batch_size
         )
         self.assertEqual(len(batch), len(outputs))
         self.assertEqual(len(outputs[0]), n)
@@ -600,5 +611,65 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     "label": "sky",
                     "mask": {"hash": "a3756324a6", "shape": (512, 683), "white_pixels": 135802},
                 },
+            ],
+        )
+    
+    @require_torch
+    @slow
+    def test_oneformer(self):
+        threshold = 0.8
+        model_id = "shi-labs/oneformer_ade20k_swin_tiny"
+
+        model = AutoModelForUniversalSegmentation.from_pretrained(model_id)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        image_segmenter = pipeline("image-segmentation", model=model, feature_extractor=feature_extractor)
+
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        file = image[0]["file"]
+        outputs = image_segmenter(file, task_inputs=["panoptic"], threshold=threshold)
+
+        # Shortening by hashing
+        for o in outputs:
+            o["mask"] = mask_to_test_readable(o["mask"])
+            
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    'label': 'tree',
+                    'mask': {'hash': '03c305f59b', 'shape': (512, 683), 'white_pixels': 14518},
+                    'score': 0.9509
+                },
+                {
+                    'label': 'grass',
+                    'mask': {'hash': '3890aba30a', 'shape': (512, 683), 'white_pixels': 53343},
+                    'score': 0.9979
+                },
+                {
+                    'label': 'road, route',
+                    'mask': {'hash': '12d05a130d', 'shape': (512, 683), 'white_pixels': 2092},
+                    'score': 0.9564
+                },
+                {
+                    'label': 'plant',
+                    'mask': {'hash': 'd0b64cc51c', 'shape': (512, 683), 'white_pixels': 2838},
+                    'score': 0.9232
+                },
+                {
+                    'label': 'building',
+                    'mask': {'hash': 'c6202857f3', 'shape': (512, 683), 'white_pixels': 124877},
+                    'score': 0.9618
+                },
+                {
+                    'label': 'wall',
+                    'mask': {'hash': '9b70cb4cfd', 'shape': (512, 683), 'white_pixels': 14971},
+                    'score': 0.9862
+                },
+                {
+                    'label': 'sky',
+                    'mask': {'hash': '3592ecf6b5', 'shape': (512, 683), 'white_pixels': 135632},
+                    'score': 0.9992
+                }
             ],
         )

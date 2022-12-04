@@ -136,6 +136,7 @@ if is_torch_available():
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelForVideoClassification,
+        AutoModelForUniversalSegmentation,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
         AutoModelForZeroShotObjectDetection,

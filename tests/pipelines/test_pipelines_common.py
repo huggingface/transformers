@@ -40,6 +40,7 @@ from transformers import (
     DistilBertForSequenceClassification,
     TextClassificationPipeline,
     TFAutoModelForSequenceClassification,
+    OneFormerForUniversalSegmentation,
     pipeline,
 )
 from transformers.pipelines import PIPELINE_REGISTRY, get_task
@@ -258,9 +259,14 @@ class PipelineTestCaseMeta(type):
                         for _ in range(n):
                             # Need to copy because Conversation object is mutated
                             yield copy.deepcopy(random.choice(examples))
+                    
+                    if isinstance(pipeline.model, OneFormerForUniversalSegmentation):
+                        task_inputs = ["panoptic"]
+                    else:
+                        task_inputs = None
 
                     out = []
-                    for item in pipeline(data(10), batch_size=4):
+                    for item in pipeline(data(10), task_inputs=task_inputs, batch_size=4):
                         out.append(item)
                     self.assertEqual(len(out), 10)
 

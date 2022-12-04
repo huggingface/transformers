@@ -62,7 +62,7 @@ class OneFormerModelTester:
         max_size=32 * 6,
         num_labels=4,
         mask_feature_size=64,
-        sequence_length=11,
+        sequence_length=77,
         n_ctx=4,
     ):
         self.parent = parent
@@ -123,6 +123,13 @@ class OneFormerModelTester:
         config.text_encoder_config["max_seq_len"] = self.sequence_length
         config.text_encoder_config["text_encoder_context_length"] = self.sequence_length
         config.text_encoder_config["text_encoder_n_ctx"] = self.n_ctx
+
+        config.label2id = {}
+        config.id2label = {}
+
+        for i in range(self.num_labels):
+            config.id2label[i] = f'LABEL_{i}'
+            config.label2id[f'LABEL_{i}'] = i
 
         return config
 
