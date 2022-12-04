@@ -556,34 +556,10 @@ class MRASelfAttention(nn.Module):
             position_embedding_type if position_embedding_type is not None else config.position_embedding_type
         )
 
-        self.use_expectation = config.use_expectation
-        self.hash_code_len = config.hash_code_len
-        self.use_conv = config.conv_window is not None
-        self.use_fast_hash = config.use_fast_hash
-        self.num_hash = config.num_hash
-        self.lsh_backward = config.lsh_backward
-
         self.num_block = config.num_block
         self.approx_mode = config.approx_mode
         self.initial_prior_first_n_blocks = config.initial_prior_first_n_blocks
         self.initial_prior_diagonal_n_blocks = config.initial_prior_diagonal_n_blocks
-
-        self.lsh_config = {
-            "hash_code_len": self.hash_code_len,
-            "use_fast_hash": self.use_fast_hash,
-            "num_hash": self.num_hash,
-            "lsh_backward": self.lsh_backward,
-        }
-
-        if config.conv_window is not None:
-            self.conv = nn.Conv2d(
-                in_channels=config.num_attention_heads,
-                out_channels=config.num_attention_heads,
-                kernel_size=(config.conv_window, 1),
-                padding=(config.conv_window // 2, 0),
-                bias=False,
-                groups=config.num_attention_heads,
-            )
 
     def transpose_for_scores(self, layer):
         new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -616,7 +592,7 @@ class MRASelfAttention(nn.Module):
         # smaller than this are padded with zeros.
         gpu_warp_size = 32
 
-        if (not self.use_expectation) and head_dim < gpu_warp_size:
+        if head_dim < gpu_warp_size:
             pad_size = batch_size * num_heads, seq_len, gpu_warp_size - head_dim
 
             query_layer = torch.cat(
@@ -648,7 +624,7 @@ class MRASelfAttention(nn.Module):
                 initial_prior_diagonal_n_blocks = self.initial_prior_diagonal_n_blocks
             )
 
-        if (not self.use_expectation) and head_dim < gpu_warp_size:
+        if head_dim < gpu_warp_size:
             context_layer = context_layer[:, :, :head_dim]
 
         context_layer = context_layer.reshape(batch_size, num_heads, seq_len, head_dim)
