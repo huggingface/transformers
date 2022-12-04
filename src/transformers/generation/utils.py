@@ -60,6 +60,7 @@ from .logits_process import (
 from .stopping_criteria import (
     MaxLengthCriteria,
     MaxTimeCriteria,
+    StopIdStoppingCriteria,
     StoppingCriteria,
     StoppingCriteriaList,
     validate_stopping_criteria,
@@ -875,13 +876,16 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self, max_length: Optional[int], max_time: Optional[float], stopping_criteria: Optional[StoppingCriteriaList]
+        self, max_length: Optional[int], max_time: Optional[float], stop_ids: Optional[List[int]], stopping_criteria: Optional[StoppingCriteriaList]
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if max_length is not None:
             criteria.append(MaxLengthCriteria(max_length=max_length))
         if max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=max_time))
+        if stop_ids is not None:
+            for stop_id in stop_ids:
+                criteria.append(StopIdStoppingCriteria(stop_id=stop_id))
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
@@ -1028,6 +1032,7 @@ class GenerationMixin:
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         renormalize_logits: Optional[bool] = None,
+        stop_ids: Optional[List[int]] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         constraints: Optional[List[Constraint]] = None,
         output_attentions: Optional[bool] = None,
@@ -1171,6 +1176,8 @@ class GenerationMixin:
                 Whether to renormalize the logits after applying all the logits processors or warpers (including the
                 custom ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the
                 score logits are normalized but some logit processors or warpers break the normalization.
+            stop_ids (`List[int]`, *optional*):
+                When specified, the generation will stop at one of the token ids specified.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                  Custom stopping criteria that complement the default stopping criteria built from arguments and a
                  model's config. If a stopping criteria is passed that is already created with the arguments or a
@@ -1505,7 +1512,7 @@ class GenerationMixin:
 
         # 8. prepare stopping criteria
         stopping_criteria = self._get_stopping_criteria(
-            max_length=max_length, max_time=max_time, stopping_criteria=stopping_criteria
+            max_length=max_length, max_time=max_time, stop_ids=stop_ids, stopping_criteria=stopping_criteria
         )
         # 9. go into different generation modes
         if is_greedy_gen_mode:
