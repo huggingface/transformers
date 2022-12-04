@@ -212,6 +212,7 @@ def calculate_uncertainty(logits):
     """
     We estimate uncerainty as L1 distance between 0.0 and the logit prediction in 'logits' for the
         foreground class in `classes`.
+
     Args:
         logits (Tensor): A tensor of shape (R, 1, ...) for class-specific or
             class-agnostic, where R is the total number of predicted masks in all images and C is the number of
@@ -254,6 +255,7 @@ def get_uncertain_point_coords_with_randomness(
     """
     Sample points in [0, 1] x [0, 1] coordinate space based on their uncertainty. The unceratinties
         are calculated for each point using 'uncertainty_func' function that takes point's logit prediction as input.
+
     Args:
     See PointRend paper for details.
         coarse_logits (Tensor): A tensor of shape (N, C, Hmask, Wmask) or (N, 1, Hmask, Wmask) for
@@ -3387,7 +3389,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ... )[0]["segmentation"]
         >>> f"👉 Panoptic Predictions Shape: {list(predicted_panoptic_map.shape)}"
         '👉 Panoptic Predictions Shape: [512, 683]'
-
+        
         🎉 Congratulations on successfully running OneFormer
         📖 For more information, checkout the official repo: https://github.com/SHI-Labs/OneFormer
         ```
