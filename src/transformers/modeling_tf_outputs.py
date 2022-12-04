@@ -606,9 +606,6 @@ class TFSeq2SeqSequenceClassifierOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`tf.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        cross_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
         past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
@@ -626,6 +623,9 @@ class TFSeq2SeqSequenceClassifierOutput(ModelOutput):
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        cross_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`
         encoder_last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -643,10 +643,10 @@ class TFSeq2SeqSequenceClassifierOutput(ModelOutput):
 
     loss: Optional[tf.Tensor] = None
     logits: tf.Tensor = None
-    cross_attentions: Optional[Tuple[tf.Tensor]] = None
     past_key_values: Optional[List[tf.Tensor]] = None
     decoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
     decoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    cross_attentions: Optional[Tuple[tf.Tensor]] = None
     encoder_last_hidden_state: Optional[tf.Tensor] = None
     encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
     encoder_attentions: Optional[Tuple[tf.Tensor]] = None
