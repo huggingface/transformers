@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 import time
 import unittest
 
@@ -29,6 +30,7 @@ if is_torch_available():
         MaxLengthCriteria,
         MaxNewTokensCriteria,
         MaxTimeCriteria,
+        StopIdStoppingCriteria,
         StoppingCriteriaList,
         validate_stopping_criteria,
     )
@@ -36,11 +38,11 @@ if is_torch_available():
 
 @require_torch
 class StoppingCriteriaTestCase(unittest.TestCase):
-    def _get_tensors(self, length):
+    def _get_tensors(self, length, rng=None):
         batch_size = 3
         vocab_size = 250
 
-        input_ids = ids_tensor((batch_size, length), vocab_size)
+        input_ids = ids_tensor((batch_size, length), vocab_size, rng=rng)
         scores = torch.ones((batch_size, length), device=torch_device, dtype=torch.float) / length
         return input_ids, scores
 
@@ -96,6 +98,18 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         self.assertFalse(criteria(input_ids, scores))
 
         criteria = MaxTimeCriteria(max_time=0.1, initial_timestamp=time.time() - 0.2)
+        self.assertTrue(criteria(input_ids, scores))
+
+    def test_stop_id_criteria(self):
+        input_ids, scores = self._get_tensors(5, rng=random.Random(42))
+
+        criteria = StopIdStoppingCriteria(stop_id=5)
+        self.assertFalse(criteria(input_ids, scores))
+
+        criteria = StopIdStoppingCriteria(stop_id=22, early_stopping=False)
+        self.assertFalse(criteria(input_ids, scores))
+
+        criteria = StopIdStoppingCriteria(stop_id=22, early_stopping=True)
         self.assertTrue(criteria(input_ids, scores))
 
     def test_validate_stopping_criteria(self):
