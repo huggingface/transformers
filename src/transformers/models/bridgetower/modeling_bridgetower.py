@@ -93,7 +93,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         super().__init__(config)
         self.is_clip= (not 'swin' in config.vit)
 
-        #import ipdb; ipdb.set_trace()
         if 'roberta' in config.tokenizer:
             bert_config = RobertaConfig(
                 vocab_size=config.vocab_size,

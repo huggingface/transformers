@@ -23,7 +23,7 @@ from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -208,6 +208,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
+        do_center_crop: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
@@ -217,7 +218,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 384}
+        size = size if size is not None else {"shortest_edge": 288} #TODO: get from config
         size = get_size_dict(size, default_to_square=False)
 
         self.do_resize = do_resize
@@ -226,6 +227,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
+        self.do_center_crop = do_center_crop
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
@@ -246,7 +248,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         Resizes the shorter side of the image to `size["shortest_edge"]` while preserving the aspect ratio. If the
         longer side is larger than the max size `(int(`size["shortest_edge"]` * 1333 / 800))`, the longer side is then
         resized to the max size while preserving the aspect ratio.
-
         Args:
             image (`np.ndarray`):
                 Image to resize.
@@ -286,6 +287,10 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
+
+    def center_crop(self, image, size):
+        output_size = size["shortest_edge"]
+        return center_crop(image, (output_size, output_size))
 
     def normalize(
         self,
@@ -393,6 +398,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
+        do_center_crop: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         **kwargs,
@@ -448,7 +454,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
-
+        do_center_crop if do_center_crop is not None else self.do_center_crop
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
@@ -472,12 +478,12 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
         if do_resize:
             images = [
                 self.resize(image=image, size=size, size_divisor=size_divisor, resample=resample) for image in images
             ]
-
+        if do_center_crop:
+            images = [self.center_crop(image=image, size=size) for image in images]
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
 
