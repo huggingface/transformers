@@ -2939,7 +2939,7 @@ class OneFormerTextMapper(nn.Module):
         if text.ndim == 3:
             num_text = text.shape[1]
             batch_size, num_text, hidden_dim = text.shape
-            text = text.reshape(batch_size*num_text, hidden_dim)
+            text = text.reshape(batch_size * num_text, hidden_dim)
             squeeze_dim = True
 
         # [B, C]
@@ -3389,7 +3389,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ... )[0]["segmentation"]
         >>> f"👉 Panoptic Predictions Shape: {list(predicted_panoptic_map.shape)}"
         '👉 Panoptic Predictions Shape: [512, 683]'
-        
+
         🎉 Congratulations on successfully running OneFormer
         📖 For more information, checkout the official repo: https://github.com/SHI-Labs/OneFormer
         ```
