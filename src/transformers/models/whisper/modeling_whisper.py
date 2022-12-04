@@ -756,8 +756,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
             ).to(inputs_embeds.device)
 
         if attention_mask is not None:
-            if attention_mask.shape[-1] > input_shape[-1] > 0:
-                attention_mask = attention_mask[:, : input_shape[-1] + past_key_values_length]
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (

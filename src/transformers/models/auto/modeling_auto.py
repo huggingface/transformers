@@ -29,6 +29,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("albert", "AlbertModel"),
+        ("audio-spectrogram-transformer", "ASTModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
         ("bert", "BertModel"),
@@ -40,6 +41,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bloom", "BloomModel"),
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
+        ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
         ("codegen", "CodeGenModel"),
@@ -58,6 +60,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
         ("detr", "DetrModel"),
+        ("dinat", "DinatModel"),
         ("distilbert", "DistilBertModel"),
         ("donut-swin", "DonutSwinModel"),
         ("dpr", "DPRQuestionEncoder"),
@@ -95,15 +98,18 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("marian", "MarianModel"),
         ("markuplm", "MarkupLMModel"),
         ("maskformer", "MaskFormerModel"),
+        ("maskformer-swin", "MaskFormerSwinModel"),
         ("mbart", "MBartModel"),
         ("mctct", "MCTCTModel"),
         ("megatron-bert", "MegatronBertModel"),
         ("mobilebert", "MobileBertModel"),
+        ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
         ("mobilevit", "MobileViTModel"),
         ("mpnet", "MPNetModel"),
         ("mt5", "MT5Model"),
         ("mvp", "MvpModel"),
+        ("nat", "NatModel"),
         ("nezha", "NezhaModel"),
         ("nllb", "M2M100Model"),
         ("nystromformer", "NystromformerModel"),
@@ -138,6 +144,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("table-transformer", "TableTransformerModel"),
         ("tapas", "TapasModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
+        ("timesformer", "TimesformerModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("unispeech", "UniSpeechModel"),
@@ -367,10 +374,13 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("cvt", "CvtForImageClassification"),
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
+        ("dinat", "DinatForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
         ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
+        ("mobilenet_v1", "MobileNetV1ForImageClassification"),
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),
         ("mobilevit", "MobileViTForImageClassification"),
+        ("nat", "NatForImageClassification"),
         (
             "perceiver",
             (
@@ -420,6 +430,7 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
+        ("timesformer", "TimesformerForVideoClassification"),
         ("videomae", "VideoMAEForVideoClassification"),
     ]
 )
@@ -778,6 +789,7 @@ MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
+        ("audio-spectrogram-transformer", "ASTForAudioClassification"),
         ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),
@@ -831,8 +843,17 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
 _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
+        ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
+    ]
+)
+
+MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
+    [
+        # Backbone mapping
+        ("maskformer-swin", "MaskFormerSwinBackbone"),
+        ("resnet", "ResNetBackbone"),
     ]
 )
 
@@ -902,6 +923,8 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
+
+MODEL_FOR_BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES)
 
 
 class AutoModel(_BaseAutoModelClass):
@@ -1124,6 +1147,10 @@ AutoModelForAudioFrameClassification = auto_class_update(
 
 class AutoModelForAudioXVector(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_XVECTOR_MAPPING
+
+
+class AutoBackbone(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_BACKBONE_MAPPING
 
 
 AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")

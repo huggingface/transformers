@@ -14,11 +14,11 @@
 # limitations under the License.
 
 import warnings
-from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import TensorType
+from transformers.utils import ExplicitEnum, TensorType
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
@@ -38,13 +38,14 @@ if is_vision_available():
     )
 
 
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
-    if is_tf_available():
-        import tensorflow as tf
-    if is_flax_available():
-        import jax.numpy as jnp
+if is_torch_available():
+    import torch
+
+if is_tf_available():
+    import tensorflow as tf
+
+if is_flax_available():
+    import jax.numpy as jnp
 
 
 def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDimension, str]) -> np.ndarray:
@@ -144,7 +145,7 @@ def to_pil_image(
     image = np.squeeze(image, axis=-1) if image.shape[-1] == 1 else image
 
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
-    do_rescale = isinstance(image.flat[0], float) if do_rescale is None else do_rescale
+    do_rescale = isinstance(image.flat[0], (float, np.float32, np.float64)) if do_rescale is None else do_rescale
     if do_rescale:
         image = rescale(image, 255)
     image = image.astype(np.uint8)
@@ -222,11 +223,12 @@ def resize(
     image,
     size: Tuple[int, int],
     resample=PILImageResampling.BILINEAR,
+    reducing_gap: Optional[int] = None,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
 ) -> np.ndarray:
     """
-    Resizes `image` to (h, w) specified by `size` using the PIL library.
+    Resizes `image` to `(height, width)` specified by `size` using the PIL library.
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
@@ -235,8 +237,11 @@ def resize(
             The size to use for resizing the image.
         resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             The filter to user for resampling.
+        reducing_gap (`int`, *optional*):
+            Apply optimization by resizing the image in two steps. The bigger `reducing_gap`, the closer the result to
+            the fair resampling. See corresponding Pillow documentation for more details.
         data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
         return_numpy (`bool`, *optional*, defaults to `True`):
             Whether or not to return the resized image as a numpy array. If False a `PIL.Image.Image` object is
             returned.
@@ -259,7 +264,7 @@ def resize(
         image = to_pil_image(image)
     height, width = size
     # PIL images are in the format (width, height)
-    resized_image = image.resize((width, height), resample=resample)
+    resized_image = image.resize((width, height), resample=resample, reducing_gap=reducing_gap)
 
     if return_numpy:
         resized_image = np.array(resized_image)
@@ -289,7 +294,7 @@ def normalize(
         std (`float` or `Iterable[float]`):
             The standard deviation to use for normalization.
         data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
     """
     if isinstance(image, PIL.Image.Image):
         warnings.warn(
@@ -568,3 +573,100 @@ def id_to_rgb(id_map):
         color.append(id_map % 256)
         id_map //= 256
     return color
+
+
+class PaddingMode(ExplicitEnum):
+    """
+    Enum class for the different padding modes to use when padding images.
+    """
+
+    CONSTANT = "constant"
+    REFLECT = "reflect"
+    REPLICATE = "replicate"
+    SYMMETRIC = "symmetric"
+
+
+def pad(
+    image: np.ndarray,
+    padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+    mode: PaddingMode = PaddingMode.CONSTANT,
+    constant_values: Union[float, Iterable[float]] = 0.0,
+    data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> np.ndarray:
+    """
+    Pads the `image` with the specified (height, width) `padding` and `mode`.
+
+    Args:
+        image (`np.ndarray`):
+            The image to pad.
+        padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+            Padding to apply to the edges of the height, width axes. Can be one of three formats:
+            - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
+            - `((before, after),)` yields same before and after pad for height and width.
+            - `(pad,)` or int is a shortcut for before = after = pad width for all axes.
+        mode (`PaddingMode`):
+            The padding mode to use. Can be one of:
+                - `"constant"`: pads with a constant value.
+                - `"reflect"`: pads with the reflection of the vector mirrored on the first and last values of the
+                  vector along each axis.
+                - `"replicate"`: pads with the replication of the last value on the edge of the array along each axis.
+                - `"symmetric"`: pads with the reflection of the vector mirrored along the edge of the array.
+        constant_values (`float` or `Iterable[float]`, *optional*):
+            The value to use for the padding if `mode` is `"constant"`.
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            If unset, will use same as the input image.
+        input_data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format for the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            If unset, will use the inferred format of the input image.
+
+    Returns:
+        `np.ndarray`: The padded image.
+
+    """
+    if input_data_format is None:
+        input_data_format = infer_channel_dimension_format(image)
+
+    def _expand_for_data_format(values):
+        """
+        Convert values to be in the format expected by np.pad based on the data format.
+        """
+        if isinstance(values, (int, float)):
+            values = ((values, values), (values, values))
+        elif isinstance(values, tuple) and len(values) == 1:
+            values = ((values[0], values[0]), (values[0], values[0]))
+        elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], int):
+            values = (values, values)
+        elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], tuple):
+            values = values
+        else:
+            raise ValueError(f"Unsupported format: {values}")
+
+        # add 0 for channel dimension
+        values = ((0, 0), *values) if input_data_format == ChannelDimension.FIRST else (*values, (0, 0))
+
+        # Add additional padding if there's a batch dimension
+        values = (0, *values) if image.ndim == 4 else values
+        return values
+
+    padding = _expand_for_data_format(padding)
+
+    if mode == PaddingMode.CONSTANT:
+        constant_values = _expand_for_data_format(constant_values)
+        image = np.pad(image, padding, mode="constant", constant_values=constant_values)
+    elif mode == PaddingMode.REFLECT:
+        image = np.pad(image, padding, mode="reflect")
+    elif mode == PaddingMode.REPLICATE:
+        image = np.pad(image, padding, mode="edge")
+    elif mode == PaddingMode.SYMMETRIC:
+        image = np.pad(image, padding, mode="symmetric")
+    else:
+        raise ValueError(f"Invalid padding mode: {mode}")
+
+    image = to_channel_dimension_format(image, data_format) if data_format is not None else image
+    return image

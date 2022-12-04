@@ -29,6 +29,7 @@ import sys
 import time
 import warnings
 from collections.abc import Mapping
+from distutils.util import strtobool
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -143,7 +144,6 @@ from .utils import (
     is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_torch_tensorrt_fx_available,
     is_torch_tpu_available,
     is_torchdynamo_available,
     logging,
@@ -636,32 +636,8 @@ class Trainer:
         self._memory_tracker.stop_and_update_metrics()
 
         # torchdynamo
-        if args.torchdynamo:
-            if not is_torchdynamo_available():
-                raise RuntimeError("Torchdynamo is not installed.")
-            import torchdynamo
-            from torchdynamo.optimizations import backends
-
-            def get_ctx():
-                # Normal
-                if args.torchdynamo == "eager":
-                    return torchdynamo.optimize("eager")
-                elif args.torchdynamo == "nvfuser":
-                    return torchdynamo.optimize("aot_nvfuser")
-                # TensorRT
-                if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
-                    if not is_torch_tensorrt_fx_available():
-                        raise RuntimeError("Torch-TensorRT FX path is not installed.")
-                    if args.torchdynamo == "fx2trt-fp16":
-                        return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
-                    elif args.torchdynamo == "fx2trt":
-                        return torchdynamo.optimize(backends.fx2trt_compiler)
-                else:
-                    raise RuntimeError(f"Torchdynamo backend {args.torchdynamo} is not supported.")
-
-            self.ctx_manager_torchdynamo = get_ctx()
-        else:
-            self.ctx_manager_torchdynamo = contextlib.nullcontext()
+        if args.torchdynamo is not None and not is_torchdynamo_available():
+            raise RuntimeError("Using torchdynamo requires a nighly install of PyTorch.")
 
     def add_callback(self, callback):
         """
@@ -1081,7 +1057,16 @@ class Trainer:
                 The training arguments for the training session.
 
         """
+
+        # parse args.optim_args
+        optim_args = {}
+        if args.optim_args:
+            for mapping in args.optim_args.replace(" ", "").split(","):
+                key, value = mapping.split("=")
+                optim_args[key] = value
+
         optimizer_kwargs = {"lr": args.learning_rate}
+
         adam_kwargs = {
             "betas": (args.adam_beta1, args.adam_beta2),
             "eps": args.adam_epsilon,
@@ -1123,6 +1108,26 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
+        elif args.optim == OptimizerNames.ADAMW_ANYPRECISION:
+            try:
+                from torchdistx.optimizers import AnyPrecisionAdamW
+
+                optimizer_cls = AnyPrecisionAdamW
+                optimizer_kwargs.update(adam_kwargs)
+
+                # TODO Change dtypes back to M=FP32, Var = BF16, Kahan = False once they can be cast together in torchdistx.
+                optimizer_kwargs.update(
+                    {
+                        "use_kahan_summation": strtobool(optim_args.get("use_kahan_summation", "False")),
+                        "momentum_dtype": getattr(torch, optim_args.get("momentum_dtype", "float32")),
+                        "variance_dtype": getattr(torch, optim_args.get("variance_dtype", "float32")),
+                        "compensation_buffer_dtype": getattr(
+                            torch, optim_args.get("compensation_buffer_dtype", "bfloat16")
+                        ),
+                    }
+                )
+            except ImportError:
+                raise ValueError("Please install https://github.com/pytorch/torchdistx")
         elif args.optim == OptimizerNames.SGD:
             optimizer_cls = torch.optim.SGD
         elif args.optim == OptimizerNames.ADAGRAD:
@@ -1275,8 +1280,9 @@ class Trainer:
                         jit_inputs = tuple(jit_inputs)
                         jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
                 jit_model = torch.jit.freeze(jit_model)
-                jit_model(**example_batch)
-                jit_model(**example_batch)
+                with torch.no_grad():
+                    jit_model(**example_batch)
+                    jit_model(**example_batch)
                 model = jit_model
                 self.use_cpu_amp = False
                 self.use_cuda_amp = False
@@ -1308,6 +1314,10 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True, dataloader=None):
+        if self.args.torchdynamo is not None:
+            import torch._dynamo as dynamo
+
+            model = dynamo.optimize(self.args.torchdynamo)(model)
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
@@ -2463,20 +2473,9 @@ class Trainer:
         """
         A helper wrapper to group together context managers.
         """
-        return ContextManagers(
-            [
-                self.torchdynamo_smart_context_manager(),
-                self.autocast_smart_context_manager(),
-            ]
-        )
+        return self.autocast_smart_context_manager()
 
-    def torchdynamo_smart_context_manager(self):
-        """
-        A helper wrapper that creates an appropriate context manager for `torchdynamo`.
-        """
-        return self.ctx_manager_torchdynamo
-
-    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = None):
+    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
@@ -3150,7 +3149,9 @@ class Trainer:
         sizes = self._nested_gather(size).cpu()
 
         max_size = max(s[1] for s in sizes)
-        if tensor.shape[1] == max_size:
+        # When extracting XLA graphs for compilation, max_size is 0,
+        # so use inequality to avoid errors.
+        if tensor.shape[1] >= max_size:
             return tensor
 
         # Then pad to the maximum size

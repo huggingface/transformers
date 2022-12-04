@@ -41,6 +41,7 @@ from transformers import (
 )
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.file_utils import is_tf_available, is_torch_available
+from transformers.image_processing_utils import BaseImageProcessor
 from transformers.models.auto.configuration_auto import AutoConfig, model_type_to_module_name
 from transformers.models.fsmt import configuration_fsmt
 from transformers.processing_utils import ProcessorMixin, transformers_module
@@ -383,6 +384,8 @@ def convert_processors(processors, tiny_config, output_folder, result):
     for processor in processors:
         if isinstance(processor, PreTrainedTokenizerBase):
             tokenizers.append(processor)
+        elif isinstance(processor, BaseImageProcessor):
+            feature_extractors.append(processor)
         elif isinstance(processor, FeatureExtractionMixin):
             feature_extractors.append(processor)
         elif isinstance(processor, ProcessorMixin):
@@ -848,8 +851,8 @@ def build(config_class, models_to_create, output_dir):
         error = f"Failed to convert the processors: {e}"
         result["warnings"].append(error)
 
-    if len(result["processor"]) == 0:
-        error = f"No processor could be converted for {config_class.__name__}."
+    if len(processors) == 0:
+        error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
         fill_result_with_error(result, error, models_to_create)
         logger.error(result["error"])
         return result

@@ -1312,8 +1312,8 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
         input_signature=[
             {
                 "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1457,8 +1457,8 @@ class TFHubertModel(TFHubertPreTrainedModel):
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
-        >>> model = TFHubertModel.from_pretrained("facebook/hubert-base-960h")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
+        >>> model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
         >>> def map_to_array(batch):
@@ -1583,8 +1583,8 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
-        >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-base-960h")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
+        >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
         >>> def map_to_array(batch):

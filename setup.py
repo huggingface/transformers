@@ -124,7 +124,9 @@ _deps = [
     "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
     "kenlm",
+    "keras-nlp>=0.3.1",
     "nltk",
+    "natten>=0.14.4",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -156,8 +158,8 @@ _deps = [
     "sigopt",
     "librosa",
     "starlette",
-    "tensorflow-cpu>=2.3",
-    "tensorflow>=2.4",
+    "tensorflow-cpu>=2.4,<2.11",
+    "tensorflow>=2.4,<2.11",
     "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
@@ -240,14 +242,13 @@ class DepsTableUpdateCommand(Command):
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
 
-
 extras = {}
 
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "pyknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 
 extras["torch"] = deps_list("torch")
 extras["accelerate"] = deps_list("accelerate")
@@ -283,6 +284,7 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 
 
@@ -409,7 +411,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.25.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.26.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
