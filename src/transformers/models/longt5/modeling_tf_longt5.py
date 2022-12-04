@@ -102,7 +102,7 @@ def _split_into_blocks(x: tf.Tensor, block_len: int, dim: int) -> tf.Tensor:
 
 
 def _concatenate_3_blocks(x: tf.Tensor, block_dim: int, sequence_dim: int, pad_value: int = 0) -> tf.Tensor:
-    """Concatenate three consecutive blocks for each input block for local attentiont.
+    """Concatenate three consecutive blocks for each input block for local attention.
 
     For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
     """
@@ -1352,10 +1352,8 @@ class TFLongT5Block(tf.keras.layers.Layer):
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
-####################################################
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFLongT5MainLayer"
-####################################################
 @keras_serializable
 class TFLongT5MainLayer(tf.keras.layers.Layer):
     config_class = LongT5Config
@@ -1601,13 +1599,11 @@ class TFLongT5MainLayer(tf.keras.layers.Layer):
             )
 
 
-####################################################
 # TFLongT5PreTrainedModel is a sub-class of tf.keras.Model
 # which take care of loading and saving pretrained weights
 # and various common utilities.
 # Here you just need to specify a few (self-explanatory)
 # pointers for your model.
-####################################################
 class TFLongT5PreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1654,6 +1650,7 @@ class TFLongT5PreTrainedModel(TFPreTrainedModel):
         if hasattr(self, "decoder"):
             self.decoder.embed_tokens = self.shared
 
+    # Copied from transformers.models.t5.modeling_tf_t5.TFT5PreTrainedModel._shift_right with T5->LongT5
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
