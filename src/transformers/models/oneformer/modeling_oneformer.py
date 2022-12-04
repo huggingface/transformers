@@ -28,7 +28,6 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 from torch.cuda.amp import autocast
 
-from einops import rearrange
 from timm.models.layers import trunc_normal_
 from transformers.utils import logging
 
@@ -367,8 +366,6 @@ class OneFormerHungarianMatcher(nn.Module):
         preds_probs = class_queries_logits
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(preds_probs, preds_masks, mask_labels, class_labels):
-            # downsample the target mask, save memory
-            target_mask = nn.functional.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
 
             pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
@@ -605,10 +602,6 @@ class OneFormerLoss(nn.Module):
         # upsample predictions to the target size, we have to add one dim to use interpolate
         target_masks, _ = self._pad_images_to_max_in_batch(mask_labels)
         target_masks = target_masks[tgt_idx]
-
-        pred_masks = nn.functional.interpolate(
-            pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
-        )
 
         pred_masks = pred_masks[:, None]
         target_masks = target_masks[:, None]
@@ -2945,7 +2938,8 @@ class OneFormerTextMapper(nn.Module):
         num_text = 1
         if text.ndim == 3:
             num_text = text.shape[1]
-            text = rearrange(text, "b n l -> (b n) l", n=num_text)
+            batch_size, num_text, hidden_dim = text.shape
+            text = text.reshape(batch_size*num_text, hidden_dim)
             squeeze_dim = True
 
         # [B, C]
@@ -2954,7 +2948,8 @@ class OneFormerTextMapper(nn.Module):
         text_x = self.text_projector(x)
 
         if squeeze_dim:
-            text_x = rearrange(text_x, "(b n) c -> b n c", n=num_text)
+            _, hidden_dim = text_x.shape
+            text_x = text_x.reshape(batch_size, num_text, hidden_dim)
             if self.prompt_ctx is not None:
                 text_ctx = self.prompt_ctx.weight.unsqueeze(0).repeat(text_x.shape[0], 1, 1)
                 text_x = torch.cat([text_x, text_ctx], dim=1)

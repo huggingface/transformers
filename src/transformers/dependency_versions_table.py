@@ -12,7 +12,6 @@ deps = {
     "decord": "decord==0.6.0",
     "deepspeed": "deepspeed>=0.6.5",
     "dill": "dill<0.3.5",
-    "einops": "einops>=0.4.1",
     "evaluate": "evaluate>=0.2.0",
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",

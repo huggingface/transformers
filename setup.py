@@ -106,7 +106,6 @@ _deps = [
     "decord==0.6.0",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
-    "einops>=0.4.1",
     "evaluate>=0.2.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -263,7 +262,6 @@ else:
     extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
-extras["einops"] = deps_list("einops")
 extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
@@ -301,7 +299,6 @@ extras["testing"] = (
         "psutil",
         "datasets",
         "dill",
-        "einops",
         "evaluate",
         "pytest-timeout",
         "black",
