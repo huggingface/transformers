@@ -38,6 +38,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
+    ImageSegmentationPipeline,
     OneFormerForUniversalSegmentation,
     TextClassificationPipeline,
     TFAutoModelForSequenceClassification,
@@ -266,8 +267,12 @@ class PipelineTestCaseMeta(type):
                         task_inputs = None
 
                     out = []
-                    for item in pipeline(data(10), task_inputs=task_inputs, batch_size=4):
-                        out.append(item)
+                    if isinstance(pipeline, ImageSegmentationPipeline):
+                        for item in pipeline(data(10), task_inputs=task_inputs, batch_size=4):
+                            out.append(item)
+                    else:
+                        for item in pipeline(data(10), batch_size=4):
+                            out.append(item)
                     self.assertEqual(len(out), 10)
 
                 run_batch_test(pipeline, examples)
