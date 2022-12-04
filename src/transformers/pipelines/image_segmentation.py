@@ -111,8 +111,8 @@ class ImageSegmentationPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
             task_inputs (`List[str]`):
-                The value of task token inputs for task-dynamic inference, choose [`semantic`, `instance` and `panoptic`].
-                The pipeline uses task_inputs for [~`OneFormerForUniversalSegmentation`]
+                The value of task token inputs for task-dynamic inference, choose [`semantic`, `instance` and
+                `panoptic`]. The pipeline uses task_inputs for [`~OneFormerForUniversalSegmentation`]
             subtask (`str`, *optional*):
                 Segmentation task to be performed, choose [`semantic`, `instance` and `panoptic`] depending on model
                 capabilities. If not set, the pipeline will attempt tp resolve in the following order:
@@ -143,7 +143,7 @@ class ImageSegmentationPipeline(Pipeline):
     def preprocess(self, image, task_inputs=None):
         image = load_image(image)
         target_size = [(image.height, image.width)]
-        
+
         if task_inputs is not None:
             inputs = self.feature_extractor(images=[image], task_inputs=task_inputs, return_tensors="pt")
         else:
@@ -160,7 +160,6 @@ class ImageSegmentationPipeline(Pipeline):
     def postprocess(
         self, model_outputs, subtask=None, threshold=0.9, mask_threshold=0.5, overlap_mask_area_threshold=0.5
     ):
-
         fn = None
         if subtask in {"panoptic", None} and hasattr(self.feature_extractor, "post_process_panoptic_segmentation"):
             fn = self.feature_extractor.post_process_panoptic_segmentation

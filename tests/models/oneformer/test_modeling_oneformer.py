@@ -128,8 +128,8 @@ class OneFormerModelTester:
         config.id2label = {}
 
         for i in range(self.num_labels):
-            config.id2label[i] = f'LABEL_{i}'
-            config.label2id[f'LABEL_{i}'] = i
+            config.id2label[i] = f"LABEL_{i}"
+            config.label2id[f"LABEL_{i}"] = i
 
         return config
 
