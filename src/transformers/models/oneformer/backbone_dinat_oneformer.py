@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 # Copied from transformers.models.dinat.modeling_dinat.DinatEncoderOutput with Dinat->OneFormerDinat
 class OneFormerDinatEncoderOutput(ModelOutput):
     """
-    Dinat encoder's outputs, with potential hidden states and attentions.
+    OneFormerDinat encoder's outputs, with potential hidden states and attentions.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -183,7 +183,6 @@ class OneFormerDinatDownsampler(nn.Module):
         return input_feature
 
 
-# Copied from transformers.dinat.modeling_dinat.drop_path
 def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -303,7 +302,7 @@ class OneFormerNeighborhoodAttentionModule(nn.Module):
         self.output = OneFormerNeighborhoodAttentionOutput(config, dim)
         self.pruned_heads = set()
 
-    # Copied from transformers.models.nat.modeling_nat.NeighborhoodAttentionModule.prune_heads
+    # Copied from transformers.models.nat.modeling_nat.OneFormerNeighborhoodAttentionModule.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -322,7 +321,7 @@ class OneFormerNeighborhoodAttentionModule(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    # Copied from transformers.models.nat.modeling_nat.NeighborhoodAttentionModule.forward
+    # Copied from transformers.models.nat.modeling_nat.OneFormerNeighborhoodAttentionModule.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -431,7 +430,6 @@ class OneFormerDinatLayer(nn.Module):
         return layer_outputs
 
 
-# Copied from transformers.models.dinat.modeling_dinat.DinatStage with Dinat->OneFormerDinat
 class OneFormerDinatStage(nn.Module):
     def __init__(self, config, dim, depth, num_heads, dilations, drop_path_rate, downsample):
         super().__init__()
@@ -458,7 +456,6 @@ class OneFormerDinatStage(nn.Module):
 
         self.pointing = False
 
-    # Copied from transformers.models.dinat.modeling_dinat.DinatStage.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -511,7 +508,6 @@ class OneFormerDinatEncoder(nn.Module):
             ]
         )
 
-    # Copied from transformers.models.dinat.modeling_dinat.DinatEncoder.forward with Dinat-OneFormerDinat
     def forward(
         self,
         hidden_states: torch.Tensor,

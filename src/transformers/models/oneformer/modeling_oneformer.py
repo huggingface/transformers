@@ -81,7 +81,6 @@ else:
     MultiScaleDeformableAttention = None
 
 
-# Copied from transformers.models.detr.modeling_detr._get_clones
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
@@ -166,7 +165,7 @@ def sigmoid_ce_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     return loss
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.pair_wise_dice_los
+# Copied from transformers.models.maskformer.modeling_maskformer.pair_wise_dice_loss
 def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
     A pair wise version of the dice loss, see `dice_loss` for usage.
@@ -1023,7 +1022,7 @@ class OneFormerSwinTransformerBackbone(nn.Module):
 
 # Pixel Decoder Classes #
 
-# Copied from transformers.models.maskformer.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
@@ -1072,7 +1071,7 @@ class MultiScaleDeformableAttentionFunction(Function):
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
 
-# Copied from transformers.models.detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
 class OneFormerPixelDecoderFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -2027,7 +2026,6 @@ class OneFormerTransformerDecoderFFNLayer(nn.Module):
         return self.forward_post(output)
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerMLPPredictionHead with Mask->One
 class OneFormerMLPPredictionHead(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3):
         """
@@ -2611,18 +2609,18 @@ class OneFormerSinePositionEmbedding(nn.Module):
     need paper, generalized to work on images.
     """
 
-    def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):
+    def __init__(
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+    ):
         super().__init__()
+        if scale is not None and normalize is False:
+            raise ValueError("normalize should be True if scale is passed")
         self.num_pos_feats = num_pos_feats
         self.temperature = temperature
         self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
+        self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self, x, mask=None):
+    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
             mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
         not_mask = ~mask
@@ -2634,7 +2632,7 @@ class OneFormerSinePositionEmbedding(nn.Module):
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
         dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t

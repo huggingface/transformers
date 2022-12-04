@@ -107,8 +107,8 @@ class OneFormerSwinModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinBaseModelOutput with Mask->One
 @dataclass
+# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinBaseModelOutput with Mask->One
 class OneFormerSwinBaseModelOutput(ModelOutput):
     """
     Class for SwinEncoder's outputs.
@@ -222,7 +222,7 @@ class OneFormerSwinPatchEmbeddings(nn.Module):
 # Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinPatchMerging with Mask->One
 class OneFormerSwinPatchMerging(nn.Module):
     """
-    Patch Merging Layer for oneformer model.
+    Patch Merging Layer.
 
     Args:
         input_resolution (`Tuple[int]`):
@@ -233,21 +233,22 @@ class OneFormerSwinPatchMerging(nn.Module):
             Normalization layer class.
     """
 
-    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
+    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
         super().__init__()
+        self.input_resolution = input_resolution
         self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def maybe_pad(self, input_feature, width, height):
+    def maybe_pad(self, input_feature, height, width):
         should_pad = (height % 2 == 1) or (width % 2 == 1)
         if should_pad:
             pad_values = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = F.pad(input_feature, pad_values)
+            input_feature = nn.functional.pad(input_feature, pad_values)
 
         return input_feature
 
-    def forward(self, input_feature, input_dimensions):
+    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
         height, width = input_dimensions
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
@@ -388,7 +389,6 @@ class OneFormerSwinSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinSelfOutput with Mask->One
 class OneFormerSwinSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
