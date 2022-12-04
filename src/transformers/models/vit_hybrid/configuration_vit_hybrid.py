@@ -33,14 +33,13 @@ VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ViTHybridConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViTModel`]. It is used to instantiate an ViT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ViT
+    This is the configuration class to store the configuration of a [`ViTHybridModel`]. It is used to instantiate a ViT
+    Hybrid model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the ViT Hybrid
     [google/vit-base-r50-s16-384](https://huggingface.co/google/vit-base-r50-s16-384) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
