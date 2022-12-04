@@ -124,16 +124,13 @@ class AtlasModel(AtlasPreTrainedModel):
     ):
         bsz = len(queries)
 
-        queries_tokens = self.query_encoder_tokenizer(queries, return_tensors="pt", padding=True, truncation=True, max_length=512).to(self.device)
+        queries_tokens = self.query_encoder_tokenizer(queries, return_tensors="pt", padding=True, truncation=True, max_length=512)
 
-        query_hidden_states = self.query_passage_encoder(input_ids=queries_tokens["input_ids"], attention_mask=queries_tokens["attention_mask"])
+        query_hidden_states = self.query_passage_encoder(input_ids=queries_tokens["input_ids"].to(self.device), attention_mask=queries_tokens["attention_mask"].to(self.device))
 
         query_hidden_states = query_hidden_states.cpu().detach().numpy()
         _, passage_ids = self.index.search_batch("embeddings", query_hidden_states, topk)
-
-
         docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
-
         passages = [[f'{queries[i]} context: {passage}' for passage in doc["text"]] for i, doc in enumerate(docs)]
 
         def encode_passages(batch, tokenizer, max_length):
@@ -154,11 +151,11 @@ class AtlasModel(AtlasPreTrainedModel):
 
 
         reader_tokens = encode_passages(passages, self.generator_tokenizer, 512)
-        labels = self.generator_tokenizer(target, return_tensors="pt", padding=True, truncation=True, max_length=512)['input_ids']
+        labels = self.generator_tokenizer(target, return_tensors="pt", padding=True, truncation=True, max_length=512)['input_ids'].to(self.device)
         labels[labels == self.generator_tokenizer.pad_token_id] = -100
 
-        reader_ids = reader_tokens["input_ids"]  # FIXME (Not added by ae99, TODO figure out why)
-        reader_mask = reader_tokens["attention_mask"].bool()
+        reader_ids = reader_tokens["input_ids"].to(self.device)  # FIXME (Not added by ae99, TODO figure out why)
+        reader_mask = reader_tokens["attention_mask"].bool().to(self.device)
 
         n_context_training = min(topk, reader_ids.size(1))
         cfg = self.generator.encoder.config
