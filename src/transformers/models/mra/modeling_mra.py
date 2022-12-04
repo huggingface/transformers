@@ -22,6 +22,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.utils.cpp_extension import load
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -50,7 +51,6 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MRA models at https://huggingface.co/models?filter=mra
 ]
 
-from torch.utils.cpp_extension import load
 
 curr_path = os.path.dirname(os.path.realpath(__file__))
 src_files = ['cuda_kernel.cu', 'cuda_launch.cu', 'torch_extension.cpp']
@@ -429,12 +429,7 @@ def mra2_attention(
 
     with torch.no_grad():
         low_resolution_logit_normalized = low_resolution_logit - low_resolution_logit_row_max
-        #print('low_resolution_logit_normalized', low_resolution_logit_normalized)
-        print(num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks)
         indices, high_resolution_mask = get_block_idxes(low_resolution_logit_normalized, num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks)
-
-    #print('low_resolution_logit_normalized', low_resolution_logit_normalized)
-    #print('indices', indices)
 
     high_resolution_logit = SampledDenseMM.operator_call(Q, K, indices, block_size = block_size) / math.sqrt(head_dim)
     max_vals, max_vals_scatter = sparse_max(high_resolution_logit, indices, num_block_per_row, num_block_per_row)
@@ -444,7 +439,6 @@ def mra2_attention(
     high_resolution_attn = torch.exp(high_resolution_logit)
     high_resolution_attn_out = SparseDenseMM.operator_call(high_resolution_attn, indices, V, num_block_per_row)
     high_resolution_normalizer = ReduceSum.operator_call(high_resolution_attn, indices, num_block_per_row, num_block_per_row)
-    #print('high resoltuion', high_resolution_normalizer)
 
     if approx_mode == "full":
         low_resolution_attn = torch.exp(low_resolution_logit - low_resolution_logit_row_max - 1e4 * high_resolution_mask) * token_count[:, None, :]
@@ -527,15 +521,13 @@ class MRAEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-            print('inputs_embeds', inputs_embeds)
+
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        print('token type', token_type_embeddings)
-        #embeddings = inputs_embeds + token_type_embeddings
+
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
-            print('position embedding', position_embeddings)
-            embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-            print('sum', embeddings)
+
+        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -599,10 +591,6 @@ class MRASelfAttention(nn.Module):
         return layer.permute(0, 2, 1, 3)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        print('hidden_states', hidden_states)
-        print('linear weight', self.query.weight)
-        #print('linear bias', self.query.bias)
-        print('query trans', self.query(hidden_states))
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -652,10 +640,6 @@ class MRASelfAttention(nn.Module):
                 ],
                 dim=-1,
             )
-        
-        #print('query', query_layer)
-
-        #print(self.num_block, self.approx_mode, self.initial_prior_first_n_blocks, self.initial_prior_diagonal_n_blocks)
 
         context_layer =  mra2_attention(
                 query_layer.float(), key_layer.float(), value_layer.float(), attention_mask.float(), self.num_block,
@@ -663,8 +647,6 @@ class MRASelfAttention(nn.Module):
                 initial_prior_first_n_blocks = self.initial_prior_first_n_blocks,
                 initial_prior_diagonal_n_blocks = self.initial_prior_diagonal_n_blocks
             )
-
-        #print('context', context_layer)
 
         if (not self.use_expectation) and head_dim < gpu_warp_size:
             context_layer = context_layer[:, :, :head_dim]
@@ -1081,15 +1063,13 @@ class MRAModel(MRAPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        print('input_ids', input_ids, 'position_ids', position_ids, 'token_type_ids', token_type_ids)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-        print('emb\n', embedding_output)
+
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
