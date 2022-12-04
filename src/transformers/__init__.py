@@ -4007,6 +4007,7 @@ if TYPE_CHECKING:
             LogitsWarper,
             MaxLengthCriteria,
             MaxTimeCriteria,
+            StopIdStoppingCriteria,
             MinLengthLogitsProcessor,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
