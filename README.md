@@ -94,6 +94,7 @@ In Computer Vision:
 - [Panoptic Segmentation with MaskFormer](https://huggingface.co/facebook/maskformer-swin-small-coco)
 - [Depth Estimation with DPT](https://huggingface.co/docs/transformers/model_doc/dpt)
 - [Video Classification with VideoMAE](https://huggingface.co/docs/transformers/model_doc/videomae)
+- [Universal Segmentation with OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 
 In Audio:
 - [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)

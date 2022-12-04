@@ -127,6 +127,7 @@ user: ユーザ
 - [DETRによる物体検出](https://huggingface.co/facebook/detr-resnet-50)
 - [SegFormerによるセマンティックセグメンテーション](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
 - [DETRによるパノプティックセグメンテーション](https://huggingface.co/facebook/detr-resnet-50-panoptic)
+- [OneFormer によるユニバーサル セグメンテーション (単一モデルによるセマンティック、インスタンス、パノプティック セグメンテーション)](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 
 オーディオにて:
 - [Wav2Vec2による自動音声認識](https://huggingface.co/facebook/wav2vec2-base-960h)
