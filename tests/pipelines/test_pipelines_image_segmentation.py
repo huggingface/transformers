@@ -92,7 +92,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         ]
 
     def run_pipeline_test(self, image_segmenter, examples):
-
         if isinstance(image_segmenter.model, OneFormerForUniversalSegmentation):
             task_inputs = ["panoptic"]
         else:
@@ -107,7 +106,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
         self.assertIsInstance(outputs, list)
         n = len(outputs)
-        if isinstance(image_segmenter.model, (OneFormerForUniversalSegmentation, MaskFormerForInstanceSegmentation, DetrForSegmentation)):
+        if isinstance(
+            image_segmenter.model,
+            (OneFormerForUniversalSegmentation, MaskFormerForInstanceSegmentation, DetrForSegmentation),
+        ):
             # Instance segmentation (maskformer, and detr) have a slot for null class
             # and can output nothing even with a low threshold
             self.assertGreaterEqual(n, 0)
@@ -120,15 +122,21 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         # RGBA
-        outputs = image_segmenter(dataset[0]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            dataset[0]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # LA
-        outputs = image_segmenter(dataset[1]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            dataset[1]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # L
-        outputs = image_segmenter(dataset[2]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            dataset[2]["file"], task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
 
@@ -150,7 +158,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
         outputs = image_segmenter(
-            batch, task_inputs=task_inputs, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0, batch_size=batch_size
+            batch,
+            task_inputs=task_inputs,
+            threshold=0.0,
+            mask_threshold=0,
+            overlap_mask_area_threshold=0,
+            batch_size=batch_size,
         )
         self.assertEqual(len(batch), len(outputs))
         self.assertEqual(len(outputs[0]), n)
@@ -613,7 +626,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 },
             ],
         )
-    
+
     @require_torch
     @slow
     def test_oneformer(self):
@@ -632,44 +645,44 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
-            
+
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
                 {
-                    'label': 'tree',
-                    'mask': {'hash': '03c305f59b', 'shape': (512, 683), 'white_pixels': 14518},
-                    'score': 0.9509
+                    "label": "tree",
+                    "mask": {"hash": "03c305f59b", "shape": (512, 683), "white_pixels": 14518},
+                    "score": 0.9509,
                 },
                 {
-                    'label': 'grass',
-                    'mask': {'hash': '3890aba30a', 'shape': (512, 683), 'white_pixels': 53343},
-                    'score': 0.9979
+                    "label": "grass",
+                    "mask": {"hash": "3890aba30a", "shape": (512, 683), "white_pixels": 53343},
+                    "score": 0.9979,
                 },
                 {
-                    'label': 'road, route',
-                    'mask': {'hash': '12d05a130d', 'shape': (512, 683), 'white_pixels': 2092},
-                    'score': 0.9564
+                    "label": "road, route",
+                    "mask": {"hash": "12d05a130d", "shape": (512, 683), "white_pixels": 2092},
+                    "score": 0.9564,
                 },
                 {
-                    'label': 'plant',
-                    'mask': {'hash': 'd0b64cc51c', 'shape': (512, 683), 'white_pixels': 2838},
-                    'score': 0.9232
+                    "label": "plant",
+                    "mask": {"hash": "d0b64cc51c", "shape": (512, 683), "white_pixels": 2838},
+                    "score": 0.9232,
                 },
                 {
-                    'label': 'building',
-                    'mask': {'hash': 'c6202857f3', 'shape': (512, 683), 'white_pixels': 124877},
-                    'score': 0.9618
+                    "label": "building",
+                    "mask": {"hash": "c6202857f3", "shape": (512, 683), "white_pixels": 124877},
+                    "score": 0.9618,
                 },
                 {
-                    'label': 'wall',
-                    'mask': {'hash': '9b70cb4cfd', 'shape': (512, 683), 'white_pixels': 14971},
-                    'score': 0.9862
+                    "label": "wall",
+                    "mask": {"hash": "9b70cb4cfd", "shape": (512, 683), "white_pixels": 14971},
+                    "score": 0.9862,
                 },
                 {
-                    'label': 'sky',
-                    'mask': {'hash': '3592ecf6b5', 'shape': (512, 683), 'white_pixels': 135632},
-                    'score': 0.9992
-                }
+                    "label": "sky",
+                    "mask": {"hash": "3592ecf6b5", "shape": (512, 683), "white_pixels": 135632},
+                    "score": 0.9992,
+                },
             ],
         )
