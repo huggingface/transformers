@@ -29,52 +29,52 @@ TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Trillsson_efficientConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Trillsson_efficientModel`]. It is used to
+    This is the configuration class to store the configuration of a [*Trillsson_efficientModel*]. It is used to
     instantiate an Trillsson_efficient model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     Trillson_efficient
     [vumichien/nonsemantic-speech-trillsson3](https://huggingface.co/vumichien/nonsemantic-speech-trillsson3)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
+    documentation from [*PretrainedConfig*] for more information.
 
 
     Args:
-        output_size (:obj:`int`, `optional`, defaults to 1024):
+        output_size (`int`, *optional*, defaults to 1024):
             The number of output dimensions.
-        depth_multiplier (:obj:`float`, `optional`, defaults to 1.0):
+        depth_multiplier (`float`, *optional*, defaults to 1.0):
             The depth multiplier for controling the size of the network.
-        depth_divisible_by (:obj:`int`, `optional`, defaults to 8):
+        depth_divisible_by (`int`, *optional*, defaults to 8):
             The value that the network depth should be divisible by.
-        min_depth (:obj:`int`, `optional`, defaults to 8):
+        min_depth (`int`, *optional*, defaults to 8):
             The minimum depth of the network.
-        hidden_act (:obj:`str`, `optional`, defaults to "swish"):
+        hidden_act (`str`, *optional*, defaults to "swish"):
             The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
             "relu", "silu", "swish", "gelu_new" and "tanh" are supported.
-        drop_connect_rate (:obj:`float`, `optional`, defaults to 0.2):
+        drop_connect_rate (`float`, *optional*, defaults to 0.2):
             The dropout ratio for drop connect.
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        norm_eps (:obj:`float`, `optional`, defaults to 0.001):
+        norm_eps (`float`, *optional*, defaults to 0.001):
             The epsilon used by the layer normalization layers.
-        norm_momentum (:obj:`float`, `optional`, defaults to 0.1):
+        norm_momentum (`float`, *optional*, defaults to 0.1):
             The momentum used by the layer normalization layers.
-        log_floor (:obj:`float`, `optional`, defaults to 1e-12):
+        log_floor (`float`, *optional*, defaults to 1e-12):
             The floor value for the log operation.
-        log_additive_offset (:obj:`float`, `optional`, defaults to 0.001):
+        log_additive_offset (`float`, *optional*, defaults to 0.001):
             The additive offset for the log operation.
-        window_length_secs (:obj:`float`, `optional`, defaults to 0.025):
+        window_length_secs (`float`, *optional*, defaults to 0.025):
             The window length in seconds.
-        hop_length_secs (:obj:`float`, `optional`, defaults to 0.010):
+        hop_length_secs (`float`, *optional*, defaults to 0.010):
             The hop length in seconds.
-        f_max (:obj:`float`, `optional`, defaults to 7500.0):
+        f_max (`float`, *optional*, defaults to 7500.0):
             The maximum frequency in Hz.
-        f_min (:obj:`float`, `optional`, defaults to 125.0):
+        f_min (`float`, *optional*, defaults to 125.0):
             The minimum frequency in Hz.
-        fft_length (:obj:`int`, `optional`, defaults to None):
+        fft_length (`int`, *optional*, defaults to None):
             The FFT length. If None, it will be computed from the window length.
-        classifier_dropout_prob (:obj:`float`, `optional`, defaults to 0.8):
+        classifier_dropout_prob (`float`, *optional*, defaults to 0.8):
             The dropout probability for the classifier.
 
     Example:

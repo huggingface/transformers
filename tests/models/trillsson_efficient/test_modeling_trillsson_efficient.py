@@ -24,7 +24,7 @@ from transformers.testing_utils import is_torch_available, require_torch, slow, 
 if is_torch_available():
     import torch
 
-    from transformers import Trillsson_efficientFeatureExtractor, Trillsson_efficientModel
+    from transformers.models.trillsson_efficient import Trillsson_efficientFeatureExtractor, Trillsson_efficientModel
 
 
 @require_torch

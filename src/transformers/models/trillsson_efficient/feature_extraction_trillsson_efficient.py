@@ -449,29 +449,29 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         Main method to compute and prepare for the model one or several sequence(s). sequences.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (*np.ndarray*, *List[float]*, *List[np.ndarray]*, *List[List[float]]*):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            sampling_rate (:obj:`int`, `optional`):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors.
-            frame_hop (:obj:`int`, `optional`, defaults to 195):
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the *raw_speech* input was sampled. It is strongly recommended to pass
+                *sampling_rate* at the forward call to prevent silent errors.
+            frame_hop (`int`, *optional*, defaults to 195):
                 The number of samples between successive frames.
-            required_length (:obj:`int`, `optional`, defaults to 32000):
+            required_length (`int`, *optional*, defaults to 32000):
                 The minimum length of the sequence after padding.
-            num_mel_bins (:obj:`int`, `optional`, defaults to 80):
+            num_mel_bins (`int`, *optional*, defaults to 80):
                 The number of mel bins.
-            frame_width (:obj:`int`, `optional`, defaults to 195):
+            frame_width (`int`, *optional*, defaults to 195):
                 The number of samples in each frame.
-            pad_mode (:obj:`str`, `optional`, defaults to 'symmetric'):
+            pad_mode (`str`, *optional*, defaults to 'symmetric'):
                 The padding mode to use. Can be one of 'constant', 'symmetric', 'reflect', 'wrap'.
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                - :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                - :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
-            padding (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+            padding (`bool`, *optional*, defaults to `False`):
                 Whether to pad the input values to the max length of the batch.
         """
         if sampling_rate is None:
