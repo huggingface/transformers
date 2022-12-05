@@ -584,9 +584,6 @@ class GPTSw3LMHeadModel(GPTSw3PreTrainedModel):
         self.transformer = GPTSw3Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()
