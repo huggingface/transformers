@@ -235,7 +235,7 @@ class BitMaxPool2d(nn.MaxPool2d):
         kernel_size = kernel_size if isinstance(kernel_size, collections.abc.Iterable) else (kernel_size, kernel_size)
         stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
         dilation = dilation if isinstance(dilation, collections.abc.Iterable) else (dilation, dilation)
-        super(BitMaxPool2d, self).__init__(kernel_size, stride, padding, dilation, ceil_mode)
+        super().__init__(kernel_size, stride, padding, dilation, ceil_mode)
         if use_dynamic_padding:
             self.pad = DynamicPad2d(kernel_size, stride, dilation, padding_value)
         else:
@@ -492,7 +492,7 @@ class BitDownsampleConv(nn.Module):
         stride=1,
         preact=True,
     ):
-        super(BitDownsampleConv, self).__init__()
+        super().__init__()
         self.conv = WeightStandardizedConv2d(
             in_channels, out_channels, 1, stride=stride, eps=1e-8, padding=config.global_padding
         )
