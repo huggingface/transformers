@@ -386,7 +386,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
         )
         output_3 = speech_translator(filename)
-        self.assertEqual(output_3, {"text": " Un uomo ha detto allo universo, Sir, esiste."})
+        self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
 
     @slow
     @require_torch
