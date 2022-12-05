@@ -86,8 +86,8 @@ def create_rename_keys(config):
             rename_keys.append((f"backbone.stages.{i}.downsample.reduction.weight", f"backbone.encoder.layers.{i}.downsample.reduction.weight"))
             rename_keys.append((f"backbone.stages.{i}.downsample.norm.weight", f"backbone.encoder.layers.{i}.downsample.norm.weight"))
             rename_keys.append((f"backbone.stages.{i}.downsample.norm.bias", f"backbone.encoder.layers.{i}.downsample.norm.bias"))
-        rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.{i}.weight"))
-        rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.{i}.bias"))
+        rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.stage{i+1}.weight"))
+        rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.stage{i+1}.bias"))
 
     # decode head
     rename_keys.extend(
@@ -222,13 +222,13 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     print(logits.shape)
     print("First values of logits:", logits[0, 0, :3, :3])
-    # TODO assert values
-    # expected_slice = torch.tensor(
-    #     [[-8.8110, -7.5399, -7.5429], [-8.5200, -7.0736, -7.2054], [-8.5220, -7.2897, -7.3901]]
-    # )
-    # print("Logits:", outputs.logits[0, 0, :3, :3])
-    # assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
-    # print("Looks ok!")
+    # assert values
+    expected_slice = torch.tensor(
+        [[-7.5958, -6.2706, -6.4283], [-6.6670, -4.8781, -5.0119], [-6.7895, -5.1362, -5.2955]]
+    )
+    print("Logits:", outputs.logits[0, 0, :3, :3])
+    assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")

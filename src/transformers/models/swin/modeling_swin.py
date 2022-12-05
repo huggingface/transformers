@@ -1368,6 +1368,8 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
 
         hidden_states = outputs.reshaped_hidden_states
 
+        print("Number of hidden states:", len(hidden_states))
+
         # for idx, hidden_state in enumerate(outputs.hidden_states[1:]):
         #     print(f"Stage {idx}:", hidden_state.shape)
         #     print("First values of hidden states:", hidden_state[0,:3,:3])
@@ -1377,7 +1379,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
             if stage in self.out_features:
                 print("Stage:", stage)
                 print("Idx:", idx)
-                # TODO can we simplify this?s
+                # TODO can we simplify this?
                 batch_size, num_channels, height, width = hidden_state.shape
                 hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
                 hidden_state = hidden_state.view(batch_size, height * width, num_channels)
