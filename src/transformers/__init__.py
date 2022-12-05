@@ -275,6 +275,7 @@ _import_structure = {
         "LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LayoutLMv3Config",
         "LayoutLMv3FeatureExtractor",
+        "LayoutLMv3ImageProcessor",
         "LayoutLMv3Processor",
         "LayoutLMv3Tokenizer",
     ],
@@ -3586,6 +3587,7 @@ if TYPE_CHECKING:
         TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Trillsson_efficientConfig,
         Trillsson_efficientFeatureExtractor,
+        Trillsson_efficientForSequenceClassification,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
