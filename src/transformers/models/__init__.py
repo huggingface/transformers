@@ -31,6 +31,7 @@ from . import (
     big_bird,
     bigbird_pegasus,
     bit,
+    biogpt,
     blenderbot,
     blenderbot_small,
     bloom,
