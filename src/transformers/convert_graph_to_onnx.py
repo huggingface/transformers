@@ -273,7 +273,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
     import torch
     from torch.onnx import export
 
-    from .pytorch_utils import is_torch_less_than_1_11
+    from transformers.pytorch_utils import is_torch_less_than_1_11
 
     print(f"Using framework PyTorch: {torch.__version__}")
 
