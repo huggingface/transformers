@@ -90,7 +90,6 @@ class ConvNextConfig(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
         image_size=224,
