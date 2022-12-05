@@ -361,11 +361,11 @@ For computer vision tasks, it is common to add some type of data augmentation to
 ```py
 >>> from torchvision.transforms import Compose, Normalize, RandomResizedCrop, ColorJitter, ToTensor
 
->>> normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+>>> normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
 >>> size = (
-...     feature_extractor.size["shortest_edge"]
-...     if "shortest_edge" in feature_extractor.size
-...     else (feature_extractor.size["height"], feature_extractor.size["width"])
+...     image_processor.size["shortest_edge"]
+...     if "shortest_edge" in image_processor.size
+...     else (image_processor.size["height"], image_processor.size["width"])
 ... )
 >>> _transforms = Compose([RandomResizedCrop(size), ColorJitter(brightness=0.5, hue=0.5), ToTensor(), normalize])
 ```
@@ -387,32 +387,7 @@ For computer vision tasks, it is common to add some type of data augmentation to
 4. Now when you access the image, you'll notice the image processor has added `pixel_values`. You can pass your processed dataset to the model now!
 
 ```py
->>> dataset[0]["image"]
-{'image': <PIL.JpegImagePlugin.JpegImageFile image mode=RGB size=384x512 at 0x7F1A7B0630D0>,
- 'label': 6,
- 'pixel_values': tensor([[[ 0.0353,  0.0745,  0.1216,  ..., -0.9922, -0.9922, -0.9922],
-          [-0.0196,  0.0667,  0.1294,  ..., -0.9765, -0.9843, -0.9922],
-          [ 0.0196,  0.0824,  0.1137,  ..., -0.9765, -0.9686, -0.8667],
-          ...,
-          [ 0.0275,  0.0745,  0.0510,  ..., -0.1137, -0.1216, -0.0824],
-          [ 0.0667,  0.0824,  0.0667,  ..., -0.0588, -0.0745, -0.0980],
-          [ 0.0353,  0.0353,  0.0431,  ..., -0.0039, -0.0039, -0.0588]],
- 
-         [[ 0.2078,  0.2471,  0.2863,  ..., -0.9451, -0.9373, -0.9451],
-          [ 0.1608,  0.2471,  0.3098,  ..., -0.9373, -0.9451, -0.9373],
-          [ 0.2078,  0.2706,  0.3020,  ..., -0.9608, -0.9373, -0.8275],
-          ...,
-          [-0.0353,  0.0118, -0.0039,  ..., -0.2392, -0.2471, -0.2078],
-          [ 0.0196,  0.0353,  0.0196,  ..., -0.1843, -0.2000, -0.2235],
-          [-0.0118, -0.0039, -0.0039,  ..., -0.0980, -0.0980, -0.1529]],
- 
-         [[ 0.3961,  0.4431,  0.4980,  ..., -0.9216, -0.9137, -0.9216],
-          [ 0.3569,  0.4510,  0.5216,  ..., -0.9059, -0.9137, -0.9137],
-          [ 0.4118,  0.4745,  0.5216,  ..., -0.9137, -0.8902, -0.7804],
-          ...,
-          [-0.2314, -0.1922, -0.2078,  ..., -0.4196, -0.4275, -0.3882],
-          [-0.1843, -0.1686, -0.2000,  ..., -0.3647, -0.3804, -0.4039],
-          [-0.1922, -0.1922, -0.1922,  ..., -0.2941, -0.2863, -0.3412]]])}
+>>> dataset[0].keys()
 ```
 
 Here is what the image looks like after the transforms are applied. The image has been randomly cropped and it's color properties are different.
