@@ -24,7 +24,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
+class LEDTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LEDTokenizer
     rust_tokenizer_class = LEDTokenizerFast
     test_rust_tokenizer = True
