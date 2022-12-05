@@ -48,7 +48,6 @@ def get_upernet_config(model_name):
         embed_dim=embed_dim,
         depths=depths,
         num_heads=num_heads,
-        output_hidden_states_before_downsampling=True,
         out_features=["stage1", "stage2", "stage3", "stage4"],
     )
     config = UperNetConfig(backbone_config=backbone_config, num_labels=150)
