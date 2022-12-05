@@ -279,7 +279,6 @@ class BitEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
 
-        # Conv
         embedding = self.convolution(pixel_values)
 
         # Eventually pad
