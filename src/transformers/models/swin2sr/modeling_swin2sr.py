@@ -984,7 +984,7 @@ class Upsample(nn.Sequential):
 
 class UpsampleOneStep(nn.Module):
     """UpsampleOneStep module (the difference with Upsample is that it always only has 1conv + 1pixelshuffle)
-    
+
     Used in lightweight SR to save parameters.
 
     Args:
@@ -993,6 +993,7 @@ class UpsampleOneStep(nn.Module):
         in_channels (int):
             Channel number of intermediate features.
     """
+
     def __init__(self, scale, in_channels, out_channels):
         super().__init__()
 
@@ -1006,11 +1007,28 @@ class UpsampleOneStep(nn.Module):
         return x
 
 
+class PixelShuffleUpsampler(nn.Module):
+    def __init__(self, config, num_features):
+        super().__init__()
+        self.conv_before_upsample = nn.Conv2d(config.embed_dim, num_features, 3, 1, 1)
+        self.activation = nn.LeakyReLU(inplace=True)
+        self.upsample = Upsample(config.upscale, num_features)
+        self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+
+    def forward(self, sequence_output):
+        x = self.conv_before_upsample(sequence_output)
+        x = self.activation(x)
+        x = self.upsample(x)
+        x = self.conv_last(x)
+
+        return x
+
+
 class NearestConvUpsampler(nn.Module):
     def __init__(self, config, num_features):
         super().__init__()
         if config.upscale != 4:
-                raise ValueError("The nearest+conv upsampler only supports an upscale factor of 4 at the moment.")
+            raise ValueError("The nearest+conv upsampler only supports an upscale factor of 4 at the moment.")
 
         self.conv_before_upsample = nn.Conv2d(config.embed_dim, num_features, 3, 1, 1)
         self.act = nn.LeakyReLU(inplace=True)
@@ -1050,11 +1068,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         # Upsampler
         num_features = 64
         if self.upsampler == "pixelshuffle":
-            self.conv_before_upsample = nn.Sequential(
-                nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
-            )
-            self.upsample = Upsample(config.upscale, num_features)
-            self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+            self.upsample = PixelShuffleUpsampler(config, num_features)
         elif self.upsampler == "pixelshuffle_aux":
             self.conv_bicubic = nn.Conv2d(config.num_channels, num_features, 3, 1, 1)
             self.conv_before_upsample = nn.Sequential(
@@ -1132,9 +1146,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         sequence_output = outputs[0]
 
         if self.upsampler == "pixelshuffle":
-            sequence_output = self.conv_before_upsample(sequence_output)
-            sequence_output = self.upsample(sequence_output)
-            reconstruction = self.conv_last(sequence_output)
+            reconstruction = self.upsample(sequence_output)
         elif self.upsampler == "pixelshuffle_aux":
             sequence_output = self.conv_before_upsample(sequence_output)
             aux = self.conv_aux(sequence_output)
