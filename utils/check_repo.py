@@ -140,7 +140,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
     "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
-    "models/trillsson_efficient/test_modeling_trillsson_efficient.py"
+    "models/trillsson_efficient/test_modeling_trillsson_efficient.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
