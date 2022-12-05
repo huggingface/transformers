@@ -13,11 +13,31 @@
 # limitations under the License.
 
 import argparse
+import hashlib
+import io
+import os
+import urllib
+import warnings
 
 import torch
 from torch import nn
+from tqdm import tqdm
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperModel
+
+
+_MODELS = {
+    "tiny.en": "https://openaipublic.azureedge.net/main/whisper/models/d3dd57d32accea0b295c96e26691aa14d8822fac7d9d27d5dc00b4ca2826dd03/tiny.en.pt",
+    "tiny": "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt",
+    "base.en": "https://openaipublic.azureedge.net/main/whisper/models/25a8566e1d0c1e2231d1c762132cd20e0f96a85d16145c3a00adf5d1ac670ead/base.en.pt",
+    "base": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
+    "small.en": "https://openaipublic.azureedge.net/main/whisper/models/f953ad0fd29cacd07d5a9eda5624af0f6bcf2258be67c92b79389873d91e0872/small.en.pt",
+    "small": "https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt",
+    "medium.en": "https://openaipublic.azureedge.net/main/whisper/models/d7440d1dc186f76616474e0ff0b3b6b879abc9d1a4926b7adfa41db2d497ab4f/medium.en.pt",
+    "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
+    "large": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large.pt",
+    "large-v2": "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
+}
 
 
 def remove_ignore_keys_(state_dict):
@@ -73,6 +93,8 @@ def make_linear_from_emb(emb):
 
 
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
+    if "https" in checkpoint_path:
+        checkpoint_path = _download(_MODELS[checkpoint_path])
     original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
@@ -80,11 +102,12 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     remove_ignore_keys_(state_dict)
     rename_keys(state_dict)
     tie_embeds = True
-    ffn_dim = state_dict["decoder.layers.0.fc1.weight"].shape[1]
+    ffn_dim = state_dict["decoder.layers.0.fc1.weight"].shape[0]
 
     config = WhisperConfig(
         vocab_size=dimensions["n_vocab"],
         encoder_ffn_dim=ffn_dim,
+        decoder_ffn_dim=ffn_dim,
         num_mel_bins=dimensions["n_mels"],
         d_model=dimensions["n_audio_state"],
         max_target_positions=dimensions["n_text_ctx"],
@@ -114,28 +137,6 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
         model.proj_out.weight.data = proj_out_weights
 
     model.save_pretrained(pytorch_dump_folder_path)
-
-
-_MODELS = {
-    "tiny.en": "https://openaipublic.azureedge.net/main/whisper/models/d3dd57d32accea0b295c96e26691aa14d8822fac7d9d27d5dc00b4ca2826dd03/tiny.en.pt",
-    "tiny": "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt",
-    "base.en": "https://openaipublic.azureedge.net/main/whisper/models/25a8566e1d0c1e2231d1c762132cd20e0f96a85d16145c3a00adf5d1ac670ead/base.en.pt",
-    "base": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
-    "small.en": "https://openaipublic.azureedge.net/main/whisper/models/f953ad0fd29cacd07d5a9eda5624af0f6bcf2258be67c92b79389873d91e0872/small.en.pt",
-    "small": "https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt",
-    "medium.en": "https://openaipublic.azureedge.net/main/whisper/models/d7440d1dc186f76616474e0ff0b3b6b879abc9d1a4926b7adfa41db2d497ab4f/medium.en.pt",
-    "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
-    "large": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large.pt",
-    "large-v2" : "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
-}
-
-import hashlib
-import io
-import os
-import urllib
-import warnings
-
-from tqdm import tqdm
 
 
 def _download(url: str, root: str) -> bytes:
