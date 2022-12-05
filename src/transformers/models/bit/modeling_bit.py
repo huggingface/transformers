@@ -528,9 +528,9 @@ class BitStage(nn.Module):
 
         # Get the layer type
         if config.layer_type == "bottleneck":
-            layer_fn = BitBottleneckLayer
+            layer_cls = BitBottleneckLayer
         else:
-            layer_fn = BitPreActivationBottleneckLayer
+            layer_cls = BitPreActivationBottleneckLayer
 
         prev_chs = in_channels
         self.layers = nn.Sequential()
@@ -542,7 +542,7 @@ class BitStage(nn.Module):
 
             self.layers.add_module(
                 str(layer_idx),
-                layer_fn(
+                layer_cls(
                     config,
                     prev_chs,
                     out_channels,
