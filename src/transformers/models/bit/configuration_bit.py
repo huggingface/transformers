@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/resnetv2-50": "https://huggingface.co/google/resnetv2-50/resolve/main/config.json",
+    "google/bit-50": "https://huggingface.co/google/resnetv2-50/resolve/main/config.json",
 }
 
 

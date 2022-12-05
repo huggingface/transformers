@@ -26,7 +26,7 @@ from ..bit import BitConfig
 logger = logging.get_logger(__name__)
 
 VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/vit-base-r50-s16-384": "https://huggingface.co/vit-base-r50-s16-384/resolve/main/config.json",
+    "google/vit-hybrid-base-bit-384": "https://huggingface.co/vit-hybrid-base-bit-384/resolve/main/config.json",
     # See all ViT hybrid models at https://huggingface.co/models?filter=vit
 }
 
@@ -61,11 +61,11 @@ class ViTHybridConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to `224`):
+        image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `1`):
+        patch_size (`int`, *optional*, defaults to 1):
             The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.

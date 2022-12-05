@@ -52,11 +52,11 @@ _CHECKPOINT_FOR_DOC = "google/resnetnv2-50"
 _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/resnetnv2-50"
+_IMAGE_CLASS_CHECKPOINT = "google/bit-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 BIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/resnetnv2-50",
+    "google/bit-50",
     # See all BiT models at https://huggingface.co/models?filter=bit
 ]
 
