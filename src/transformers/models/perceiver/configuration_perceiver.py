@@ -136,7 +136,6 @@ class PerceiverConfig(PretrainedConfig):
         position_embedding_init_scale=0.02,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         use_query_residual=True,
         vocab_size=262,
         max_position_embeddings=2048,
