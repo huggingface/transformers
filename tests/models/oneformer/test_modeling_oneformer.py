@@ -431,6 +431,7 @@ def prepare_img():
 
 
 @require_vision
+@slow
 class OneFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
