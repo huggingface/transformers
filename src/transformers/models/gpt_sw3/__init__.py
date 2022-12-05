@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_gpt_sw3": ["GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSw3Config", "GPTSw3OnnxConfig"],
+    "configuration_gpt_sw3": ["GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSw3Config"],
     "tokenization_gpt_sw3": ["GPTSw3Tokenizer"],
 }
 
