@@ -447,6 +447,16 @@ class FeaturesManager:
             "sequence-classification",
             onnx_config_cls="models.perceiver.PerceiverOnnxConfig",
         ),
+        "rembert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls="models.rembert.RemBertOnnxConfig",
+        ),
         "resnet": supported_features_mapping(
             "default",
             "image-classification",
