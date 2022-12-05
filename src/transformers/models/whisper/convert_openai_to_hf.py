@@ -73,9 +73,6 @@ def make_linear_from_emb(emb):
 
 
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
-    if not ".pt" in checkpoint_path:
-        checkpoint_path = _MODELS[checkpoint_path]
-
     original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
@@ -86,18 +83,17 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
     vocab_size = state_dict["decoder.embed_tokens.weight"].shape[0]
 
-    tie_embeds = args.share_decoder_input_output_embed
+    tie_embeds = True
 
-    conv_kernel_sizes = [int(i) for i in args.conv_kernel_sizes.split(",")]
     config = WhisperConfig(
         vocab_size=dimensions["n_vocab"],
         num_mel_bins=dimensions["n_mels"],
         d_model=dimensions["n_audio_state"],
         max_target_positions=dimensions["n_text_ctx"],
-        encoder_layers=dimensions["n_audio_layers"],
-        encoder_attention_heads=dimensions["n_audio_heads"],
-        decoder_layers=dimensions["n_text_layers"],
-        decoder_attention_heads=dimensions["n_text_heads"],
+        encoder_layers=dimensions["n_audio_layer"],
+        encoder_attention_heads=dimensions["n_audio_head"],
+        decoder_layers=dimensions["n_text_layer"],
+        decoder_attention_heads=dimensions["n_text_state"],
         max_source_positions=dimensions["n_audio_ctx"],
     )
 
@@ -214,8 +210,8 @@ def convert_every_model(save_dir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
-    parser.add_argument("--original_name", type=str, help="Name of the openai model")
+    parser.add_argument("--checkpoint_path", type=str, help="Patht to the downloaded checkpoints")
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
 
-    convert_openai_whisper_to_tfms(args.original_name, args.pytorch_dump_folder_path)
+    convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
