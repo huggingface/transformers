@@ -41,7 +41,7 @@ from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig
 from transformers import RobertaConfig, RobertaModel
-from transformers import BertConfig, BertModel
+from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertOutput, BertIntermediate, BertSelfOutput, BertSelfAttention, BertAttention
 from transformers.modeling_utils import (
     PreTrainedModel,
@@ -94,7 +94,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.is_clip= (not 'swin' in config.vit)
 
         if 'roberta' in config.tokenizer:
-            bert_config = RobertaConfig(
+            tokenizer_config = RobertaConfig(
                 vocab_size=config.vocab_size,
                 hidden_size=config.hidden_size,
                 num_hidden_layers=config.num_layers,
@@ -105,16 +105,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 attention_probs_dropout_prob=config.drop_rate
             )
         else:
-            bert_config = BertConfig(
-                vocab_size=config.vocab_size,
-                hidden_size=config.hidden_size,
-                num_hidden_layers=config.num_layers,
-                num_attention_heads=config.num_heads,
-                intermediate_size=config.hidden_size * config.mlp_ratio,
-                max_position_embeddings=config.max_text_len,
-                hidden_dropout_prob=config.drop_rate,
-                attention_probs_dropout_prob=config.drop_rate
-            )
+            raise ValueError("Incorrect value of tokenizer. Currently roberta tokenizer is supported")
 
         resolution_after=config.image_size
 
@@ -143,8 +134,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 if 'roberta' in config.tokenizer:
                     RobertaModel.from_pretrained(config.tokenizer, cache_dir=f"{config.cache_dir}/{config.tokenizer}")
                 else:
-                    BertModel.from_pretrained(config.tokenizer, cache_dir=f"{config.cache_dir}/{config.tokenizer}")
-
+                    raise ValueError(f"Incorrect value of tokenizer. Currently roberta tokenizer is supported")
             torch.distributed.barrier()
 
         if self.is_clip:
@@ -158,18 +148,17 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         if 'roberta' in config.tokenizer:
             roberta_config = RobertaConfig.from_pretrained(config.tokenizer)
             self.text_transformer = RobertaModel(roberta_config)
-            #self.text_transformer = RobertaModel.from_pretrained(config.tokenizer, cache_dir=f"{config.cache_dir}/{config.tokenizer}")
         else:
-            self.text_transformer = BertModel.from_pretrained(config.tokenizer, cache_dir=f"{config.cache_dir}/{config.tokenizer}")
+            raise ValueError(f"Incorrect value of tokenizer. Currently roberta tokenizer is supported")
 
         if not config.vit_layernorm_shared and config.vit_layernorm_init_from_vit:
             for ln in self.vit_model.visual.cross_modal_ln_separate:
                 ln.weight.data = self.vit_model.visual.ln_post.weight.data
                 ln.bias.data = self.vit_model.visual.ln_post.bias.data
 
-        self.cross_modal_image_layers = nn.ModuleList([BertCrossLayer(bert_config) for _ in range(config.num_layers)])
+        self.cross_modal_image_layers = nn.ModuleList([BertCrossLayer(tokenizer_config) for _ in range(config.num_layers)])
         self.cross_modal_image_layers.apply(self._init_weights)
-        self.cross_modal_text_layers = nn.ModuleList([BertCrossLayer(bert_config) for _ in range(config.num_layers)])
+        self.cross_modal_text_layers = nn.ModuleList([BertCrossLayer(tokenizer_config) for _ in range(config.num_layers)])
         self.cross_modal_text_layers.apply(self._init_weights)
 
         # Class token => Linear => Tanh
@@ -180,12 +169,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         if config.loss_names["mlm"] > 0:
             # MLM Head weights don't tie with BERT Embedding weights. Train from scratch.
-            self.mlm_score = BridgeTowerMLMHead(bert_config)
+            self.mlm_score = BridgeTowerMLMHead(tokenizer_config)
             self.mlm_score.apply(self._init_weights)
 
         hs = config.hidden_size
 
-        # ===================== Initialize LCI Components ===================== #
+        # ===================== Initialize BridgeTower Components ===================== #
         # just for first layer
         self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size)
         self.cross_modal_text_layernorm.apply(self._init_weights)
@@ -193,11 +182,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.cross_modal_image_layernorm.apply(self._init_weights)
 
         if config.link_tower_shared:
-            self.cross_modal_text_link_tower = LinkTower(config, bert_config)
-            self.cross_modal_image_link_tower = LinkTower(config, bert_config)
+            self.cross_modal_text_link_tower = LinkTower(config, tokenizer_config)
+            self.cross_modal_image_link_tower = LinkTower(config, tokenizer_config)
         else:
-            self.cross_modal_text_link_tower = nn.ModuleList([LinkTower(config, bert_config) for _ in range(config.num_layers - 1)])
-            self.cross_modal_image_link_tower = nn.ModuleList([LinkTower(config, bert_config) for _ in range(config.num_layers - 1)])
+            self.cross_modal_text_link_tower = nn.ModuleList([LinkTower(config, tokenizer_config) for _ in range(config.num_layers - 1)])
+            self.cross_modal_image_link_tower = nn.ModuleList([LinkTower(config, tokenizer_config) for _ in range(config.num_layers - 1)])
 
         self.cross_modal_text_link_tower.apply(self._init_weights)
         self.cross_modal_image_link_tower.apply(self._init_weights)
@@ -509,7 +498,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
 
 class LinkTower(nn.Module):
-    def __init__(self, config, bert_config):
+    def __init__(self, config, tokenizer_config):
         super(LinkTower, self).__init__()
         self.link_tower_type = config.link_tower_type
         self.hidden_size = config.hidden_size
@@ -544,7 +533,7 @@ class LinkTower(nn.Module):
                 )
             self.LayerNorm = nn.LayerNorm(self.hidden_size)
         elif config.link_tower_type in ['cross_attention', 'cross_attention_ffn']:
-            self.dense = BertLinkLayer(bert_config, self.link_tower_type)
+            self.dense = BertLinkLayer(tokenizer_config, self.link_tower_type)
         else:
             raise NotImplementedError(f"link_tower_type {config.link_tower_type} is not implemented")
 

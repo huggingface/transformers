@@ -88,7 +88,7 @@ class BridgeTowerConfig(PretrainedConfig):
                 'vqa': 1},
         max_text_len=50, #check 40 in configuration.py
         mlp_ratio=4,
-        model_type='bridgetower', #TODO:Changed from LCI->bridgetower
+        model_type='bridgetower',
         nlvr2_head_format='pair',
         num_heads=12,
         num_layers=6,

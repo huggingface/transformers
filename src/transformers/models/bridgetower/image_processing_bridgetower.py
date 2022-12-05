@@ -540,7 +540,7 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, model_type: str = "LCI", stop_gradient: bool = False, vit_remove_last: bool = False):
+    def __init__(self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, model_type: str = "bridgetower", stop_gradient: bool = False, vit_remove_last: bool = False):
         super().__init__()
         self.width = width
         self.layers = layers
@@ -555,19 +555,19 @@ class Transformer(nn.Module):
         xs = []
         for block in self.resblocks:
             x = block(x, x_mask)
-            if self.model_type == 'LCI':
+            if self.model_type == 'bridgetower':
                 if self.stop_gradient:
                     xs.append(x.detach())
                 else:
                     xs.append(x)
-        if self.model_type == 'LCI':
+        if self.model_type == 'bridgetower':
             return xs
         else:
             return x
 
 
 class VisualTransformer(nn.Module):
-    def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int, resolution_after: int, model_type: str = "LCI", stop_gradient: bool = False, vit_layernorm_shared: bool = True, vit_remove_last: bool = False):
+    def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int, resolution_after: int, model_type: str = "bridgetower", stop_gradient: bool = False, vit_layernorm_shared: bool = True, vit_remove_last: bool = False):
         super().__init__()
         self.input_resolution = input_resolution
         self.output_dim = output_dim
@@ -595,7 +595,7 @@ class VisualTransformer(nn.Module):
         x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
         x = x.permute(1, 0, 2)  # NLD -> LND
-        if self.model_type == 'LCI':
+        if self.model_type == 'bridgetower':
             xs = self.transformer(x, x_mask)
             xs = torch.stack(xs, dim=0)  # shape = [layers, width, *, grid ** 2]
             xs = xs.permute(0, 2, 1, 3)  # shape = [layers, *, width, grid ** 2]
@@ -645,7 +645,7 @@ class CLIP(nn.Module):
                  transformer_heads: int,
                  transformer_layers: int,
                  resolution_after=224,
-                 model_type="LCI",
+                 model_type="bridgetower",
                  stop_gradient=False,
                  vit_layernorm_shared=True,
                  vit_remove_last=False
@@ -771,7 +771,7 @@ def adapt_position_encoding(model, patch_size=32, after=384,
     return model
 
 
-def build_model(name, resolution_after=224, model_type="LCI", stop_gradient=False, vit_layernorm_shared=True, vit_remove_last=False):
+def build_model(name, resolution_after=224, model_type="bridgetower", stop_gradient=False, vit_layernorm_shared=True, vit_remove_last=False):
     if name in _MODELS:
         model_path = _download(_MODELS[name])
     elif os.path.isfile(name):
