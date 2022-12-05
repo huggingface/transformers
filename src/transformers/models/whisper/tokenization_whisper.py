@@ -583,5 +583,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return input_ids
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
-        self.set_prefix_tokens(task=task, language=language, predict_timestamps=no_timestamps)
-        return self.prefix_tokens
+        self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
+        prefix_tokens = self.prefix_tokens
+        forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(prefix_tokens)]
+        return forced_decoder_ids
