@@ -60,8 +60,6 @@ class Speech2Text2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             https://arxiv.org/abs/1909.11556>`__ for more details.
@@ -109,7 +107,6 @@ class Speech2Text2Config(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         decoder_start_token_id=2,
-        classifier_dropout=0.0,
         scale_embedding=True,
         pad_token_id=1,
         bos_token_id=0,
@@ -129,7 +126,6 @@ class Speech2Text2Config(PretrainedConfig):
         self.activation_function = activation_function
         self.init_std = init_std
         self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = decoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
