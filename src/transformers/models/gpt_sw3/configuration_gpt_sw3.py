@@ -48,7 +48,7 @@ class GPTSw3Config(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         n_head (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*, defaults to None):
+        n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
