@@ -225,7 +225,7 @@ A tokenizer can also accept a list of inputs, and pad and truncate the text to r
 
 <Tip>
 
-Check out the [preprocess](./preprocessing) tutorial for more details about tokenization, and how to use an [`AutoFeatureExtractor`] and [`AutoProcessor`] to preprocess image, audio, and multimodal inputs.
+Check out the [preprocess](./preprocessing) tutorial for more details about tokenization, and how to use an [`AutoImageProcessor`], [`AutoFeatureExtractor`] and [`AutoProcessor`] to preprocess image, audio, and multimodal inputs.
 
 </Tip>
 
@@ -424,7 +424,7 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
    ... )
    ```
 
-3. A preprocessing class like a tokenizer, feature extractor, or processor:
+3. A preprocessing class like a tokenizer, image processor, feature extractor, or processor:
 
    ```py
    >>> from transformers import AutoTokenizer
@@ -501,7 +501,7 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
    ```
 
-2. A preprocessing class like a tokenizer, feature extractor, or processor:
+2. A preprocessing class like a tokenizer, image processor, feature extractor, or processor:
 
    ```py
    >>> from transformers import AutoTokenizer

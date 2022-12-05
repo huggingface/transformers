@@ -23,7 +23,7 @@ from ...processing_utils import ProcessorMixin
 
 class TrOCRProcessor(ProcessorMixin):
     r"""
-    Constructs a TrOCR processor which wraps a vision feature extractor and a TrOCR tokenizer into a single processor.
+    Constructs a TrOCR processor which wraps a vision image processor and a TrOCR tokenizer into a single processor.
 
     [`TrOCRProcessor`] offers all the functionalities of [`ViTImageProcessor`/`DeiTImageProcessor`] and
     [`RobertaTokenizer`/`XLMRobertaTokenizer`]. See the [`~TrOCRProcessor.__call__`] and [`~TrOCRProcessor.decode`] for

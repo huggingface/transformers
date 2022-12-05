@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ViTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ViTFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "ViTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224-in21k"
@@ -481,8 +481,8 @@ VIT_START_DOCSTRING = r"""
 VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
-            [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`ViTImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -664,7 +664,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import ViTFeatureExtractor, ViTForMaskedImageModeling
+        >>> from transformers import ViTImageProcessor, ViTForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -672,11 +672,11 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
         >>> model = ViTForMaskedImageModeling.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
