@@ -40,6 +40,7 @@ logger = logging.get_logger(__name__)
 if is_vision_available():
     import PIL
 
+
 # Copied from transformers.models.bit.image_processing_bit.convert_to_rgb
 def convert_to_rgb(image: Union[Any, PIL.Image.Image]) -> Union[Any, PIL.Image.Image]:
     """
