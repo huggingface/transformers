@@ -1225,10 +1225,10 @@ else:
     _import_structure["models.convnext"].extend(
         [
             "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextBackbone",
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
-            "ConvNextBackbone",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -2151,7 +2151,6 @@ else:
             "SwinForMaskedImageModeling",
             "SwinModel",
             "SwinPreTrainedModel",
-            "SwinBackbone",
         ]
     )
     _import_structure["models.swin2sr"].extend(

@@ -1368,12 +1368,6 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
 
         hidden_states = outputs.reshaped_hidden_states
 
-        print("Layernorms: ", self.hidden_states_norms)
-
-        print("Number of hidden states:", len(hidden_states))
-        for i in hidden_states:
-            print("Shape of hidden state:", i.shape)
-
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
