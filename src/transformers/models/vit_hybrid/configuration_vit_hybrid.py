@@ -121,7 +121,7 @@ class ViTHybridConfig(PretrainedConfig):
                 backbone_config_class = CONFIG_MAPPING[backbone_config["model_type"]]
             else:
                 logger.info(
-                    "`model_type` is not found in `backbone_config`. Use `ResNet` as the backbone configuration class."
+                    "`model_type` is not found in `backbone_config`. Use `Bit` as the backbone configuration class."
                 )
                 backbone_config_class = BitConfig
             backbone_config = backbone_config_class(**backbone_config)
