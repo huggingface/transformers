@@ -2573,6 +2573,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         f"Error no file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
                         f"{pretrained_model_name_or_path}."
                     )
+            elif os.path.isfile(pretrained_model_name_or_path):
+                archive_file = pretrained_model_name_or_path
+                is_local = True
+            elif os.path.isfile(pretrained_model_name_or_path + ".index"):
+                archive_file = pretrained_model_name_or_path + ".index"
+                is_local = True
             elif is_remote_url(pretrained_model_name_or_path):
                 filename = pretrained_model_name_or_path
                 resolved_archive_file = download_url(pretrained_model_name_or_path)
