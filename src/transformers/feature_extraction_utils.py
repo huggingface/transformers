@@ -193,6 +193,7 @@ class BatchFeature(UserDict):
         import torch  # noqa
 
         new_data = {}
+        device, _ = self._parse_to_args(*args, **kwargs)
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
             # check if v is a floating point
@@ -200,32 +201,31 @@ class BatchFeature(UserDict):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
             else:
-                # just send to device
-                device = kwargs.pop("device", None)
-                # Check if the args are a device or a dtype
-                if device is None and len(args) > 0:
-                    # device should be always the first argument
-                    arg = args[0]
-                    if is_torch_dtype(arg):
-                        # Ignore the dtype
-                        logger.warning(
-                            "Attempting to cast a non-floating point element of BatchFeature to `dtype`"
-                            f" {str(arg)}. This is not supported."
-                        )
-                    elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
-                        device = arg
-                    else:
-                        # it's something else
-                        raise ValueError(
-                            f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported."
-                        )
-                # Finally send to device
+                # Just send to device for int tensors
                 if device is not None:
                     new_data[k] = v.to(device=device)
                 else:
                     new_data[k] = v
         self.data = new_data
         return self
+
+    def _parse_to_args(self, *args, **kwargs):
+        # just send to device
+        device = kwargs.get("device")
+        dtype = kwargs.get("dtype")
+        # Check if the args are a device or a dtype
+        if device is None and len(args) > 0:
+            # device should be always the first argument
+            arg = args[0]
+            if is_torch_dtype(arg):
+                # Assign the dtype
+                dtype = arg
+            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                device = arg
+            else:
+                # it's something else
+                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+        return device, dtype
 
 
 class FeatureExtractionMixin(PushToHubMixin):
