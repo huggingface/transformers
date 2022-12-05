@@ -26,6 +26,11 @@ if is_speech_available():
     from transformers import WhisperFeatureExtractor, WhisperProcessor
 
 
+START_OF_TRANSCRIPT = 50257
+TRANSCRIBE = 50358
+NOTIMESTAMPS = 50362
+
+
 @require_torch
 @require_torchaudio
 @require_sentencepiece
@@ -128,3 +133,17 @@ class WhisperProcessorTest(unittest.TestCase):
             feature_extractor.model_input_names,
             msg="`processor` and `feature_extractor` model input names do not match",
         )
+
+    def test_get_decoder_prompt_ids(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", no_timestamps=True)
+
+        self.assertIsInstance(forced_decoder_ids, list)
+        for ids in forced_decoder_ids:
+            self.assertIsInstance(ids, (list, tuple))
+
+        expected_ids = [START_OF_TRANSCRIPT, TRANSCRIBE, NOTIMESTAMPS]
+        self.assertListEqual([ids[-1] for ids in forced_decoder_ids], expected_ids)
