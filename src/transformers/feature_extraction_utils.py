@@ -193,24 +193,22 @@ class BatchFeature(UserDict):
         import torch  # noqa
 
         new_data = {}
-        device = self._parse_to_args(*args, **kwargs)
+        device = self._parse_args_to_device(*args, **kwargs)
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
             # check if v is a floating point
             if torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
+            elif device is not None:
+                new_data[k] = v.to(device=device)
             else:
-                # Just send to device for int tensors
-                if device is not None:
-                    new_data[k] = v.to(device=device)
-                else:
-                    new_data[k] = v
+                new_data[k] = v
         self.data = new_data
         return self
 
-    def _parse_to_args(self, *args, **kwargs):
-        # just send to device
+    def _parse_args_to_device(self, *args, **kwargs):
+        # Retrieve device from kwargs
         device = kwargs.get("device")
         # Check if the args are a device or a dtype
         if device is None and len(args) > 0:
