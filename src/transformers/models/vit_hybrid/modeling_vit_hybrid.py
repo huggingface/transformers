@@ -54,7 +54,6 @@ VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->ViTHybrid
 class ViTHybridEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
