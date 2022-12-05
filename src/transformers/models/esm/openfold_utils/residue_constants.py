@@ -19,7 +19,7 @@ import collections
 import copy
 import functools
 from importlib import resources
-from typing import List, Mapping, Tuple
+from typing import Dict, List, Mapping, Sequence, Tuple
 
 import numpy as np
 
@@ -33,43 +33,21 @@ ca_ca = 3.80209737096
 # Format: The list for each AA type contains chi1, chi2, chi3, chi4 in
 # this order (or a relevant subset from chi1 onwards). ALA and GLY don't have
 # chi angles so their chi angle lists are empty.
-chi_angles_atoms = {
+chi_angles_atoms: Dict[str, List[List[str]]] = {
     "ALA": [],
     # Chi5 in arginine is always 0 +- 5 degrees, so ignore it.
-    "ARG": [
-        ["N", "CA", "CB", "CG"],
-        ["CA", "CB", "CG", "CD"],
-        ["CB", "CG", "CD", "NE"],
-        ["CG", "CD", "NE", "CZ"],
-    ],
+    "ARG": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "NE"], ["CG", "CD", "NE", "CZ"]],
     "ASN": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "OD1"]],
     "ASP": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "OD1"]],
     "CYS": [["N", "CA", "CB", "SG"]],
-    "GLN": [
-        ["N", "CA", "CB", "CG"],
-        ["CA", "CB", "CG", "CD"],
-        ["CB", "CG", "CD", "OE1"],
-    ],
-    "GLU": [
-        ["N", "CA", "CB", "CG"],
-        ["CA", "CB", "CG", "CD"],
-        ["CB", "CG", "CD", "OE1"],
-    ],
+    "GLN": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "OE1"]],
+    "GLU": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "OE1"]],
     "GLY": [],
     "HIS": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "ND1"]],
     "ILE": [["N", "CA", "CB", "CG1"], ["CA", "CB", "CG1", "CD1"]],
     "LEU": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD1"]],
-    "LYS": [
-        ["N", "CA", "CB", "CG"],
-        ["CA", "CB", "CG", "CD"],
-        ["CB", "CG", "CD", "CE"],
-        ["CG", "CD", "CE", "NZ"],
-    ],
-    "MET": [
-        ["N", "CA", "CB", "CG"],
-        ["CA", "CB", "CG", "SD"],
-        ["CB", "CG", "SD", "CE"],
-    ],
+    "LYS": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "CE"], ["CG", "CD", "CE", "NZ"]],
+    "MET": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "SD"], ["CB", "CG", "SD", "CE"]],
     "PHE": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD1"]],
     "PRO": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"]],
     "SER": [["N", "CA", "CB", "OG"]],
@@ -81,7 +59,7 @@ chi_angles_atoms = {
 
 # If chi angles given in fixed-length array, this matrix determines how to mask
 # them for each AA type. The order is as per restype_order (see below).
-chi_angles_mask = [
+chi_angles_mask: List[List[float]] = [
     [0.0, 0.0, 0.0, 0.0],  # ALA
     [1.0, 1.0, 1.0, 1.0],  # ARG
     [1.0, 1.0, 0.0, 0.0],  # ASN
@@ -106,7 +84,7 @@ chi_angles_mask = [
 
 # The following chi angles are pi periodic: they can be rotated by a multiple
 # of pi without affecting the structure.
-chi_pi_periodic = [
+chi_pi_periodic: List[List[float]] = [
     [0.0, 0.0, 0.0, 0.0],  # ALA
     [0.0, 0.0, 0.0, 0.0],  # ARG
     [0.0, 0.0, 0.0, 0.0],  # ASN
@@ -142,219 +120,219 @@ chi_pi_periodic = [
 # is defined such that the dihedral-angle-definiting atom (the last entry in
 # chi_angles_atoms above) is in the xy-plane (with a positive y-coordinate).
 # format: [atomname, group_idx, rel_position]
-rigid_group_atom_positions = {
+rigid_group_atom_positions: Dict[str, List[Tuple[str, int, Tuple[float, float, float]]]] = {
     "ALA": [
-        ["N", 0, (-0.525, 1.363, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.526, -0.000, -0.000)],
-        ["CB", 0, (-0.529, -0.774, -1.205)],
-        ["O", 3, (0.627, 1.062, 0.000)],
+        ("N", 0, (-0.525, 1.363, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.526, -0.000, -0.000)),
+        ("CB", 0, (-0.529, -0.774, -1.205)),
+        ("O", 3, (0.627, 1.062, 0.000)),
     ],
     "ARG": [
-        ["N", 0, (-0.524, 1.362, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.525, -0.000, -0.000)],
-        ["CB", 0, (-0.524, -0.778, -1.209)],
-        ["O", 3, (0.626, 1.062, 0.000)],
-        ["CG", 4, (0.616, 1.390, -0.000)],
-        ["CD", 5, (0.564, 1.414, 0.000)],
-        ["NE", 6, (0.539, 1.357, -0.000)],
-        ["NH1", 7, (0.206, 2.301, 0.000)],
-        ["NH2", 7, (2.078, 0.978, -0.000)],
-        ["CZ", 7, (0.758, 1.093, -0.000)],
+        ("N", 0, (-0.524, 1.362, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.525, -0.000, -0.000)),
+        ("CB", 0, (-0.524, -0.778, -1.209)),
+        ("O", 3, (0.626, 1.062, 0.000)),
+        ("CG", 4, (0.616, 1.390, -0.000)),
+        ("CD", 5, (0.564, 1.414, 0.000)),
+        ("NE", 6, (0.539, 1.357, -0.000)),
+        ("NH1", 7, (0.206, 2.301, 0.000)),
+        ("NH2", 7, (2.078, 0.978, -0.000)),
+        ("CZ", 7, (0.758, 1.093, -0.000)),
     ],
     "ASN": [
-        ["N", 0, (-0.536, 1.357, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.526, -0.000, -0.000)],
-        ["CB", 0, (-0.531, -0.787, -1.200)],
-        ["O", 3, (0.625, 1.062, 0.000)],
-        ["CG", 4, (0.584, 1.399, 0.000)],
-        ["ND2", 5, (0.593, -1.188, 0.001)],
-        ["OD1", 5, (0.633, 1.059, 0.000)],
+        ("N", 0, (-0.536, 1.357, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.526, -0.000, -0.000)),
+        ("CB", 0, (-0.531, -0.787, -1.200)),
+        ("O", 3, (0.625, 1.062, 0.000)),
+        ("CG", 4, (0.584, 1.399, 0.000)),
+        ("ND2", 5, (0.593, -1.188, 0.001)),
+        ("OD1", 5, (0.633, 1.059, 0.000)),
     ],
     "ASP": [
-        ["N", 0, (-0.525, 1.362, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.527, 0.000, -0.000)],
-        ["CB", 0, (-0.526, -0.778, -1.208)],
-        ["O", 3, (0.626, 1.062, -0.000)],
-        ["CG", 4, (0.593, 1.398, -0.000)],
-        ["OD1", 5, (0.610, 1.091, 0.000)],
-        ["OD2", 5, (0.592, -1.101, -0.003)],
+        ("N", 0, (-0.525, 1.362, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.527, 0.000, -0.000)),
+        ("CB", 0, (-0.526, -0.778, -1.208)),
+        ("O", 3, (0.626, 1.062, -0.000)),
+        ("CG", 4, (0.593, 1.398, -0.000)),
+        ("OD1", 5, (0.610, 1.091, 0.000)),
+        ("OD2", 5, (0.592, -1.101, -0.003)),
     ],
     "CYS": [
-        ["N", 0, (-0.522, 1.362, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.524, 0.000, 0.000)],
-        ["CB", 0, (-0.519, -0.773, -1.212)],
-        ["O", 3, (0.625, 1.062, -0.000)],
-        ["SG", 4, (0.728, 1.653, 0.000)],
+        ("N", 0, (-0.522, 1.362, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.524, 0.000, 0.000)),
+        ("CB", 0, (-0.519, -0.773, -1.212)),
+        ("O", 3, (0.625, 1.062, -0.000)),
+        ("SG", 4, (0.728, 1.653, 0.000)),
     ],
     "GLN": [
-        ["N", 0, (-0.526, 1.361, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.526, 0.000, 0.000)],
-        ["CB", 0, (-0.525, -0.779, -1.207)],
-        ["O", 3, (0.626, 1.062, -0.000)],
-        ["CG", 4, (0.615, 1.393, 0.000)],
-        ["CD", 5, (0.587, 1.399, -0.000)],
-        ["NE2", 6, (0.593, -1.189, -0.001)],
-        ["OE1", 6, (0.634, 1.060, 0.000)],
+        ("N", 0, (-0.526, 1.361, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.526, 0.000, 0.000)),
+        ("CB", 0, (-0.525, -0.779, -1.207)),
+        ("O", 3, (0.626, 1.062, -0.000)),
+        ("CG", 4, (0.615, 1.393, 0.000)),
+        ("CD", 5, (0.587, 1.399, -0.000)),
+        ("NE2", 6, (0.593, -1.189, -0.001)),
+        ("OE1", 6, (0.634, 1.060, 0.000)),
     ],
     "GLU": [
-        ["N", 0, (-0.528, 1.361, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.526, -0.000, -0.000)],
-        ["CB", 0, (-0.526, -0.781, -1.207)],
-        ["O", 3, (0.626, 1.062, 0.000)],
-        ["CG", 4, (0.615, 1.392, 0.000)],
-        ["CD", 5, (0.600, 1.397, 0.000)],
-        ["OE1", 6, (0.607, 1.095, -0.000)],
-        ["OE2", 6, (0.589, -1.104, -0.001)],
+        ("N", 0, (-0.528, 1.361, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.526, -0.000, -0.000)),
+        ("CB", 0, (-0.526, -0.781, -1.207)),
+        ("O", 3, (0.626, 1.062, 0.000)),
+        ("CG", 4, (0.615, 1.392, 0.000)),
+        ("CD", 5, (0.600, 1.397, 0.000)),
+        ("OE1", 6, (0.607, 1.095, -0.000)),
+        ("OE2", 6, (0.589, -1.104, -0.001)),
     ],
     "GLY": [
-        ["N", 0, (-0.572, 1.337, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.517, -0.000, -0.000)],
-        ["O", 3, (0.626, 1.062, -0.000)],
+        ("N", 0, (-0.572, 1.337, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.517, -0.000, -0.000)),
+        ("O", 3, (0.626, 1.062, -0.000)),
     ],
     "HIS": [
-        ["N", 0, (-0.527, 1.360, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.525, 0.000, 0.000)],
-        ["CB", 0, (-0.525, -0.778, -1.208)],
-        ["O", 3, (0.625, 1.063, 0.000)],
-        ["CG", 4, (0.600, 1.370, -0.000)],
-        ["CD2", 5, (0.889, -1.021, 0.003)],
-        ["ND1", 5, (0.744, 1.160, -0.000)],
-        ["CE1", 5, (2.030, 0.851, 0.002)],
-        ["NE2", 5, (2.145, -0.466, 0.004)],
+        ("N", 0, (-0.527, 1.360, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.525, 0.000, 0.000)),
+        ("CB", 0, (-0.525, -0.778, -1.208)),
+        ("O", 3, (0.625, 1.063, 0.000)),
+        ("CG", 4, (0.600, 1.370, -0.000)),
+        ("CD2", 5, (0.889, -1.021, 0.003)),
+        ("ND1", 5, (0.744, 1.160, -0.000)),
+        ("CE1", 5, (2.030, 0.851, 0.002)),
+        ("NE2", 5, (2.145, -0.466, 0.004)),
     ],
     "ILE": [
-        ["N", 0, (-0.493, 1.373, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.527, -0.000, -0.000)],
-        ["CB", 0, (-0.536, -0.793, -1.213)],
-        ["O", 3, (0.627, 1.062, -0.000)],
-        ["CG1", 4, (0.534, 1.437, -0.000)],
-        ["CG2", 4, (0.540, -0.785, -1.199)],
-        ["CD1", 5, (0.619, 1.391, 0.000)],
+        ("N", 0, (-0.493, 1.373, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.527, -0.000, -0.000)),
+        ("CB", 0, (-0.536, -0.793, -1.213)),
+        ("O", 3, (0.627, 1.062, -0.000)),
+        ("CG1", 4, (0.534, 1.437, -0.000)),
+        ("CG2", 4, (0.540, -0.785, -1.199)),
+        ("CD1", 5, (0.619, 1.391, 0.000)),
     ],
     "LEU": [
-        ["N", 0, (-0.520, 1.363, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.525, -0.000, -0.000)],
-        ["CB", 0, (-0.522, -0.773, -1.214)],
-        ["O", 3, (0.625, 1.063, -0.000)],
-        ["CG", 4, (0.678, 1.371, 0.000)],
-        ["CD1", 5, (0.530, 1.430, -0.000)],
-        ["CD2", 5, (0.535, -0.774, 1.200)],
+        ("N", 0, (-0.520, 1.363, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.525, -0.000, -0.000)),
+        ("CB", 0, (-0.522, -0.773, -1.214)),
+        ("O", 3, (0.625, 1.063, -0.000)),
+        ("CG", 4, (0.678, 1.371, 0.000)),
+        ("CD1", 5, (0.530, 1.430, -0.000)),
+        ("CD2", 5, (0.535, -0.774, 1.200)),
     ],
     "LYS": [
-        ["N", 0, (-0.526, 1.362, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.526, 0.000, 0.000)],
-        ["CB", 0, (-0.524, -0.778, -1.208)],
-        ["O", 3, (0.626, 1.062, -0.000)],
-        ["CG", 4, (0.619, 1.390, 0.000)],
-        ["CD", 5, (0.559, 1.417, 0.000)],
-        ["CE", 6, (0.560, 1.416, 0.000)],
-        ["NZ", 7, (0.554, 1.387, 0.000)],
+        ("N", 0, (-0.526, 1.362, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.526, 0.000, 0.000)),
+        ("CB", 0, (-0.524, -0.778, -1.208)),
+        ("O", 3, (0.626, 1.062, -0.000)),
+        ("CG", 4, (0.619, 1.390, 0.000)),
+        ("CD", 5, (0.559, 1.417, 0.000)),
+        ("CE", 6, (0.560, 1.416, 0.000)),
+        ("NZ", 7, (0.554, 1.387, 0.000)),
     ],
     "MET": [
-        ["N", 0, (-0.521, 1.364, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.525, 0.000, 0.000)],
-        ["CB", 0, (-0.523, -0.776, -1.210)],
-        ["O", 3, (0.625, 1.062, -0.000)],
-        ["CG", 4, (0.613, 1.391, -0.000)],
-        ["SD", 5, (0.703, 1.695, 0.000)],
-        ["CE", 6, (0.320, 1.786, -0.000)],
+        ("N", 0, (-0.521, 1.364, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.525, 0.000, 0.000)),
+        ("CB", 0, (-0.523, -0.776, -1.210)),
+        ("O", 3, (0.625, 1.062, -0.000)),
+        ("CG", 4, (0.613, 1.391, -0.000)),
+        ("SD", 5, (0.703, 1.695, 0.000)),
+        ("CE", 6, (0.320, 1.786, -0.000)),
     ],
     "PHE": [
-        ["N", 0, (-0.518, 1.363, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.524, 0.000, -0.000)],
-        ["CB", 0, (-0.525, -0.776, -1.212)],
-        ["O", 3, (0.626, 1.062, -0.000)],
-        ["CG", 4, (0.607, 1.377, 0.000)],
-        ["CD1", 5, (0.709, 1.195, -0.000)],
-        ["CD2", 5, (0.706, -1.196, 0.000)],
-        ["CE1", 5, (2.102, 1.198, -0.000)],
-        ["CE2", 5, (2.098, -1.201, -0.000)],
-        ["CZ", 5, (2.794, -0.003, -0.001)],
+        ("N", 0, (-0.518, 1.363, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.524, 0.000, -0.000)),
+        ("CB", 0, (-0.525, -0.776, -1.212)),
+        ("O", 3, (0.626, 1.062, -0.000)),
+        ("CG", 4, (0.607, 1.377, 0.000)),
+        ("CD1", 5, (0.709, 1.195, -0.000)),
+        ("CD2", 5, (0.706, -1.196, 0.000)),
+        ("CE1", 5, (2.102, 1.198, -0.000)),
+        ("CE2", 5, (2.098, -1.201, -0.000)),
+        ("CZ", 5, (2.794, -0.003, -0.001)),
     ],
     "PRO": [
-        ["N", 0, (-0.566, 1.351, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.527, -0.000, 0.000)],
-        ["CB", 0, (-0.546, -0.611, -1.293)],
-        ["O", 3, (0.621, 1.066, 0.000)],
-        ["CG", 4, (0.382, 1.445, 0.0)],
-        # ['CD', 5, (0.427, 1.440, 0.0)],
-        ["CD", 5, (0.477, 1.424, 0.0)],  # manually made angle 2 degrees larger
+        ("N", 0, (-0.566, 1.351, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.527, -0.000, 0.000)),
+        ("CB", 0, (-0.546, -0.611, -1.293)),
+        ("O", 3, (0.621, 1.066, 0.000)),
+        ("CG", 4, (0.382, 1.445, 0.0)),
+        # ('CD', 5, (0.427, 1.440, 0.0)),
+        ("CD", 5, (0.477, 1.424, 0.0)),  # manually made angle 2 degrees larger
     ],
     "SER": [
-        ["N", 0, (-0.529, 1.360, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.525, -0.000, -0.000)],
-        ["CB", 0, (-0.518, -0.777, -1.211)],
-        ["O", 3, (0.626, 1.062, -0.000)],
-        ["OG", 4, (0.503, 1.325, 0.000)],
+        ("N", 0, (-0.529, 1.360, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.525, -0.000, -0.000)),
+        ("CB", 0, (-0.518, -0.777, -1.211)),
+        ("O", 3, (0.626, 1.062, -0.000)),
+        ("OG", 4, (0.503, 1.325, 0.000)),
     ],
     "THR": [
-        ["N", 0, (-0.517, 1.364, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.526, 0.000, -0.000)],
-        ["CB", 0, (-0.516, -0.793, -1.215)],
-        ["O", 3, (0.626, 1.062, 0.000)],
-        ["CG2", 4, (0.550, -0.718, -1.228)],
-        ["OG1", 4, (0.472, 1.353, 0.000)],
+        ("N", 0, (-0.517, 1.364, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.526, 0.000, -0.000)),
+        ("CB", 0, (-0.516, -0.793, -1.215)),
+        ("O", 3, (0.626, 1.062, 0.000)),
+        ("CG2", 4, (0.550, -0.718, -1.228)),
+        ("OG1", 4, (0.472, 1.353, 0.000)),
     ],
     "TRP": [
-        ["N", 0, (-0.521, 1.363, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.525, -0.000, 0.000)],
-        ["CB", 0, (-0.523, -0.776, -1.212)],
-        ["O", 3, (0.627, 1.062, 0.000)],
-        ["CG", 4, (0.609, 1.370, -0.000)],
-        ["CD1", 5, (0.824, 1.091, 0.000)],
-        ["CD2", 5, (0.854, -1.148, -0.005)],
-        ["CE2", 5, (2.186, -0.678, -0.007)],
-        ["CE3", 5, (0.622, -2.530, -0.007)],
-        ["NE1", 5, (2.140, 0.690, -0.004)],
-        ["CH2", 5, (3.028, -2.890, -0.013)],
-        ["CZ2", 5, (3.283, -1.543, -0.011)],
-        ["CZ3", 5, (1.715, -3.389, -0.011)],
+        ("N", 0, (-0.521, 1.363, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.525, -0.000, 0.000)),
+        ("CB", 0, (-0.523, -0.776, -1.212)),
+        ("O", 3, (0.627, 1.062, 0.000)),
+        ("CG", 4, (0.609, 1.370, -0.000)),
+        ("CD1", 5, (0.824, 1.091, 0.000)),
+        ("CD2", 5, (0.854, -1.148, -0.005)),
+        ("CE2", 5, (2.186, -0.678, -0.007)),
+        ("CE3", 5, (0.622, -2.530, -0.007)),
+        ("NE1", 5, (2.140, 0.690, -0.004)),
+        ("CH2", 5, (3.028, -2.890, -0.013)),
+        ("CZ2", 5, (3.283, -1.543, -0.011)),
+        ("CZ3", 5, (1.715, -3.389, -0.011)),
     ],
     "TYR": [
-        ["N", 0, (-0.522, 1.362, 0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.524, -0.000, -0.000)],
-        ["CB", 0, (-0.522, -0.776, -1.213)],
-        ["O", 3, (0.627, 1.062, -0.000)],
-        ["CG", 4, (0.607, 1.382, -0.000)],
-        ["CD1", 5, (0.716, 1.195, -0.000)],
-        ["CD2", 5, (0.713, -1.194, -0.001)],
-        ["CE1", 5, (2.107, 1.200, -0.002)],
-        ["CE2", 5, (2.104, -1.201, -0.003)],
-        ["OH", 5, (4.168, -0.002, -0.005)],
-        ["CZ", 5, (2.791, -0.001, -0.003)],
+        ("N", 0, (-0.522, 1.362, 0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.524, -0.000, -0.000)),
+        ("CB", 0, (-0.522, -0.776, -1.213)),
+        ("O", 3, (0.627, 1.062, -0.000)),
+        ("CG", 4, (0.607, 1.382, -0.000)),
+        ("CD1", 5, (0.716, 1.195, -0.000)),
+        ("CD2", 5, (0.713, -1.194, -0.001)),
+        ("CE1", 5, (2.107, 1.200, -0.002)),
+        ("CE2", 5, (2.104, -1.201, -0.003)),
+        ("OH", 5, (4.168, -0.002, -0.005)),
+        ("CZ", 5, (2.791, -0.001, -0.003)),
     ],
     "VAL": [
-        ["N", 0, (-0.494, 1.373, -0.000)],
-        ["CA", 0, (0.000, 0.000, 0.000)],
-        ["C", 0, (1.527, -0.000, -0.000)],
-        ["CB", 0, (-0.533, -0.795, -1.213)],
-        ["O", 3, (0.627, 1.062, -0.000)],
-        ["CG1", 4, (0.540, 1.429, -0.000)],
-        ["CG2", 4, (0.533, -0.776, 1.203)],
+        ("N", 0, (-0.494, 1.373, -0.000)),
+        ("CA", 0, (0.000, 0.000, 0.000)),
+        ("C", 0, (1.527, -0.000, -0.000)),
+        ("CB", 0, (-0.533, -0.795, -1.213)),
+        ("O", 3, (0.627, 1.062, -0.000)),
+        ("CG1", 4, (0.540, 1.429, -0.000)),
+        ("CG2", 4, (0.533, -0.776, 1.203)),
     ],
 }
 
 # A list of atoms (excluding hydrogen) for each AA type. PDB naming convention.
-residue_atoms = {
+residue_atoms: Dict[str, List[str]] = {
     "ALA": ["C", "CA", "CB", "N", "O"],
     "ARG": ["C", "CA", "CB", "CG", "CD", "CZ", "N", "NE", "O", "NH1", "NH2"],
     "ASP": ["C", "CA", "CB", "CG", "N", "O", "OD1", "OD2"],
@@ -372,36 +350,8 @@ residue_atoms = {
     "PRO": ["C", "CA", "CB", "CG", "CD", "N", "O"],
     "SER": ["C", "CA", "CB", "N", "O", "OG"],
     "THR": ["C", "CA", "CB", "CG2", "N", "O", "OG1"],
-    "TRP": [
-        "C",
-        "CA",
-        "CB",
-        "CG",
-        "CD1",
-        "CD2",
-        "CE2",
-        "CE3",
-        "CZ2",
-        "CZ3",
-        "CH2",
-        "N",
-        "NE1",
-        "O",
-    ],
-    "TYR": [
-        "C",
-        "CA",
-        "CB",
-        "CG",
-        "CD1",
-        "CD2",
-        "CE1",
-        "CE2",
-        "CZ",
-        "N",
-        "O",
-        "OH",
-    ],
+    "TRP": ["C", "CA", "CB", "CG", "CD1", "CD2", "CE2", "CE3", "CZ2", "CZ3", "CH2", "N", "NE1", "O"],
+    "TYR": ["C", "CA", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ", "N", "O", "OH"],
     "VAL": ["C", "CA", "CB", "CG1", "CG2", "N", "O"],
 }
 
@@ -412,7 +362,7 @@ residue_atoms = {
 # in LEU, VAL and ARG can be resolved by using the 3d constellations of
 # the 'ambiguous' atoms and their neighbours)
 # TODO: ^ interpret this
-residue_atom_renaming_swaps = {
+residue_atom_renaming_swaps: Dict[str, Dict[str, str]] = {
     "ASP": {"OD1": "OD2"},
     "GLU": {"OE1": "OE2"},
     "PHE": {"CD1": "CD2", "CE1": "CE2"},
@@ -420,7 +370,7 @@ residue_atom_renaming_swaps = {
 }
 
 # Van der Waals radii [Angstroem] of the atoms (from Wikipedia)
-van_der_waals_radius = {
+van_der_waals_radius: Dict[str, float] = {
     "C": 1.7,
     "N": 1.55,
     "O": 1.52,
@@ -434,7 +384,7 @@ BondAngle = collections.namedtuple(
 )
 
 
-def map_structure_with_atom_order(in_list: List, first_call: bool = True):
+def map_structure_with_atom_order(in_list: list, first_call: bool = True) -> list:
     # Maps strings in a nested list structure to their corresponding index in atom_order
     if first_call:
         in_list = copy.deepcopy(in_list)
@@ -468,20 +418,20 @@ def load_stereo_chemical_props() -> Tuple[
 
     lines_iter = iter(stereo_chemical_props.splitlines())
     # Load bond lengths.
-    residue_bonds = {}
+    residue_bonds: Dict[str, List[Bond]] = {}
     next(lines_iter)  # Skip header line.
     for line in lines_iter:
         if line.strip() == "-":
             break
-        bond, resname, length, stddev = line.split()
+        bond, resname, bond_length, stddev = line.split()
         atom1, atom2 = bond.split("-")
         if resname not in residue_bonds:
             residue_bonds[resname] = []
-        residue_bonds[resname].append(Bond(atom1, atom2, float(length), float(stddev)))
+        residue_bonds[resname].append(Bond(atom1, atom2, float(bond_length), float(stddev)))
     residue_bonds["UNK"] = []
 
     # Load bond angles.
-    residue_bond_angles = {}
+    residue_bond_angles: Dict[str, List[BondAngle]] = {}
     next(lines_iter)  # Skip empty line.
     next(lines_iter)  # Skip header line.
     for line in lines_iter:
@@ -502,15 +452,15 @@ def load_stereo_chemical_props() -> Tuple[
         )
     residue_bond_angles["UNK"] = []
 
-    def make_bond_key(atom1_name, atom2_name):
+    def make_bond_key(atom1_name: str, atom2_name: str) -> str:
         """Unique key to lookup bonds."""
         return "-".join(sorted([atom1_name, atom2_name]))
 
     # Translate bond angles into distances ("virtual bonds").
-    residue_virtual_bonds = {}
+    residue_virtual_bonds: Dict[str, List[Bond]] = {}
     for resname, bond_angles in residue_bond_angles.items():
         # Create a fast lookup dict for bond lengths.
-        bond_cache = {}
+        bond_cache: Dict[str, Bond] = {}
         for b in residue_bonds[resname]:
             bond_cache[make_bond_key(b.atom1_name, b.atom2_name)] = b
         residue_virtual_bonds[resname] = []
@@ -538,16 +488,16 @@ def load_stereo_chemical_props() -> Tuple[
 
 # Between-residue bond lengths for general bonds (first element) and for Proline
 # (second element).
-between_res_bond_length_c_n = [1.329, 1.341]
-between_res_bond_length_stddev_c_n = [0.014, 0.016]
+between_res_bond_length_c_n: Tuple[float, float] = (1.329, 1.341)
+between_res_bond_length_stddev_c_n: Tuple[float, float] = (0.014, 0.016)
 
 # Between-residue cos_angles.
-between_res_cos_angles_c_n_ca = [-0.5203, 0.0353]  # degrees: 121.352 +- 2.315
-between_res_cos_angles_ca_c_n = [-0.4473, 0.0311]  # degrees: 116.568 +- 1.995
+between_res_cos_angles_c_n_ca: Tuple[float, float] = (-0.5203, 0.0353)  # degrees: 121.352 +- 2.315
+between_res_cos_angles_ca_c_n: Tuple[float, float] = (-0.4473, 0.0311)  # degrees: 116.568 +- 1.995
 
 # This mapping is used when we need to store atom data in a format that requires
 # fixed atom data size for every residue (e.g. a numpy array).
-atom_types = [
+atom_types: List[str] = [
     "N",
     "CA",
     "C",
@@ -586,258 +536,33 @@ atom_types = [
     "NZ",
     "OXT",
 ]
-atom_order = {atom_type: i for i, atom_type in enumerate(atom_types)}
+atom_order: Dict[str, int] = {atom_type: i for i, atom_type in enumerate(atom_types)}
 atom_type_num = len(atom_types)  # := 37.
 
 # A compact atom encoding with 14 columns
 # pylint: disable=line-too-long
 # pylint: disable=bad-whitespace
-restype_name_to_atom14_names = {
+restype_name_to_atom14_names: Dict[str, List[str]] = {
     "ALA": ["N", "CA", "C", "O", "CB", "", "", "", "", "", "", "", "", ""],
-    "ARG": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "CD",
-        "NE",
-        "CZ",
-        "NH1",
-        "NH2",
-        "",
-        "",
-        "",
-    ],
-    "ASN": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "OD1",
-        "ND2",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
-    "ASP": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "OD1",
-        "OD2",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
+    "ARG": ["N", "CA", "C", "O", "CB", "CG", "CD", "NE", "CZ", "NH1", "NH2", "", "", ""],
+    "ASN": ["N", "CA", "C", "O", "CB", "CG", "OD1", "ND2", "", "", "", "", "", ""],
+    "ASP": ["N", "CA", "C", "O", "CB", "CG", "OD1", "OD2", "", "", "", "", "", ""],
     "CYS": ["N", "CA", "C", "O", "CB", "SG", "", "", "", "", "", "", "", ""],
-    "GLN": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "CD",
-        "OE1",
-        "NE2",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
-    "GLU": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "CD",
-        "OE1",
-        "OE2",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
+    "GLN": ["N", "CA", "C", "O", "CB", "CG", "CD", "OE1", "NE2", "", "", "", "", ""],
+    "GLU": ["N", "CA", "C", "O", "CB", "CG", "CD", "OE1", "OE2", "", "", "", "", ""],
     "GLY": ["N", "CA", "C", "O", "", "", "", "", "", "", "", "", "", ""],
-    "HIS": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "ND1",
-        "CD2",
-        "CE1",
-        "NE2",
-        "",
-        "",
-        "",
-        "",
-    ],
-    "ILE": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG1",
-        "CG2",
-        "CD1",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
-    "LEU": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "CD1",
-        "CD2",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
-    "LYS": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "CD",
-        "CE",
-        "NZ",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
-    "MET": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "SD",
-        "CE",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
-    "PHE": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "CD1",
-        "CD2",
-        "CE1",
-        "CE2",
-        "CZ",
-        "",
-        "",
-        "",
-    ],
+    "HIS": ["N", "CA", "C", "O", "CB", "CG", "ND1", "CD2", "CE1", "NE2", "", "", "", ""],
+    "ILE": ["N", "CA", "C", "O", "CB", "CG1", "CG2", "CD1", "", "", "", "", "", ""],
+    "LEU": ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "", "", "", "", "", ""],
+    "LYS": ["N", "CA", "C", "O", "CB", "CG", "CD", "CE", "NZ", "", "", "", "", ""],
+    "MET": ["N", "CA", "C", "O", "CB", "CG", "SD", "CE", "", "", "", "", "", ""],
+    "PHE": ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ", "", "", ""],
     "PRO": ["N", "CA", "C", "O", "CB", "CG", "CD", "", "", "", "", "", "", ""],
     "SER": ["N", "CA", "C", "O", "CB", "OG", "", "", "", "", "", "", "", ""],
-    "THR": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "OG1",
-        "CG2",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
-    "TRP": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "CD1",
-        "CD2",
-        "NE1",
-        "CE2",
-        "CE3",
-        "CZ2",
-        "CZ3",
-        "CH2",
-    ],
-    "TYR": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG",
-        "CD1",
-        "CD2",
-        "CE1",
-        "CE2",
-        "CZ",
-        "OH",
-        "",
-        "",
-    ],
-    "VAL": [
-        "N",
-        "CA",
-        "C",
-        "O",
-        "CB",
-        "CG1",
-        "CG2",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ],
+    "THR": ["N", "CA", "C", "O", "CB", "OG1", "CG2", "", "", "", "", "", "", ""],
+    "TRP": ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"],
+    "TYR": ["N", "CA", "C", "O", "CB", "CG", "CD1", "CD2", "CE1", "CE2", "CZ", "OH", "", ""],
+    "VAL": ["N", "CA", "C", "O", "CB", "CG1", "CG2", "", "", "", "", "", "", ""],
     "UNK": ["", "", "", "", "", "", "", "", "", "", "", "", "", ""],
 }
 # pylint: enable=line-too-long
@@ -846,7 +571,7 @@ restype_name_to_atom14_names = {
 
 # This is the standard residue order when coding AA type as a number.
 # Reproduce it by taking 3-letter AA codes and sorting them alphabetically.
-restypes = [
+restypes: List[str] = [
     "A",
     "R",
     "N",
@@ -868,12 +593,12 @@ restypes = [
     "Y",
     "V",
 ]
-restype_order = {restype: i for i, restype in enumerate(restypes)}
+restype_order: Dict[str, int] = {restype: i for i, restype in enumerate(restypes)}
 restype_num = len(restypes)  # := 20.
 unk_restype_index = restype_num  # Catch-all index for unknown restypes.
 
-restypes_with_x = restypes + ["X"]
-restype_order_with_x = {restype: i for i, restype in enumerate(restypes_with_x)}
+restypes_with_x: List[str] = restypes + ["X"]
+restype_order_with_x: Dict[str, int] = {restype: i for i, restype in enumerate(restypes_with_x)}
 
 
 def sequence_to_onehot(sequence: str, mapping: Mapping[str, int], map_unknown_to_x: bool = False) -> np.ndarray:
@@ -916,7 +641,7 @@ def sequence_to_onehot(sequence: str, mapping: Mapping[str, int], map_unknown_to
     return one_hot_arr
 
 
-restype_1to3 = {
+restype_1to3: Dict[str, str] = {
     "A": "ALA",
     "R": "ARG",
     "N": "ASN",
@@ -944,13 +669,13 @@ restype_1to3 = {
 # 1-to-1 mapping of 3 letter names to one letter names. The latter contains
 # many more, and less common, three letter names as keys and maps many of these
 # to the same one letter name (including 'X' and 'U' which we don't use here).
-restype_3to1 = {v: k for k, v in restype_1to3.items()}
+restype_3to1: Dict[str, str] = {v: k for k, v in restype_1to3.items()}
 
 # Define a restype name for all unknown residues.
 unk_restype = "UNK"
 
-resnames = [restype_1to3[r] for r in restypes] + [unk_restype]
-resname_to_idx = {resname: i for i, resname in enumerate(resnames)}
+resnames: List[str] = [restype_1to3[r] for r in restypes] + [unk_restype]
+resname_to_idx: Dict[str, int] = {resname: i for i, resname in enumerate(resnames)}
 
 
 # The mapping here uses hhblits convention, so that B is mapped to D, J and O
@@ -960,7 +685,7 @@ resname_to_idx = {resname: i for i, resname in enumerate(resnames)}
 # "-" representing a missing amino acid in an alignment.  The id for these
 # codes is put at the end (20 and 21) so that they can easily be ignored if
 # desired.
-HHBLITS_AA_TO_ID = {
+HHBLITS_AA_TO_ID: Dict[str, int] = {
     "A": 0,
     "B": 2,
     "C": 1,
@@ -991,7 +716,7 @@ HHBLITS_AA_TO_ID = {
 }
 
 # Partial inversion of HHBLITS_AA_TO_ID.
-ID_TO_HHBLITS_AA = {
+ID_TO_HHBLITS_AA: Dict[int, str] = {
     0: "A",
     1: "C",  # Also U.
     2: "D",  # Also B.
@@ -1016,8 +741,8 @@ ID_TO_HHBLITS_AA = {
     21: "-",
 }
 
-restypes_with_x_and_gap = restypes + ["X", "-"]
-MAP_HHBLITS_AATYPE_TO_OUR_AATYPE = tuple(
+restypes_with_x_and_gap: List[str] = restypes + ["X", "-"]
+MAP_HHBLITS_AATYPE_TO_OUR_AATYPE: Tuple[int, ...] = tuple(
     restypes_with_x_and_gap.index(ID_TO_HHBLITS_AA[i]) for i in range(len(restypes_with_x_and_gap))
 )
 
@@ -1066,15 +791,15 @@ chi_atom_1_one_hot = chi_angle_atom(1)
 chi_atom_2_one_hot = chi_angle_atom(2)
 
 # An array like chi_angles_atoms but using indices rather than names.
-chi_angles_atom_indices = [chi_angles_atoms[restype_1to3[r]] for r in restypes]
-chi_angles_atom_indices_ours = map_structure_with_atom_order(chi_angles_atom_indices)
+chi_angles_atom_indices_list: List[List[List[str]]] = [chi_angles_atoms[restype_1to3[r]] for r in restypes]
+chi_angles_atom_indices_ours: list = map_structure_with_atom_order(chi_angles_atom_indices_list)
 chi_angles_atom_indices = np.array(
-    [chi_atoms + ([[0, 0, 0, 0]] * (4 - len(chi_atoms))) for chi_atoms in chi_angles_atom_indices]
+    [chi_atoms + ([[0, 0, 0, 0]] * (4 - len(chi_atoms))) for chi_atoms in chi_angles_atom_indices_list]
 )
 
 # Mapping from (res_name, atom_name) pairs to the atom's chi group index
 # and atom index within that group.
-chi_groups_for_atom = collections.defaultdict(list)
+chi_groups_for_atom: Dict[Tuple[str, str], List[Tuple[int, int]]] = collections.defaultdict(list)
 for res_name, chi_angle_atoms_for_res in chi_angles_atoms.items():
     for chi_group_i, chi_group in enumerate(chi_angle_atoms_for_res):
         for atom_i, atom in enumerate(chi_group):
@@ -1082,7 +807,7 @@ for res_name, chi_angle_atoms_for_res in chi_angles_atoms.items():
 chi_groups_for_atom = dict(chi_groups_for_atom)
 
 
-def _make_rigid_transformation_4x4(ex, ey, translation):
+def _make_rigid_transformation_4x4(ex: np.ndarray, ey: np.ndarray, translation: np.ndarray) -> np.ndarray:
     """Create a rigid 4x4 transformation matrix from two axes and transl."""
     # Normalize ex.
     ex_normalized = ex / np.linalg.norm(ex)
@@ -1111,7 +836,7 @@ restype_atom14_rigid_group_positions = np.zeros([21, 14, 3], dtype=np.float32)
 restype_rigid_group_default_frame = np.zeros([21, 8, 4, 4], dtype=np.float32)
 
 
-def _make_rigid_group_constants():
+def _make_rigid_group_constants() -> None:
     """Fill the arrays above."""
     for restype, restype_letter in enumerate(restypes):
         resname = restype_1to3[restype_letter]
@@ -1128,7 +853,9 @@ def _make_rigid_group_constants():
 
     for restype, restype_letter in enumerate(restypes):
         resname = restype_1to3[restype_letter]
-        atom_positions = {name: np.array(pos) for name, _, pos in rigid_group_atom_positions[resname]}
+        atom_positions: Dict[str, np.ndarray] = {
+            name: np.array(pos) for name, _, pos in rigid_group_atom_positions[resname]
+        }
 
         # backbone to backbone is the identity transform
         restype_rigid_group_default_frame[restype, 0, :, :] = np.eye(4)
@@ -1183,7 +910,10 @@ def _make_rigid_group_constants():
 _make_rigid_group_constants()
 
 
-def make_atom14_dists_bounds(overlap_tolerance=1.5, bond_length_tolerance_factor=15):
+def make_atom14_dists_bounds(
+    overlap_tolerance: float = 1.5,
+    bond_length_tolerance_factor: int = 15,
+) -> Dict[str, np.ndarray]:
     """compute upper and lower bounds for bonds to assess violations."""
     restype_atom14_bond_lower_bound = np.zeros([21, 14, 14], np.float32)
     restype_atom14_bond_upper_bound = np.zeros([21, 14, 14], np.float32)
@@ -1229,10 +959,10 @@ def make_atom14_dists_bounds(overlap_tolerance=1.5, bond_length_tolerance_factor
 
 
 restype_atom14_ambiguous_atoms = np.zeros((21, 14), dtype=np.float32)
-restype_atom14_ambiguous_atoms_swap_idx = np.tile(np.arange(14, dtype=int), (21, 1))
+restype_atom14_ambiguous_atoms_swap_idx: np.ndarray = np.tile(np.arange(14, dtype=int), (21, 1))
 
 
-def _make_atom14_ambiguity_feats():
+def _make_atom14_ambiguity_feats() -> None:
     for res, pairs in residue_atom_renaming_swaps.items():
         res_idx = restype_order[restype_3to1[res]]
         for atom1, atom2 in pairs.items():
@@ -1247,5 +977,5 @@ def _make_atom14_ambiguity_feats():
 _make_atom14_ambiguity_feats()
 
 
-def aatype_to_str_sequence(aatype):
+def aatype_to_str_sequence(aatype: Sequence[int]) -> str:
     return "".join([restypes_with_x[aatype[i]] for i in range(len(aatype))])

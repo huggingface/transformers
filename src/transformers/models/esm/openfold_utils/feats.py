@@ -13,12 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Dict, Tuple, overload
+
 import torch
-import torch.nn as nn
+import torch.types
+from torch import nn
 
 from . import residue_constants as rc
 from .rigid_utils import Rigid, Rotation
 from .tensor_utils import batched_gather
+
+
+@overload
+def pseudo_beta_fn(aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_atom_masks: None) -> torch.Tensor:
+    ...
+
+
+@overload
+def pseudo_beta_fn(
+    aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_atom_masks: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    ...
 
 
 def pseudo_beta_fn(aatype, all_atom_positions, all_atom_masks):
@@ -42,7 +57,7 @@ def pseudo_beta_fn(aatype, all_atom_positions, all_atom_masks):
         return pseudo_beta
 
 
-def atom14_to_atom37(atom14, batch):
+def atom14_to_atom37(atom14: torch.Tensor, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
     atom37_data = batched_gather(
         atom14,
         batch["residx_atom37_to_atom14"],
@@ -55,7 +70,7 @@ def atom14_to_atom37(atom14, batch):
     return atom37_data
 
 
-def build_template_angle_feat(template_feats):
+def build_template_angle_feat(template_feats: Dict[str, torch.Tensor]) -> torch.Tensor:
     template_aatype = template_feats["template_aatype"]
     torsion_angles_sin_cos = template_feats["template_torsion_angles_sin_cos"]
     alt_torsion_angles_sin_cos = template_feats["template_alt_torsion_angles_sin_cos"]
@@ -73,7 +88,15 @@ def build_template_angle_feat(template_feats):
     return template_angle_feat
 
 
-def build_template_pair_feat(batch, min_bin, max_bin, no_bins, use_unit_vector=False, eps=1e-20, inf=1e8):
+def build_template_pair_feat(
+    batch: Dict[str, torch.Tensor],
+    min_bin: torch.types.Number,
+    max_bin: torch.types.Number,
+    no_bins: int,
+    use_unit_vector: bool = False,
+    eps: float = 1e-20,
+    inf: float = 1e8,
+) -> torch.Tensor:
     template_mask = batch["template_pseudo_beta_mask"]
     template_mask_2d = template_mask[..., None] * template_mask[..., None, :]
 
@@ -86,7 +109,7 @@ def build_template_pair_feat(batch, min_bin, max_bin, no_bins, use_unit_vector=F
 
     to_concat = [dgram, template_mask_2d[..., None]]
 
-    aatype_one_hot = nn.functional.one_hot(
+    aatype_one_hot: torch.LongTensor = nn.functional.one_hot(
         batch["template_aatype"],
         rc.restype_num + 2,
     )
@@ -126,8 +149,8 @@ def build_template_pair_feat(batch, min_bin, max_bin, no_bins, use_unit_vector=F
     return act
 
 
-def build_extra_msa_feat(batch):
-    msa_1hot = nn.functional.one_hot(batch["extra_msa"], 23)
+def build_extra_msa_feat(batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+    msa_1hot: torch.LongTensor = nn.functional.one_hot(batch["extra_msa"], 23)
     msa_feat = [
         msa_1hot,
         batch["extra_has_deletion"].unsqueeze(-1),
@@ -141,7 +164,7 @@ def torsion_angles_to_frames(
     alpha: torch.Tensor,
     aatype: torch.Tensor,
     rrgdf: torch.Tensor,
-):
+) -> Rigid:
     # [*, N, 8, 4, 4]
     default_4x4 = rrgdf[aatype, ...]
 
@@ -172,9 +195,7 @@ def torsion_angles_to_frames(
     all_rots[..., 1, 2] = -alpha[..., 0]
     all_rots[..., 2, 1:] = alpha
 
-    all_rots = Rigid(Rotation(rot_mats=all_rots), None)
-
-    all_frames = default_r.compose(all_rots)
+    all_frames = default_r.compose(Rigid(Rotation(rot_mats=all_rots), None))
 
     chi2_frame_to_frame = all_frames[..., 5]
     chi3_frame_to_frame = all_frames[..., 6]
@@ -203,22 +224,22 @@ def torsion_angles_to_frames(
 def frames_and_literature_positions_to_atom14_pos(
     r: Rigid,
     aatype: torch.Tensor,
-    default_frames,
-    group_idx,
-    atom_mask,
-    lit_positions,
-):
+    default_frames: torch.Tensor,
+    group_idx: torch.Tensor,
+    atom_mask: torch.Tensor,
+    lit_positions: torch.Tensor,
+) -> torch.Tensor:
     # [*, N, 14]
     group_mask = group_idx[aatype, ...]
 
     # [*, N, 14, 8]
-    group_mask = nn.functional.one_hot(
+    group_mask_one_hot: torch.LongTensor = nn.functional.one_hot(
         group_mask,
         num_classes=default_frames.shape[-3],
     )
 
     # [*, N, 14, 8]
-    t_atoms_to_global = r[..., None, :] * group_mask
+    t_atoms_to_global = r[..., None, :] * group_mask_one_hot
 
     # [*, N, 14]
     t_atoms_to_global = t_atoms_to_global.map_tensor_fn(lambda x: torch.sum(x, dim=-1))
