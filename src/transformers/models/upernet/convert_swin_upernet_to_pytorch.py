@@ -62,30 +62,30 @@ def create_rename_keys(config):
 
     # fmt: off
     # stem
-    rename_keys.append(("backbone.patch_embed.projection.weight", "backbone.swin.embeddings.patch_embeddings.projection.weight"))
-    rename_keys.append(("backbone.patch_embed.projection.bias", "backbone.swin.embeddings.patch_embeddings.projection.bias"))
-    rename_keys.append(("backbone.patch_embed.norm.weight", "backbone.swin.embeddings.norm.weight"))
-    rename_keys.append(("backbone.patch_embed.norm.bias", "backbone.swin.embeddings.norm.bias"))
+    rename_keys.append(("backbone.patch_embed.projection.weight", "backbone.embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("backbone.patch_embed.projection.bias", "backbone.embeddings.patch_embeddings.projection.bias"))
+    rename_keys.append(("backbone.patch_embed.norm.weight", "backbone.embeddings.norm.weight"))
+    rename_keys.append(("backbone.patch_embed.norm.bias", "backbone.embeddings.norm.bias"))
     # stages
     for i in range(len(config.backbone_config.depths)):
         for j in range(config.backbone_config.depths[i]):
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm1.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_before.weight"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm1.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_before.bias"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_bias_table", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_bias_table"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_index", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_index"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.proj.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.output.dense.weight"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.proj.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.output.dense.bias"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm2.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_after.weight"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm2.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_after.bias"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.0.0.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.intermediate.dense.weight"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.0.0.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.intermediate.dense.bias"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.1.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.output.dense.weight"))
-            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.1.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.output.dense.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm1.weight", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_before.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm1.bias", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_before.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_bias_table", f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_bias_table"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_index", f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_index"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.proj.weight", f"backbone.encoder.layers.{i}.blocks.{j}.attention.output.dense.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.proj.bias", f"backbone.encoder.layers.{i}.blocks.{j}.attention.output.dense.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm2.weight", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_after.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm2.bias", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_after.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.0.0.weight", f"backbone.encoder.layers.{i}.blocks.{j}.intermediate.dense.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.0.0.bias", f"backbone.encoder.layers.{i}.blocks.{j}.intermediate.dense.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.1.weight", f"backbone.encoder.layers.{i}.blocks.{j}.output.dense.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.1.bias", f"backbone.encoder.layers.{i}.blocks.{j}.output.dense.bias"))
 
         if i < 3:
-            rename_keys.append((f"backbone.stages.{i}.downsample.reduction.weight", f"backbone.swin.encoder.layers.{i}.downsample.reduction.weight"))
-            rename_keys.append((f"backbone.stages.{i}.downsample.norm.weight", f"backbone.swin.encoder.layers.{i}.downsample.norm.weight"))
-            rename_keys.append((f"backbone.stages.{i}.downsample.norm.bias", f"backbone.swin.encoder.layers.{i}.downsample.norm.bias"))
+            rename_keys.append((f"backbone.stages.{i}.downsample.reduction.weight", f"backbone.encoder.layers.{i}.downsample.reduction.weight"))
+            rename_keys.append((f"backbone.stages.{i}.downsample.norm.weight", f"backbone.encoder.layers.{i}.downsample.norm.weight"))
+            rename_keys.append((f"backbone.stages.{i}.downsample.norm.bias", f"backbone.encoder.layers.{i}.downsample.norm.bias"))
         rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.{i}.weight"))
         rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.{i}.bias"))
 
@@ -119,18 +119,18 @@ def read_in_q_k_v(state_dict, backbone_config):
             in_proj_weight = state_dict.pop(f"backbone.stages.{i}.blocks.{j}.attn.w_msa.qkv.weight")
             in_proj_bias = state_dict.pop(f"backbone.stages.{i}.blocks.{j}.attn.w_msa.qkv.bias")
             # next, add query, keys and values (in that order) to the state dict
-            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.query.weight"] = in_proj_weight[:dim, :]
-            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.query.bias"] = in_proj_bias[: dim]
-            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.key.weight"] = in_proj_weight[
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.query.weight"] = in_proj_weight[:dim, :]
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.query.bias"] = in_proj_bias[: dim]
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.key.weight"] = in_proj_weight[
                 dim : dim * 2, :
             ]
-            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.key.bias"] = in_proj_bias[
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.key.bias"] = in_proj_bias[
                 dim : dim * 2
             ]
-            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"] = in_proj_weight[
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"] = in_proj_weight[
                 -dim :, :
             ]
-            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.value.bias"] = in_proj_bias[-dim :]
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.value.bias"] = in_proj_bias[-dim :]
             # fmt: on
 
 
@@ -174,7 +174,9 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         "upernet-swin-small-mmsegmentation": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210526_192015-ee2fff1c.pth",
     }
     checkpoint_url = model_name_to_url[model_name]
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["state_dict"]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[
+        "state_dict"
+    ]
 
     for name, param in state_dict.items():
         print(name, param.shape)
@@ -204,9 +206,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             if "norm" in key:
                 state_dict[key] = reverse_correct_unfold_norm_order(value)
 
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    assert missing_keys == ["backbone.swin.layernorm.weight", "backbone.swin.layernorm.bias"]
-    assert len(unexpected_keys) == 0, f"Unexpected keys: {unexpected_keys}"
+    model.load_state_dict(state_dict)
 
     # verify on image
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
@@ -221,7 +221,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         logits = outputs.logits
 
     print(logits.shape)
-    print("First values of logits:", logits[0,0,:3,:3])
+    print("First values of logits:", logits[0, 0, :3, :3])
     # TODO assert values
     # expected_slice = torch.tensor(
     #     [[-8.8110, -7.5399, -7.5429], [-8.5200, -7.0736, -7.2054], [-8.5220, -7.2897, -7.3901]]

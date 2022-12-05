@@ -265,8 +265,8 @@ class SwinEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        print("Shape of embeddings before encoder:", embeddings.shape)
-        print("First values of embeddings before encoder:", embeddings[0, :3, :3])
+        # print("Shape of embeddings before encoder:", embeddings.shape)
+        # print("First values of embeddings before encoder:", embeddings[0, :3, :3])
 
         return embeddings, output_dimensions
 
@@ -1375,6 +1375,8 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
+                print("Stage:", stage)
+                print("Idx:", idx)
                 # TODO can we simplify this?s
                 batch_size, num_channels, height, width = hidden_state.shape
                 hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
