@@ -77,16 +77,14 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
     proj_out_weights = state_dict["decoder.token_embedding.weight"]
-
     remove_ignore_keys_(state_dict)
     rename_keys(state_dict)
-
-    vocab_size = state_dict["decoder.embed_tokens.weight"].shape[0]
-
     tie_embeds = True
+    ffn_dim = state_dict["decoder.layers.0.fc1.weight"].shape[1]
 
     config = WhisperConfig(
         vocab_size=dimensions["n_vocab"],
+        encoder_ffn_dim=ffn_dim,
         num_mel_bins=dimensions["n_mels"],
         d_model=dimensions["n_audio_state"],
         max_target_positions=dimensions["n_text_ctx"],
