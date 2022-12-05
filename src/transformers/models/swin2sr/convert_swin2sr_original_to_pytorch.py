@@ -99,15 +99,7 @@ def rename_key(name, config):
         or "aux" in name
     ):
         # heads
-        if config.upsampler == "pixelshuffle":
-            if "conv_before_upsample.0" in name:
-                name = name.replace("conv_before_upsample.0", "conv_before_upsample")
-            name = "upsample." + name
-        elif config.upsampler == "pixelshuffle_aux":
-            if "conv_before_upsample.0" in name:
-                name = name.replace("conv_before_upsample.0", "conv_before_upsample")
-            name = "upsample." + name
-        elif config.upsampler == "nearest+conv":
+        if config.upsampler in ["pixelshuffle", "pixelshuffle_aux", "nearest+conv"]:
             if "conv_before_upsample.0" in name:
                 name = name.replace("conv_before_upsample.0", "conv_before_upsample")
             name = "upsample." + name
