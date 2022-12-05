@@ -51,7 +51,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_gpt_sw3 import GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSw3Config, GPTSw3OnnxConfig
+    from .configuration_gpt_sw3 import GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSw3Config
     from .tokenization_gpt_sw3 import GPTSw3Tokenizer
 
     try:
