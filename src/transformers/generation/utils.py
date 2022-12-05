@@ -876,7 +876,11 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self, max_length: Optional[int], max_time: Optional[float], stop_ids: Optional[List[int]], stopping_criteria: Optional[StoppingCriteriaList]
+        self,
+        max_length: Optional[int],
+        max_time: Optional[float],
+        stop_ids: Optional[List[int]],
+        stopping_criteria: Optional[StoppingCriteriaList],
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if max_length is not None:

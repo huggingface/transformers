@@ -3032,10 +3032,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         gpt2_model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         input_ids = gpt2_tokenizer(prompt, return_tensors="pt").input_ids.to(torch_device)
 
-        stop_ids = gpt2_tokenizer.encode(' fe')
+        stop_ids = gpt2_tokenizer.encode(" fe")
         self.assertEqual(stop_ids, [641])
 
         output = gpt2_model.generate(input_ids=input_ids, stop_ids=stop_ids)
         generated_text = gpt2_tokenizer.batch_decode(output)
 
-        self.assertEqual(generated_text, ['Hello I believe in fe'])
+        self.assertEqual(generated_text, ["Hello I believe in fe"])

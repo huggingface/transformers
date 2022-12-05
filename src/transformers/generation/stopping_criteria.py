@@ -125,6 +125,7 @@ class StopIdStoppingCriteria(StoppingCriteria):
     >>> model.generate(text, stopping_criteria=[stopping_criteria])
     ```
     """
+
     def __init__(self, stop_id: int, early_stopping: bool = False):
         self.stop_id = stop_id
         self.early_stopping = early_stopping
