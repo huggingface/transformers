@@ -145,8 +145,8 @@ jobs:
           fi
           echo $keys
           echo $test_map
-          echo "::set-output name=matrix::$keys"
-          echo "::set-output name=test_map::$test_map"
+          echo "matrix=$keys" >> $GITHUB_OUTPUT
+          echo "test_map=$test_map" >> $GITHUB_OUTPUT
 
   run_tests_single_gpu:
     name: Model tests
