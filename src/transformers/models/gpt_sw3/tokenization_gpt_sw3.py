@@ -106,20 +106,9 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
         # Used to for whitespace normalization in input texts
-        self.whitespaces = {
-            " ",
-            " ",
-            " ",
-            " ",
-            " ",
-            "　",
-            " ",
-            " ",
-            " ",
-            " ",
-            "￼",
-            "",
-        }
+        # fmt : off
+        self.whitespaces = {" ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""}
+        # fmt : on
 
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         self.non_printing_characters_re = re.compile(

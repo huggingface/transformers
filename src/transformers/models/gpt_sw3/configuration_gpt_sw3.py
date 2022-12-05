@@ -20,7 +20,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "": "https://huggingface.co//resolve/main/config.json",  # TODO: ADD SOMETHING HERE!
+    "AI-Sweden/gpt-sw3-126m": "https://huggingface.co/AI-Sweden/gpt-sw3-126m/resolve/main/config.json",
+    "AI-Sweden/gpt-sw3-350m": "https://huggingface.co/AI-Sweden/gpt-sw3-350m/resolve/main/config.json",
+    "AI-Sweden/gpt-sw3-1.6b": "https://huggingface.co/AI-Sweden/gpt-sw3-1.6b/resolve/main/config.json",
+    "AI-Sweden/gpt-sw3-6.7b": "https://huggingface.co/AI-Sweden/gpt-sw3-6.7b/resolve/main/config.json",
+    "AI-Sweden/gpt-sw3-20b": "https://huggingface.co/AI-Sweden/gpt-sw3-20b/resolve/main/config.json",
 }
 
 
@@ -29,7 +33,7 @@ class GPTSw3Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GPTSw3Model`]. It is used to instantiate a
     GPT-SW3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GPT-SW3.
-    [gpt_sw3](https://huggingface.co/gpt_sw3) architecture. # TODO: add correct link.
+    [AI-Sweden/gpt-sw3-20b](https://huggingface.co/AI-Sweden/gpt-sw3-20b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -115,7 +119,6 @@ class GPTSw3Config(PretrainedConfig):
     ```"""
 
     model_type = "gpt-sw3"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "n_embd",
         "max_position_embeddings": "n_positions",
