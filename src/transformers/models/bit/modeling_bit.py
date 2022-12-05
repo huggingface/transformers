@@ -452,25 +452,25 @@ class BitBottleneckLayer(nn.Module):
 
         self.activation = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         # shortcut branch
-        shortcut = x
+        shortcut = hidden_states
         if self.downsample is not None:
-            shortcut = self.downsample(x)
+            shortcut = self.downsample(hidden_states)
 
         # residual
-        x = self.conv1(x)
-        x = self.norm1(x)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.norm1(hidden_states)
 
-        x = self.conv2(x)
-        x = self.norm2(x)
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.norm2(hidden_states)
 
-        x = self.conv3(x)
-        x = self.norm3(x)
+        hidden_states = self.conv3(hidden_states)
+        hidden_states = self.norm3(hidden_states)
 
-        x = self.drop_path(x)
-        x = self.activation(x + shortcut)
-        return x
+        hidden_states = self.drop_path(hidden_states)
+        hidden_states = self.activation(hidden_states + shortcut)
+        return hidden_states
 
 
 class BitDownsampleConv(nn.Module):
