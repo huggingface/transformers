@@ -88,7 +88,7 @@ def rename_key(name, config):
         name = "layernorm.weight"
     if name == "norm.bias":
         name = "layernorm.bias"
-
+    
     if (
         "upsample" in name
         or "conv_before_upsample" in name
@@ -99,6 +99,8 @@ def rename_key(name, config):
         or "aux" in name
     ):
         # heads
+        if "conv_last" in name:
+            name = name.replace("conv_last", "final_convolution")
         if config.upsampler in ["pixelshuffle", "pixelshuffle_aux", "nearest+conv"]:
             if "conv_before_upsample.0" in name:
                 name = name.replace("conv_before_upsample.0", "conv_before_upsample")
