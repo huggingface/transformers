@@ -66,7 +66,6 @@ class SwinModelTester:
         use_labels=True,
         type_sequence_label_size=10,
         encoder_stride=8,
-        out_features=["stage1", "stage2", "stage3"],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -92,7 +91,6 @@ class SwinModelTester:
         self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
-        self.out_features = out_features
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -125,7 +123,6 @@ class SwinModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
-            out_features=self.out_features,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -233,12 +230,8 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
-    @unittest.skip(reason="Swin Transformer does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Swin Transformer does not use feedforward chunking")
-    def test_feed_forward_chunking(self):
+        # Swin does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -306,8 +299,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            # also another +1 for reshaped_hidden_states
-            added_hidden_states = 1 if model_class.__name__ == "SwinBackbone" else 2
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            else:
+                # also another +1 for reshaped_hidden_states
+                added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
             self_attentions = outputs.attentions
@@ -348,18 +344,17 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             [num_patches, self.model_tester.embed_dim],
         )
 
-        if not model_class.__name__ == "SwinBackbone":
-            reshaped_hidden_states = outputs.reshaped_hidden_states
-            self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
+        reshaped_hidden_states = outputs.reshaped_hidden_states
+        self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
-            batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-            reshaped_hidden_states = (
-                reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-            )
-            self.assertListEqual(
-                list(reshaped_hidden_states.shape[-2:]),
-                [num_patches, self.model_tester.embed_dim],
-            )
+        batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
+        reshaped_hidden_states = (
+            reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        )
+        self.assertListEqual(
+            list(reshaped_hidden_states.shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
+        )
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

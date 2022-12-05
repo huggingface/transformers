@@ -76,8 +76,6 @@ class Swinv2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         encoder_stride (`int`, `optional`, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
-        output_hidden_states_before_downsampling (`bool`, `optional`, defaults to `False`):
-            Whether or not to output hidden states before downsampling when `output_hidden_states=True`.
 
     Example:
 
@@ -120,7 +118,6 @@ class Swinv2Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
-        output_hidden_states_before_downsampling=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -144,7 +141,6 @@ class Swinv2Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.encoder_stride = encoder_stride
-        self.output_hidden_states_before_downsampling = output_hidden_states_before_downsampling
         # we set the hidden_size attribute in order to make Swinv2 work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))

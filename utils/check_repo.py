@@ -674,7 +674,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "TensorFlowBenchmarkArguments",
     "MaskFormerSwinBackbone",
     "ResNetBackbone",
-    "SwinBackbone",
     "AutoBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
