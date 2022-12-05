@@ -36,8 +36,8 @@ logger = logging.get_logger(__name__)
 
 def get_maskformer_config(model_name: str):
     backbone_config = SwinConfig.from_pretrained(
-            "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
-        )
+        "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+    )
     config = MaskFormerConfig(backbone_config=backbone_config)
 
     repo_id = "huggingface/label-files"
@@ -263,7 +263,10 @@ def convert_maskformer_checkpoint(
         print(name, param.shape)
 
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    assert missing_keys == ['model.pixel_level_module.encoder.model.layernorm.weight', 'model.pixel_level_module.encoder.model.layernorm.bias']
+    assert missing_keys == [
+        "model.pixel_level_module.encoder.model.layernorm.weight",
+        "model.pixel_level_module.encoder.model.layernorm.bias",
+    ]
     assert len(unexpected_keys) == 0, f"Unexpected keys: {unexpected_keys}"
 
     # verify results
@@ -285,9 +288,7 @@ def convert_maskformer_checkpoint(
 
     if model_name == "maskformer-swin-tiny-ade":
         expected_logits = torch.tensor(
-            [[ 3.6353, -4.4770, -2.6065],
-        [ 0.5081, -4.2394, -3.5343],
-        [ 2.1909, -5.0353, -1.9323]]
+            [[3.6353, -4.4770, -2.6065], [0.5081, -4.2394, -3.5343], [2.1909, -5.0353, -1.9323]]
         )
     assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
     print("Looks ok!")
@@ -315,9 +316,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--checkpoint_path",
-        default=(
-            "/Users/nielsrogge/Documents/MaskFormer_checkpoints/MaskFormer-Swin-tiny-ADE20k/model.pkl"
-        ),
+        default="/Users/nielsrogge/Documents/MaskFormer_checkpoints/MaskFormer-Swin-tiny-ADE20k/model.pkl",
         type=str,
         help="Path to the original state dict (.pth file).",
     )
