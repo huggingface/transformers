@@ -35,7 +35,7 @@ jobs:
         if: ${{ always() }}
         run: |
           offline_runners=$(python3 -c 'fp = open("offline_runners.txt"); failed = fp.read(); fp.close(); print(failed)')
-          echo "::set-output name=offline_runners::$offline_runners"
+          echo "offline_runners=$offline_runners" >> $GITHUB_OUTPUT
 
   send_results:
     name: Send results to webhook
