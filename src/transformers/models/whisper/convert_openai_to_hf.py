@@ -73,6 +73,9 @@ def make_linear_from_emb(emb):
 
 
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
+    if not ".pt" in checkpoint_path:
+        checkpoint_path = _MODELS[checkpoint_path]
+
     original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
@@ -88,7 +91,7 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     conv_kernel_sizes = [int(i) for i in args.conv_kernel_sizes.split(",")]
     config = WhisperConfig(
         vocab_size=dimensions["n_vocab"],
-        num_mel_bins=dimensions["n°mels"],
+        num_mel_bins=dimensions["n_mels"],
         d_model=dimensions["n_audio_state"],
         max_target_positions=dimensions["n_text_ctx"],
         encoder_layers=dimensions["n_audio_layers"],
@@ -129,6 +132,7 @@ _MODELS = {
     "medium.en": "https://openaipublic.azureedge.net/main/whisper/models/d7440d1dc186f76616474e0ff0b3b6b879abc9d1a4926b7adfa41db2d497ab4f/medium.en.pt",
     "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
     "large": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large.pt",
+    "large-v2" : "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
 }
 
 import hashlib
@@ -210,8 +214,8 @@ def convert_every_model(save_dir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
-    parser.add_argument("--original_name", type=str, help="Path to the fairseq model (.pt) file.")
+    parser.add_argument("--original_name", type=str, help="Name of the openai model")
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
 
-    convert_openai_whisper_to_tfms(parser.original_name, parser.pytorch_dump_folder_path)
+    convert_openai_whisper_to_tfms(args.original_name, args.pytorch_dump_folder_path)
