@@ -41,7 +41,7 @@ class GPTSw3Config(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the GPTSw3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GPTSw3Model`].
         n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
@@ -52,7 +52,7 @@ class GPTSw3Config(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         n_head (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*, defaults to None):
+        n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
