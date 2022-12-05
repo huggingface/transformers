@@ -345,7 +345,7 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
-        "type": "image",
+        "type": "multimodal",
     },
     "zero-shot-object-detection": {
         "impl": ZeroShotObjectDetectionPipeline,
@@ -558,8 +558,9 @@ def pipeline(
             pipeline will be allocated.
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
-            `device_map="auto"` to compute the most optimized `device_map` automatically. [More
-            information](https://huggingface.co/docs/accelerate/main/en/big_modeling#accelerate.cpu_offload)
+            `device_map="auto"` to compute the most optimized `device_map` automatically (see
+            [here](https://huggingface.co/docs/accelerate/main/en/package_reference/big_modeling#accelerate.cpu_offload)
+            for more information).
 
             <Tip warning={true}>
 
@@ -590,15 +591,17 @@ def pipeline(
     >>> from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
 
     >>> # Sentiment analysis pipeline
-    >>> pipeline("sentiment-analysis")
+    >>> analyzer = pipeline("sentiment-analysis")
 
     >>> # Question answering pipeline, specifying the checkpoint identifier
-    >>> pipeline("question-answering", model="distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased")
+    >>> oracle = pipeline(
+    ...     "question-answering", model="distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
+    ... )
 
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
     >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    >>> pipeline("ner", model=model, tokenizer=tokenizer)
+    >>> recognizer = pipeline("ner", model=model, tokenizer=tokenizer)
     ```"""
     if model_kwargs is None:
         model_kwargs = {}

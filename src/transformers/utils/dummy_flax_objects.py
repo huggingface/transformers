@@ -17,6 +17,13 @@ class FlaxForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxGenerationMixin(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxLogitsProcessor(metaclass=DummyObject):
     _backends = ["flax"]
 

@@ -19,6 +19,8 @@ import tempfile
 import unittest
 from typing import List
 
+import numpy as np
+
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutlmv3 import LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES
@@ -99,6 +101,17 @@ class LayoutLMv3ProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+
+        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+
+        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+
+        return image_inputs
+
     def test_save_load_pretrained_default(self):
         feature_extractor = self.get_feature_extractor()
         tokenizers = self.get_tokenizers()
@@ -145,6 +158,20 @@ class LayoutLMv3ProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv3FeatureExtractor)
+
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = LayoutLMv3Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # add extra args
+        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
+
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
 
 # different use cases tests
