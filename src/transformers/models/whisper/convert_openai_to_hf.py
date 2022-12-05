@@ -1,4 +1,4 @@
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team and the OpenAI team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,6 @@
 
 import argparse
 import hashlib
-import io
 import os
 import urllib
 import warnings
@@ -23,7 +22,7 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperModel
+from transformers import WhisperConfig, WhisperForConditionalGeneration
 
 
 _MODELS = {
@@ -92,10 +91,49 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
+def _download(url: str, root: str) -> bytes:
+    os.makedirs(root, exist_ok=True)
+    filename = os.path.basename(url)
+
+    expected_sha256 = url.split("/")[-2]
+    download_target = os.path.join(root, filename)
+
+    if os.path.exists(download_target) and not os.path.isfile(download_target):
+        raise RuntimeError(f"{download_target} exists and is not a regular file")
+
+    if os.path.isfile(download_target):
+        model_bytes = open(download_target, "rb").read()
+        if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
+            return model_bytes
+        else:
+            warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
+
+    with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
+        with tqdm(
+            total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True, unit_divisor=1024
+        ) as loop:
+            while True:
+                buffer = source.read(8192)
+                if not buffer:
+                    break
+
+                output.write(buffer)
+                loop.update(len(buffer))
+
+    model_bytes = open(download_target, "rb").read()
+    if hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
+        raise RuntimeError(
+            "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
+        )
+
+    return model_bytes
+
+
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
-    if "https" in checkpoint_path:
-        checkpoint_path = _download(_MODELS[checkpoint_path])
-    original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    if ".pt" not in checkpoint_path:
+        original_checkpoint = _download(_MODELS[checkpoint_path])
+    else:
+        original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
     proj_out_weights = state_dict["decoder.token_embedding.weight"]
@@ -137,73 +175,6 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
         model.proj_out.weight.data = proj_out_weights
 
     model.save_pretrained(pytorch_dump_folder_path)
-
-
-def _download(url: str, root: str) -> bytes:
-    os.makedirs(root, exist_ok=True)
-    filename = os.path.basename(url)
-
-    expected_sha256 = url.split("/")[-2]
-    download_target = os.path.join(root, filename)
-
-    if os.path.exists(download_target) and not os.path.isfile(download_target):
-        raise RuntimeError(f"{download_target} exists and is not a regular file")
-
-    if os.path.isfile(download_target):
-        model_bytes = open(download_target, "rb").read()
-        if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
-            return model_bytes
-        else:
-            warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
-
-    with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
-        with tqdm(
-            total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True, unit_divisor=1024
-        ) as loop:
-            while True:
-                buffer = source.read(8192)
-                if not buffer:
-                    break
-
-                output.write(buffer)
-                loop.update(len(buffer))
-
-    model_bytes = open(download_target, "rb").read()
-    if hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
-        raise RuntimeError(
-            "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
-        )
-
-    return model_bytes
-
-
-def convert_every_model(save_dir):
-    layers = [4, 6, 12, 24, 32]
-    width = [384, 512, 768, 1024, 1280]
-    heads = [6, 8, 12, 16, 20]
-    name = ["tiny", "base", "small", "medium", "large"]
-    for l, w, h, n in zip(layers, width, heads, name):
-        config = WhisperConfig(
-            vocab_size=51865,
-            encoder_layers=l,
-            encoder_attention_heads=h,
-            decoder_attention_heads=h,
-            decoder_layers=l,
-            d_model=w,
-        )
-        model = WhisperModel(config)
-
-        model_bytes = _download(_MODELS[n], "weights")
-        with io.BytesIO(model_bytes) as fp:
-            original = torch.load(fp, map_location="cpu")["model_state_dict"]
-
-        # original = torch.load(f"/home/arthur_huggingface_co/whisper/tiny.pt")
-        new = rename_keys(original.copy())
-
-        missing, unexpected = model.load_state_dict(new, strict=False)
-        if missing == []:
-            print("succesfully loaded")
-            model.save_pretrained(f"{save_dir}/{n}")
 
 
 if __name__ == "__main__":
