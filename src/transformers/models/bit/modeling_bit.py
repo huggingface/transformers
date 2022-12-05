@@ -242,9 +242,9 @@ class BitMaxPool2d(nn.MaxPool2d):
         else:
             self.pad = nn.Identity()
 
-    def forward(self, x):
-        x = self.pad(x)
-        return nn.functional.max_pool2d(x, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode)
+    def forward(self, hidden_states):
+        hidden_states = self.pad(hidden_states)
+        return nn.functional.max_pool2d(hidden_states, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode)
 
 
 class BitEmbeddings(nn.Module):
