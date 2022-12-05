@@ -167,7 +167,8 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             output,
             [{"generated_text": "Hello I believe in fe fe fe fe fe fe fe fe fe fe fe fe"}],
         )
-        output = text_generator(prompt, stop_ids=[641])
+        stop_ids = text_generator.tokenizer.encode(' fe')
+        output = text_generator(prompt, stop_ids=stop_ids)
         self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
 
     def run_pipeline_test(self, text_generator, _):
