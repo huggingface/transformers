@@ -163,6 +163,8 @@ def prepare_whisper_inputs_dict(
     return {
         "input_features": input_ids,
         "decoder_input_ids": decoder_input_ids,
+        "attention_mask": attention_mask,
+        "decoder_attention_mask": decoder_attention_mask,
     }
 
 
@@ -287,3 +289,21 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
         self.assertTrue(np.allclose(logits[0][0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
+
+    def test_tiny_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny", from_pt=True)
+
+        input_speech = self._load_datasamples(1)
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="jax"
+        ).input_features
+
+        generated_ids = model.generate(input_features, num_beams=5, max_length=20)
+        transcript = processor.tokenizer.decode(generated_ids[0])
+
+        EXPECTED_TRANSCRIPT = (
+            "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle"
+            " classes and we are glad"
+        )
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
