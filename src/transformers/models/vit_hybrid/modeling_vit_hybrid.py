@@ -161,20 +161,15 @@ class ViTHybridPatchEmbeddings(nn.Module):
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
 
         self.backbone = AutoBackbone.from_config(config.backbone_config)
+        if self.backbone.config.model_type != "bit":
+            raise ValueError(f"Backbone model type {self.backbone.model_type} is not supported.")
         feature_dim = self.backbone.channels[-1]
 
         if feature_size is None:
-            with torch.no_grad():
-                # NOTE Most reliable way of determining spatial output dimensions is to run forward pass
-                training = self.backbone.training
-                if training:
-                    self.backbone.eval()
-                feature_map = self.backbone(torch.zeros(1, num_channels, image_size[0], image_size[1])).feature_maps[
-                    -1
-                ]
-                feature_size = feature_map.shape[-2:]
-                feature_dim = feature_map.shape[1]
-                self.backbone.train(training)
+            dummy_image = torch.zeros(1, num_channels, image_size[0], image_size[1])
+            feature_map = self.backbone._get_feature_map_size(dummy_image)
+            feature_size = feature_map.shape[-2:]
+            feature_dim = feature_map.shape[1]
         else:
             feature_size = (
                 feature_size if isinstance(feature_size, collections.abc.Iterable) else (feature_size, feature_size)

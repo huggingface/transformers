@@ -649,7 +649,6 @@ class BitEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->Bit,resnet->bit
 class BitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -671,6 +670,15 @@ class BitPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BitModel):
             module.gradient_checkpointing = value
+
+    @torch.no_grad()
+    def _get_feature_map_size(self, dummy_image):
+        training = self.training
+        if training:
+            self.eval()
+        feature_map = self(dummy_image).feature_maps[-1]
+        self.train(training)
+        return feature_map
 
 
 BIT_START_DOCSTRING = r"""
