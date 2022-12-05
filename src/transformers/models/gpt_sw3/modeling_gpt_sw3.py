@@ -740,27 +740,6 @@ class GPTSw3DoubleHeadsModel(GPTSw3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.multiple_choice_head = self.multiple_choice_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.multiple_choice_head = self.multiple_choice_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
