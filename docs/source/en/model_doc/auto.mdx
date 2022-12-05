@@ -74,33 +74,41 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 [[autodoc]] AutoProcessor
 
-## AutoModel
+## Generic model classes
+
+The following `AutoClasses` are available for instantiating a base model class without a specific head.
+
+### AutoModel
 
 [[autodoc]] AutoModel
 
-## TFAutoModel
+### TFAutoModel
 
 [[autodoc]] TFAutoModel
 
-## FlaxAutoModel
+### FlaxAutoModel
 
 [[autodoc]] FlaxAutoModel
 
-## AutoModelForPreTraining
+## Generic pretraining classes
+
+The following `AutoClasses` are available for instantiating a model with a pretraining head.
+
+### AutoModelForPreTraining
 
 [[autodoc]] AutoModelForPreTraining
 
-## TFAutoModelForPreTraining
+### TFAutoModelForPreTraining
 
 [[autodoc]] TFAutoModelForPreTraining
 
-## FlaxAutoModelForPreTraining
+### FlaxAutoModelForPreTraining
 
 [[autodoc]] FlaxAutoModelForPreTraining
 
 ## Natural Language Processing
 
-[`AutoModel`], [`TFAutoModel`], and [`FlaxAutoModel`] are available for the following natural language processing tasks.
+The following `AutoClasses` are available for the following natural language processing tasks.
 
 ### AutoModelForCausalLM
 
@@ -198,17 +206,9 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 [[autodoc]] FlaxAutoModelForQuestionAnswering
 
-### AutoModelForTableQuestionAnswering
-
-[[autodoc]] AutoModelForTableQuestionAnswering
-
-### TFAutoModelForTableQuestionAnswering
-
-[[autodoc]] TFAutoModelForTableQuestionAnswering
-
 ## Computer vision
 
-[`AutoModel`], [`TFAutoModel`], and [`FlaxAutoModel`] are available for the following computer vision tasks.
+The following `AutoClasses` are available for the following computer vision tasks.
 
 ### AutoModelForDepthEstimation
 
@@ -260,7 +260,7 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 ## Audio
 
-[`AutoModel`] and [`TFAutoModel`] are available for the following audio tasks.
+The following `AutoClasses` are available for the following audio tasks.
 
 ### AutoModelForAudioClassification
 
@@ -288,7 +288,15 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 ## Multimodal
 
-[`AutoModel`], [`TFAutoModel`], and [`FlaxAutoModel`] are available for the following multimodal tasks.
+The following `AutoClasses` are available for the following multimodal tasks.
+
+### AutoModelForTableQuestionAnswering
+
+[[autodoc]] AutoModelForTableQuestionAnswering
+
+### TFAutoModelForTableQuestionAnswering
+
+[[autodoc]] TFAutoModelForTableQuestionAnswering
 
 ### AutoModelForDocumentQuestionAnswering
 
