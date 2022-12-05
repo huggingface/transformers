@@ -672,7 +672,7 @@ class BitPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
     @torch.no_grad()
-    def _get_feature_map_size(self, dummy_image):
+    def _get_feature_map(self, dummy_image):
         training = self.training
         if training:
             self.eval()
