@@ -118,11 +118,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 },
             )
         else:
-            # Non CTC models cannot use chunk_length
-            with self.assertRaises(ValueError) as v:
-                outputs = speech_recognizer(audio, chunk_length_s=10)
-            self.assertEqual(v.exception, "")
-
             # Non CTC models cannot use return_timestamps
             with self.assertRaises(ValueError) as v:
                 outputs = speech_recognizer(audio, return_timestamps="char")
