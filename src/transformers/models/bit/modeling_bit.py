@@ -244,7 +244,9 @@ class BitMaxPool2d(nn.MaxPool2d):
 
     def forward(self, hidden_states):
         hidden_states = self.pad(hidden_states)
-        return nn.functional.max_pool2d(hidden_states, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode)
+        return nn.functional.max_pool2d(
+            hidden_states, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode
+        )
 
 
 class BitEmbeddings(nn.Module):
@@ -252,10 +254,17 @@ class BitEmbeddings(nn.Module):
     BiT Embeddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, config: BitConfig, conv_layer: nn.Module):
+    def __init__(self, config: BitConfig):
         super().__init__()
 
-        self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
+        self.convolution = WeightStandardizedConv2d(
+            config.num_channels,
+            config.embedding_size,
+            kernel_size=7,
+            stride=2,
+            eps=1e-8,
+            padding=config.global_padding,
+        )
 
         self.pooler = BitMaxPool2d(kernel_size=3, stride=2, use_dynamic_padding=config.embedding_dynamic_padding)
 
@@ -359,8 +368,6 @@ class BitPreActivationBottleneckLayer(nn.Module):
 
         first_dilation = first_dilation or dilation
 
-        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.global_padding)
-
         norm_layer = partial(BitGroupNormActivation, config=config)
 
         out_channels = out_channels or in_channels
@@ -372,20 +379,22 @@ class BitPreActivationBottleneckLayer(nn.Module):
                 out_channels,
                 stride=stride,
                 preact=True,
-                conv_layer=conv_layer,
+                padding=config.global_padding,
                 norm_layer=norm_layer,
             )
         else:
             self.downsample = None
 
         self.norm1 = norm_layer(num_channels=in_channels)
-        self.conv1 = conv_layer(in_channels, mid_channels, 1)
+        self.conv1 = WeightStandardizedConv2d(in_channels, mid_channels, 1, eps=1e-8, padding=config.global_padding)
 
         self.norm2 = norm_layer(num_channels=mid_channels)
-        self.conv2 = conv_layer(mid_channels, mid_channels, 3, stride=stride, dilation=first_dilation, groups=groups)
+        self.conv2 = WeightStandardizedConv2d(
+            mid_channels, mid_channels, 3, stride=stride, groups=groups, eps=1e-8, padding=config.global_padding
+        )
 
         self.norm3 = norm_layer(num_channels=mid_channels)
-        self.conv3 = conv_layer(mid_channels, out_channels, 1)
+        self.conv3 = WeightStandardizedConv2d(mid_channels, out_channels, 1, eps=1e-8, padding=config.global_padding)
 
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
@@ -424,8 +433,6 @@ class BitBottleneckLayer(nn.Module):
         super().__init__()
         first_dilation = first_dilation or dilation
 
-        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.global_padding)
-
         norm_layer = partial(BitGroupNormActivation, config=config)
         out_channels = out_channels or in_channels
         mid_chs = make_div(out_channels * bottle_ratio)
@@ -436,17 +443,26 @@ class BitBottleneckLayer(nn.Module):
                 out_channels,
                 stride=stride,
                 preact=False,
-                conv_layer=conv_layer,
+                padding=config.global_padding,
                 norm_layer=norm_layer,
             )
         else:
             self.downsample = None
 
-        self.conv1 = conv_layer(in_channels, mid_chs, 1)
+        self.conv1 = WeightStandardizedConv2d(in_channels, mid_chs, 1, eps=1e-8, padding=config.global_padding)
         self.norm1 = norm_layer(num_channels=mid_chs)
-        self.conv2 = conv_layer(mid_chs, mid_chs, 3, stride=stride, dilation=first_dilation, groups=groups)
+        self.conv2 = WeightStandardizedConv2d(
+            mid_chs,
+            mid_chs,
+            3,
+            stride=stride,
+            dilation=first_dilation,
+            groups=groups,
+            eps=1e-8,
+            padding=config.global_padding,
+        )
         self.norm2 = norm_layer(num_channels=mid_chs)
-        self.conv3 = conv_layer(mid_chs, out_channels, 1)
+        self.conv3 = WeightStandardizedConv2d(mid_chs, out_channels, 1, eps=1e-8, padding=config.global_padding)
         self.norm3 = norm_layer(num_channels=out_channels, apply_activation=False)
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
@@ -480,12 +496,11 @@ class BitDownsampleConv(nn.Module):
         out_channels,
         stride=1,
         preact=True,
-        conv_layer=None,
+        padding=None,
         norm_layer=None,
     ):
         super(BitDownsampleConv, self).__init__()
-        self.conv_layer = conv_layer
-        self.conv = conv_layer(in_channels, out_channels, 1, stride=stride)
+        self.conv = WeightStandardizedConv2d(in_channels, out_channels, 1, stride=stride, eps=1e-8, padding=padding)
         self.norm = nn.Identity() if preact else norm_layer(num_channels=out_channels, apply_activation=False)
 
     def forward(self, x):
@@ -567,7 +582,7 @@ class BitStage(nn.Module):
 
 
 class BitEncoder(nn.Module):
-    def __init__(self, config: BitConfig, conv_layer: nn.Module):
+    def __init__(self, config: BitConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
 
@@ -693,11 +708,9 @@ class BitModel(BitPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.global_padding)
+        self.embedder = BitEmbeddings(config)
 
-        self.embedder = BitEmbeddings(config, conv_layer)
-
-        self.encoder = BitEncoder(config, conv_layer)
+        self.encoder = BitEncoder(config)
         norm_layer = BitGroupNormActivation
         self.norm = (
             norm_layer(config, num_channels=config.hidden_sizes[-1])
