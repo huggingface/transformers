@@ -320,7 +320,7 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Bit
 class BitDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -328,8 +328,8 @@ class BitDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return drop_path(x, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
