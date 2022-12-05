@@ -1051,6 +1051,34 @@ class NearestConvUpsampler(nn.Module):
         return reconstruction
 
 
+class PixelShuffleAuxUpsampler(nn.Module):
+    def __init__(self, config, num_features):
+        super().__init__()
+
+        self.upscale = config.upscale
+        self.conv_bicubic = nn.Conv2d(config.num_channels, num_features, 3, 1, 1)
+        self.conv_before_upsample = nn.Conv2d(config.embed_dim, num_features, 3, 1, 1)
+        self.activation = nn.LeakyReLU(inplace=True)
+        self.conv_aux = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+        self.conv_after_aux = nn.Sequential(nn.Conv2d(3, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True))
+        self.upsample = Upsample(config.upscale, num_features)
+        self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+
+    def forward(self, sequence_output, bicubic, height, width):
+        bicubic = self.conv_bicubic(bicubic)
+        sequence_output = self.conv_before_upsample(sequence_output)
+        sequence_output = self.activation(sequence_output)
+        aux = self.conv_aux(sequence_output)
+        sequence_output = self.conv_after_aux(aux)
+        sequence_output = (
+            self.upsample(sequence_output)[:, :, : height * self.upscale, : width * self.upscale]
+            + bicubic[:, :, : height * self.upscale, : width * self.upscale]
+        )
+        reconstruction = self.conv_last(sequence_output)
+
+        return reconstruction, aux
+
+
 @add_start_docstrings(
     """
     Swin2SR Model transformer with an upsampler head on top for image super resolution and restoration.
@@ -1070,14 +1098,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         if self.upsampler == "pixelshuffle":
             self.upsample = PixelShuffleUpsampler(config, num_features)
         elif self.upsampler == "pixelshuffle_aux":
-            self.conv_bicubic = nn.Conv2d(config.num_channels, num_features, 3, 1, 1)
-            self.conv_before_upsample = nn.Sequential(
-                nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
-            )
-            self.conv_aux = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
-            self.conv_after_aux = nn.Sequential(nn.Conv2d(3, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True))
-            self.upsample = Upsample(config.upscale, num_features)
-            self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+            self.upsample = PixelShuffleAuxUpsampler(config, num_features)
         elif self.upsampler == "pixelshuffledirect":
             # for lightweight SR (to save parameters)
             self.upsample = UpsampleOneStep(config.upscale, config.embed_dim, config.num_channels)
@@ -1133,7 +1154,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
                 mode="bicubic",
                 align_corners=False,
             )
-            bicubic = self.conv_bicubic(bicubic)
 
         outputs = self.swin2sr(
             pixel_values,
@@ -1148,14 +1168,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         if self.upsampler == "pixelshuffle":
             reconstruction = self.upsample(sequence_output)
         elif self.upsampler == "pixelshuffle_aux":
-            sequence_output = self.conv_before_upsample(sequence_output)
-            aux = self.conv_aux(sequence_output)
-            sequence_output = self.conv_after_aux(aux)
-            sequence_output = (
-                self.upsample(sequence_output)[:, :, : height * self.upscale, : width * self.upscale]
-                + bicubic[:, :, : height * self.upscale, : width * self.upscale]
-            )
-            reconstruction = self.conv_last(sequence_output)
+            reconstruction, aux = self.upsample(sequence_output, bicubic, height, width)
             aux = aux / self.swin2sr.img_range + self.swin2sr.mean
         elif self.upsampler == "pixelshuffledirect":
             reconstruction = self.upsample(sequence_output)

@@ -102,10 +102,11 @@ def rename_key(name, config):
         if config.upsampler == "pixelshuffle":
             if "conv_before_upsample.0" in name:
                 name = name.replace("conv_before_upsample.0", "conv_before_upsample")
-            if "conv_bicubic" in name:
-                pass
-            else:
-                name = "upsample." + name
+            name = "upsample." + name
+        elif config.upsampler == "pixelshuffle_aux":
+            if "conv_before_upsample.0" in name:
+                name = name.replace("conv_before_upsample.0", "conv_before_upsample")
+            name = "upsample." + name
         elif config.upsampler == "nearest+conv":
             if "conv_before_upsample.0" in name:
                 name = name.replace("conv_before_upsample.0", "conv_before_upsample")
