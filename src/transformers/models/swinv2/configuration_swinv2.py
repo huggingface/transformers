@@ -21,8 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/swinv2_tiny_patch4_windows8_256": (
-        "https://huggingface.co/microsoft/swinv2_tiny_patch4_windows8_256/resolve/main/config.json"
+    "microsoft/swinv2-tiny-patch4-window8-256": (
+        "https://huggingface.co/microsoft/swinv2-tiny-patch4-window8-256/resolve/main/config.json"
     ),
 }
 
@@ -32,7 +32,7 @@ class Swinv2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Swinv2Model`]. It is used to instantiate a Swin
     Transformer v2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Swin Transformer v2
-    [microsoft/swinv2_tiny_patch4_windows8_256](https://huggingface.co/microsoft/swinv2_tiny_patch4_windows8_256)
+    [microsoft/swinv2-tiny-patch4-window8-256](https://huggingface.co/microsoft/swinv2-tiny-patch4-window8-256)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -82,10 +82,10 @@ class Swinv2Config(PretrainedConfig):
     ```python
     >>> from transformers import Swinv2Config, Swinv2Model
 
-    >>> # Initializing a Swinv2 microsoft/swinv2_tiny_patch4_windows8_256 style configuration
+    >>> # Initializing a Swinv2 microsoft/swinv2-tiny-patch4-window8-256 style configuration
     >>> configuration = Swinv2Config()
 
-    >>> # Initializing a model (with random weights) from the microsoft/swinv2_tiny_patch4_windows8_256 style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/swinv2-tiny-patch4-window8-256 style configuration
     >>> model = Swinv2Model(configuration)
 
     >>> # Accessing the model configuration
