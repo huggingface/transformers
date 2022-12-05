@@ -319,8 +319,8 @@ class BitDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -389,20 +389,20 @@ class BitPreActivationBottleneckLayer(nn.Module):
 
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
-    def forward(self, x):
-        x_preact = self.norm1(x)
+    def forward(self, hidden_states):
+        hidden_states_preact = self.norm1(hidden_states)
 
         # shortcut branch
-        shortcut = x
+        shortcut = hidden_states
         if self.downsample is not None:
-            shortcut = self.downsample(x_preact)
+            shortcut = self.downsample(hidden_states_preact)
 
         # residual branch
-        x = self.conv1(x_preact)
-        x = self.conv2(self.norm2(x))
-        x = self.conv3(self.norm3(x))
-        x = self.drop_path(x)
-        return x + shortcut
+        hidden_states = self.conv1(hidden_states_preact)
+        hidden_states = self.conv2(self.norm2(hidden_states))
+        hidden_states = self.conv3(self.norm3(hidden_states))
+        hidden_states = self.drop_path(hidden_states)
+        return hidden_states + shortcut
 
 
 class BitBottleneckLayer(nn.Module):
