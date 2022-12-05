@@ -281,13 +281,10 @@ class BitEmbeddings(nn.Module):
 
         embedding = self.convolution(pixel_values)
 
-        # Eventually pad
         embedding = self.pad(embedding)
 
-        # Eventually use BitGroupNorm
         embedding = self.norm(embedding)
 
-        # and pool
         embedding = self.pooler(embedding)
 
         return embedding
