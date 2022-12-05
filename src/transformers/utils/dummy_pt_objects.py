@@ -1004,7 +1004,7 @@ class BioGptForCausalLM(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-        
+
 class BioGptModel(metaclass=DummyObject):
     _backends = ["torch"]
 
