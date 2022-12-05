@@ -204,11 +204,17 @@ def prepare_img():
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        return (
+            ViTFeatureExtractor.from_pretrained(VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ViTHybridForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+        model = ViTHybridForImageClassification.from_pretrained(VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -222,6 +228,6 @@ class ViTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor([-1.9090, -0.4993, -0.2389]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

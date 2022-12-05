@@ -16,7 +16,6 @@
 
 import collections
 import math
-from functools import partial
 from typing import Optional, Tuple
 
 import torch
