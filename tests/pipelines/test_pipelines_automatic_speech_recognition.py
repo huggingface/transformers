@@ -121,7 +121,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             # Non CTC models cannot use return_timestamps
             with self.assertRaises(ValueError) as v:
                 outputs = speech_recognizer(audio, return_timestamps="char")
-            self.assertEqual(v.exception, "")
+            self.assertEqual(v.exception, "We cannot return_timestamps yet on non-ctc models !")
 
     @require_torch
     @slow
