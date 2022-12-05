@@ -24,7 +24,7 @@ from ...processing_utils import ProcessorMixin
 
 class DonutProcessor(ProcessorMixin):
     r"""
-    Constructs a Donut processor which wraps a Donut feature extractor and an XLMRoBERTa tokenizer into a single
+    Constructs a Donut processor which wraps a Donut image processor and an XLMRoBERTa tokenizer into a single
     processor.
 
     [`DonutProcessor`] offers all the functionalities of [`DonutFeatureExtractor`] and
@@ -32,8 +32,8 @@ class DonutProcessor(ProcessorMixin):
     [`~DonutProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`DonutFeatureExtractor`]):
-            An instance of [`DonutFeatureExtractor`]. The feature extractor is a required input.
+        image_processor ([`DonutFeatureExtractor`]):
+            An instance of [`DonutFeatureExtractor`]. The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
