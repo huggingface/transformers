@@ -39,6 +39,7 @@ class OwlViTProcessor(ProcessorMixin):
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
+    attributes = ["image_processor", "tokenizer"]
     image_processor_class = "OwlViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
