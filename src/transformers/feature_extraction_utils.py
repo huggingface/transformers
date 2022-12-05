@@ -193,22 +193,6 @@ class BatchFeature(UserDict):
         import torch  # noqa
 
         new_data = {}
-        device = self._parse_args_to_device(*args, **kwargs)
-        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
-            # check if v is a floating point
-            if torch.is_floating_point(v):
-                # cast and send to device
-                new_data[k] = v.to(*args, **kwargs)
-            elif device is not None:
-                new_data[k] = v.to(device=device)
-            else:
-                new_data[k] = v
-        self.data = new_data
-        return self
-
-    def _parse_args_to_device(self, *args, **kwargs):
-        # Retrieve device from kwargs
         device = kwargs.get("device")
         # Check if the args are a device or a dtype
         if device is None and len(args) > 0:
@@ -222,7 +206,18 @@ class BatchFeature(UserDict):
             else:
                 # it's something else
                 raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
-        return device
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        for k, v in self.items():
+            # check if v is a floating point
+            if torch.is_floating_point(v):
+                # cast and send to device
+                new_data[k] = v.to(*args, **kwargs)
+            elif device is not None:
+                new_data[k] = v.to(device=device)
+            else:
+                new_data[k] = v
+        self.data = new_data
+        return self
 
 
 class FeatureExtractionMixin(PushToHubMixin):
