@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..bit import BitConfig
 
 
 logger = logging.get_logger(__name__)
@@ -76,6 +77,8 @@ class DPTConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
+        embedding_type (`str`, *optional*, defaults to `"patch_embedding"`):
+            The type of embedding to use. Can be one of [`"patch_embedding"`, `"vit_hybrid"`].
         reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
         neck_hidden_sizes (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
@@ -125,6 +128,7 @@ class DPTConfig(PretrainedConfig):
         image_size=384,
         patch_size=16,
         num_channels=3,
+        embedding_type="patch_embedding",
         qkv_bias=True,
         backbone_out_indices=[2, 5, 8, 11],
         readout_type="project",
@@ -142,6 +146,25 @@ class DPTConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
+        
+        self.embedding_type = embedding_type
+        if embedding_type not in ["patch_embedding", "vit_hybrid"]:
+            raise ValueError("Embedding type must be one of ['patch_embedding', 'vit_hybrid']")
+        if embedding_type == "vit_hybrid":
+            logger.info("Initializing the config with a `BiT` backbone.")
+            backbone_config = {
+                "global_padding": "same",
+                "layer_type": "bottleneck",
+                "depths": [3, 4, 9],
+                "out_features": ["stage1", "stage2", "stage3"],
+                "embedding_dynamic_padding": True,
+            }
+            self.backbone_config = BitConfig(**backbone_config)
+            self.is_hybrid = True
+        else:
+            self.backbone_config = None
+            self.is_hybrid = False
+        
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size

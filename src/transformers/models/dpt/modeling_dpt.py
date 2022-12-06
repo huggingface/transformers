@@ -41,7 +41,9 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     DepthEstimatorOutput,
     SemanticSegmenterOutput,
+    BaseModelOutputWithIntermediateActivations,
 )
+from ..auto import AutoBackbone
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
@@ -63,6 +65,109 @@ DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Intel/dpt-large",
     # See all DPT models at https://huggingface.co/models?filter=dpt
 ]
+
+
+# Copied from transformers.models.vit_hybrid.modeling_vit_hybrid.ViTHybridPatchEmbeddings with ViTHybrid->DPTViTHybrid
+class DPTViTHybridEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config, feature_size=None):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+
+        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        feature_dim = self.backbone.channels[-1]
+        if len(config.backbone_config.out_features) != 3:
+            raise ValueError(
+                f"Expected backbone to have 3 output features, got {len(config.backbone_config.out_features)}"
+            )
+        self.residual_feature_map_index = [0, 1] # Always take the output of the first and second backbone stage
+
+        if feature_size is None:
+            with torch.no_grad():
+                # NOTE Most reliable way of determining spatial output dimensions is to run forward pass
+                training = self.backbone.training
+                if training:
+                    self.backbone.eval()
+                feature_map = self.backbone(torch.zeros(1, num_channels, image_size[0], image_size[1])).feature_maps[
+                    -1
+                ]
+                feature_size = feature_map.shape[-2:]
+                feature_dim = feature_map.shape[1]
+                self.backbone.train(training)
+        else:
+            feature_size = (
+                feature_size if isinstance(feature_size, collections.abc.Iterable) else (feature_size, feature_size)
+            )
+            feature_dim = self.backbone.channels[-1]
+
+        self.image_size = image_size
+        self.patch_size = patch_size[0]
+        self.num_channels = num_channels
+
+        self.projection = nn.Conv2d(feature_dim, hidden_size, kernel_size=1)
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+
+    def _resize_pos_embed(self, posemb, grid_size_height, grid_size_width, start_index=1):
+        posemb_tok = posemb[:, :start_index]
+        posemb_grid = posemb[0, start_index:]
+
+        old_grid_size = int(math.sqrt(len(posemb_grid)))
+
+        posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
+        posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
+        posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, grid_size_height * grid_size_width, -1)
+
+        posemb = torch.cat([posemb_tok, posemb_grid], dim=1)
+
+        return posemb
+
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
+
+        position_embeddings = self._resize_pos_embed(
+            self.position_embeddings, height // self.patch_size, width // self.patch_size
+        )
+
+        backbone_output = self.backbone(pixel_values)
+        
+        features = backbone_output.feature_maps[-1]
+
+        output_hidden_states = [backbone_output.feature_maps[index] for index in self.residual_feature_map_index]
+
+        embeddings = self.projection(features).flatten(2).transpose(1, 2)
+
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        # add positional encoding to each token
+        embeddings = embeddings + position_embeddings
+
+        return BaseModelOutputWithIntermediateActivations(
+            last_hidden_states=embeddings,
+            intermediate_activations=output_hidden_states,
+        )
 
 
 class DPTViTEmbeddings(nn.Module):
@@ -117,7 +222,9 @@ class DPTViTEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        return embeddings
+        return BaseModelOutputWithIntermediateActivations(
+            last_hidden_states=embeddings
+        )
 
 
 class DPTViTPatchEmbeddings(nn.Module):
@@ -429,6 +536,35 @@ class DPTReassembleStage(nn.Module):
 
         self.config = config
         self.layers = nn.ModuleList()
+        if config.embedding_type == "vit_hybrid":
+            self._init_reassemble_dpt_hybrid(config)
+        else:
+            self._init_reassemble_dpt(config)
+    
+    def _init_reassemble_dpt_hybrid(self, config):
+        r""""
+        This needs to be re-defined since for `DPTHybrid` the first 2 reassemble layers are set to 
+        `nn.Identity()`. 
+        """
+        for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
+            if i <= 1:
+                self.layers.append(nn.Identity())
+            elif i > 1:
+                self.layers.append(
+                    DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor)
+                )
+
+        if config.readout_type == "project":
+            self.readout_projects = nn.ModuleList()
+            for i in range(len(config.neck_hidden_sizes)):
+                if i <= 1:
+                    self.readout_projects.append(nn.Sequential(nn.Identity()))
+                elif i > 1:
+                    self.readout_projects.append(
+                        nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
+                    )
+    
+    def _init_reassemble_dpt(self, config):
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
             self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
 
@@ -439,35 +575,38 @@ class DPTReassembleStage(nn.Module):
                     nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], ignore_index: Optional[List]=[]) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
+            ignore_index (`List[int]`, *optional*):
+                List of indices to ignore when reassembling the hidden states.
         """
         out = []
 
         for i, hidden_state in enumerate(hidden_states):
-            # reshape to (B, C, H, W)
-            hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
-            batch_size, sequence_length, num_channels = hidden_state.shape
-            size = int(math.sqrt(sequence_length))
-            hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
-            hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+            if i not in ignore_index:
+                # reshape to (B, C, H, W)
+                hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
+                batch_size, sequence_length, num_channels = hidden_state.shape
+                size = int(math.sqrt(sequence_length))
+                hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
+                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
-            feature_shape = hidden_state.shape
-            if self.config.readout_type == "project":
-                # reshape to (B, H*W, C)
-                hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
-                readout = cls_token.unsqueeze(1).expand_as(hidden_state)
-                # concatenate the readout token to the hidden states and project
-                hidden_state = self.readout_projects[i](torch.cat((hidden_state, readout), -1))
-                # reshape back to (B, C, H, W)
-                hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
-            elif self.config.readout_type == "add":
-                hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
-                hidden_state = hidden_state.reshape(feature_shape)
-            hidden_state = self.layers[i](hidden_state)
+                feature_shape = hidden_state.shape
+                if self.config.readout_type == "project":
+                    # reshape to (B, H*W, C)
+                    hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
+                    readout = cls_token.unsqueeze(1).expand_as(hidden_state)
+                    # concatenate the readout token to the hidden states and project
+                    hidden_state = self.readout_projects[i](torch.cat((hidden_state, readout), -1))
+                    # reshape back to (B, C, H, W)
+                    hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
+                elif self.config.readout_type == "add":
+                    hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
+                    hidden_state = hidden_state.reshape(feature_shape)
+                hidden_state = self.layers[i](hidden_state)
             out.append(hidden_state)
 
         return out
@@ -679,9 +818,14 @@ class DPTModel(DPTPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
+        self.is_hybird = False
 
         # vit encoder
-        self.embeddings = DPTViTEmbeddings(config)
+        if config.embedding_type == "patch_embedding":
+            self.embeddings = DPTViTEmbeddings(config)
+        else:
+            self.embeddings = DPTViTHybridEmbeddings(config)
+            self.is_hybird = True
         self.encoder = DPTViTEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -734,7 +878,7 @@ class DPTModel(DPTPreTrainedModel):
         embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
-            embedding_output,
+            embedding_output.last_hidden_states,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -754,6 +898,7 @@ class DPTModel(DPTPreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            intermediate_activations=embedding_output.intermediate_activations,
         )
 
 
@@ -787,7 +932,6 @@ class DPTNeck(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-
         self.config = config
 
         # postprocessing
@@ -799,6 +943,8 @@ class DPTNeck(nn.Module):
         # fusion
         self.fusion_stage = DPTFeatureFusionStage(config)
 
+        self.is_using_hybrid = config.embedding_type == "vit_hybrid"
+
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if not isinstance(hidden_states, list):
             raise ValueError("hidden_states should be a list of tensors")
@@ -807,7 +953,10 @@ class DPTNeck(nn.Module):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
         # postprocess hidden states
-        features = self.reassemble_stage(hidden_states)
+        if self.is_using_hybrid:
+            features = self.reassemble_stage(hidden_states, ignore_index=[0, 1])
+        else:
+            features = self.reassemble_stage(hidden_states)
 
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
@@ -939,9 +1088,15 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         # only keep certain features based on config.backbone_out_indices
         # note that the hidden_states also include the initial embeddings
-        hidden_states = [
-            feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
-        ]
+        if not self.config.is_hybrid:
+            hidden_states = [
+                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
+            ]
+        else:
+            backbone_hidden_states = outputs.intermediate_activations
+            backbone_hidden_states.extend(feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices[2:])
+
+            hidden_states = backbone_hidden_states
 
         hidden_states = self.neck(hidden_states)
 
