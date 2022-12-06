@@ -22,7 +22,7 @@ for the task, similarly to the zero-shot capabilities of GPT-2 and 3.
 
 The abstract from the paper is the following:
 
-*State-of-the-art computer vision systems are trained to predict a fixed set of predetermined object categories. This
+_State-of-the-art computer vision systems are trained to predict a fixed set of predetermined object categories. This
 restricted form of supervision limits their generality and usability since additional labeled data is needed to specify
 any other visual concept. Learning directly from raw text about images is a promising alternative which leverages a
 much broader source of supervision. We demonstrate that the simple pre-training task of predicting which caption goes
@@ -34,7 +34,7 @@ such as OCR, action recognition in videos, geo-localization, and many types of f
 model transfers non-trivially to most tasks and is often competitive with a fully supervised baseline without the need
 for any dataset specific training. For instance, we match the accuracy of the original ResNet-50 on ImageNet zero-shot
 without needing to use any of the 1.28 million training examples it was trained on. We release our code and pre-trained
-model weights at this https URL.*
+model weights at this https URL._
 
 ## Usage
 
@@ -52,7 +52,6 @@ The [`CLIPTokenizer`] is used to encode the text. The [`CLIPProcessor`] wraps
 [`CLIPFeatureExtractor`] and [`CLIPTokenizer`] into a single instance to both
 encode the text and prepare the images. The following example shows how to get the image-text similarity scores using
 [`CLIPProcessor`] and [`CLIPModel`].
-
 
 ```python
 >>> from PIL import Image
@@ -81,23 +80,19 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
 The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
-<PipelineTag pipeline="text-to-image"/>
-- A blog post on [How to use CLIP to retrieve images from text](https://huggingface.co/blog/fine-tune-clip-rsicd).
-- A blog bost on [How to use CLIP for Japanese text to image generation](https://huggingface.co/blog/japanese-stable-diffusion).
+<PipelineTag pipeline="text-to-image" />- A blog post on [How to use CLIP to retrieve
+images from text](https://huggingface.co/blog/fine-tune-clip-rsicd). - A blog bost
+on [How to use CLIP for Japanese text to image generation](https://huggingface.co/blog/japanese-stable-diffusion).
 
+<PipelineTag pipeline="image-to-text" />- A notebook showing [Video to text matching
+with CLIP for videos](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/X-CLIP/Video_text_matching_with_X_CLIP.ipynb).
 
-<PipelineTag pipeline="image-to-text"/>
-- A notebook showing [Video to text matching with CLIP for videos](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/X-CLIP/Video_text_matching_with_X_CLIP.ipynb).
-
-
-<PipelineTag pipeline="zero-shot-classification"/>
-- A notebook showing [Zero shot video classification using CLIP for video](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/X-CLIP/Zero_shot_classify_a_YouTube_video_with_X_CLIP.ipynb).
-
+<PipelineTag pipeline="zero-shot-classification" />- A notebook showing [Zero shot
+video classification using CLIP for video](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/X-CLIP/Zero_shot_classify_a_YouTube_video_with_X_CLIP.ipynb).
 
 ## CLIPConfig
 
-[[autodoc]] CLIPConfig
-    - from_text_vision_configs
+[[autodoc]] CLIPConfig - from_text_vision_configs
 
 ## CLIPTextConfig
 
@@ -109,11 +104,7 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 ## CLIPTokenizer
 
-[[autodoc]] CLIPTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
+[[autodoc]] CLIPTokenizer - build_inputs_with_special_tokens - get_special_tokens_mask - create_token_type_ids_from_sequences - save_vocabulary
 
 ## CLIPTokenizerFast
 
@@ -121,8 +112,7 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 ## CLIPImageProcessor
 
-[[autodoc]] CLIPImageProcessor
-    - preprocess
+[[autodoc]] CLIPImageProcessor - preprocess
 
 ## CLIPFeatureExtractor
 
@@ -134,62 +124,48 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 ## CLIPModel
 
-[[autodoc]] CLIPModel
-    - forward
-    - get_text_features
-    - get_image_features
+[[autodoc]] CLIPModel - forward - get_text_features - get_image_features
 
 ## CLIPTextModel
 
-[[autodoc]] CLIPTextModel
-    - forward
+[[autodoc]] CLIPTextModel - forward
 
 ## CLIPTextModelWithProjection
 
-[[autodoc]] CLIPTextModelWithProjection
-    - forward
+[[autodoc]] CLIPTextModelWithProjection - forward
 
 ## CLIPVisionModelWithProjection
 
-[[autodoc]] CLIPVisionModelWithProjection
-    - forward
-
+[[autodoc]] CLIPVisionModelWithProjection - forward
 
 ## CLIPVisionModel
 
-[[autodoc]] CLIPVisionModel
-    - forward
+[[autodoc]] CLIPVisionModel - forward
 
 ## TFCLIPModel
 
-[[autodoc]] TFCLIPModel
-    - call
-    - get_text_features
-    - get_image_features
+[[autodoc]] TFCLIPModel - call - get_text_features - get_image_features
 
 ## TFCLIPTextModel
 
-[[autodoc]] TFCLIPTextModel
-    - call
+[[autodoc]] TFCLIPTextModel - call
+
+## TFCLIPTokenizer
+
+[[autodoc]] TFCLIPTokenizer
 
 ## TFCLIPVisionModel
 
-[[autodoc]] TFCLIPVisionModel
-    - call
+[[autodoc]] TFCLIPVisionModel - call
 
 ## FlaxCLIPModel
 
-[[autodoc]] FlaxCLIPModel
-    - __call__
-    - get_text_features
-    - get_image_features
+[[autodoc]] FlaxCLIPModel - **call** - get_text_features - get_image_features
 
 ## FlaxCLIPTextModel
 
-[[autodoc]] FlaxCLIPTextModel
-    - __call__
+[[autodoc]] FlaxCLIPTextModel - **call**
 
 ## FlaxCLIPVisionModel
 
-[[autodoc]] FlaxCLIPVisionModel
-    - __call__
+[[autodoc]] FlaxCLIPVisionModel - **call**
