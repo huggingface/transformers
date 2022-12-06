@@ -82,7 +82,8 @@ user: 使用者
         <b>繁體中文</b> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a>
+        <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a>
     <p>
 </h4>
 
