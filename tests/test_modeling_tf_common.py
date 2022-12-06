@@ -162,6 +162,7 @@ class TFModelTesterMixin:
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
+
         if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
             inputs_dict = {
                 k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1))
@@ -1229,6 +1230,7 @@ class TFModelTesterMixin:
         if not self.test_resize_embeddings:
             return
         config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
         for model_class in self.all_model_classes:
             # create a model with resized (expended) embeddings
             new_tokens_size = 10
