@@ -17,7 +17,7 @@
 
 import math
 import os
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
