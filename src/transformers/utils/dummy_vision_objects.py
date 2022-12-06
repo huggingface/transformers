@@ -43,6 +43,13 @@ class BeitImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class BitImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ChineseCLIPFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -415,6 +422,13 @@ class ViTFeatureExtractor(metaclass=DummyObject):
 
 
 class ViTImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class ViTHybridImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
