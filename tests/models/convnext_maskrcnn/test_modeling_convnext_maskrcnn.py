@@ -15,8 +15,9 @@
 """ Testing suite for the PyTorch ConvNextMaskRCNN model. """
 
 
-import inspect
+import random
 import unittest
+import inspect
 
 import numpy as np
 
@@ -59,7 +60,6 @@ class ConvNextMaskRCNNModelTester:
         use_labels=True,
         intermediate_size=37,
         hidden_act="gelu",
-        type_sequence_label_size=10,
         initializer_range=0.02,
         num_labels=3,
         scope=None,
@@ -75,8 +75,8 @@ class ConvNextMaskRCNNModelTester:
         self.use_labels = use_labels
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.num_labels = num_labels
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -84,7 +84,16 @@ class ConvNextMaskRCNNModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = {'gt_labels':[], 'gt_bboxes':[], 'gt_masks':[], 'gt_bboxes_ignore':None}
+            for _ in range(self.batch_size):
+                # sample a number of objects
+                number_of_objects = random.randint(0, 10)
+                class_labels = torch.tensor([random.randint(0, self.num_labels) for _ in range(number_of_objects)])
+                boxes = torch.randn(number_of_objects, 4)
+                masks = torch.randn(number_of_objects, self.image_size, self.image_size)
+                labels["gt_labels"].append(class_labels)
+                labels["gt_bboxes"].append(boxes)
+                labels["gt_masks"].append(masks)
 
         config = self.get_config()
 
@@ -103,6 +112,17 @@ class ConvNextMaskRCNNModelTester:
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = ConvNextMaskRCNNModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        # expected last hidden states: B, C, H // 32, W // 32
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+        )
+
+    def create_and_check_model_for_object_detection(self, config, pixel_values, labels):
+        model = ConvNextMaskRCNNForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -139,6 +159,7 @@ class ConvNextMaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = ConvNextMaskRCNNModelTester(self)
@@ -186,6 +207,10 @@ class ConvNextMaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_for_object_detection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_for_object_detection(*config_and_inputs)
+
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -217,10 +242,6 @@ class ConvNextMaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
