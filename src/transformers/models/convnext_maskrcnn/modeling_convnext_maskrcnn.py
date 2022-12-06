@@ -1253,9 +1253,10 @@ class ConvNextMaskRCNNMaxIoUAssigner:
     def assign_wrt_overlaps(self, overlaps, gt_labels=None):
         """Assign w.r.t. the overlaps of bboxes with gts.
         Args:
-            overlaps (Tensor): Overlaps between k gt_bboxes and n bboxes,
-                shape(k, n).
-            gt_labels (Tensor, optional): Labels of k gt_bboxes, shape (k, ).
+            overlaps (`torch.Tensor`):
+                Overlaps between k gt_bboxes and n bboxes, shape(k, n).
+            gt_labels (`torch.Tensor`, *optional*):
+                Labels of k gt_bboxes, shape (k, ).
         Returns:
             `AssignResult`: The assign result.
         """
@@ -1329,12 +1330,14 @@ class ConvNextMaskRCNNRandomSampler:
     Source: https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/bbox/samplers/random_sampler.py
 
     Args:
-        num (int): Number of samples
-        pos_fraction (float): Fraction of positive samples
-        neg_pos_up (int, optional): Upper bound number of negative and
-            positive samples. Defaults to -1.
-        add_gt_as_proposals (bool, optional): Whether to add ground truth
-            boxes as proposals. Defaults to True.
+        num (`int`):
+            Number of samples.
+        pos_fraction (`float`):
+            Fraction of positive samples
+        neg_pos_up (`int`, *optional*, defaults to -1):
+            Upper bound number of negative and positive samples.
+        add_gt_as_proposals (`bool`, *optional*, defaults to `True`):
+            Whether to add ground truth boxes as proposals.
     """
 
     def __init__(self, num, pos_fraction, neg_pos_ub=-1, add_gt_as_proposals=True, **kwargs):
@@ -1351,10 +1354,15 @@ class ConvNextMaskRCNNRandomSampler:
 
     def random_choice(self, gallery, num):
         """Random select some elements from the gallery.
-        Args:
         If `gallery` is a Tensor, the returned indices will be a Tensor; If `gallery` is a ndarray or list, the
         returned indices will be a ndarray.
-            gallery (Tensor | ndarray | list): indices pool. num (int): expected sample num.
+
+        Args:   
+            gallery (Tensor | ndarray | list):
+                Indices pool.
+            num (int):
+                Expected sample num.
+        
         Returns:
             Tensor or ndarray: sampled indices.
         """
@@ -1404,11 +1412,11 @@ class ConvNextMaskRCNNRandomSampler:
         Args:
             assign_result (`AssignResult`):
                 Bbox assigning results.
-            boxes (Tensor):
+            boxes (`torch.Tensor`):
                 Boxes to be sampled from.
-            gt_bboxes (Tensor):
+            gt_bboxes (`torch.Tensor`):
                 Ground truth bboxes.
-            gt_labels (Tensor, optional):
+            gt_labels (`torch.Tensor`, *optional*):
                 Class labels of ground truth bboxes.
 
         Returns:
