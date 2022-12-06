@@ -718,6 +718,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_keras_nlp_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["models.clip"].append("TFCLIPTokenizer")
     _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
 
 try:
@@ -3921,6 +3922,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_keras_nlp_objects import *
     else:
+        from .models.clip import TFCLIPTokenizer
         from .models.gpt2 import TFGPT2Tokenizer
 
     try:

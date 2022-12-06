@@ -21,6 +21,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
+    is_keras_nlp_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -86,6 +87,14 @@ else:
         "TFCLIPTextModel",
         "TFCLIPVisionModel",
     ]
+
+try:
+    if not is_keras_nlp_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_clip_tf"] = ["TFCLIPTokenizer"]
 
 try:
     if not is_flax_available():
@@ -160,6 +169,14 @@ if TYPE_CHECKING:
             TFCLIPTextModel,
             TFCLIPVisionModel,
         )
+
+    try:
+        if not is_keras_nlp_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_clip_tf import TFCLIPTokenizer
 
     try:
         if not is_flax_available():
