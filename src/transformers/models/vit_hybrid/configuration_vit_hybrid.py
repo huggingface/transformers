@@ -75,10 +75,10 @@ class ViTHybridConfig(PretrainedConfig):
     ```python
     >>> from transformers import ViTHybridConfig, ViTHybridModel
 
-    >>> # Initializing a ViT Hybrid vit-base-r50-s16-384 style configuration
+    >>> # Initializing a ViT Hybrid vit-hybrid-base-bit-384 style configuration
     >>> configuration = ViTHybridConfig()
 
-    >>> # Initializing a model (with random weights) from the vit-base-r50-s16-384 style configuration
+    >>> # Initializing a model (with random weights) from the vit-hybrid-base-bit-384 style configuration
     >>> model = ViTHybridModel(configuration)
 
     >>> # Accessing the model configuration
