@@ -62,16 +62,18 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @require_torch
     def test_small_model_pt(self):
         small_model = "hf-internal-testing/tiny-random-VideoMAEForVideoClassification"
-        small_feature_extractor = VideoMAEFeatureExtractor(size=10, crop_size=dict(height=10, width=10))
+        small_feature_extractor = VideoMAEFeatureExtractor(
+            size=dict(shortest_edge=10), crop_size=dict(height=10, width=10)
+        )
         video_classifier = pipeline(
-            "video-classification", model=small_model, feature_extractor=small_feature_extractor
+            "video-classification", model=small_model, feature_extractor=small_feature_extractor, frame_sampling_rate=4
         )
 
         video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
         outputs = video_classifier(video_file_path, top_k=2)
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [{"score": 0.5209, "label": "LABEL_0"}, {"score": 0.4791, "label": "LABEL_1"}],
+            [{"score": 0.5199, "label": "LABEL_0"}, {"score": 0.4801, "label": "LABEL_1"}],
         )
 
         outputs = video_classifier(
@@ -84,8 +86,8 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                [{"score": 0.5209, "label": "LABEL_0"}, {"score": 0.4791, "label": "LABEL_1"}],
-                [{"score": 0.5209, "label": "LABEL_0"}, {"score": 0.4791, "label": "LABEL_1"}],
+                [{"score": 0.5199, "label": "LABEL_0"}, {"score": 0.4801, "label": "LABEL_1"}],
+                [{"score": 0.5199, "label": "LABEL_0"}, {"score": 0.4801, "label": "LABEL_1"}],
             ],
         )
 

@@ -37,14 +37,17 @@ class VideoClassificationPipeline(Pipeline):
         requires_backends(self, "decord")
         self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING)
 
-        self.frame_sampling_rate = kwargs.pop("frame_sample_rate", 4)
-        self.num_frames = self.model.config.num_frames
+    def _sanitize_parameters(self, top_k=None, num_frames=None, frame_sampling_rate=None):
+        preprocess_params = {}
+        if frame_sampling_rate is not None:
+            preprocess_params["frame_sampling_rate"] = frame_sampling_rate
+        if num_frames is not None:
+            preprocess_params["num_frames"] = num_frames
 
-    def _sanitize_parameters(self, top_k=None):
         postprocess_params = {}
         if top_k is not None:
             postprocess_params["top_k"] = top_k
-        return {}, {}, postprocess_params
+        return preprocess_params, {}, postprocess_params
 
     def __call__(self, videos: Union[str, List[str]], **kwargs):
         """
@@ -75,18 +78,20 @@ class VideoClassificationPipeline(Pipeline):
         """
         return super().__call__(videos, **kwargs)
 
-    def preprocess(self, video):
+    def preprocess(self, video, num_frames=None, frame_sampling_rate=1):
+
+        if num_frames is None:
+            num_frames = self.model.config.num_frames
 
         if video.startswith("http://") or video.startswith("https://"):
             video = BytesIO(requests.get(video).content)
 
-        videoreader = VideoReader(video, num_threads=1, ctx=cpu(0))
+        videoreader = VideoReader(video)
         videoreader.seek(0)
 
         start_idx = 0
-        end_idx = self.num_frames * self.frame_sampling_rate - 1
-        indices = np.linspace(start_idx, end_idx, num=self.num_frames)
-        indices = np.clip(indices, start_idx, end_idx).astype(np.int64)
+        end_idx = num_frames * frame_sampling_rate - 1
+        indices = np.linspace(start_idx, end_idx, num=num_frames, dtype=np.int64)
 
         video = videoreader.get_batch(indices).asnumpy()
         video = list(video)
