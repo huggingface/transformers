@@ -152,6 +152,7 @@ def to_pil_image(
     return PIL.Image.fromarray(image)
 
 
+# Logic adapted from torchvision resizing logic: https://github.com/pytorch/vision/blob/511924c1ced4ce0461197e5caa64ce5b9e558aab/torchvision/transforms/functional.py#L366
 def get_resize_output_image_size(
     input_image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
