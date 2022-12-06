@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import copy
+import tempfile
 import unittest
 
 import numpy as np
@@ -77,11 +78,13 @@ class TFBartModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs_for_common(self):
+        # Ids are clipped to avoid "beginng of sequence", "end of sequence", and "pad" tokens
         input_ids = tf.clip_by_value(
             ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size),
             clip_value_min=self.eos_token_id + 1,
             clip_value_max=self.vocab_size + 1,
         )
+        # Explicity add "end of sequence" to the inputs
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
@@ -296,6 +299,56 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
+
+    @slow
+    def test_save_load_after_resize_token_embeddings(self):
+        # Custom version of this test to ensure "end of sequence" tokens are present throughout
+        if not self.test_resize_embeddings:
+            return
+        config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # create a model with resized (expended) embeddings
+            new_tokens_size = 10
+            old_total_size = config.vocab_size
+            new_total_size = old_total_size + new_tokens_size
+            model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
+            model(model.dummy_inputs)  # builds the embeddings layer
+            model.resize_token_embeddings(new_total_size)
+
+            # fetch the output for an input exclusively made of new members of the vocabulary
+            inputs_dict = copy.deepcopy(original_inputs_dict)
+            ids_feat_name = None
+            if "input_ids" in inputs_dict:
+                ids_feat_name = "input_ids"
+            elif "decoder_input_ids" in inputs_dict:
+                ids_feat_name = "decoder_input_ids"
+            else:
+                assert False, "No input ids feature found in the inputs dict"
+
+            new_vocab_input_ids = ids_tensor(inputs_dict[ids_feat_name].shape, new_tokens_size)
+            new_vocab_input_ids += old_total_size
+
+            # Replace last id with EOS token
+            new_vocab_input_ids = new_vocab_input_ids[:, :-1]
+            new_vocab_input_ids = tf.concat([new_vocab_input_ids,
+                tf.ones((tf.shape(new_vocab_input_ids)[0], 1), dtype=tf.int32) * 2], axis=1)
+
+            inputs_dict[ids_feat_name] = new_vocab_input_ids
+            if "input_ids" in inputs_dict:
+                inputs_dict["input_ids"] = new_vocab_input_ids
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"] = new_vocab_input_ids
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+            outputs = model(**prepared_inputs)
+
+            # save and load the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False)
+                model = model_class.from_pretrained(tmpdirname)
+                restored_model_outputs = model(**prepared_inputs)
+
+                # check that the output for the restored model is the same
+                self.assert_outputs_same(restored_model_outputs, outputs)
 
 
 def _long_tensor(tok_lst):
