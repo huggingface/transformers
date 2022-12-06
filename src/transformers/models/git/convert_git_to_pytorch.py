@@ -20,12 +20,23 @@ URL: https://github.com/microsoft/GenerativeImage2Text/tree/main"""
 import argparse
 from pathlib import Path
 
+import numpy as np
 import torch
 from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import AutoTokenizer, CLIPImageProcessor, GitConfig, GitForCausalLM, GitProcessor, GitVisionConfig
+# from decord import VideoReader, cpu
+from huggingface_hub import hf_hub_download
+from transformers import (
+    AutoTokenizer,
+    CLIPImageProcessor,
+    GitConfig,
+    GitForCausalLM,
+    GitProcessor,
+    GitVisionConfig,
+    VideoMAEImageProcessor,
+)
 from transformers.utils import logging
 
 
@@ -33,7 +44,14 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_git_config(model_name, image_size):
+def get_git_config(model_name):
+    if "base" in model_name and "vqa" in model_name:
+        image_size = 480
+    elif "large" in model_name and "vqa" in model_name:
+        image_size = 420
+    else:
+        image_size = 224
+
     vision_config = GitVisionConfig(image_size=image_size)
 
     if "large" in model_name:
@@ -41,7 +59,7 @@ def get_git_config(model_name, image_size):
 
     config = GitConfig(vision_config=vision_config.to_dict())
 
-    return config
+    return config, image_size
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
@@ -157,8 +175,29 @@ def prepare_img(model_name):
     else:
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
-    
+
     return image
+
+
+def prepare_video():
+    def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        converted_len = int(clip_len * frame_sample_rate)
+        end_idx = np.random.randint(converted_len, seg_len)
+        start_idx = end_idx - converted_len
+        indices = np.linspace(start_idx, end_idx, num=clip_len)
+        indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        return indices
+
+    # video clip consists of 300 frames (10 seconds at 30 FPS)
+    file_path = hf_hub_download(repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset")
+    videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+
+    # sample 16 frames
+    videoreader.seek(0)
+    indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(videoreader))
+    video = videoreader.get_batch(indices).asnumpy()
+
+    return video
 
 
 @torch.no_grad()
@@ -191,13 +230,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     }
 
     # define GIT configuration based on model name
-    if "base" in model_name and "vqa" in model_name:
-        image_size = 480
-    elif "large" in model_name and "vqa" in model_name:
-        image_size = 420
-    else:
-        image_size = 224
-    config = get_git_config(model_name, image_size=image_size)
+    config, image_size = get_git_config(model_name)
     # load original state_dict from URL
     checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["model"]
@@ -222,24 +255,28 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     assert unexpected_keys == ["git.image_encoder.visual_projection.weight"]
 
     # verify results
-    image_processor = CLIPImageProcessor()
+    image_processor = VideoMAEImageProcessor if "vatex" in model_name else CLIPImageProcessor()
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     tokenizer.model_input_names = ["input_ids", "attention_mask"]
     processor = GitProcessor(tokenizer=tokenizer, feature_extractor=image_processor)
 
-    image = prepare_img(model_name)
-    # pixel_values = processor(images=image, return_tensors="pt").pixel_values
-    image_transforms = Compose(
-        [
-            Resize(image_size, interpolation=Image.BICUBIC),
-            CenterCrop(image_size),
-            ToTensor(),
-            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-        ]
-    )
-    pixel_values = image_transforms(image).unsqueeze(0)
-    input_ids = torch.tensor([[101]])
+    # TODO use processor to prepare data for the model
+    if "vatex" in model_name:
+        video = prepare_video()
+        pixel_values = image_processor(video, return_tensors="pt").pixel_values
+    else:
+        image = prepare_img(model_name)
+        image_transforms = Compose(
+            [
+                Resize(image_size, interpolation=Image.BICUBIC),
+                CenterCrop(image_size),
+                ToTensor(),
+                Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+            ]
+        )
+        pixel_values = image_transforms(image).unsqueeze(0)
 
+    input_ids = torch.tensor([[101]])
     outputs = model(input_ids, pixel_values=pixel_values)
     logits = outputs.logits
     print("Logits:", logits[0, -1, :3])
@@ -260,8 +297,12 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     print("Generating caption...")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    question = "what does the front of the bus say at the top?" if "textvqa" in model_name else "what are the cats doing?"
-    input_ids = tokenizer(question, add_special_tokens=False).input_ids if "qa" in model_name else None
+    prompt = ""
+    if "textvqa" in model_name:
+        prompt = "what does the front of the bus say at the top?"
+    elif "vqa" in model_name:
+        prompt = "what are the cats doing?"
+    input_ids = tokenizer(prompt, add_special_tokens=False).input_ids
     input_ids = [tokenizer.cls_token_id] + input_ids
     input_ids = torch.tensor(input_ids).unsqueeze(0)
     print("Question:", tokenizer.decode(input_ids[0]) if input_ids is not None else None)

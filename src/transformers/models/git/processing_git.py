@@ -32,7 +32,7 @@ class GitProcessor(ProcessorMixin):
         tokenizer ([`BertTokenizerFast`]):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "CLIPImageProcessor"
+    feature_extractor_class = ("CLIPImageProcessor", "VideoMAEImageProcessor")
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):

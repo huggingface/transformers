@@ -578,6 +578,11 @@ GIT_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
+
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -1218,7 +1223,24 @@ class GitModel(GitPreTrainedModel):
 
         projected_visual_features = None
         if pixel_values is not None:
-            visual_features = self.image_encoder(pixel_values).last_hidden_state
+            if pixel_values.ndim == 4:
+                # here we assume pixel_values is of shape (batch_size, num_channels, height, width)
+                visual_features = self.image_encoder(pixel_values).last_hidden_state
+
+            elif pixel_values.ndim == 5:
+                # here we assume pixel_values is of shape (batch_size, num_frames, num_channels, height, width)
+                visual_features = []
+                for frame_idx in range(pixel_values.shape[1]):
+                    visual_features_frame = self.image_encoder(pixel_values[:, frame_idx, :, :]).last_hidden_state
+                    visual_features_frame += self.positional_embedding_visual[frame_idx]
+                    visual_features.append(visual_features_frame)
+
+                # finally, concatenate all features along sequence dimension
+                visual_features = visual_features.cat(visual_features, dim=1)
+
+            else:
+                raise ValueError("pixel_values must be of rank 4 or 5")
+
             projected_visual_features = self.visual_projection(visual_features)
 
         embedding_output = self.embeddings(
