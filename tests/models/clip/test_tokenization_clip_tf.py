@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from transformers import AutoConfig, TFCLIPTextModel, is_keras_nlp_available, is_tf_available
+from transformers import TFCLIPTextModel, is_keras_nlp_available, is_tf_available
 from transformers.models.clip.tokenization_clip import CLIPTokenizer
 from transformers.testing_utils import require_keras_nlp, slow
 

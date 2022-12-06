@@ -129,13 +129,13 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
         eos_token_id = None
         bos_token_id = None
 
-        if tokenizer.eos_token is not None:
+        if tokenizer._eos_token is not None:
             eos_token_id = tokenizer.convert_tokens_to_ids(tokenizer._eos_token.content)
 
-        if tokenizer.bos_token is not None:
+        if tokenizer._bos_token is not None:
             bos_token_id = tokenizer.convert_tokens_to_ids(tokenizer._bos_token.content)
 
-        return cls(vocab, merges, eos_token_id=eos_token_id, bos_token_id=bos_token_id * args, **kwargs)
+        return cls(vocab, merges, eos_token_id=eos_token_id, bos_token_id=bos_token_id, *args, **kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
@@ -176,6 +176,14 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
 
     def call(self, x, max_length: int = None):
         input_ids = self.tf_tokenizer(x)
+        input_ids_shape = tf.shape(input_ids)
+
+        oned_tokens = tf.ones((input_ids_shape[0], 1))
+        bos_tokens = tf.cast((oned_tokens * self.bos_token_id), tf.int32)
+        eos_tokens = tf.cast((oned_tokens * self.eos_token_id), tf.int32)
+
+        input_ids = tf.concat([bos_tokens, input_ids, eos_tokens], axis=1)
+
         attention_mask = tf.ones_like(input_ids)
 
         if self.pad_token_id is not None:
