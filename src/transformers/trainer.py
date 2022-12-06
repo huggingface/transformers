@@ -1345,7 +1345,9 @@ class Trainer:
             model = nn.DataParallel(model)
 
         if self.args.jit_mode_eval:
+            start_time = time.time()
             model = self.torch_jit_model_eval(model, dataloader, training)
+            self.jit_compilation_time = round(time.time() - start_time, 4)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -2819,6 +2821,8 @@ class Trainer:
         )
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
+        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
@@ -2886,6 +2890,8 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         total_batch_size = self.args.eval_batch_size * self.args.world_size
+        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
@@ -3102,6 +3108,8 @@ class Trainer:
 
         if all_losses is not None:
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
+        if hasattr(self, "jit_compilation_time"):
+            metrics[f"{metric_key_prefix}_jit_compilation_time"] = self.jit_compilation_time
 
         # Prefix all keys with metric_key_prefix + '_'
         for key in list(metrics.keys()):
