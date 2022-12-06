@@ -222,7 +222,9 @@ class DonutImageProcessor(BaseImageProcessor):
             data_format (`Optional[Union[str, ChannelDimension]]`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
         """
-        output_size = (size["height"], size["width"])
+        min_size = min(size["height"], size["width"])
+        max_size = max(size["height"], size["width"])
+        output_size = get_resize_output_image_size(image, min_size, default_to_square=False, max_size=max_size)
         return resize(image, size=output_size, resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs)
 
     def resize(

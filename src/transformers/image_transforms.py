@@ -202,9 +202,6 @@ def get_resize_output_image_size(
     short, long = (width, height) if width <= height else (height, width)
     requested_new_short = size
 
-    if short == requested_new_short:
-        return (height, width)
-
     new_short, new_long = requested_new_short, int(requested_new_short * long / short)
 
     if max_size is not None:
