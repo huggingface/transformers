@@ -74,6 +74,7 @@ class GPTSw3PreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
+    # Copied from transformers.models.gpt2.GPT2PreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, Conv1D)):
@@ -101,12 +102,14 @@ class GPTSw3PreTrainedModel(PreTrainedModel):
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
+    # Copied from transformers.models.gpt2.GPT2PreTrainedModel._set_gradient_checkpointing
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPTSw3Model):
             module.gradient_checkpointing = value
 
 
 @dataclass
+# Copied from transformers.models.gpt2.GPT2DoubleHeadsModelOutput
 class GPTSw3DoubleHeadsModelOutput(ModelOutput):
     """
     Base class for outputs of models predicting if two sentences are consecutive or not.
@@ -240,6 +243,7 @@ GPT_SW3_INPUTS_DOCSTRING = r"""
 class GPTSw3Model(GPTSw3PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
 
+    # Copied from transformers.models.gpt2.GPT2Model.__init__
     def __init__(self, config):
         super().__init__(config)
 
@@ -257,12 +261,15 @@ class GPTSw3Model(GPTSw3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.gpt2.GPT2Model.get_input_embeddings
     def get_input_embeddings(self):
         return self.wte
 
+    # Copied from transformers.models.gpt2.GPT2Model.set_input_embeddings
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    # Copied from transformers.models.gpt2.GPT2Model._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
@@ -277,6 +284,7 @@ class GPTSw3Model(GPTSw3PreTrainedModel):
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.gpt2.GPT2Model.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -465,22 +473,24 @@ class GPTSw3Model(GPTSw3PreTrainedModel):
 class GPTSw3LMHeadModel(GPTSw3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
+    # Copied from transformers.models.gpt2.GPT2LMHeadModel.__init__
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GPTSw3Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-
         # Initialize weights and apply final processing
         self.post_init()
 
-
+    # Copied from transformers.models.gpt2.GPT2LMHeadModel.get_output_embeddings
     def get_output_embeddings(self):
         return self.lm_head
 
+    # Copied from transformers.models.gpt2.GPT2LMHeadModel.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Copied from transformers.models.gpt2.GPT2LMHeadModel.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
@@ -516,6 +526,7 @@ class GPTSw3LMHeadModel(GPTSw3PreTrainedModel):
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.gpt2.GPT2LMHeadModel.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -583,6 +594,7 @@ class GPTSw3LMHeadModel(GPTSw3PreTrainedModel):
         )
 
     @staticmethod
+    # Copied from transformers.models.gpt2.GPT2LMHeadModel._reorder_cache
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
@@ -607,6 +619,7 @@ input sequence).
 class GPTSw3DoubleHeadsModel(GPTSw3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
+    # Copied from transformers.models.gpt2.GPT2DoubleHeadsModel.__init__
     def __init__(self, config):
         super().__init__(config)
         config.num_labels = 1
@@ -617,13 +630,15 @@ class GPTSw3DoubleHeadsModel(GPTSw3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-
+    # Copied from transformers.models.gpt2.GPT2DoubleHeadsModel.get_output_embeddings
     def get_output_embeddings(self):
         return self.lm_head
 
+    # Copied from transformers.models.gpt2.GPT2DoubleHeadsModel.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Copied from transformers.models.gpt2.GPT2DoubleHeadsModel.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
@@ -655,6 +670,7 @@ class GPTSw3DoubleHeadsModel(GPTSw3PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_SW3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GPTSw3DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.gpt2.GPT2DoubleHeadsModel.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -761,6 +777,7 @@ class GPTSw3DoubleHeadsModel(GPTSw3PreTrainedModel):
         )
 
     @staticmethod
+    # Copied from transformers.models.gpt2.GPT2DoubleHeadsModel._reorder_cache
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
@@ -791,6 +808,7 @@ class GPTSw3DoubleHeadsModel(GPTSw3PreTrainedModel):
 class GPTSw3ForSequenceClassification(GPTSw3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
+    # Copied from transformers.models.gpt2.GPT2ForSequenceClassification.__init__
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -809,6 +827,7 @@ class GPTSw3ForSequenceClassification(GPTSw3PreTrainedModel):
         expected_output="'LABEL_0'",
         expected_loss=5.28,
     )
+    # Copied from transformers.models.gpt2.GPT2ForSequenceClassification.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -913,6 +932,8 @@ class GPTSw3ForSequenceClassification(GPTSw3PreTrainedModel):
     GPT_SW3_START_DOCSTRING,
 )
 class GPTSw3ForTokenClassification(GPTSw3PreTrainedModel):
+
+    # Copied from transformers.models.gpt2.GPT2ForTokenClassification.__init__
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -931,6 +952,7 @@ class GPTSw3ForTokenClassification(GPTSw3PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT_SW3_INPUTS_DOCSTRING)
+    # Copied from transformers.models.gpt2.GPT2ForTokenClassification.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
