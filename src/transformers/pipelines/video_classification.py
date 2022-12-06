@@ -65,6 +65,12 @@ class VideoClassificationPipeline(Pipeline):
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
+            num_frames (`int`, *optional*, defaults to `self.model.config.num_frames`):
+                The number of frames sampled from the video to run the classification on. If not provided, will default
+                to the number of frames specified in the model configuration.
+            frame_sampling_rate (`int`, *optional*, defaults to 1):
+                The sampling rate used to select frames from the video. If not provided, will default to 1, i.e. every
+                frame will be used.
 
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single video, will return a
