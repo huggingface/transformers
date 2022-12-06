@@ -10,12 +10,12 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# mask2former
+# Mask2Former
 
 ## Overview
 
 The Mask2Former model was proposed in [Masked-attention Mask Transformer for Universal Image Segmentation](https://arxiv.org/abs/2112.01527) by Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar.
-Mask2Former is a unified framework for panoptic, instance and semantic segmentation.
+Mask2Former is a unified framework for panoptic, instance and semantic segmentation and features significant performance and efficiency improvements over MaskFormer.
 
 The abstract from the paper is the following:
 
@@ -44,10 +44,24 @@ Tips:
 This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
 The original code can be found [here](https://github.com/facebookresearch/Mask2Former).
 
+## MaskFormer specific outputs
+
+[[autodoc]] models.mask2former.modeling_mask2former.Mask2FormerModelOutput
+
+[[autodoc]] models.mask2former.modeling_mask2former.Mask2FormerForInstanceSegmentationOutput
 
 ## Mask2FormerConfig
 
 [[autodoc]] Mask2FormerConfig
+
+## Mask2FormerImageProcessor
+
+[[autodoc]] Mask2FormerImageProcessor
+    - preprocess
+    - encode_inputs
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
 
 ## Mask2FormerFeatureExtractor
 

@@ -198,7 +198,10 @@ class OriginalMask2FormerCheckpointToOursConverter:
         for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
             """
-            print(src_key) print(dst_key) print(dst_state_dict[dst_key]) print()
+            print(src_key)
+            print(dst_key) 
+            print(dst_state_dict[dst_key]) 
+            print()
             """
 
     def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig):
@@ -824,8 +827,12 @@ def test(
 
         # let's test the full model
         original_model_out = original_model([{"image": x.squeeze(0)}])
+        print(original_model_out[0]["instances"])
+        print(original_model_out[0]["instances"].pred_masks.shape)
+        print(original_model_out[0]["instances"].scores.shape)
 
-        original_segmentation = original_model_out[0]["sem_seg"]
+        original_segmentation = original_model_out[0]["instances"]
+
 
         our_model_out: Mask2FormerForInstanceSegmentationOutput = our_model(x)
 
