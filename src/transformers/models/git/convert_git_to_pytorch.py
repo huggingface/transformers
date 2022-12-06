@@ -26,7 +26,6 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from decord import VideoReader, cpu
 from huggingface_hub import hf_hub_download
 from transformers import (
     AutoTokenizer,
@@ -55,7 +54,11 @@ def get_git_config(model_name):
     vision_config = GitVisionConfig(image_size=image_size)
 
     if "large" in model_name:
-        vision_config = GitVisionConfig.from_pretrained("openai/clip-vit-large-patch14")
+        vision_config.patch_size = 14
+        vision_config.hidden_size = 1024
+        vision_config.intermediate_size = 4096
+        vision_config.num_hidden_layers = 24
+        vision_config.num_attention_heads = 16
 
     num_image_with_embedding = 6 if "vatex" in model_name else None
     config = GitConfig(vision_config=vision_config.to_dict(), num_image_with_embedding=num_image_with_embedding)
@@ -189,6 +192,8 @@ def prepare_img(model_name):
 
 
 def prepare_video():
+    from decord import VideoReader, cpu
+
     def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         converted_len = int(clip_len * frame_sample_rate)
         end_idx = np.random.randint(converted_len, seg_len)
@@ -238,21 +243,34 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         ),
     }
 
+    model_name_to_path = {
+        "git-large": "/Users/nielsrogge/Documents/GIT/git_large_model.pt",
+    }
+
     # define GIT configuration based on model name
     config, image_size = get_git_config(model_name)
-    # load original state_dict from URL
-    checkpoint_url = model_name_to_url[model_name]
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["model"]
+    # define GIT configuration based on model name
+    config, image_size = get_git_config(model_name)
+    if "large" in model_name:
+        # large checkpoints take way too long to download
+        checkpoint_path = model_name_to_path[model_name]
+        state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    else:
+        checkpoint_url = model_name_to_url[model_name]
+        state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[
+            "model"
+        ]
     # TODO remove line below
     # state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
     # rename keys
-    prefix = "module." if model_name in ["git-base", "git-large"] else ""
+    prefix = "module." if model_name == "git-base" else ""
     rename_keys = create_rename_keys(config, prefix=prefix)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config, prefix=prefix)
 
     # load HuggingFace model
+    print("Vision encoder hidden size:", config.vision_config.hidden_size)
     config.use_cache = False
     model = GitForCausalLM(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
@@ -301,9 +319,11 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         expected_slice_logits = torch.tensor([-0.8570, -0.8568, -0.8561])
     elif model_name == "git-base-textvqa":
         expected_slice_logits = torch.tensor([-1.4085, -1.4083, -1.4082])
+    elif model_name == "git-large":
+        expected_slice_logits = torch.tensor([-1.1708, -1.1707, -1.1705])
 
     if "vatex" not in model_name:
-        # TODO add logits for VATEX model
+        # TODO add logits for VATEX models (due to sampling of frames not deterministic atm)
         assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
         print("Looks ok!")
 
@@ -331,7 +351,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     input_ids = tokenizer(prompt, add_special_tokens=False).input_ids
     input_ids = [tokenizer.cls_token_id] + input_ids
     input_ids = torch.tensor(input_ids).unsqueeze(0)
-    print("Question:", tokenizer.decode(input_ids[0]) if input_ids is not None else None)
+    print("Prompt:", tokenizer.decode(input_ids[0]) if input_ids is not None else None)
     generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
     print("Generated caption:", tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
 
