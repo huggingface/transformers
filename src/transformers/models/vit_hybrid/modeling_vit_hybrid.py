@@ -50,7 +50,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/vit-base-r50-s16-384",
-    # See all ViT hybrid models at https://huggingface.co/models?filter=vit
+    # See all ViT hybrid models at https://huggingface.co/models?filter=vit-hybrid
 ]
 
 

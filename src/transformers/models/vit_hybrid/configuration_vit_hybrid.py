@@ -36,7 +36,7 @@ class ViTHybridConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ViTHybridModel`]. It is used to instantiate a ViT
     Hybrid model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ViT Hybrid
-    [google/vit-base-r50-s16-384](https://huggingface.co/google/vit-base-r50-s16-384) architecture.
+    [google/vit-hybrid-base-bit-384](https://huggingface.co/google/vit-hybrid-base-bit-384) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -84,7 +84,7 @@ class ViTHybridConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "vit"
+    model_type = "vit-hybrid"
 
     def __init__(
         self,

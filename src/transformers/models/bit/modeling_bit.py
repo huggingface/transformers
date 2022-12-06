@@ -48,7 +48,7 @@ _CONFIG_FOR_DOC = "BitConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "google/resnetnv2-50"
+_CHECKPOINT_FOR_DOC = "google/bit-50"
 _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 
 # Image classification docstring
