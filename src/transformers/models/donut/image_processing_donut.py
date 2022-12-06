@@ -210,7 +210,8 @@ class DonutImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize the image to the specified size using thumbnail method.
+        Resize the image to make a thumbnail. The image is resized so that no dimension is larger than any
+        corresponding dimension of the specified size.
 
         Args:
             image (`np.ndarray`):
@@ -222,10 +223,24 @@ class DonutImageProcessor(BaseImageProcessor):
             data_format (`Optional[Union[str, ChannelDimension]]`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
         """
-        min_size = min(size["height"], size["width"])
-        max_size = max(size["height"], size["width"])
-        output_size = get_resize_output_image_size(image, min_size, default_to_square=False, max_size=max_size)
-        return resize(image, size=output_size, resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs)
+        input_height, input_width = get_image_size(image)
+        output_height, output_width = size["height"], size["width"]
+
+        # We always resize to the smallest of either the input or output size.
+        height = min(input_height, output_height)
+        width = min(input_width, output_width)
+
+        if height == input_height and width == input_width:
+            return image
+
+        if input_height > input_width:
+            width = int(input_width * height / input_height)
+        else:
+            height = int(input_height * width / input_width)
+
+        return resize(
+            image, size=(height, width), resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs
+        )
 
     def resize(
         self,
