@@ -490,7 +490,9 @@ class T5Attention(nn.Module):
                     # (batch_size, n_heads, key_length, dim_per_head)
                     hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
                 elif past_key_value.shape[2] != key_value_states.shape[1]:
-                    # to support prefix tuning
+                    # checking that the `sequence_length` of the `past_key_value` is the same as
+                    # the provided `key_value_states` to support prefix tuning
+                    # cross-attn
                     # (batch_size, n_heads, seq_length, dim_per_head)
                     hidden_states = shape(proj_layer(key_value_states))
                 else:
