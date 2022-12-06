@@ -1462,6 +1462,7 @@ class MaskedAttentionDecoderLayer(nn.Module):
             #     output_attentions=output_attentions,
             # )
 
+
             hidden_states = self.encoder_attn(
                 query=self.with_pos_embed(hidden_states, query_position_embeddings),
                 key=self.with_pos_embed(encoder_hidden_states[level_index], position_embeddings[level_index]),
@@ -1484,9 +1485,11 @@ class MaskedAttentionDecoderLayer(nn.Module):
 
         query = key = self.with_pos_embed(hidden_states, query_position_embeddings)
 
+        
         hidden_states = self.self_attn(
             query=query, key=key, value=hidden_states, attn_mask=None, key_padding_mask=None
         )[0]
+
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -1642,6 +1645,8 @@ class MaskedAttentionDecoder(nn.Module):
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
         mask_predictions = ()
 
+        inputs_embeds = self.layernorm(inputs_embeds)
+
         predicted_mask, attention_mask = self.mask_predictor(inputs_embeds, pixel_embeddings, feature_size_list[0])
         mask_predictions += (predicted_mask,)
 
@@ -1660,7 +1665,7 @@ class MaskedAttentionDecoder(nn.Module):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         return module(*inputs, output_attentions)
-
+            
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
@@ -1671,8 +1676,10 @@ class MaskedAttentionDecoder(nn.Module):
                     encoder_attention_mask,
                     None,
                 )
+
             else:
                 level_index = idx % self.num_feature_levels
+
                 attention_mask[torch.where(attention_mask.sum(-1) == attention_mask.shape[-1])] = False
 
                 layer_outputs = decoder_layer(
@@ -1686,12 +1693,14 @@ class MaskedAttentionDecoder(nn.Module):
                     output_attentions=output_attentions,
                 )
 
+                decoder_norm_output = self.layernorm(layer_outputs[0])
                 predicted_mask, attention_mask = self.mask_predictor(
-                    layer_outputs[0], pixel_embeddings, feature_size_list[(idx + 1) % self.num_feature_levels]
+                    decoder_norm_output, pixel_embeddings, feature_size_list[(idx + 1) % self.num_feature_levels]
                 )
 
                 mask_predictions += (predicted_mask,)
-
+                # intermediate += (decoder_norm_output,)
+            
             hidden_states = layer_outputs[0]
 
             if self.config.auxiliary_loss:
@@ -1705,11 +1714,12 @@ class MaskedAttentionDecoder(nn.Module):
                     all_cross_attentions += (layer_outputs[2],)
 
         # finally, apply layernorm
-        hidden_states = self.layernorm(hidden_states)
+        # hidden_states = self.layernorm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
+            
 
         # stack intermediate decoder activations
         if self.config.auxiliary_loss:
@@ -3040,7 +3050,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
             encoder_last_hidden_state=features[-1] if output_hidden_states else (),
             decoder_last_hidden_state=decoder_output.last_hidden_state,  # per pixel embedding
             encoder_hidden_states=tuple(features) if output_hidden_states else (),
-            decoder_hidden_states=decoder_output.hidden_states,  # multi-scale feature
+            decoder_hidden_states=decoder_output.hidden_states,  # multi-scale features
         )
 
 
@@ -3076,7 +3086,7 @@ class Mask2FormerTransformerModule(nn.Module):
                 for _ in range(self.num_feature_levels)
             ]
         )
-        # print("self.input_projection:", self.input_projection)
+        
 
         self.decoder = MaskedAttentionDecoder(config=config.decoder_config, mask_feature_size=config.mask_feature_size)
 
@@ -3106,10 +3116,7 @@ class Mask2FormerTransformerModule(nn.Module):
 
         queries_embeddings = self.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
         learnable_queries = self.learnable_queries.weight.unsqueeze(1).repeat(1, batch_size, 1)
-        """
-        print("learnable_queries:", learnable_queries.shape) print("queries_embeddings:", queries_embeddings.shape)
-        print("feature_size_list:", feature_size_list)
-        """
+        
 
         output = self.decoder(
             inputs_embeds=learnable_queries,
@@ -3277,7 +3284,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
 
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=pixel_values.device)
-
+        
         pixel_level_module_output = self.pixel_level_module(pixel_values, output_hidden_states)
 
         multi_scale_features = pixel_level_module_output.decoder_hidden_states
@@ -3439,8 +3446,8 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         else:
             transformer_decoder_outputs = outputs.transformer_decoder_last_hidden_state
 
-        class_queries_logits = self.class_predictor(transformer_decoder_outputs.transpose(0, 1))
-
+        class_queries_logits = self.class_predictor(transformer_decoder_outputs.transpose(0, 1))        
+        
         masks_queries_logits = outputs.masks_queries_logits
 
         if self.config.use_auxiliary_loss:
