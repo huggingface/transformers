@@ -30,14 +30,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import BitBackbone, BitForImageClassification, BitModel
+    from transformers import BitBackbone, BitForImageClassification, BitImageProcessor, BitModel
     from transformers.models.bit.modeling_bit import BIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import AutoFeatureExtractor
 
 
 class BitModelTester:
@@ -276,9 +274,7 @@ class BitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            AutoFeatureExtractor.from_pretrained(BIT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
+            BitImageProcessor.from_pretrained(BIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]) if is_vision_available() else None
         )
 
     @slow
