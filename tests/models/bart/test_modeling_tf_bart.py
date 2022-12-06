@@ -330,8 +330,9 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
             # Replace last id with EOS token
             new_vocab_input_ids = new_vocab_input_ids[:, :-1]
-            new_vocab_input_ids = tf.concat([new_vocab_input_ids,
-                tf.ones((tf.shape(new_vocab_input_ids)[0], 1), dtype=tf.int32) * 2], axis=1)
+            new_vocab_input_ids = tf.concat(
+                [new_vocab_input_ids, tf.ones((tf.shape(new_vocab_input_ids)[0], 1), dtype=tf.int32) * 2], axis=1
+            )
 
             inputs_dict[ids_feat_name] = new_vocab_input_ids
             if "input_ids" in inputs_dict:
