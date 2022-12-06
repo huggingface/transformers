@@ -3238,6 +3238,8 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, Mask2FormerSwinEncoder):
             module.gradient_checkpointing = value
+        if isinstance(module, Mask2FormerPixelDecoder):
+            module.gradient_checkpointing = value
         if isinstance(module, MaskedAttentionDecoder):
             module.gradient_checkpointing = value
 
