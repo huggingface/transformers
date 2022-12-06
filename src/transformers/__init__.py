@@ -200,6 +200,7 @@ _import_structure = {
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": [],
+    "models.cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CPMAntConfig", "CPMAntTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models.data2vec": [
@@ -622,6 +623,7 @@ else:
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
+    _import_structure["models.cpmant"].append("CPMAntTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.deberta_v2"].append("DebertaV2TokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
@@ -890,6 +892,7 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -904,7 +907,6 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
-
     _import_structure["models.audio_spectrogram_transformer"].extend(
         [
             "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -913,6 +915,7 @@ else:
             "ASTPreTrainedModel",
         ]
     )
+
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
@@ -1181,6 +1184,21 @@ else:
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cpmant"].extend(
+        [
+            "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CPMAntForCausalLM",
+            "CPMAntForMaskedLM",
+            "CPMAntForMultipleChoice",
+            "CPMAntForQuestionAnswering",
+            "CPMAntForSequenceClassification",
+            "CPMAntForTokenClassification",
+            "CPMAntLayer",
+            "CPMAntModel",
+            "CPMAntPreTrainedModel",
+            "load_tf_weights_in_cpmant",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -3462,6 +3480,7 @@ if TYPE_CHECKING:
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
+    from .models.cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CPMAntConfig, CPMAntTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.data2vec import (
@@ -3849,6 +3868,7 @@ if TYPE_CHECKING:
         from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
+        from .models.cpmant import CPMAntTokenizerFast
         from .models.deberta import DebertaTokenizerFast
         from .models.deberta_v2 import DebertaV2TokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
@@ -4059,8 +4079,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4308,6 +4326,21 @@ if TYPE_CHECKING:
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,
+        )
+
+        # PyTorch model imports
+        from .models.cpmant import (
+            CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CPMAntForCausalLM,
+            CPMAntForMaskedLM,
+            CPMAntForMultipleChoice,
+            CPMAntForQuestionAnswering,
+            CPMAntForSequenceClassification,
+            CPMAntForTokenClassification,
+            CPMAntLayer,
+            CPMAntModel,
+            CPMAntPreTrainedModel,
+            load_tf_weights_in_cpmant,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
