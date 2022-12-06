@@ -214,8 +214,8 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
         do_center_crop=True,
         crop_size={"height": timm_transforms[1].size[0], "width": timm_transforms[1].size[1]},
         do_normalize=True,
-        image_mean=timm_transforms[-1].mean,
-        image_std=timm_transforms[-1].std,
+        image_mean=timm_transforms[-1].mean.tolist(),
+        image_std=timm_transforms[-1].std.tolist(),
     )
 
     image = prepare_img()
@@ -250,8 +250,8 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
 
     if push_to_hub:
         print(f"Pushing model and processor to the hub {vit_name}")
-        model.push_to_hub(f"nielsr/{vit_name}")
-        processor.push_to_hub(f"nielsr/{vit_name}")
+        model.push_to_hub(f"ybelkada/{vit_name}")
+        processor.push_to_hub(f"ybelkada/{vit_name}")
 
 
 if __name__ == "__main__":

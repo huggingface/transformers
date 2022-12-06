@@ -121,8 +121,8 @@ def convert_bit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         do_center_crop=True,
         crop_size={"height": timm_transforms[1].size[0], "width": timm_transforms[1].size[1]},
         do_normalize=True,
-        image_mean=timm_transforms[-1].mean,
-        image_std=timm_transforms[-1].std,
+        image_mean=timm_transforms[-1].mean.tolist(),
+        image_std=timm_transforms[-1].std.tolist(),
     )
 
     image = prepare_img()
@@ -152,8 +152,8 @@ def convert_bit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     if push_to_hub:
         print(f"Pushing model {model_name} and processor to the hub")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"ybelkada/{model_name}")
+        processor.push_to_hub(f"ybelkada/{model_name}")
 
 
 if __name__ == "__main__":
