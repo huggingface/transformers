@@ -76,6 +76,7 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
         intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
             Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
+
     last_hidden_states: torch.FloatTensor = None
     intermediate_activations: Optional[Tuple[torch.FloatTensor]] = None
 

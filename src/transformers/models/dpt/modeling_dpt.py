@@ -38,15 +38,15 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithIntermediateActivations,
     BaseModelOutputWithPooling,
     DepthEstimatorOutput,
     SemanticSegmenterOutput,
-    BaseModelOutputWithIntermediateActivations,
 )
-from ..auto import AutoBackbone
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
+from ..auto import AutoBackbone
 from .configuration_dpt import DPTConfig
 
 
@@ -67,7 +67,6 @@ DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.vit_hybrid.modeling_vit_hybrid.ViTHybridPatchEmbeddings with ViTHybrid->DPTViTHybrid
 class DPTViTHybridEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -90,7 +89,7 @@ class DPTViTHybridEmbeddings(nn.Module):
             raise ValueError(
                 f"Expected backbone to have 3 output features, got {len(config.backbone_config.out_features)}"
             )
-        self.residual_feature_map_index = [0, 1] # Always take the output of the first and second backbone stage
+        self.residual_feature_map_index = [0, 1]  # Always take the output of the first and second backbone stage
 
         if feature_size is None:
             with torch.no_grad():
@@ -151,7 +150,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         )
 
         backbone_output = self.backbone(pixel_values)
-        
+
         features = backbone_output.feature_maps[-1]
 
         output_hidden_states = [backbone_output.feature_maps[index] for index in self.residual_feature_map_index]
@@ -222,9 +221,7 @@ class DPTViTEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        return BaseModelOutputWithIntermediateActivations(
-            last_hidden_states=embeddings
-        )
+        return BaseModelOutputWithIntermediateActivations(last_hidden_states=embeddings)
 
 
 class DPTViTPatchEmbeddings(nn.Module):
@@ -540,19 +537,16 @@ class DPTReassembleStage(nn.Module):
             self._init_reassemble_dpt_hybrid(config)
         else:
             self._init_reassemble_dpt(config)
-    
+
     def _init_reassemble_dpt_hybrid(self, config):
-        r""""
-        This needs to be re-defined since for `DPTHybrid` the first 2 reassemble layers are set to 
-        `nn.Identity()`. 
+        r""" "
+        This needs to be re-defined since for `DPTHybrid` the first 2 reassemble layers are set to `nn.Identity()`.
         """
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
             if i <= 1:
                 self.layers.append(nn.Identity())
             elif i > 1:
-                self.layers.append(
-                    DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor)
-                )
+                self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
@@ -563,7 +557,7 @@ class DPTReassembleStage(nn.Module):
                     self.readout_projects.append(
                         nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
                     )
-    
+
     def _init_reassemble_dpt(self, config):
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
             self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
@@ -575,7 +569,7 @@ class DPTReassembleStage(nn.Module):
                     nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    def forward(self, hidden_states: List[torch.Tensor], ignore_index: Optional[List]=[]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], ignore_index: Optional[List] = []) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
@@ -1094,7 +1088,9 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             ]
         else:
             backbone_hidden_states = outputs.intermediate_activations
-            backbone_hidden_states.extend(feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices[2:])
+            backbone_hidden_states.extend(
+                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices[2:]
+            )
 
             hidden_states = backbone_hidden_states
 

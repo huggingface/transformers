@@ -14,6 +14,8 @@
 # limitations under the License.
 """ DPT model configuration"""
 
+import copy
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..bit import BitConfig
@@ -146,7 +148,7 @@ class DPTConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
-        
+
         self.embedding_type = embedding_type
         if embedding_type not in ["patch_embedding", "vit_hybrid"]:
             raise ValueError("Embedding type must be one of ['patch_embedding', 'vit_hybrid']")
@@ -164,7 +166,7 @@ class DPTConfig(PretrainedConfig):
         else:
             self.backbone_config = None
             self.is_hybrid = False
-        
+
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -191,3 +193,16 @@ class DPTConfig(PretrainedConfig):
         self.auxiliary_loss_weight = auxiliary_loss_weight
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.semantic_classifier_dropout = semantic_classifier_dropout
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        if self.backbone_config is not None:
+            self.backbone_config = self.backbone_config.to_dict()
+
+        output = copy.deepcopy(self.__dict__)
+
+        output["model_type"] = self.__class__.model_type
+        return output
