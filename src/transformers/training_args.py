@@ -73,7 +73,7 @@ log_levels = logging.get_log_levels_dict().copy()
 trainer_log_levels = dict(**log_levels, passive=-1)
 
 
-DYNAMO_BACKENDS = [
+TORCH_COMPILE_BACKENDS = [
     "eager",
     "aot_eager",
     "inductor",
@@ -983,8 +983,8 @@ class TrainingArguments:
     torchdynamo: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Sets up the backend compiler for TorchDynamo.",
-            "choices": DYNAMO_BACKENDS,
+            "help": "This argument is deprecated, use `--torch_compile_backend` instead.",
+            "choices": TORCH_COMPILE_BACKENDS,
         },
     )
     ray_scope: Optional[str] = field(
@@ -1004,6 +1004,20 @@ class TrainingArguments:
         default=1800,
         metadata={
             "help": "Overrides the default timeout for distributed training (value should be given in seconds)."
+        },
+    )
+    torch_compile_backend: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Which backend to use with `torch.compile`, passing one will trigger a model compilation.",
+            "choices": TORCH_COMPILE_BACKENDS,
+        },
+    )
+    torch_compile_mode: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Which mode to use with `torch.compile`, passing one will trigger a model compilation.",
+            "choices": ["default", "reduce-overhead", "max-autotune"],
         },
     )
 
@@ -1148,10 +1162,22 @@ class TrainingArguments:
                 " (`--bf16_full_eval`) can only be used on CUDA or CPU devices."
             )
 
-        if self.framework == "pt" and is_torch_available() and self.torchdynamo is not None:
+        if self.torchdynamo is not None:
+            warnings.warn(
+                "`torchdynamo` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
+                " `torch_compile_backend` instead",
+                FutureWarning,
+            )
+            self.torch_compile_backend = self.torchdynamo
+        if self.torch_compile_mode is not None and self.torch_compile_backend is not None:
+            self.torch_compile_backend = "inductor"
+        if self.framework == "pt" and is_torch_available() and self.torch_compile_backend is not None:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
-                    logger.info("Setting TF32 in CUDA backends to speedup torchdynamo.")
+                    logger.info(
+                        "Setting TF32 in CUDA backends to speedup torch compile, you won't see any improvement"
+                        " otherwise."
+                    )
                     torch.backends.cuda.matmul.allow_tf32 = True
             else:
                 logger.warning(
