@@ -67,7 +67,7 @@ class GPTSw3PreTrainedModel(PreTrainedModel):
 
     config_class = GPTSw3Config
     base_model_prefix = "transformer"
-    is_parallelizable = True
+    is_parallelizable = False
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPT2Block"]
 
