@@ -24,12 +24,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import (
-    DPTFeatureExtractor,
-    DPTConfig,
-    DPTForDepthEstimation,
-    DPTForSemanticSegmentation,
-)
+from transformers import DPTConfig, DPTFeatureExtractor, DPTForDepthEstimation, DPTForSemanticSegmentation
 from transformers.utils import logging
 
 
@@ -201,9 +196,7 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"dpt.encoder.layer.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"dpt.encoder.layer.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
         state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
         state_dict[f"dpt.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
@@ -214,9 +207,7 @@ def read_in_q_k_v(state_dict, config):
         state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
             -config.hidden_size :, :
         ]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[
-            -config.hidden_size :
-        ]
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
 # We will verify our results on an image of cute cats
@@ -247,9 +238,7 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
-    model = (
-        DPTForSemanticSegmentation(config) if "ade" in checkpoint_url else DPTForDepthEstimation(config)
-    )
+    model = DPTForSemanticSegmentation(config) if "ade" in checkpoint_url else DPTForDepthEstimation(config)
     model.load_state_dict(state_dict)
     model.eval()
 
@@ -265,17 +254,17 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
 
     if show_prediction:
         prediction = (
-                    torch.nn.functional.interpolate(
-                        outputs.unsqueeze(1),
-                        size=(image.size[1], image.size[0]),
-                        mode="bicubic",
-                        align_corners=False,
-                    )
-                    .squeeze()
-                    .cpu()
-                    .numpy()
+            torch.nn.functional.interpolate(
+                outputs.unsqueeze(1),
+                size=(image.size[1], image.size[0]),
+                mode="bicubic",
+                align_corners=False,
             )
-    
+            .squeeze()
+            .cpu()
+            .numpy()
+        )
+
         Image.fromarray((prediction / prediction.max()) * 255).show()
 
     # # Assert logits
@@ -294,7 +283,6 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     model.save_pretrained(pytorch_dump_folder_path)
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
-
 
 
 if __name__ == "__main__":

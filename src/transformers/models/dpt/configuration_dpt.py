@@ -199,10 +199,10 @@ class DPTConfig(PretrainedConfig):
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
-        if self.backbone_config is not None:
-            self.backbone_config = self.backbone_config.to_dict()
-
         output = copy.deepcopy(self.__dict__)
+
+        if output["backbone_config"] is not None:
+            output["backbone_config"] = self.backbone_config.to_dict()
 
         output["model_type"] = self.__class__.model_type
         return output
