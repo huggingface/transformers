@@ -194,7 +194,9 @@ class PegasusAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]` check to support prefix tuning
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
         if (
             is_cross_attention
             and past_key_value is not None
