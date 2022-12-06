@@ -14,7 +14,7 @@ jobs:
         shell: bash -l {0}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Load cached virtual environment
         uses: actions/cache@v2
