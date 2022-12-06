@@ -749,3 +749,58 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
             scores[:, :] = -float("inf")
             scores[:, current_token] = 0
         return scores
+
+
+class TimeStampLogitsProcessor(LogitsProcessor):
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
+    are sampled at their corresponding index."""
+
+    def __init__(
+        self,
+        begin_index,
+        timestamp_begin,
+        eos_token_id,
+        no_timestamps_token_id,
+        n_audio_ctx,
+        max_initial_timestamp=0,
+        chunk_length=30,
+    ):
+        self.begin_index = begin_index
+        self.timestamp_begin = timestamp_begin
+        self.eos_token_id = eos_token_id
+        self.no_timestamps_token_id = no_timestamps_token_id
+
+        precision = chunk_length / n_audio_ctx  # usually 0.02 seconds
+        self.max_initial_timestamp_index = round(max_initial_timestamp / precision)
+
+    def __call__(self, input_ids, scores):
+        # suppress <|notimestamps|> which is handled by without_timestamps
+        if self.no_timestamps_token_id is not None:
+            scores[:, self.no_timestamps_token_id] = -np.inf
+
+        # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
+        for k in range(input_ids.shape[0]):
+            seq = [t for t in input_ids[k, self.begin_index :].tolist()]
+            last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
+            penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
+
+            if last_was_timestamp:
+                if penultimate_was_timestamp:  # has to be non-timestamp
+                    scores[k, self.timestamp_begin :] = -np.inf
+                else:  # cannot be normal text tokens
+                    scores[k, : self.eos_token_id] = -np.inf
+
+            # apply the `max_initial_timestamp` option
+            if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
+                last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+                scores[:, last_allowed + 1 :] = -np.inf
+
+            # if sum of probability over timestamps is above any other token, sample timestamp
+            logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
+            for k in range(input_ids.shape[0]):
+                timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
+                max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
+                if timestamp_logprob > max_text_token_logprob:
+                    scores[k, : self.timestamp_begin] = -np.inf
+
+        return scores
