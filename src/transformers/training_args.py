@@ -1187,10 +1187,10 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.torch_compile_backend = self.torchdynamo
-        if self.torch_compile_mode is not None and self.torch_compile_backend is not None:
-            self.torch_compile_backend = "inductor"
-        if self.torch_compile_backend is not None and not self.torch_compile:
+        if (self.torch_compile_mode is not None or self.torch_compile_backend is not None) and not self.torch_compile:
             self.torch_compile = True
+        if self.torch_compile and self.torch_compile_backend is None:
+            self.torch_compile_backend = "inductor"
         if self.framework == "pt" and is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
