@@ -19,11 +19,10 @@ import unittest
 
 import numpy as np
 
-from transformers import AltCLIPConfig, AltCLIPTextConfig, is_torch_available
+from transformers import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...models.clip.test_modeling_clip import CLIPVisionModelTester
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -37,7 +36,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import AltCLIPModel, AltCLIPTextModel
+    from transformers import AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
     from transformers.models.altclip.modeling_altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -46,6 +45,97 @@ if is_vision_available():
     from transformers import AltCLIPProcessor
 
 
+class AltCLIPVisionModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        image_size=30,
+        patch_size=2,
+        num_channels=3,
+        is_training=True,
+        hidden_size=32,
+        projection_dim=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        dropout=0.1,
+        attention_dropout=0.1,
+        initializer_range=0.02,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.is_training = is_training
+        self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.scope = scope
+
+        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches + 1
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def get_config(self):
+        return AltCLIPVisionConfig(
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            num_channels=self.num_channels,
+            hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            initializer_range=self.initializer_range,
+        )
+
+    def create_and_check_model(self, config, pixel_values):
+        model = AltCLIPVisionModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+    # def create_and_check_model_with_projection(self, config, pixel_values):
+    #     model = AltCLIPVisionModelWithProjection(config=config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     with torch.no_grad():
+    #         result = model(pixel_values)
+    #     # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+    #     image_size = (self.image_size, self.image_size)
+    #     patch_size = (self.patch_size, self.patch_size)
+    #     num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+    #     self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+    #     self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
 class AltCLIPTextModelTester:
     def __init__(
         self,
@@ -199,7 +289,7 @@ class AltCLIPModelTester:
 
         self.parent = parent
         self.text_model_tester = AltCLIPTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = CLIPVisionModelTester(parent, **vision_kwargs)
+        self.vision_model_tester = AltCLIPVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -271,23 +361,24 @@ class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
-        model = self.model_class(config=configs_no_init)
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                # check if `logit_scale` is initilized as per the original implementation
-                if name == "logit_scale":
-                    self.assertAlmostEqual(
-                        param.data.item(),
-                        np.log(1 / 0.07),
-                        delta=1e-3,
-                        msg=f"Parameter {name} of model {self.model_class} seems not properly initialized",
-                    )
-                else:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {self.model_class} seems not properly initialized",
-                    )
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    # check if `logit_scale` is initilized as per the original implementation
+                    if name == "logit_scale":
+                        self.assertAlmostEqual(
+                            param.data.item(),
+                            np.log(1 / 0.07),
+                            delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

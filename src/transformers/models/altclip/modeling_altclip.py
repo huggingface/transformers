@@ -960,6 +960,123 @@ class AltRobertaModel(AltRobertaPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+class AltCLIPPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = AltCLIPConfig
+    base_model_prefix = "altclip"
+    supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        factor = self.config.initializer_factor
+        # if isinstance(module, CLIPTextEmbeddings):
+        #     module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        #     module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        if isinstance(module, AltCLIPVisionEmbeddings):
+            factor = self.config.initializer_factor
+            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+        elif isinstance(module, AltCLIPAttention):
+            factor = self.config.initializer_factor
+            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim**-0.5) * factor
+            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+        elif isinstance(module, AltCLIPMLP):
+            factor = self.config.initializer_factor
+            in_proj_std = (
+                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            )
+            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
+            nn.init.normal_(module.fc1.weight, std=fc_std)
+            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+        elif isinstance(module, AltCLIPModel):
+            nn.init.normal_(
+                module.text_projection.weight,
+                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
+            )
+            nn.init.normal_(
+                module.visual_projection.weight,
+                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
+            )
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, AltCLIPEncoder):
+            module.gradient_checkpointing = value
+
+
+class AltCLIPVisionModel(AltCLIPPreTrainedModel):
+    config_class = AltCLIPVisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: AltCLIPVisionConfig):
+        super().__init__(config)
+        self.vision_model = AltCLIPVisionTransformer(config)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @add_start_docstrings_to_model_forward(ALTCLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AltCLIPVisionConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import CLIPProcessor, CLIPVisionModel
+
+        >>> model = AltCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = AltCLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        return self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
 
 class AltCLIPTextModel(AltRobertaPreTrainedModel):
 
@@ -994,7 +1111,7 @@ class AltCLIPTextModel(AltRobertaPreTrainedModel):
     ):
         r""" """
 
-        return_dict = return_dict if return_dict is not None else True
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.roberta(
             input_ids=input_ids,
@@ -1017,16 +1134,17 @@ class AltCLIPTextModel(AltRobertaPreTrainedModel):
         sequence_output = self.pre_LN(sequence_output)
 
         # pooler
-        pooler_output = self.pooler(sequence_output)
-        pooler_output = self.transformation(pooler_output)
         projection_state = self.transformation(sequence_output)
+        pooler_output = self.pooler(projection_state)
+
+        if not return_dict:
+            return ( projection_state, pooler_output ) + outputs[2:4]
 
         return BaseModelOutputWithPoolingAndprojection(
+            last_hidden_state=projection_state,
             pooler_output=pooler_output,
-            last_hidden_state=outputs[0],
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            projection_state=projection_state,
         )
 
 
@@ -1439,69 +1557,6 @@ class AltCLIPOutput(ModelOutput):
         )
 
 
-class AltCLIPPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = AltCLIPConfig
-    base_model_prefix = "altclip"
-    supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_factor
-        # if isinstance(module, CLIPTextEmbeddings):
-        #     module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        #     module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        if isinstance(module, AltCLIPVisionEmbeddings):
-            factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, AltCLIPAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, AltCLIPMLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, AltCLIPModel):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, AltCLIPEncoder):
-            module.gradient_checkpointing = value
-
 
 class AltCLIPModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPConfig
@@ -1576,7 +1631,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        pooled_output = text_outputs.pooler_output
+        pooled_output = text_outputs[0]
         text_features = self.text_projection(pooled_output)
 
         return text_features
@@ -1687,8 +1742,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         image_embeds = vision_outputs[1]
         image_embeds = self.visual_projection(image_embeds)
 
-        # text_embeds = self.text_model.get_text_embeds(text_outputs['pooler_output'],clip_outputs[1])
-        text_embeds = text_outputs.pooler_output
+        text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features

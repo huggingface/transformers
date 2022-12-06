@@ -128,6 +128,7 @@ _import_structure = {
         "AltCLIPConfig",
         "AltCLIPProcessor",
         "AltCLIPTextConfig",
+        "AltCLIPVisionConfig",
     ],
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -911,6 +912,7 @@ else:
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
             "AltCLIPModel",
             "AltCLIPTextModel",
+            "AltCLIPVisionModel",
         ]
     )
 
@@ -3379,6 +3381,7 @@ if TYPE_CHECKING:
         AltCLIPConfig,
         AltCLIPProcessor,
         AltCLIPTextConfig,
+        AltCLIPVisionConfig,
     )
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4056,7 +4059,7 @@ if TYPE_CHECKING:
         )
 
         # PyTorch model imports
-        from .models.altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST, AltCLIPModel, AltCLIPTextModel
+        from .models.altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST, AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ASTForAudioClassification,
