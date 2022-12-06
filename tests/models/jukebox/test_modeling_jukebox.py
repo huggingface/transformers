@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+from unittest import skip
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow
@@ -311,6 +312,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         torch.testing.assert_allclose(zs[2][0], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
+    @skip("Not enough GPU memory on CI runners")
     def test_slow_sampling(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         labels = [i.cuda() for i in self.prepare_inputs(self.model_id)]
