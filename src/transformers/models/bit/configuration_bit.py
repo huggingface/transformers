@@ -69,10 +69,10 @@ class BitConfig(PretrainedConfig):
     ```python
     >>> from transformers import BitConfig, BitModel
 
-    >>> # Initializing a BiT resnetv2-50 style configuration
+    >>> # Initializing a BiT bit-50 style configuration
     >>> configuration = BitConfig()
 
-    >>> # Initializing a model (with random weights) from the resnetv2-50 style configuration
+    >>> # Initializing a model (with random weights) from the bit-50 style configuration
     >>> model = BitModel(configuration)
 
     >>> # Accessing the model configuration
