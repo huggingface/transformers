@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 2
 
@@ -124,7 +124,7 @@ jobs:
           python3 utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
 
       - name: Report fetched tests
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: test_fetched
           path: /transformers/test_preparation.txt
@@ -232,7 +232,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
@@ -323,7 +323,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
@@ -409,7 +409,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
           path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
@@ -495,7 +495,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
           path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
@@ -545,7 +545,7 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         # To avoid failure when multiple commits are merged into `main` in a short period of time.
         # Checking out to an old commit beyond the fetch depth will get an error `fatal: reference is not a tree: ...
         # (Only required for `workflow_run` event, where we get the latest HEAD on `main` instead of the event commit)
@@ -560,7 +560,7 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
