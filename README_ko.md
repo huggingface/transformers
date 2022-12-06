@@ -45,7 +45,8 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hant.md">繁體中文</a> |
         <b>한국어</b> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a>
+        <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a>
     <p>
 </h4>
 
