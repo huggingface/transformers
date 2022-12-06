@@ -636,7 +636,7 @@ class Trainer:
         self._memory_tracker.stop_and_update_metrics()
 
         # torch.compile
-        if args.torch_compile_backend is not None and not is_torch_compile_available():
+        if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires a nighly install of PyTorch.")
 
     def add_callback(self, callback):
@@ -1314,7 +1314,7 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True, dataloader=None):
-        if self.args.torch_compile_backend is not None:
+        if self.args.torch_compile:
             model = torch.compile(backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode)(model)
 
         if self.args.use_ipex:
