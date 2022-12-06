@@ -36,14 +36,14 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_git import GITConfig, GITVisionConfig
+from .configuration_git import GitConfig, GitVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
 # TODO update checkpoint
 _CHECKPOINT_FOR_DOC = "nielsr/git-base"
-_CONFIG_FOR_DOC = "GITConfig"
+_CONFIG_FOR_DOC = "GitConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -54,8 +54,8 @@ GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->GIT
-class GITVisionModelOutput(ModelOutput):
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Git
+class GitVisionModelOutput(ModelOutput):
     """
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
@@ -98,7 +98,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-class GITEmbeddings(nn.Module):
+class GitEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
 
     def __init__(self, config):
@@ -144,7 +144,7 @@ class GITEmbeddings(nn.Module):
         return embeddings
 
 
-class GITSelfAttention(nn.Module):
+class GitSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -241,7 +241,7 @@ class GITSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in GITModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in GitModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -267,8 +267,8 @@ class GITSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->GIT
-class GITSelfOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+class GitSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -282,15 +282,15 @@ class GITSelfOutput(nn.Module):
         return hidden_states
 
 
-class GITAttention(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->GIT
+class GitAttention(nn.Module):
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->Git
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = GITSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = GITSelfOutput(config)
+        self.self = GitSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = GitSelfOutput(config)
         self.pruned_heads = set()
 
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads with Bert->GIT
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -329,8 +329,8 @@ class GITAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->GIT
-class GITIntermediate(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+class GitIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -345,8 +345,8 @@ class GITIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->GIT
-class GITOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOutput
+class GitOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -360,14 +360,14 @@ class GITOutput(nn.Module):
         return hidden_states
 
 
-class GITLayer(nn.Module):
+class GitLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = GITAttention(config)
-        self.intermediate = GITIntermediate(config)
-        self.output = GITOutput(config)
+        self.attention = GitAttention(config)
+        self.intermediate = GitIntermediate(config)
+        self.output = GitOutput(config)
 
     def forward(
         self,
@@ -408,12 +408,12 @@ class GITLayer(nn.Module):
         return layer_output
 
 
-class GITEncoder(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertEncoder.__init__ with Bert->GIT
+class GitEncoder(nn.Module):
+    # Copied from transformers.models.bert.modeling_bert.BertEncoder.__init__ with Bert->Git
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([GITLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([GitLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -504,70 +504,20 @@ class GITEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->GIT
-class GITPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->GIT
-class GITLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = GITPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->GIT
-class GITOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = GITLMPredictionHead(config)
-
-    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
-
-
-class GITPreTrainedModel(PreTrainedModel):
+class GitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = GITConfig
+    config_class = GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, GITVisionEmbeddings):
+        if isinstance(module, GitVisionEmbeddings):
             nn.init.normal_(module.class_embedding, mean=0.0, std=self.config.initializer_range)
             nn.init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
             nn.init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
@@ -586,7 +536,7 @@ class GITPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (GITEncoder, GITVisionEncoder)):
+        if isinstance(module, (GitEncoder, GitVisionEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -601,7 +551,7 @@ GIT_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`GITConfig`]): Model configuration class with all the parameters of the model.
+        config ([`GitConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -649,9 +599,9 @@ GIT_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->GIT
-class GITVisionEmbeddings(nn.Module):
-    def __init__(self, config: GITVisionConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Git
+class GitVisionEmbeddings(nn.Module):
+    def __init__(self, config: GitVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -681,7 +631,7 @@ class GITVisionEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP
-class GITVisionMLP(nn.Module):
+class GitVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -697,7 +647,7 @@ class GITVisionMLP(nn.Module):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPAttention
-class GITVisionAttention(nn.Module):
+class GitVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -801,14 +751,14 @@ class GITVisionAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->GITVision
-class GITVisionEncoderLayer(nn.Module):
-    def __init__(self, config: GITVisionConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->GitVision
+class GitVisionEncoderLayer(nn.Module):
+    def __init__(self, config: GitVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = GITVisionAttention(config)
+        self.self_attn = GitVisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.mlp = GITVisionMLP(config)
+        self.mlp = GitVisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -852,20 +802,20 @@ class GITVisionEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->GITVision, CLIPConfig
-class GITVisionEncoder(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->GitVision, CLIPConfig
+class GitVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`GITVisionEncoderLayer`].
+    [`GitVisionEncoderLayer`].
 
     Args:
-        config: GITVisionConfig
+        config: GitVisionConfig
     """
 
-    def __init__(self, config: GITVisionConfig):
+    def __init__(self, config: GitVisionConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([GITVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([GitVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -972,20 +922,20 @@ GIT_VISION_INPUTS_DOCSTRING = r"""
 """
 
 
-class GITVisionTransformer(nn.Module):
-    # Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer.__init__ with CLIPEncoder->GITVisionEncoder, CLIP->GIT
-    def __init__(self, config: GITVisionConfig):
+class GitVisionTransformer(nn.Module):
+    # Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer.__init__ with CLIPEncoder->GitVisionEncoder, CLIP->Git
+    def __init__(self, config: GitVisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = GITVisionEmbeddings(config)
+        self.embeddings = GitVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim)
-        self.encoder = GITVisionEncoder(config)
+        self.encoder = GitVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
     @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GITVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GitVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1039,14 +989,14 @@ class GITVisionTransformer(nn.Module):
     """The vision model from CLIP, used in GIT, without any head or projection on top.""",
     GIT_START_DOCSTRING,
 )
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP->GIT, openai/clip-vit-base-patch32->microsoft/git-base
-class GITVisionModel(GITPreTrainedModel):
-    config_class = GITVisionConfig
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP_VISION_INPUTS_DOCSTRING->GIT_VISION_INPUTS_DOCSTRING, CLIP->Git, openai/clip-vit-base-patch32->microsoft/git-base
+class GitVisionModel(GitPreTrainedModel):
+    config_class = GitVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: GITVisionConfig):
+    def __init__(self, config: GitVisionConfig):
         super().__init__(config)
-        self.vision_model = GITVisionTransformer(config)
+        self.vision_model = GitVisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1054,7 +1004,7 @@ class GITVisionModel(GITPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GITVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GitVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1070,10 +1020,10 @@ class GITVisionModel(GITPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import GITProcessor, GITVisionModel
+        >>> from transformers import GitProcessor, GitVisionModel
 
-        >>> model = GITVisionModel.from_pretrained("microsoft/git-base")
-        >>> processor = GITProcessor.from_pretrained("microsoft/git-base")
+        >>> model = GitVisionModel.from_pretrained("microsoft/git-base")
+        >>> processor = GitProcessor.from_pretrained("microsoft/git-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1094,8 +1044,8 @@ class GITVisionModel(GITPreTrainedModel):
         )
 
 
-class GITProjection(nn.Module):
-    def __init__(self, config: GITConfig):
+class GitProjection(nn.Module):
+    def __init__(self, config: GitConfig):
         super().__init__()
         self.config = config
         self.visual_projection = nn.Sequential(
@@ -1111,16 +1061,16 @@ class GITProjection(nn.Module):
     " without any specific head on top.",
     GIT_START_DOCSTRING,
 )
-class GITModel(GITPreTrainedModel):
+class GitModel(GitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = GITEmbeddings(config)
-        self.image_encoder = GITVisionModel(config.vision_config)
-        self.encoder = GITEncoder(config)
+        self.embeddings = GitEmbeddings(config)
+        self.image_encoder = GitVisionModel(config.vision_config)
+        self.encoder = GitEncoder(config)
 
-        self.visual_projection = GITProjection(config)
+        self.visual_projection = GitProjection(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1226,12 +1176,12 @@ class GITModel(GITPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import GITProcessor, GITModel
+        >>> from transformers import GitProcessor, GitModel
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = GITProcessor.from_pretrained("nielsr/git-base-coco")
-        >>> model = GITModel.from_pretrained("nielsr/git-base-coco")
+        >>> processor = GitProcessor.from_pretrained("nielsr/git-base-coco")
+        >>> model = GitModel.from_pretrained("nielsr/git-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1342,11 +1292,11 @@ class GITModel(GITPreTrainedModel):
 @add_start_docstrings(
     """GIT Model with a `language modeling` head on top for autoregressive language modeling.""", GIT_START_DOCSTRING
 )
-class GITForCausalLM(GITPreTrainedModel):
+class GitForCausalLM(GitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.git = GITModel(config)
+        self.git = GitModel(config)
         self.output = nn.Linear(config.hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
@@ -1395,12 +1345,12 @@ class GITForCausalLM(GITPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import GITProcessor, GITForCausalLM
+        >>> from transformers import GitProcessor, GitForCausalLM
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = GITProcessor.from_pretrained("nielsr/git-base-coco")
-        >>> model = GITForCausalLM.from_pretrained("nielsr/git-base-coco")
+        >>> processor = GitProcessor.from_pretrained("nielsr/git-base-coco")
+        >>> model = GitForCausalLM.from_pretrained("nielsr/git-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

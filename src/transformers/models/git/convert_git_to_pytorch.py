@@ -25,7 +25,7 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import AutoTokenizer, CLIPImageProcessor, GITConfig, GITForCausalLM, GITProcessor
+from transformers import AutoTokenizer, CLIPImageProcessor, GitConfig, GitForCausalLM, GitProcessor
 from transformers.utils import logging
 
 
@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_git_config(model_name):
-    config = GITConfig()
+    config = GitConfig()
 
     return config
 
@@ -206,7 +206,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     read_in_q_k_v(state_dict, config, prefix=prefix)
 
     # load HuggingFace model
-    model = GITForCausalLM(config)
+    model = GitForCausalLM(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model.eval()
 
@@ -217,7 +217,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     image_processor = CLIPImageProcessor()
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     tokenizer.model_input_names = ["input_ids", "attention_mask"]
-    processor = GITProcessor(tokenizer=tokenizer, feature_extractor=image_processor)
+    processor = GitProcessor(tokenizer=tokenizer, feature_extractor=image_processor)
 
     image = prepare_img()
     # pixel_values = processor(images=image, return_tensors="pt").pixel_values

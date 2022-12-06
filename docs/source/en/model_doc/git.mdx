@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 Tips:
 
 - GIT is implemented in a very similar way to GPT-2, the only difference being that the model is also conditioned on `pixel_values`.
-- One can use [`GITProcessor`] to prepare images for the model, and the `generate` method for autoregressive generation.
+- One can use [`GitProcessor`] to prepare images for the model, and the `generate` method for autoregressive generation.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/git_architecture.jpg"
 alt="drawing" width="600"/>
@@ -36,31 +36,31 @@ alt="drawing" width="600"/>
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/microsoft/GenerativeImage2Text).
 
-## GITVisionConfig
+## GitVisionConfig
 
-[[autodoc]] GITVisionConfig
+[[autodoc]] GitVisionConfig
 
-## GITVisionModel
+## GitVisionModel
 
-[[autodoc]] GITVisionModel
+[[autodoc]] GitVisionModel
     - forward
 
-## GITConfig
+## GitConfig
 
-[[autodoc]] GITConfig
+[[autodoc]] GitConfig
     - all
 
-## GITProcessor
+## GitProcessor
 
-[[autodoc]] GITProcessor
+[[autodoc]] GitProcessor
     - __call__
 
-## GITModel
+## GitModel
 
-[[autodoc]] GITModel
+[[autodoc]] GitModel
     - forward
 
-## GITForCausalLM
+## GitForCausalLM
 
-[[autodoc]] GITForCausalLM
+[[autodoc]] GitForCausalLM
     - forward

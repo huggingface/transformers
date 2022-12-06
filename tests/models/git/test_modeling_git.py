@@ -16,7 +16,7 @@
 import inspect
 import unittest
 
-from transformers import GITConfig, GITProcessor, GITVisionConfig, is_torch_available, is_vision_available
+from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_FOR_PRETRAINING_MAPPING, GITForCausalLM, GITModel, GITVisionModel
+    from transformers import MODEL_FOR_PRETRAINING_MAPPING, GitForCausalLM, GitModel, GitVisionModel
     from transformers.models.git.modeling_git import GIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -36,7 +36,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class GITVisionModelTester:
+class GitVisionModelTester:
     def __init__(
         self,
         parent,
@@ -82,7 +82,7 @@ class GITVisionModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return GITVisionConfig(
+        return GitVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -97,7 +97,7 @@ class GITVisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = GITVisionModel(config=config)
+        model = GitVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -117,21 +117,21 @@ class GITVisionModelTester:
 
 
 @require_torch
-class GITVisionModelTest(ModelTesterMixin, unittest.TestCase):
+class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as GIT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (GITVisionModel,) if is_torch_available() else ()
+    all_model_classes = (GitVisionModel,) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = GITVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GITVisionConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = GitVisionModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GitVisionConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -171,22 +171,22 @@ class GITVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="GITVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="GITVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in GIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GITVisionModel.from_pretrained(model_name)
+            model = GitVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class GITModelTester:
+class GitModelTester:
     def __init__(
         self,
         parent,
@@ -259,7 +259,7 @@ class GITModelTester:
         """
         Returns a tiny configuration by default.
         """
-        return GITConfig(
+        return GitConfig(
             vision_config={
                 "num_channels": self.num_channels,
                 "image_size": self.image_size,
@@ -278,7 +278,7 @@ class GITModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, pixel_values, token_labels):
-        model = GITModel(config=config)
+        model = GitModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -296,7 +296,7 @@ class GITModelTester:
         )
 
     def create_and_check_for_causal_lm(self, config, input_ids, input_mask, pixel_values, token_labels):
-        model = GITForCausalLM(config=config)
+        model = GitForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -335,10 +335,10 @@ class GITModelTester:
 
 
 @require_torch
-class GITModelTest(ModelTesterMixin, unittest.TestCase):
+class GitModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (GITModel, GITForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (GITForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_torchscript = False
 
@@ -357,8 +357,8 @@ class GITModelTest(ModelTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = GITModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GITConfig, hidden_size=37)
+        self.model_tester = GitModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GitConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -380,17 +380,17 @@ class GITModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in GIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GITModel.from_pretrained(model_name)
+            model = GitModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
 @require_vision
-class GITModelIntegrationTest(unittest.TestCase):
+class GitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_captioning(self):
-        processor = GITProcessor.from_pretrained("nielsr/git-base")
-        model = GITForCausalLM.from_pretrained("nielsr/git-base")
+        processor = GitProcessor.from_pretrained("nielsr/git-base")
+        model = GitForCausalLM.from_pretrained("nielsr/git-base")
         model.to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

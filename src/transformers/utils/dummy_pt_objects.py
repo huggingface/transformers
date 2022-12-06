@@ -2429,28 +2429,28 @@ def load_tf_weights_in_funnel(*args, **kwargs):
 GIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class GITForCausalLM(metaclass=DummyObject):
+class GitForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GITModel(metaclass=DummyObject):
+class GitModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GITPreTrainedModel(metaclass=DummyObject):
+class GitPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GITVisionModel(metaclass=DummyObject):
+class GitVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

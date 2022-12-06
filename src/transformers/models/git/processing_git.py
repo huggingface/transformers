@@ -19,12 +19,12 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-class GITProcessor(ProcessorMixin):
+class GitProcessor(ProcessorMixin):
     r"""
     Constructs a GIT processor which wraps a CLIP image processor and a BERT tokenizer into a single processor.
 
-    [`GITProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`BertTokenizerFast`]. See the
-    [`~GITProcessor.__call__`] and [`~GITProcessor.decode`] for more information.
+    [`GitProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`BertTokenizerFast`]. See the
+    [`~GitProcessor.__call__`] and [`~GitProcessor.decode`] for more information.
 
     Args:
         feature_extractor ([`CLIPImageProcessor`]):

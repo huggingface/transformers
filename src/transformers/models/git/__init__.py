@@ -22,8 +22,8 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GITConfig", "GITVisionConfig"],
-    "processing_git": ["GITProcessor"],
+    "configuration_git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitVisionConfig"],
+    "processing_git": ["GitProcessor"],
 }
 
 try:
@@ -34,15 +34,15 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_git"] = [
         "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GITForCausalLM",
-        "GITModel",
-        "GITPreTrainedModel",
-        "GITVisionModel",
+        "GitForCausalLM",
+        "GitModel",
+        "GitPreTrainedModel",
+        "GitVisionModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GITConfig, GITVisionConfig
-    from .processing_git import GITProcessor
+    from .configuration_git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitVisionConfig
+    from .processing_git import GitProcessor
 
     try:
         if not is_torch_available():
@@ -52,10 +52,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_git import (
             GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GITForCausalLM,
-            GITModel,
-            GITPreTrainedModel,
-            GITVisionModel,
+            GitForCausalLM,
+            GitModel,
+            GitPreTrainedModel,
+            GitVisionModel,
         )
 
 else:

@@ -23,17 +23,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+Git_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/git-base": "https://huggingface.co/microsoft/git-base/resolve/main/config.json",
 }
 
 
-# Copied from transformers.models.clip.configuration_clip.CLIPVisionConfig with CLIP->GIT, clip->git, openai/git-vit-base-patch32->microsoft/git-base, 32->16
-class GITVisionConfig(PretrainedConfig):
+# Copied from transformers.models.clip.configuration_clip.CLIPVisionConfig with CLIP->Git, clip->git, openai/git-vit-base-patch32->microsoft/git-base, 32->16
+class GitVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GITModel`]. It is used to instantiate an GIT
+    This is the configuration class to store the configuration of a [`GitModel`]. It is used to instantiate an Git
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the GIT
+    defaults will yield a similar configuration to that of the Git
     [microsoft/git-base](https://huggingface.co/microsoft/git-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -70,13 +70,13 @@ class GITVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import GITVisionConfig, GITVisionModel
+    >>> from transformers import GitVisionConfig, GitVisionModel
 
-    >>> # Initializing a GITVisionConfig with microsoft/git-base style configuration
-    >>> configuration = GITVisionConfig()
+    >>> # Initializing a GitVisionConfig with microsoft/git-base style configuration
+    >>> configuration = GitVisionConfig()
 
-    >>> # Initializing a GITVisionModel (with random weights) from the microsoft/git-base style configuration
-    >>> model = GITVisionModel(configuration)
+    >>> # Initializing a GitVisionModel (with random weights) from the microsoft/git-base style configuration
+    >>> model = GitVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -124,7 +124,7 @@ class GITVisionConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from GITConfig
+        # get the vision config dict if we are loading from GitConfig
         if config_dict.get("model_type") == "git":
             config_dict = config_dict["vision_config"]
 
@@ -137,9 +137,9 @@ class GITVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class GITConfig(PretrainedConfig):
+class GitConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GITModel`]. It is used to instantiate a GIT model
+    This is the configuration class to store the configuration of a [`GitModel`]. It is used to instantiate a GIT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GIT
     [microsoft/git-base](https://huggingface.co/microsoft/git-base) architecture.
@@ -149,10 +149,10 @@ class GITConfig(PretrainedConfig):
 
     Args:
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`GITVisionConfig`].
+            Dictionary of configuration options used to initialize [`GitVisionConfig`].
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the GIT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GITModel`].
+            `inputs_ids` passed when calling [`GitModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 6):
@@ -189,13 +189,13 @@ class GITConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import GITConfig, GITModel
+    >>> from transformers import GitConfig, GitModel
 
     >>> # Initializing a GIT microsoft/git-base style configuration
-    >>> configuration = GITConfig()
+    >>> configuration = GitConfig()
 
     >>> # Initializing a model (with random weights) from the microsoft/git-base style configuration
-    >>> model = GITModel(configuration)
+    >>> model = GitModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -229,9 +229,9 @@ class GITConfig(PretrainedConfig):
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the GITVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the GitVisionConfig with default values.")
 
-        self.vision_config = GITVisionConfig(**vision_config)
+        self.vision_config = GitVisionConfig(**vision_config)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
