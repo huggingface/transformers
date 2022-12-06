@@ -17,11 +17,7 @@ import unittest
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    LEDConfig,
-    LongT5Config,
     SummarizationPipeline,
-    SwitchTransformersConfig,
-    T5Config,
     pipeline,
 )
 from transformers.testing_utils import require_tf, require_torch, slow, torch_device
@@ -55,7 +51,18 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
         )
         self.assertEqual(outputs, [{"summary_text": ANY(str)}])
 
-        if not isinstance(model.config, (SwitchTransformersConfig, T5Config, LongT5Config, LEDConfig)):
+        model_can_handle_longer_seq = [
+            "SwitchTransformersConfig",
+            "T5Config",
+            "LongT5Config",
+            "LEDConfig",
+            # tokenizers that get small `model_max_length`
+            "PegasusXConfig",  # `PegasusXModelTester` sets `max_position_embeddings=30`
+            "FSMTConfig",  # `FSMTModelTester` sets `max_position_embeddings=20`
+            "M2M100Config",  # `M2M100ModelTester` sets `max_position_embeddings=20`
+            "ProphetNetConfig",  # `ProphetNetModelTester` sets `max_position_embeddings=30`
+        ]
+        if model.config.__class__.__name__ not in model_can_handle_longer_seq:
             # Switch Transformers, LED, T5, LongT5 can handle it.
             # Too long.
             with self.assertRaises(Exception):
