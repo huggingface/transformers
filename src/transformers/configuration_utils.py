@@ -942,6 +942,7 @@ def get_configuration_file(configuration_files: List[str]) -> str:
 
 
 PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)
-PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
-    object="config", object_class="AutoConfig", object_files="configuration file"
-)
+if PretrainedConfig.push_to_hub.__doc__ is not None:
+    PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
+        object="config", object_class="AutoConfig", object_files="configuration file"
+    )
