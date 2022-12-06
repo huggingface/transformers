@@ -33,17 +33,17 @@ class GPTSw3Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GPTSw3Model`]. It is used to instantiate a
     GPT-SW3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GPT-SW3.
-    [AI-Sweden/gpt-sw3-20b](https://huggingface.co/AI-Sweden/gpt-sw3-20b) architecture.
+    [AI-Sweden/gpt-sw3-126m](https://huggingface.co/AI-Sweden/gpt-sw3-126m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50257):
+        vocab_size (`int`, *optional*, defaults to 64000):
             Vocabulary size of the GPTSw3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GPTSw3Model`].
-        n_positions (`int`, *optional*, defaults to 1024):
+        n_positions (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         n_embd (`int`, *optional*, defaults to 768):
@@ -97,6 +97,12 @@ class GPTSw3Config(PretrainedConfig):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        pad_token_id (`int`, *optional*, defaults to `0`):
+            The token id of the pad token, not seen during pretraining.
+        bos_token_id (`int`, *optional*, defaults to `2`):
+            The token id of the beginning of sequence token, not seen during pretraining.
+        eos_token_id (`int`, *optional*, defaults to `3`):
+            The token id of the end of sequence token, seen during pretraining.
         scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
             Whether to additionally scale attention weights by `1 / layer_idx + 1`.
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
@@ -146,8 +152,9 @@ class GPTSw3Config(PretrainedConfig):
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
         scale_attn_weights=True,
-        use_cache=False,
-        bos_token_id=3,
+        use_cache=True,
+        pad_token_id=0,
+        bos_token_id=2,
         eos_token_id=3,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
@@ -175,7 +182,8 @@ class GPTSw3Config(PretrainedConfig):
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
 
+        self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
