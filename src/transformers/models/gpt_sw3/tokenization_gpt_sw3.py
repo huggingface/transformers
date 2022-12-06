@@ -160,13 +160,13 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
         )
 
-    # Copied from transformers.models.albert.AlbertTokenizer.__getstate__
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
         return state
 
-    # Copied from transformers.models.albert.AlbertTokenizer.__setstate__
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__setstate__
     def __setstate__(self, d):
         self.__dict__ = d
 
@@ -178,7 +178,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     @property
-    # Copied from transformers.models.albert.AlbertTokenizer.vocab_size
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.vocab_size
     def vocab_size(self) -> int:
         return len(self.sp_model)
 
@@ -201,12 +201,10 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         text = self.preprocess_text(text)
         return self.sp_model.encode(text, out_type=str)
 
-    # Copied from transformers.models.albert.AlbertTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) to an id (int) using the vocab."""
         return self.sp_model.PieceToId(token)
 
-    # Copied from transformers.models.albert.AlbertTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (int) to a token (str) using the vocab."""
         return self.sp_model.IdToPiece(index)
@@ -236,13 +234,13 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         return out_string
 
-    # Copied from transformers.models.albert.AlbertTokenizer.get_vocab
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.get_vocab
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    # Copied from transformers.models.albert.AlbertTokenizer.save_vocabulary
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
