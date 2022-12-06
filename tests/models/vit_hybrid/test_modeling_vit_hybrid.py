@@ -30,14 +30,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTHybridForImageClassification, ViTHybridModel
+    from transformers import ViTHybridForImageClassification, ViTHybridImageProcessor, ViTHybridModel
     from transformers.models.vit_hybrid.modeling_vit_hybrid import VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import ViTFeatureExtractor
 
 
 class ViTHybridModelTester:
@@ -205,7 +203,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            ViTFeatureExtractor.from_pretrained(VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+            ViTHybridImageProcessor.from_pretrained(VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[0])
             if is_vision_available()
             else None
         )

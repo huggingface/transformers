@@ -16,6 +16,7 @@
 
 
 import argparse
+import json
 from pathlib import Path
 
 import torch
@@ -23,6 +24,7 @@ from PIL import Image
 
 import requests
 import timm
+from huggingface_hub import hf_hub_download
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 from transformers import (
@@ -189,6 +191,13 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config, base_model)
+
+    repo_id = "huggingface/label-files"
+    filename = "imagenet-1k-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     # load HuggingFace model
     if vit_name[-5:] == "in21k":
