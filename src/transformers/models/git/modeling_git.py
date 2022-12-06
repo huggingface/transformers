@@ -1072,6 +1072,12 @@ class GitModel(GitPreTrainedModel):
 
         self.visual_projection = GitProjection(config)
 
+        if config.num_image_with_embedding is not None:
+            self.img_temperal_embedding = nn.ParameterList(
+                nn.Parameter(torch.zeros(1, 1, config.vision_config.hidden_size))
+                for _ in range(config.num_image_with_embedding)
+            )
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1232,11 +1238,11 @@ class GitModel(GitPreTrainedModel):
                 visual_features = []
                 for frame_idx in range(pixel_values.shape[1]):
                     visual_features_frame = self.image_encoder(pixel_values[:, frame_idx, :, :]).last_hidden_state
-                    visual_features_frame += self.positional_embedding_visual[frame_idx]
+                    visual_features_frame += self.img_temperal_embedding[frame_idx]
                     visual_features.append(visual_features_frame)
 
                 # finally, concatenate all features along sequence dimension
-                visual_features = visual_features.cat(visual_features, dim=1)
+                visual_features = torch.cat(visual_features, dim=1)
 
             else:
                 raise ValueError("pixel_values must be of rank 4 or 5")
@@ -1282,6 +1288,9 @@ class GitModel(GitPreTrainedModel):
                 expanded_attn_mask = expanded_attn_mask[:, :, -past_key_values_length:, :]
             else:
                 combined_attention_mask[:, :, -input_shape[1] :, -input_shape[1] :] += expanded_attn_mask
+
+        # print("Shape of hidden states:", hidden_states.shape)
+        # print("Shape of combined attention mask:", combined_attention_mask.shape)
 
         encoder_outputs = self.encoder(
             hidden_states,

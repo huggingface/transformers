@@ -185,6 +185,8 @@ class GitConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        num_image_with_embedding (`int`, *optional*):
+            The number of temporal embeddings to add, in case the model is used for video captioning/VQA.
 
     Examples:
 
@@ -223,6 +225,7 @@ class GitConfig(PretrainedConfig):
         tie_word_embeddings=False,
         bos_token_id=101,
         eos_token_id=102,
+        num_image_with_embedding=None,
         **kwargs
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
@@ -247,6 +250,7 @@ class GitConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         self.tie_word_embeddings = tie_word_embeddings
+        self.num_image_with_embedding = num_image_with_embedding
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

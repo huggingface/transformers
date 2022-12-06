@@ -26,7 +26,7 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-# from decord import VideoReader, cpu
+from decord import VideoReader, cpu
 from huggingface_hub import hf_hub_download
 from transformers import (
     AutoTokenizer,
@@ -57,7 +57,8 @@ def get_git_config(model_name):
     if "large" in model_name:
         vision_config = GitVisionConfig.from_pretrained("openai/clip-vit-large-patch14")
 
-    config = GitConfig(vision_config=vision_config.to_dict())
+    num_image_with_embedding = 6 if "vatex" in model_name else None
+    config = GitConfig(vision_config=vision_config.to_dict(), num_image_with_embedding=num_image_with_embedding)
 
     return config, image_size
 
@@ -136,6 +137,14 @@ def create_rename_keys(config, prefix=""):
         rename_keys.append((f"{prefix}textual.transformer.encoder.layer.{i}.output.LayerNorm.bias", f"git.encoder.layer.{i}.output.LayerNorm.bias"))
     # fmt: on
 
+    if config.num_image_with_embedding is not None:
+        rename_keys.append(("img_temperal_embedding.0", "git.img_temperal_embedding.0"))
+        rename_keys.append(("img_temperal_embedding.1", "git.img_temperal_embedding.1"))
+        rename_keys.append(("img_temperal_embedding.2", "git.img_temperal_embedding.2"))
+        rename_keys.append(("img_temperal_embedding.3", "git.img_temperal_embedding.3"))
+        rename_keys.append(("img_temperal_embedding.4", "git.img_temperal_embedding.4"))
+        rename_keys.append(("img_temperal_embedding.5", "git.img_temperal_embedding.5"))
+
     return rename_keys
 
 
@@ -192,9 +201,9 @@ def prepare_video():
     file_path = hf_hub_download(repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset")
     videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
 
-    # sample 16 frames
+    # sample 6 frames
     videoreader.seek(0)
-    indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(videoreader))
+    indices = sample_frame_indices(clip_len=6, frame_sample_rate=4, seg_len=len(videoreader))
     video = videoreader.get_batch(indices).asnumpy()
 
     return video
@@ -244,6 +253,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     read_in_q_k_v(state_dict, config, prefix=prefix)
 
     # load HuggingFace model
+    config.use_cache = False
     model = GitForCausalLM(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model.eval()
@@ -255,7 +265,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     assert unexpected_keys == ["git.image_encoder.visual_projection.weight"]
 
     # verify results
-    image_processor = VideoMAEImageProcessor if "vatex" in model_name else CLIPImageProcessor()
+    image_processor = VideoMAEImageProcessor() if "vatex" in model_name else CLIPImageProcessor()
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     tokenizer.model_input_names = ["input_ids", "attention_mask"]
     processor = GitProcessor(tokenizer=tokenizer, feature_extractor=image_processor)
@@ -263,7 +273,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     # TODO use processor to prepare data for the model
     if "vatex" in model_name:
         video = prepare_video()
-        pixel_values = image_processor(video, return_tensors="pt").pixel_values
+        pixel_values = image_processor(list(video), return_tensors="pt").pixel_values
     else:
         image = prepare_img(model_name)
         image_transforms = Compose(
@@ -292,11 +302,27 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     elif model_name == "git-base-textvqa":
         expected_slice_logits = torch.tensor([-1.4085, -1.4083, -1.4082])
 
-    assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
-    print("Looks ok!")
+    if "vatex" not in model_name:
+        # TODO add logits for VATEX model
+        assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
+        print("Looks ok!")
 
     print("Generating caption...")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    # predicted_ids = []
+    # for i in range(30):
+    #     outputs = model(pixel_values=pixel_values, input_ids=input_ids)
+    #     logits = outputs.logits[:, -1, :]
+    #     # perform argmax on the last dimension (i.e. greedy decoding)
+    #     predicted_id = logits.argmax(-1)
+    #     predicted_ids.append(predicted_id.item())
+    #     print(tokenizer.decode([predicted_id.squeeze()]))
+    #     # print("Predicted id:", predicted_id)
+    #     # add predicted id to input_ids
+    #     input_ids = torch.cat([input_ids, predicted_id.unsqueeze(0)], dim=1)
+
+    # print("Generated caption:", tokenizer.batch_decode(predicted_ids, skip_special_tokens=True))
+
     prompt = ""
     if "textvqa" in model_name:
         prompt = "what does the front of the bus say at the top?"
