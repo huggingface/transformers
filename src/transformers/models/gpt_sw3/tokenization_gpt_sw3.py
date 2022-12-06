@@ -57,16 +57,16 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         keep_accents (`bool`, *optional*, defaults to `False`):
             Whether or not to keep accents when tokenizing.
         bos_token (`str`, *optional*, defaults to `None`):
-            The beginning of sequence token that can be used for downstream task, was not seen during pretraining.
-            If not provided, will default to '<s>' or '<|endoftext|>', depending on model size.
+            The beginning of sequence token that can be used for downstream task, was not seen during pretraining. If
+            not provided, will default to '<s>' or '<|endoftext|>', depending on model size.
         eos_token (`str`, *optional*, defaults to `None`):
             The end of sequence token seen during pretraining. If not provided, will default to '<|endoftext|>'
         unk_token (`str`, *optional*, defaults to `None`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead. If not provided, will default to '<unk>'.
         pad_token (`str`, *optional*, defaults to `None`):
-            The token used for padding, for example when batching sequences of different lengths.
-            If not provided, will default to '<pad>' or '<unk>' depending on model size.
+            The token used for padding, for example when batching sequences of different lengths. If not provided, will
+            default to '<pad>' or '<unk>' depending on model size.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,

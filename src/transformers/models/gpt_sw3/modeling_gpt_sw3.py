@@ -924,7 +924,6 @@ class GPTSw3ForSequenceClassification(GPTSw3PreTrainedModel):
     GPT_SW3_START_DOCSTRING,
 )
 class GPTSw3ForTokenClassification(GPTSw3PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
