@@ -36,11 +36,9 @@ logger = logging.get_logger(__name__)
 
 def get_maskformer_config(model_name: str):
     if "resnet101c" in model_name:
-        # TODO use ResNet-C model here instead
-        # backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101", use_deeplab_stem=True)
+        # TODO add support for ResNet-C backbone, which uses a "deeplab" stem
         raise NotImplementedError("To do")
     elif "resnet101" in model_name:
-        print("we're here")
         backbone_config = ResNetConfig.from_pretrained(
             "microsoft/resnet-101", out_features=["stage1", "stage2", "stage3", "stage4"]
         )
@@ -52,15 +50,12 @@ def get_maskformer_config(model_name: str):
 
     repo_id = "huggingface/label-files"
     if "ade20k-full" in model_name:
-        # this should be ok
         config.num_labels = 847
         filename = "maskformer-ade20k-full-id2label.json"
     elif "ade" in model_name:
-        # this should be ok
         config.num_labels = 150
         filename = "ade20k-id2label.json"
     elif "coco-stuff" in model_name:
-        # this should be ok
         config.num_labels = 171
         filename = "maskformer-coco-stuff-id2label.json"
     elif "coco" in model_name:
@@ -68,16 +63,16 @@ def get_maskformer_config(model_name: str):
         config.num_labels = 133
         filename = "coco-panoptic-id2label.json"
     elif "cityscapes" in model_name:
-        # this should be ok
         config.num_labels = 19
         filename = "cityscapes-id2label.json"
     elif "vistas" in model_name:
-        # this should be ok
         config.num_labels = 65
         filename = "mapillary-vistas-id2label.json"
 
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
@@ -277,9 +272,6 @@ def convert_maskformer_checkpoint(
         data = pickle.load(f)
     state_dict = data["model"]
 
-    for name, param in state_dict.items():
-        print(name, param.shape)
-
     # rename keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -293,9 +285,6 @@ def convert_maskformer_checkpoint(
     # load 🤗 model
     model = MaskFormerForInstanceSegmentation(config)
     model.eval()
-
-    for name, param in model.named_parameters():
-        print(name, param.shape)
 
     model.load_state_dict(state_dict)
 
@@ -314,33 +303,52 @@ def convert_maskformer_checkpoint(
 
     outputs = model(**inputs)
 
-    print("Logits:", outputs.class_queries_logits[0, :3, :3])
-
     if model_name == "maskformer-resnet50-ade":
         expected_logits = torch.tensor(
             [[6.7710, -0.1452, -3.5687], [1.9165, -1.0010, -1.8614], [3.6209, -0.2950, -1.3813]]
         )
-    elif model_name == "maskformer-resnet50-vistas":
+    elif model_name == "maskformer-resnet101-ade":
         expected_logits = torch.tensor(
-            [[-6.3917, -1.5216, -1.1392], [-5.5335, -4.5318, -1.8339], [-4.3576, -4.0301, 0.2162]]
+            [[4.0381, -1.1483, -1.9688], [2.7083, -1.9147, -2.2555], [3.4367, -1.3711, -2.1609]]
+        )
+    elif model_name == "maskformer-resnet50-coco-stuff":
+        expected_logits = torch.tensor(
+            [[3.2309, -3.0481, -2.8695], [5.4986, -5.4242, -2.4211], [6.2100, -5.2279, -2.7786]]
+        )
+    elif model_name == "maskformer-resnet101-coco-stuff":
+        expected_logits = torch.tensor(
+            [[4.7188, -3.2585, -2.8857], [6.6871, -2.9181, -1.2487], [7.2449, -2.2764, -2.1874]]
         )
     elif model_name == "maskformer-resnet101-cityscapes":
         expected_logits = torch.tensor(
             [[-1.8861, -1.5465, 0.6749], [-2.3677, -1.6707, -0.0867], [-2.2314, -1.9530, -0.9132]]
         )
+    elif model_name == "maskformer-resnet50-vistas":
+        expected_logits = torch.tensor(
+            [[-6.3917, -1.5216, -1.1392], [-5.5335, -4.5318, -1.8339], [-4.3576, -4.0301, 0.2162]]
+        )
+    elif model_name == "maskformer-resnet50-ade20k-full":
+        expected_logits = torch.tensor(
+            [[3.6146, -1.9367, -3.2534], [4.0099, 0.2027, -2.7576], [3.3913, -2.3644, -3.9519]]
+        )
+    elif model_name == "maskformer-resnet101-ade20k-full":
+        expected_logits = torch.tensor(
+            [[3.2211, -1.6550, -2.7605], [2.8559, -2.4512, -2.9574], [2.6331, -2.6775, -2.1844]]
+        )
+
     assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
+        print(f"Saving model and feature extractor of {model_name} to {pytorch_dump_folder_path}")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
         feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing model and feature extractor to the hub...")
-        model.push_to_hub(f"nielsr/{model_name}")
-        feature_extractor.push_to_hub(f"nielsr/{model_name}")
+        print(f"Pushing model and feature extractor of {model_name} to the hub...")
+        model.push_to_hub(f"facebook/{model_name}")
+        feature_extractor.push_to_hub(f"facebook/{model_name}")
 
 
 if __name__ == "__main__":
@@ -350,15 +358,24 @@ if __name__ == "__main__":
         "--model_name",
         default="maskformer-resnet50-ade",
         type=str,
+        required=True,
+        choices=[
+            "maskformer-resnet50-ade",
+            "maskformer-resnet101-ade",
+            "maskformer-resnet50-coco-stuff",
+            "maskformer-resnet101-coco-stuff",
+            "maskformer-resnet101-cityscapes",
+            "maskformer-resnet50-vistas",
+            "maskformer-resnet50-ade20k-full",
+            "maskformer-resnet101-ade20k-full",
+        ],
         help=("Name of the MaskFormer model you'd like to convert",),
     )
     parser.add_argument(
         "--checkpoint_path",
-        default=(
-            "/Users/nielsrogge/Documents/MaskFormer_checkpoints/MaskFormer-ResNet-50-ADE20k/model_final_d8dbeb.pkl"
-        ),
         type=str,
-        help="Path to the original state dict (.pth file).",
+        required=True,
+        help=("Path to the original pickle file (.pkl) of the original checkpoint.",),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
