@@ -182,6 +182,7 @@ from . import (
     vit_hybrid,
     vit_mae,
     vit_msn,
+    vivit,
     wav2vec2,
     wav2vec2_conformer,
     wav2vec2_phoneme,

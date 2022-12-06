@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2022 Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """ ViViT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
@@ -6,17 +20,24 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "vivit-b-16x2-kinetics400": (
+        "https://huggingface.co/jegormeister/vivit-b-16x2-kinetics400/resolve/main/config.json"
+    ),
+    # See all ViViT models at https://huggingface.co/models?filter=vivit
+}
 
 
 class ViViTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViViTModel`]. It is used to instantiate a ViViT
+    This is the configuration class to store the configuration of a [`~ViViTModel`]. It is used to instantiate an ViViT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the original ViViTModel architecture.
+    defaults will yield a similar configuration to that of the ViViT
+    [vivit-b-16x2-kinetics400](https://huggingface.co/jegormeister/vivit-b-16x2-kinetics400) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
 
     Args:
         video_size (`List[int]`, *optional*, defaults to [32, 224, 224]):
@@ -47,21 +68,20 @@ class ViViTConfig(PretrainedConfig):
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
 
-    Example:
+        Example:
 
     ```python
-    >>> from transformers import ViViTConfig, ViViTModel
+    >>> from transformers import ViViTModel, ViViTConfig
 
-    >>> # Initializing a ViViT vivit-base style configuration
+    >>> # Initializing a ViViT vivit-b-16x2-kinetics400 style configuration
     >>> configuration = ViViTConfig()
 
-    >>> # Randomly initializing a model from the configuration
+    >>> # Initializing a model from the vivit-b-16x2-kinetics400 style configuration
     >>> model = ViViTModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
     model_type = "vivit"
 
     def __init__(
@@ -81,8 +101,6 @@ class ViViTConfig(PretrainedConfig):
         qkv_bias=True,
         **kwargs
     ):
-        super().__init__(**kwargs)
-
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -97,3 +115,5 @@ class ViViTConfig(PretrainedConfig):
         self.tubelet_size = tubelet_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+
+        super().__init__(**kwargs)
