@@ -92,17 +92,22 @@ class DPTViTHybridEmbeddings(nn.Module):
         self.residual_feature_map_index = [0, 1]  # Always take the output of the first and second backbone stage
 
         if feature_size is None:
-            with torch.no_grad():
-                # NOTE Most reliable way of determining spatial output dimensions is to run forward pass
-                training = self.backbone.training
-                if training:
-                    self.backbone.eval()
-                feature_map = self.backbone(torch.zeros(1, num_channels, image_size[0], image_size[1])).feature_maps[
-                    -1
-                ]
-                feature_size = feature_map.shape[-2:]
-                feature_dim = feature_map.shape[1]
-                self.backbone.train(training)
+            # with torch.no_grad():
+            #     # NOTE Most reliable way of determining spatial output dimensions is to run forward pass
+            #     training = self.backbone.training
+            #     if training:
+            #         self.backbone.eval()
+            #     feature_map = self.backbone(torch.zeros(1, num_channels, image_size[0], image_size[1])).feature_maps[
+            #         -1
+            #     ]
+            #     feature_size = feature_map.shape[-2:]
+            #     feature_dim = feature_map.shape[1]
+            #     self.backbone.train(training)
+
+            # TODO: add it on the config
+            feat_map_shape = (1, 1024, 24, 24)
+            feature_size = feat_map_shape[-2:]
+            feature_dim = feat_map_shape[1]
         else:
             feature_size = (
                 feature_size if isinstance(feature_size, collections.abc.Iterable) else (feature_size, feature_size)
