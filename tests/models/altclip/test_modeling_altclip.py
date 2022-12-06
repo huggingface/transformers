@@ -299,9 +299,9 @@ class AltCLIPModelTester:
         config = self.get_config(text_config, vision_config)
         return config, input_ids, attention_mask, pixel_values
 
-    def get_config(self, text_config, vision_config):
-        return AltCLIPConfig(
-            text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), projection_dim=64
+    def get_config(self):
+        return AltCLIPConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
