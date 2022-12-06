@@ -20,10 +20,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-# #TODO: Add something like  "https://huggingface.co/dandelin/vilt-b32-mlm/blob/main/config.json"
-# #BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-#     "": "https://huggingface.co//resolve/main/config.json"=,
-# }
+BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+        "anahita-b/bridgetower": "https://huggingface.co/anahita-b/bridgetower/blob/main/config.json",
+ }
 
 
 class BridgeTowerConfig(PretrainedConfig):
@@ -74,7 +73,6 @@ class BridgeTowerConfig(PretrainedConfig):
         input_text_embed_size=768,
         link_tower_shared=False,
         link_tower_type='add',
-        load_path='/home/shaoyent/checkpoints/btmodel/BridgeTower_pt_base.ckpt', #TODO: Change to appropriate path
         log_dir='log_dir',
         loss_names={'contras': 0,
                 'irtr': 0,
@@ -133,7 +131,6 @@ class BridgeTowerConfig(PretrainedConfig):
         self.input_text_embed_size = input_text_embed_size
         self.link_tower_shared = link_tower_shared
         self.link_tower_type = link_tower_type
-        self.load_path = load_path
         self.log_dir = log_dir
         self.loss_names = loss_names
         self.max_text_len = max_text_len
