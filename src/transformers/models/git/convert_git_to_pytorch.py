@@ -25,7 +25,7 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import AutoTokenizer, CLIPImageProcessor, GitConfig, GitForCausalLM, GitProcessor
+from transformers import AutoTokenizer, CLIPImageProcessor, GitConfig, GitForCausalLM, GitProcessor, GitVisionConfig
 from transformers.utils import logging
 
 
@@ -33,8 +33,13 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_git_config(model_name):
-    config = GitConfig()
+def get_git_config(model_name, image_size):
+    vision_config = GitVisionConfig(image_size=image_size)
+
+    if "large" in model_name:
+        vision_config = GitVisionConfig.from_pretrained("openai/clip-vit-large-patch14")
+
+    config = GitConfig(vision_config=vision_config.to_dict())
 
     return config
 
@@ -152,16 +157,6 @@ def prepare_img():
     return image
 
 
-image_transforms = Compose(
-    [
-        Resize(224, interpolation=Image.BICUBIC),
-        CenterCrop(224),
-        ToTensor(),
-        Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-    ]
-)
-
-
 @torch.no_grad()
 def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     """
@@ -172,8 +167,8 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         "git-base": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE/snapshot/model.pt",
         "git-base-coco": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_COCO/snapshot/model.pt",
         "git-base-textcaps": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_TEXTCAPS/snapshot/model.pt",
-        "git-base-vqav2": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_VQAV2/snapshot/model.pt",
-        "git-base-textvqa": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_TEXTVQA/snapshot/model.pt",
+        "git-base-vqav2": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_VQAv2/snapshot/model.pt",  # todo
+        "git-base-textvqa": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_TEXTVQA/snapshot/model.pt",  # todo
         "git-base-vatex": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_VATEX/snapshot/model.pt",
         "git-base-msrvtt-qa": (
             "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_MSRVTT_QA/snapshot/model.pt"
@@ -192,7 +187,13 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     }
 
     # define GIT configuration based on model name
-    config = get_git_config(model_name)
+    if "base-vqav2" in model_name:
+        image_size = 480
+    elif "large-vqav2" in model_name:
+        image_size = 420
+    else:
+        image_size = 224
+    config = get_git_config(model_name, image_size=image_size)
     # load original state_dict from URL
     checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["model"]
@@ -210,6 +211,9 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model.eval()
 
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
+
     assert missing_keys == ["git.embeddings.position_ids", "git.image_encoder.vision_model.embeddings.position_ids"]
     assert unexpected_keys == ["git.image_encoder.visual_projection.weight"]
 
@@ -221,6 +225,14 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     image = prepare_img()
     # pixel_values = processor(images=image, return_tensors="pt").pixel_values
+    image_transforms = Compose(
+        [
+            Resize(image_size, interpolation=Image.BICUBIC),
+            CenterCrop(image_size),
+            ToTensor(),
+            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+        ]
+    )
     pixel_values = image_transforms(image).unsqueeze(0)
     input_ids = torch.tensor([[101]])
 
@@ -233,26 +245,29 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     elif model_name == "git-base-coco":
         expected_slice_logits = torch.tensor([-0.9925, -0.9930, -0.9935])
     elif model_name == "git-base-textcaps":
-        expected_slice_logits = torch.tensor([-1.2832, -1.2835, -1.2840])
+        expected_slice_logits = torch.tensor([-1.2980, -1.2983, -1.2985])
+    elif model_name == "git-base-vqav2":
+        expected_slice_logits = torch.tensor([-0.8570, -0.8568, -0.8561])
 
     assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")
 
     print("Generating caption...")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    generated_ids = model.generate(pixel_values=pixel_values, max_length=20)
+    input_ids = tokenizer("what are the cats doing?", return_tensors="pt").input_ids if "qa" in model_name else None
+    generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=20)
     print("Generated caption:", tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model and processor to {pytorch_dump_folder_path}")
+        print(f"Saving model and processor of {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing model and processor to the hub...")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        print(f"Pushing model and processor of {model_name} to the hub...")
+        model.push_to_hub(f"microsoft/{model_name}")
+        processor.push_to_hub(f"microsoft/{model_name}")
 
 
 if __name__ == "__main__":

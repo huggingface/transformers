@@ -935,14 +935,14 @@ class GitVisionTransformer(nn.Module):
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
     @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GitVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=GitVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Returns:
 
@@ -968,18 +968,13 @@ class GitVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs[0]
 
-        # TODO add output grid logic here
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            return (last_hidden_state,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -989,7 +984,7 @@ class GitVisionTransformer(nn.Module):
     """The vision model from CLIP, used in GIT, without any head or projection on top.""",
     GIT_START_DOCSTRING,
 )
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP_VISION_INPUTS_DOCSTRING->GIT_VISION_INPUTS_DOCSTRING, CLIP->Git, openai/clip-vit-base-patch32->microsoft/git-base
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP_VISION_INPUTS_DOCSTRING->GIT_VISION_INPUTS_DOCSTRING, CLIP->Git, openai/clip-vit-base-patch32->microsoft/git-base, BaseModelOutputWithPooling->BaseModelOutput
 class GitVisionModel(GitPreTrainedModel):
     config_class = GitVisionConfig
     main_input_name = "pixel_values"
@@ -1004,14 +999,14 @@ class GitVisionModel(GitPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GitVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=GitVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Returns:
 
