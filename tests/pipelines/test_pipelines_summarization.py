@@ -56,11 +56,10 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
             "T5Config",
             "LongT5Config",
             "LEDConfig",
-            # tokenizers that get small `model_max_length`
-            "PegasusXConfig",  # `PegasusXModelTester` sets `max_position_embeddings=30`
-            "FSMTConfig",  # `FSMTModelTester` sets `max_position_embeddings=20`
-            "M2M100Config",  # `M2M100ModelTester` sets `max_position_embeddings=20`
-            "ProphetNetConfig",  # `ProphetNetModelTester` sets `max_position_embeddings=30`
+            "PegasusXConfig",
+            "FSMTConfig",
+            "M2M100Config",
+            "ProphetNetConfig",  # positional embeddings up to a fixed maximum size (otherwise clamping the values)
         ]
         if model.config.__class__.__name__ not in model_can_handle_longer_seq:
             # Switch Transformers, LED, T5, LongT5 can handle it.
