@@ -312,7 +312,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         torch.testing.assert_allclose(zs[2][0], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
-    @skip("Not enough memory on CI")
+    @skip("Not enough GPU memory on CI runners")
     def test_slow_sampling(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         labels = [i.cuda() for i in self.prepare_inputs(self.model_id)]
