@@ -51,10 +51,13 @@ class QuestionAnsweringTrainer(Trainer):
                 # self.args.prediction_loss_only
                 prediction_loss_only=True if compute_metrics is None else None,
                 ignore_keys=ignore_keys,
+                metric_key_prefix=metric_key_prefix,
             )
         finally:
             self.compute_metrics = compute_metrics
         total_batch_size = self.args.eval_batch_size * self.args.world_size
+        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
@@ -74,7 +77,7 @@ class QuestionAnsweringTrainer(Trainer):
                     metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
             metrics.update(output.metrics)
         else:
-            metrics = {}
+            metrics = output.metrics
 
         if self.args.should_log:
             # Only the main node log the results by default
@@ -103,10 +106,13 @@ class QuestionAnsweringTrainer(Trainer):
                 # self.args.prediction_loss_only
                 prediction_loss_only=True if compute_metrics is None else None,
                 ignore_keys=ignore_keys,
+                metric_key_prefix=metric_key_prefix,
             )
         finally:
             self.compute_metrics = compute_metrics
         total_batch_size = self.args.eval_batch_size * self.args.world_size
+        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
