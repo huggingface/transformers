@@ -150,10 +150,14 @@ def read_in_q_k_v(state_dict, config, prefix=""):
         state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-dim:]
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+# We will verify our results on an image
+def prepare_img(model_name):
+    if "textvqa" in model_name:
+        image = Image.open("/Users/nielsrogge/Desktop/bus.png").convert("RGB")
+    else:
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+    
     return image
 
 
@@ -167,7 +171,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         "git-base": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE/snapshot/model.pt",
         "git-base-coco": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_COCO/snapshot/model.pt",
         "git-base-textcaps": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_TEXTCAPS/snapshot/model.pt",
-        "git-base-vqav2": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_VQAv2/snapshot/model.pt",  # todo
+        "git-base-vqav2": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_VQAv2/snapshot/model.pt",
         "git-base-textvqa": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_TEXTVQA/snapshot/model.pt",  # todo
         "git-base-vatex": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_VATEX/snapshot/model.pt",
         "git-base-msrvtt-qa": (
@@ -187,9 +191,9 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     }
 
     # define GIT configuration based on model name
-    if "base-vqav2" in model_name:
+    if "base" in model_name and "vqa" in model_name:
         image_size = 480
-    elif "large-vqav2" in model_name:
+    elif "large" in model_name and "vqa" in model_name:
         image_size = 420
     else:
         image_size = 224
@@ -223,7 +227,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     tokenizer.model_input_names = ["input_ids", "attention_mask"]
     processor = GitProcessor(tokenizer=tokenizer, feature_extractor=image_processor)
 
-    image = prepare_img()
+    image = prepare_img(model_name)
     # pixel_values = processor(images=image, return_tensors="pt").pixel_values
     image_transforms = Compose(
         [
@@ -248,14 +252,20 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         expected_slice_logits = torch.tensor([-1.2980, -1.2983, -1.2985])
     elif model_name == "git-base-vqav2":
         expected_slice_logits = torch.tensor([-0.8570, -0.8568, -0.8561])
+    elif model_name == "git-base-textvqa":
+        expected_slice_logits = torch.tensor([-1.4085, -1.4083, -1.4082])
 
     assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")
 
     print("Generating caption...")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    input_ids = tokenizer("what are the cats doing?", return_tensors="pt").input_ids if "qa" in model_name else None
-    generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=20)
+    question = "what does the front of the bus say at the top?" if "textvqa" in model_name else "what are the cats doing?"
+    input_ids = tokenizer(question, add_special_tokens=False).input_ids if "qa" in model_name else None
+    input_ids = [tokenizer.cls_token_id] + input_ids
+    input_ids = torch.tensor(input_ids).unsqueeze(0)
+    print("Question:", tokenizer.decode(input_ids[0]) if input_ids is not None else None)
+    generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
     print("Generated caption:", tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
