@@ -41,19 +41,19 @@ the hub already defines it:
 ```python
 >>> pipe = pipeline(model="roberta-large-mnli")
 >>> pipe("This restaurant is awesome")
-[{'label': 'POSITIVE', 'score': 0.9998743534088135}]
+[{'label': 'NEUTRAL', 'score': 0.7313136458396912}]
 ```
 
-To call a pipeline on many items, you can either call with a *list*.
+To call a pipeline on many items, you can call it with a *list*.
 
 ```python
 >>> pipe = pipeline("text-classification")
->>> pipe(["This restaurant is awesome", "This restaurant is aweful"])
+>>> pipe(["This restaurant is awesome", "This restaurant is awful"])
 [{'label': 'POSITIVE', 'score': 0.9998743534088135},
  {'label': 'NEGATIVE', 'score': 0.9996669292449951}]
 ```
 
-To iterate of full datasets it is recommended to use a `dataset` directly. This means you don't need to allocate
+To iterate over full datasets it is recommended to use a `dataset` directly. This means you don't need to allocate
 the whole dataset at once, nor do you need to do batching yourself. This should work just as fast as custom loops on
 GPU. If it doesn't don't hesitate to create an issue.
 
