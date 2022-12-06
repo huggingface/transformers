@@ -235,15 +235,6 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     def test_onnx_compliancy(self):
         pass
 
-    def prepare_config_and_inputs_for_common(self):
-        input_ids = tf.clip_by_value(
-            ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size),
-            clip_value_min=self.eos_token_id + 1,
-            clip_value_max=self.vocab_size + 1,
-        )
-        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
-        input_ids = tf.concat([input_ids, eos_tensor], axis=1)
-
     # TFBartForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

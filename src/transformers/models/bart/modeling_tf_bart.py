@@ -1585,8 +1585,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
 
         sentence_representation = masked[:, -1, :]
         logits = self.classification_head(sentence_representation)
-        reshaped_logits = tf.reshape(tensor=logits, shape=(-1, self.config.num_labels))
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
