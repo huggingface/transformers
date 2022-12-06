@@ -235,7 +235,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         "git-large-textcaps": (
             "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_TEXTCAPS/snapshot/model.pt"
         ),
-        "git-large-vqav2": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_VQAV2/snapshot/model.pt",
+        "git-large-vqav2": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_VQAv2/snapshot/model.pt",
         "git-large-textvqa": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_TEXTVQA/snapshot/model.pt",
         "git-large-vatex": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_VATEX/snapshot/model.pt",
         "git-large-msrvtt-qa": (
@@ -245,6 +245,8 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     model_name_to_path = {
         "git-large": "/Users/nielsrogge/Documents/GIT/git_large_model.pt",
+        "git-large-coco": "/Users/nielsrogge/Documents/GIT/git_large_coco_model.pt",
+        "git-large-textcaps": "/Users/nielsrogge/Documents/GIT/git_large_textcaps_model.pt",
     }
 
     # define GIT configuration based on model name
@@ -260,8 +262,6 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[
             "model"
         ]
-    # TODO remove line below
-    # state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
     # rename keys
     prefix = "module." if model_name == "git-base" else ""
     rename_keys = create_rename_keys(config, prefix=prefix)
@@ -270,8 +270,8 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     read_in_q_k_v(state_dict, config, prefix=prefix)
 
     # load HuggingFace model
-    print("Vision encoder hidden size:", config.vision_config.hidden_size)
-    config.use_cache = False
+    # TODO fix use_cache for video models
+    config.use_cache = False if "vatex" in model_name else True
     model = GitForCausalLM(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model.eval()
@@ -321,6 +321,10 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         expected_slice_logits = torch.tensor([-1.4085, -1.4083, -1.4082])
     elif model_name == "git-large":
         expected_slice_logits = torch.tensor([-1.1708, -1.1707, -1.1705])
+    elif model_name == "git-large-coco":
+        expected_slice_logits = torch.tensor([-1.0425, -1.0423, -1.0422])
+    elif model_name == "git-large-textcaps":
+        expected_slice_logits = torch.tensor([-1.2705, -1.2708, -1.2706])
 
     if "vatex" not in model_name:
         # TODO add logits for VATEX models (due to sampling of frames not deterministic atm)
