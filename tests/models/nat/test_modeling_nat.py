@@ -65,6 +65,7 @@ class NatModelTester:
         use_labels=True,
         type_sequence_label_size=10,
         encoder_stride=8,
+        out_features=["stage1", "stage2"],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -89,6 +90,7 @@ class NatModelTester:
         self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
+        self.out_features = out_features
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -120,6 +122,7 @@ class NatModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
+            out_features=self.out_features,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
