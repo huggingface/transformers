@@ -190,6 +190,9 @@ class DonutSwinEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
+        # print("Shape of embeddings before encoder:", embeddings.shape)
+        # print("First values of embeddings before encoder:", embeddings[0, :3, :3])
+
         return embeddings, output_dimensions
 
 
@@ -270,7 +273,9 @@ class DonutSwinPatchMerging(nn.Module):
 
         return input_feature
 
-    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
+    def forward(
+        self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int], print_values=False
+    ) -> torch.Tensor:
         height, width = input_dimensions
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
@@ -577,6 +582,7 @@ class DonutSwinLayer(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        print_values=False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         self.set_shift_and_window_size(input_dimensions)
         height, width = input_dimensions
@@ -590,12 +596,21 @@ class DonutSwinLayer(nn.Module):
         # pad hidden_states to multiples of window size
         hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
 
+        if print_values:
+            print("Hidden states after padding:", hidden_states[0, 0, :3, :3])
+
+        if print_values:
+            print("Shift size:", self.shift_size)
+
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
         if self.shift_size > 0:
             shifted_hidden_states = torch.roll(hidden_states, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
         else:
             shifted_hidden_states = hidden_states
+
+        if print_values:
+            print("Hidden states after cyclic shift:", shifted_hidden_states[0, 0, :3, :3])
 
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
@@ -604,11 +619,17 @@ class DonutSwinLayer(nn.Module):
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
+        if print_values:
+            print("Hidden states before attention:", hidden_states_windows[0, :3, :3])
+
         attention_outputs = self.attention(
             hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
         )
 
         attention_output = attention_outputs[0]
+
+        if print_values:
+            print("Hidden states after attention:", attention_output[0, :3, :3])
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
         shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)
@@ -630,6 +651,9 @@ class DonutSwinLayer(nn.Module):
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
         layer_output = hidden_states + self.output(layer_output)
+
+        if print_values:
+            print("Final Hidden states of block:", layer_output[0, :3, :3])
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
@@ -668,13 +692,16 @@ class DonutSwinStage(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        print_values=False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(
+                hidden_states, input_dimensions, layer_head_mask, output_attentions, print_values=print_values
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -684,6 +711,8 @@ class DonutSwinStage(nn.Module):
             output_dimensions = (height, width, height_downsampled, width_downsampled)
             hidden_states = self.downsample(hidden_states_before_downsampling, input_dimensions)
         else:
+            if print_values:
+                print("we are here")
             output_dimensions = (height, width, height, width)
 
         stage_outputs = (hidden_states, hidden_states_before_downsampling, output_dimensions)
@@ -754,7 +783,9 @@ class DonutSwinEncoder(nn.Module):
                     create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, input_dimensions, layer_head_mask, output_attentions, print_values=i == 3
+                )
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]

@@ -251,7 +251,9 @@ class MaskFormerSwinPatchMerging(nn.Module):
 
         return input_feature
 
-    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
+    def forward(
+        self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int], print_values=False
+    ) -> torch.Tensor:
         height, width = input_dimensions
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
