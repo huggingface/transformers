@@ -140,7 +140,7 @@ class MaskFormerConfig(PretrainedConfig):
                     f" {','.join(self.backbones_supported)}"
                 )
             if isinstance(backbone_config, dict):
-                config_class = CONFIG_MAPPING[backbone_model_type]()
+                config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
         if decoder_config is None:
@@ -157,7 +157,7 @@ class MaskFormerConfig(PretrainedConfig):
                     f" {','.join(self.decoders_supported)}"
                 )
             if isinstance(decoder_config, dict):
-                config_class = CONFIG_MAPPING[decoder_type]()
+                config_class = CONFIG_MAPPING[decoder_type]
                 decoder_config = config_class.from_dict(decoder_config)
 
         self.backbone_config = backbone_config
