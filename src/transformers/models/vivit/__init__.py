@@ -30,7 +30,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_vivit"] = ["ViViTFeatureExtractor"]
     _import_structure["image_processing_vivit"] = ["ViViTImageProcessor"]
 
 
@@ -57,7 +56,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_vivit import ViViTFeatureExtractor
         from .image_processing_vivit import ViViTImageProcessor
 
     try:

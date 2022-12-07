@@ -484,8 +484,8 @@ VIVIT_START_DOCSTRING = r"""
 VIVIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViViTFeatureExtractor`]. See
-            [`ViViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`ViViTImageProcessor`]. See
+            [`ViViTImageProcessor.preprocess`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -552,7 +552,7 @@ class ViViTModel(ViViTPreTrainedModel):
         >>> from decord import VideoReader, cpu
         >>> import numpy as np
 
-        >>> from transformers import ViViTFeatureExtractor, ViViTModel
+        >>> from transformers import ViViTImageProcessor, ViViTModel
         >>> from huggingface_hub import hf_hub_download
 
 
@@ -576,7 +576,7 @@ class ViViTModel(ViViTPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = ViViTFeatureExtractor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+        >>> feature_extractor = ViViTImageProcessor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
         >>> model = ViViTModel.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
 
         >>> # prepare video for the model
@@ -668,7 +668,7 @@ class ViViTForVideoClassification(ViViTPreTrainedModel):
         >>> import torch
         >>> import numpy as np
 
-        >>> from transformers import ViViTFeatureExtractor, ViViTForVideoClassification
+        >>> from transformers import ViViTImageProcessor, ViViTForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
@@ -694,7 +694,7 @@ class ViViTForVideoClassification(ViViTPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = ViViTFeatureExtractor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+        >>> feature_extractor = ViViTImageProcessor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
         >>> model = ViViTForVideoClassification.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
 
         >>> inputs = feature_extractor(list(video), return_tensors="pt")
