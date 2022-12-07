@@ -24,8 +24,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.autograd import Function
-from torch.autograd.function import once_differentiable
 from torch.cuda.amp import autocast
 
 from transformers.utils import logging
@@ -37,15 +35,13 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_ninja_available,
     is_scipy_available,
-    is_torch_cuda_available,
     replace_return_docstrings,
     requires_backends,
 )
 from .backbone_dinat_oneformer import OneFormerDinatModel
-from .backbone_swin_oneformer import OneFormerSwinEncoder, OneFormerSwinModel
 from .configuration_oneformer import OneFormerConfig
+from transformers import AutoBackbone, MaskFormerSwinConfig
 
 
 logger = logging.get_logger(__name__)
@@ -952,55 +948,6 @@ class OneFormerDinatBackbone(nn.Module):
         return hidden_states_permuted
 
 
-# Swin Backbone Classes #
-
-
-class OneFormerSwinTransformerBackbone(nn.Module):
-    """
-    This class uses [`OneFormerSwinModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
-    hidden_size)` output four level of features of varying resolutions: (`batch_size, num_channels, height, width)`).
-
-    Args:
-        config (`OneFormerConfig`):
-            The configuration used by [`OneFormerSwinModel`].
-    """
-
-    def __init__(self, config: OneFormerConfig):
-        super().__init__()
-        self.model = OneFormerSwinModel(config)
-        self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(out_shape) for out_shape in self.outputs_shapes])
-
-    def forward(self, *args, **kwargs) -> List[Tensor]:
-        output = self.model(*args, **kwargs, output_hidden_states=True)
-        hidden_states_permuted: List[Tensor] = []
-        # we need to reshape the hidden state to their original spatial dimensions
-        # skipping the embeddings
-        hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
-        # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
-        spatial_dimensions: Tuple[Tuple[int, int]] = output.hidden_states_spatial_dimensions
-        for i, (hidden_state, (height, width)) in enumerate(zip(hidden_states, spatial_dimensions)):
-            norm = self.hidden_states_norms[i]
-            # the last element corespond to the layer's last block output but before patch merging
-            hidden_state_unpolled = hidden_state[-1]
-            hidden_state_norm = norm(hidden_state_unpolled)
-            # our pixel decoder (FPN) expect 3D tensors (features)
-            batch_size, _, hidden_size = hidden_state_norm.shape
-            # reshape our tensor "b (h w) d -> b d h w"
-            hidden_state_permuted = (
-                hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
-            )
-            hidden_states_permuted.append(hidden_state_permuted)
-        return hidden_states_permuted
-
-    @property
-    def input_resolutions(self) -> List[int]:
-        return [layer.input_resolution for layer in self.model.encoder.layers]
-
-    @property
-    def outputs_shapes(self) -> List[int]:
-        return [layer.dim for layer in self.model.encoder.layers]
-
-
 # Pixel Decoder Classes #
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
@@ -1384,7 +1331,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
 
 # Modified from from transformers.models.detr.modeling_deformable_detr.DeformableDetrModel with DeformableDetrModel->OneFormerPixelDecoder
 class OneFormerPixelDecoder(nn.Module):
-    def __init__(self, config: OneFormerConfig):
+    def __init__(self, config: OneFormerConfig, feature_channels):
         super().__init__()
 
         self.config = config
@@ -1394,9 +1341,9 @@ class OneFormerPixelDecoder(nn.Module):
             num_pos_feats=config.decoder_config["conv_dim"] // 2, normalize=True
         )
         self.num_feature_levels = 3
-        transformer_in_channels = config.backbone_config["feature_channels"][-self.num_feature_levels :]
-        self.transformer_feature_strides = config.backbone_config["strides"][-self.num_feature_levels :]
-        self.feature_channels = config.backbone_config["feature_channels"]
+        transformer_in_channels = feature_channels[-self.num_feature_levels :]
+        self.transformer_feature_strides = config.general_config["strides"][-self.num_feature_levels :]
+        self.feature_channels = feature_channels
         self.level_embed = nn.Parameter(torch.Tensor(self.num_feature_levels, config.decoder_config["conv_dim"]))
 
         # Create input projection layers
@@ -1604,14 +1551,16 @@ class OneFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-        if config.general_config["backbone_type"] == "swin":
-            self.encoder = OneFormerSwinTransformerBackbone(config)
-        else:
-            self.encoder = OneFormerDinatBackbone(config)
-        self.decoder = OneFormerPixelDecoder(config)
+        # backbone_config = config.backbone_config
+        # if backbone_config.model_type == "swin":
+        #     # for backwards compatibility
+        #     backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
+        #     backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
+        self.encoder = AutoBackbone.from_config(config.backbone_config)
+        self.decoder = OneFormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> OneFormerPixelLevelModuleOutput:
-        features: List[Tensor] = self.encoder(pixel_values)
+        features: List[Tensor] = self.encoder(pixel_values).feature_maps
         decoder_output: OneFormerPixelDecoderOutput = self.decoder(features, output_hidden_states=output_hidden_states)
         return OneFormerPixelLevelModuleOutput(
             encoder_features=tuple(features),
@@ -2958,12 +2907,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                     submodule.weight.data.normal_(mean=0.0, std=std)
                     if submodule.bias is not None:
                         submodule.bias.data.zero_()
-        elif isinstance(module, OneFormerSwinModel):
-            for submodule in module.modules():
-                if isinstance(submodule, (nn.Conv2d, nn.Linear)):
-                    submodule.weight.data.normal_(mean=0.0, std=std)
-                    if submodule.bias is not None:
-                        submodule.bias.data.zero_()
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -2985,15 +2928,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                         elif isinstance(module, nn.LayerNorm):
                             module.bias.data.zero_()
                             module.weight.data.fill_(1.0)
-        elif isinstance(module, OneFormerSwinModel):
-            for submodule in module.modules():
-                if isinstance(submodule, (nn.Conv2d, nn.Linear)):
-                    submodule.weight.data.normal_(mean=0.0, std=std)
-                    if submodule.bias is not None:
-                        submodule.bias.data.zero_()
-                elif isinstance(module, nn.LayerNorm):
-                    module.bias.data.zero_()
-                    module.weight.data.fill_(1.0)
         elif isinstance(module, OneFormerDinatModel):
             for submodule in module.modules():
                 if isinstance(submodule, (nn.Conv2d, nn.Linear)):
@@ -3010,10 +2944,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.MultiheadAttention):
             module.in_proj_weight.data.normal_(mean=0.0, std=std)
             module.in_proj_bias.data.zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, OneFormerSwinEncoder):
-            module.gradient_checkpointing = value
 
 
 @add_start_docstrings(

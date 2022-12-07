@@ -109,8 +109,8 @@ class OneFormerModelTester:
         config.general_config["num_queries"] = self.num_queries
         config.general_config["num_classes"] = self.num_labels
 
-        config.backbone_config["depths"] = [1, 1, 1, 1]
-        config.backbone_config["num_channels"] = self.num_channels
+        config.backbone_config.depths = [1, 1, 1, 1]
+        config.backbone_config.num_channels = self.num_channels
 
         config.decoder_config["encoder_feedforward_dim"] = 64
         config.decoder_config["dim_feedforward"] = 128
@@ -143,7 +143,7 @@ class OneFormerModelTester:
         pixel_decoder_hidden_states = output.pixel_decoder_hidden_states
         transformer_decoder_hidden_states = output.transformer_decoder_hidden_states
 
-        self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone_config["depths"]))
+        self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone_config.depths))
         self.parent.assertTrue(len(pixel_decoder_hidden_states), config.decoder_config["encoder_layers"])
         self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_config["decoder_layers"] - 1)
 

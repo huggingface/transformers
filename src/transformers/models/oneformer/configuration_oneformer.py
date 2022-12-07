@@ -14,9 +14,12 @@
 # limitations under the License.
 """OneFormer model configuration"""
 from typing import Dict, Optional
-
+import copy
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
+
+from transformers import MaskFormerSwinConfig, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -50,11 +53,14 @@ class OneFormerConfig(PretrainedConfig):
             Whether to output intermediate predictions.
         return_dict (`bool`, *optional*, defaults to `True`):
             Whether to return output as tuples or dataclass objects.
-        general_config (`dict`, *optional*, defaults to a dictionary with the following keys)
+        general_config (`dict`, *optional*)
             Dictionary containing general configuration like backbone_type, loss weights, number of classes, etc.
-        backbone_config (`dict`, *optional*, defaults to a dictionary with the following keys)
+        backbone_config (`dict`, *optional*, defaults to `swin-tiny-patch4-window7-224`)
             Dictionary containing configuration for the backbone module like patch size, num_heads, etc.
         text_encoder_config (`dict`, *optional*, defaults to a dictionary with the following keys)
+            Dictionary containing configuration for the text-mapper module and task encoder like sequence length,
+            number of linear layers in MLP, etc.
+        decoder_config (`dict`, *optional*, defaults to a dictionary with the following keys)
             Dictionary containing configuration for the text-mapper module and task encoder like sequence length,
             number of linear layers in MLP, etc.
 
@@ -86,14 +92,7 @@ class OneFormerConfig(PretrainedConfig):
     ):
         cfgs = self._setup_cfg(general_config, backbone_config, text_encoder_config, decoder_config)
 
-        general_config, backbone_config, text_encoder_config, decoder_config = cfgs
-
-        backbone_type = general_config["backbone_type"]
-
-        if backbone_type not in self.backbones_supported:
-            raise ValueError(
-                f"Backbone {backbone_type} not supported, please use one of {','.join(self.backbones_supported)}"
-            )
+        general_config, backbone_config, text_encoder_config, decoder_config = cfgs 
 
         self.general_config = general_config
         self.backbone_config = backbone_config
@@ -111,13 +110,12 @@ class OneFormerConfig(PretrainedConfig):
     def _setup_cfg(
         self,
         general_config: Optional[Dict] = None,
-        backbone_config: Optional[Dict] = None,
+        backbone_config: Optional[MaskFormerSwinConfig] = None,
         text_encoder_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
     ) -> Dict[str, any]:
         if general_config is None:
             general_config = {}
-            general_config["backbone_type"] = "swin"
             general_config["ignore_value"] = 255
             general_config["num_classes"] = 150
             general_config["num_queries"] = 150
@@ -137,37 +135,33 @@ class OneFormerConfig(PretrainedConfig):
             general_config["is_train"] = False
             general_config["use_auxiliary_loss"] = True
             general_config["output_auxiliary_logits"] = True
+            general_config["strides"] = [4, 8, 16, 32]
+        
 
         if backbone_config is None:
-            backbone_config = {}
-            backbone_config["image_size"] = 224
-            backbone_config["num_channels"] = 3
-            backbone_config["hidden_act"] = "gelu"
-            backbone_config["patch_size"] = 4
-            backbone_config["embed_dim"] = 96
-            backbone_config["mlp_ratio"] = 4.0
-            backbone_config["depths"] = [2, 2, 6, 2]
-            backbone_config["num_heads"] = [3, 6, 12, 24]
-            backbone_config["window_size"] = 7
-            backbone_config["qkv_bias"] = True
-            backbone_config["hidden_dropout_prob"] = 0.0
-            backbone_config["attention_probs_dropout_prob"] = 0.0
-            backbone_config["drop_path_rate"] = 0.3
-            backbone_config["use_absolute_embeddings"] = False
-            backbone_config["patch_norm"] = True
-            backbone_config["encoder_stride"] = 32
-            backbone_config["strides"] = [4, 8, 16, 32]
-            backbone_config["kernel_size"] = 11
-            backbone_config["dilations"] = [
-                [1, 20, 1],
-                [1, 5, 1, 10],
-                [1, 2, 1, 3, 1, 4, 1, 5, 1, 2, 1, 3, 1, 4, 1, 5, 1, 5],
-                [1, 2, 1, 2, 1],
-            ]
-            backbone_config["layer_scale_init_value"] = 0.0
-        backbone_config["feature_channels"] = [
-            int(backbone_config["embed_dim"] * 2**i) for i in range(len(backbone_config["depths"]))
-        ]
+            backbone_config = MaskFormerSwinConfig(
+                                image_size=224,
+                                in_channels=3,
+                                patch_size=4,
+                                embed_dim=96,
+                                depths=[2, 2, 6, 2],
+                                num_heads=[3, 6, 12, 24],
+                                window_size=7,
+                                drop_path_rate=0.3,
+                                out_features=["stage1", "stage2", "stage3", "stage4"],
+                            )
+        else:
+            backbone_model_type = (
+                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
+            )
+            if backbone_model_type not in self.backbones_supported:
+                raise ValueError(
+                    f"Backbone {backbone_model_type} not supported, please use one of"
+                    f" {','.join(self.backbones_supported)}"
+                )
+            if isinstance(backbone_config, dict):
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
 
         if text_encoder_config is None:
             text_encoder_config = {}
@@ -199,3 +193,14 @@ class OneFormerConfig(PretrainedConfig):
             decoder_config["common_stride"] = 4
 
         return general_config, backbone_config, text_encoder_config, decoder_config
+    
+    def to_dict(self) -> Dict[str, any]:
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["backbone_config"] = self.backbone_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output

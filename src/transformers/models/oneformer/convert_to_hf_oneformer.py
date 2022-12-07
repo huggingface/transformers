@@ -35,7 +35,7 @@ try:
     from detectron2.projects.deeplab import add_deeplab_config
 except ImportError:
     pass
-from transformers import CLIPTokenizer
+from transformers import CLIPTokenizer, SwinConfig, MaskFormerSwinConfig
 from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
 from transformers.models.oneformer.modeling_oneformer import (
     OneFormerConfig,
@@ -121,28 +121,20 @@ class OriginalOneFormerConfigToOursConverter:
         dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST_PANOPTIC[0])
         id2label = {idx: label for idx, label in enumerate(dataset_catalog.stuff_classes)}
         label2id = {label: idx for idx, label in id2label.items()}
-
+        
         if is_swin:
-            backbone_config = dict(
-                image_size=model.SWIN.PRETRAIN_IMG_SIZE,
-                num_channels=3,
-                hidden_act="gelu",
-                mlp_ratio=model.SWIN.MLP_RATIO,
-                patch_size=model.SWIN.PATCH_SIZE,
-                embed_dim=model.SWIN.EMBED_DIM,
-                depths=model.SWIN.DEPTHS,
-                num_heads=model.SWIN.NUM_HEADS,
-                strides=[4, 8, 16, 32],
-                window_size=model.SWIN.WINDOW_SIZE,
-                qkv_bias=model.SWIN.QKV_BIAS,
-                hidden_dropout_prob=model.SWIN.DROP_RATE,
-                attention_probs_dropout_prob=model.SWIN.ATTN_DROP_RATE,
-                drop_path_rate=model.SWIN.DROP_PATH_RATE,
-                use_absolute_embeddings=model.SWIN.APE,
-                patch_norm=model.SWIN.PATCH_NORM,
-                encoder_stride=model.ONE_FORMER.SIZE_DIVISIBILITY,
-            )
+            if model.SWIN.EMBED_DIM == 96:
+                backbone_config = SwinConfig.from_pretrained(
+                    "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+                )
+            elif model.SWIN.EMBED_DIM == 192:
+               backbone_config = SwinConfig.from_pretrained(
+                    "microsoft/swin-large-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
+                )
+            else: 
+                raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
         else:
+            # TODO replace this with DinatConfig once DinatBackBone is added
             backbone_config = dict(
                 num_channels=3,
                 hidden_act="gelu",
@@ -167,7 +159,6 @@ class OriginalOneFormerConfigToOursConverter:
             output_hidden_states=True,
             return_dict=True,
             general_config=dict(
-                backbone_type="swin" if is_swin else "dinat",
                 ignore_value=model.SEM_SEG_HEAD.IGNORE_VALUE,
                 num_classes=model.SEM_SEG_HEAD.NUM_CLASSES,
                 num_queries=model.ONE_FORMER.NUM_OBJECT_QUERIES,
@@ -187,6 +178,7 @@ class OriginalOneFormerConfigToOursConverter:
                 is_train=False,
                 use_auxiliary_loss=model.ONE_FORMER.DEEP_SUPERVISION,
                 output_auxiliary_logits=True,
+                strides=[4, 8, 16, 32],
             ),
             backbone_config=backbone_config,
             text_encoder_config=dict(
@@ -276,9 +268,9 @@ class OriginalOneFormerCheckpointToOursConverter:
             (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.model.embeddings.norm.weight"),
             (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.model.embeddings.norm.bias"),
         ]
-        num_layers = len(config.backbone_config["depths"])
+        num_layers = len(config.backbone_config.depths)
         for layer_idx in range(num_layers):
-            for block_idx in range(config.backbone_config["depths"][layer_idx]):
+            for block_idx in range(config.backbone_config.depths[layer_idx]):
                 renamed_keys.extend(
                     [  # src, dst
                         (
@@ -561,16 +553,14 @@ class OriginalOneFormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     # Backbone + Pixel Decoder
-    def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict, is_swin: bool):
         dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
-        if self.config.general_config["backbone_type"] == "swin":
+        if is_swin:
             self.replace_swin_backbone(dst_state_dict, src_state_dict, self.config)
-        elif self.config.general_config["backbone_type"] == "dinat":
-            self.replace_dinat_backbone(dst_state_dict, src_state_dict, self.config)
         else:
-            raise ValueError(f"Unsupported backbone type passed: {self.config.general_config['backbone_type']}")
+            self.replace_dinat_backbone(dst_state_dict, src_state_dict, self.config)
 
         def rename_keys_for_weight_bias(src_prefix: str, dst_prefix: str):
             return [
@@ -932,11 +922,11 @@ class OriginalOneFormerCheckpointToOursConverter:
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
-    def convert(self, oneformer: OneFormerModel) -> OneFormerModel:
+    def convert(self, oneformer: OneFormerModel, is_swin: bool) -> OneFormerModel:
         dst_state_dict = TrackedStateDict(oneformer.state_dict())
         src_state_dict = self.original_model.state_dict()
 
-        self.replace_pixel_module(dst_state_dict, src_state_dict)
+        self.replace_pixel_module(dst_state_dict, src_state_dict, is_swin)
         self.replace_transformer_module(dst_state_dict, src_state_dict)
         self.replace_task_mlp(dst_state_dict, src_state_dict)
         if self.config.general_config["is_train"]:
@@ -1158,7 +1148,7 @@ if __name__ == "__main__":
 
         converter = OriginalOneFormerCheckpointToOursConverter(original_model, config)
 
-        oneformer = converter.convert(oneformer)
+        oneformer = converter.convert(oneformer, is_swin)
 
         oneformer_for_universal_segmentation = OneFormerForUniversalSegmentation(config=config).eval()
 
