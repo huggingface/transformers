@@ -66,6 +66,21 @@ class BaseModelOutputWithNoAttention(ModelOutput):
 
 
 @dataclass
+class BaseModelOutputWithIntermediateActivations(ModelOutput):
+    """
+    Args:
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+            Intermediate activations that can be used to compute hidden states of the model at various layers.
+    """
+
+    last_hidden_states: torch.FloatTensor = None
+    intermediate_activations: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class BaseModelOutputWithPooling(ModelOutput):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states.
@@ -95,6 +110,7 @@ class BaseModelOutputWithPooling(ModelOutput):
     pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    intermediate_activations: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
