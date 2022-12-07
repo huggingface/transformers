@@ -149,24 +149,27 @@ class DPTConfig(PretrainedConfig):
         semantic_classifier_dropout=0.1,
         backbone_featmap_shape=[1, 1024, 24, 24],
         neck_ignore_stages=[0, 1],
+        backbone_config=None,
         **kwargs
     ):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
 
-        self.embedding_type = embedding_type
         if embedding_type not in ["patch_embedding", "vit_hybrid"]:
             raise ValueError("Embedding type must be one of ['patch_embedding', 'vit_hybrid']")
         if embedding_type == "vit_hybrid":
             logger.info("Initializing the config with a `BiT` backbone.")
-            backbone_config = {
-                "global_padding": "same",
-                "layer_type": "bottleneck",
-                "depths": [3, 4, 9],
-                "out_features": ["stage1", "stage2", "stage3"],
-                "embedding_dynamic_padding": True,
-            }
+            if backbone_config is None:
+                backbone_config = {
+                    "global_padding": "same",
+                    "layer_type": "bottleneck",
+                    "depths": [3, 4, 9],
+                    "out_features": ["stage1", "stage2", "stage3"],
+                    "embedding_dynamic_padding": True,
+                }
+            elif not isinstance(backbone_config, dict):
+                raise ValueError("backbone_config must be a dictionary.")
             self.backbone_config = BitConfig(**backbone_config)
             self.is_hybrid = True
             self.backbone_featmap_shape = backbone_featmap_shape
@@ -179,6 +182,7 @@ class DPTConfig(PretrainedConfig):
             self.is_hybrid = False
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
+        self.embedding_type = embedding_type
 
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

@@ -267,22 +267,12 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
 
         Image.fromarray((prediction / prediction.max()) * 255).show()
 
-    # # Assert logits
-    # expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]])
-    # if "ade" in checkpoint_url:
-    #     expected_slice = torch.tensor([[4.0480, 4.2420, 4.4360], [4.3124, 4.5693, 4.8261], [4.5768, 4.8965, 5.2163]])
-    # assert outputs.shape == torch.Size(expected_shape)
-    # assert (
-    #     torch.allclose(outputs[0, 0, :3, :3], expected_slice, atol=1e-4)
-    #     if "ade" in checkpoint_url
-    #     else torch.allclose(outputs[0, :3, :3], expected_slice)
-    # )
-
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -298,7 +288,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path",
         default=None,
         type=str,
-        required=True,
+        required=False,
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(

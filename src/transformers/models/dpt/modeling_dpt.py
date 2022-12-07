@@ -124,7 +124,9 @@ class DPTViTHybridEmbeddings(nn.Module):
 
         return posemb
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(
+        self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False, return_dict: bool = False
+    ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -155,6 +157,9 @@ class DPTViTHybridEmbeddings(nn.Module):
 
         # add positional encoding to each token
         embeddings = embeddings + position_embeddings
+
+        if not return_dict:
+            return (embeddings, output_hidden_states)
 
         # Return hidden states and intermediate activations
         return BaseModelOutputWithIntermediateActivations(
@@ -193,7 +198,7 @@ class DPTViTEmbeddings(nn.Module):
 
         return posemb
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values, return_dict=False):
         batch_size, num_channels, height, width = pixel_values.shape
 
         # possibly interpolate position encodings to handle varying image sizes
@@ -214,6 +219,9 @@ class DPTViTEmbeddings(nn.Module):
         embeddings = embeddings + position_embeddings
 
         embeddings = self.dropout(embeddings)
+
+        if not return_dict:
+            return (embeddings,)
 
         return BaseModelOutputWithIntermediateActivations(last_hidden_states=embeddings)
 
@@ -546,6 +554,9 @@ class DPTReassembleStage(nn.Module):
             elif i > 1:
                 self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
 
+        if config.readout_type != "project":
+            raise ValueError(f"Readout type {config.readout_type} is not supported for DPT-Hybrid.")
+
         # When using DPT-Hybrid the readout type is set to "project". The sanity check is done on the config file
         self.readout_projects = nn.ModuleList()
         for i in range(len(config.neck_hidden_sizes)):
@@ -827,7 +838,10 @@ class DPTModel(DPTPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
+        if self.config.is_hybrid:
+            return self.embeddings
+        else:
+            return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -867,10 +881,12 @@ class DPTModel(DPTPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, return_dict=return_dict)
+
+        embedding_last_hidden_states = embedding_output[0] if not return_dict else embedding_output.last_hidden_states
 
         encoder_outputs = self.encoder(
-            embedding_output.last_hidden_states,
+            embedding_last_hidden_states,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -883,7 +899,7 @@ class DPTModel(DPTPreTrainedModel):
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
+            return head_outputs + encoder_outputs[1:] + embedding_output[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -1080,7 +1096,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
                 feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
             ]
         else:
-            backbone_hidden_states = outputs.intermediate_activations
+            backbone_hidden_states = outputs.intermediate_activations if return_dict else list(outputs[-1])
             backbone_hidden_states.extend(
                 feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices[2:]
             )
@@ -1228,9 +1244,17 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         # only keep certain features based on config.backbone_out_indices
         # note that the hidden_states also include the initial embeddings
-        hidden_states = [
-            feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
-        ]
+        if not self.config.is_hybrid:
+            hidden_states = [
+                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
+            ]
+        else:
+            backbone_hidden_states = outputs.intermediate_activations if return_dict else list(outputs[-1])
+            backbone_hidden_states.extend(
+                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices[2:]
+            )
+
+            hidden_states = backbone_hidden_states
 
         hidden_states = self.neck(hidden_states)
 
