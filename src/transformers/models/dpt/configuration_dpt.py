@@ -103,6 +103,8 @@ class DPTConfig(PretrainedConfig):
             Used only for the `vit_hybrid` embedding type. The shape of the feature maps of the backbone.
         neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `vit_hybrid` embedding type. The stages of the readout layers to ignore.
+        backbone_config (`Dict[str, Any]`, *optional*, defaults to `None`):
+            Used only for the `vit_hybrid` embedding type. The configuration of the backbone in a dictionary.
 
     Example:
 

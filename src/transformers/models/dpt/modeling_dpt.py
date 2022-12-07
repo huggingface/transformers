@@ -583,8 +583,6 @@ class DPTReassembleStage(nn.Module):
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
-            ignore_index (`List[int]`, *optional*):
-                List of indices to ignore when reassembling the hidden states.
         """
         out = []
 
@@ -838,7 +836,7 @@ class DPTModel(DPTPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        if self.config.is_hybrid:
+        if self.is_hybrid:
             return self.embeddings
         else:
             return self.embeddings.patch_embeddings

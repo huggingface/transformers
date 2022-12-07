@@ -102,14 +102,14 @@ class DPTModelTester:
 
     def get_config(self):
         backbone_config = {
-                "global_padding": "same",
-                "layer_type": "bottleneck",
-                "depths": [3, 4, 9],
-                "out_features": ["stage1", "stage2", "stage3"],
-                "embedding_dynamic_padding": True,
-                "hidden_sizes": [96, 192, 384, 768], 
-                "num_groups": 2,
-            }
+            "global_padding": "same",
+            "layer_type": "bottleneck",
+            "depths": [3, 4, 9],
+            "out_features": ["stage1", "stage2", "stage3"],
+            "embedding_dynamic_padding": True,
+            "hidden_sizes": [96, 192, 384, 768],
+            "num_groups": 2,
+        }
 
         return DPTConfig(
             image_size=self.image_size,
@@ -261,14 +261,13 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in DPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = DPTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-    
+
     def test_raise_readout_type(self):
         # We do this test only for DPTForDepthEstimation since it is the only model that uses readout_type
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.readout_type = "add"
         with self.assertRaises(ValueError):
             _ = DPTForDepthEstimation(config)
-
 
 
 # We will verify our results on an image of cute cats
@@ -297,8 +296,8 @@ class DPTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 384, 384))
         self.assertEqual(predicted_depth.shape, expected_shape)
 
-        expected_slice = torch.tensor([[[5.6437, 5.6146, 5.6511],
-         [5.4371, 5.5649, 5.5958],
-         [5.5215, 5.5184, 5.5293]]]).to(torch_device)
+        expected_slice = torch.tensor(
+            [[[5.6437, 5.6146, 5.6511], [5.4371, 5.5649, 5.5958], [5.5215, 5.5184, 5.5293]]]
+        ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[:3, :3, :3] / 100, expected_slice, atol=1e-4))

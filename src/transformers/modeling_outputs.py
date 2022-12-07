@@ -69,7 +69,7 @@ class BaseModelOutputWithNoAttention(ModelOutput):
 class BaseModelOutputWithIntermediateActivations(ModelOutput):
     """
     Args:
-    Base class for model's outputs that also contains intermediate activations that can be used at later stages.
+    Base class for model's outputs that also contains intermediate activations that can be used at later stages. Useful in the context of Vision models.:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
