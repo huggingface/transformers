@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 class ImageGPTFeatureExtractor(ImageGPTImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
-            "The class ImageGPTFeatureExtractor is deprecated and will be removed in version 4.27 of Transformers."
+            "The class ImageGPTFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
             " Please use ImageGPTImageProcessor instead.",
             FutureWarning,
         )

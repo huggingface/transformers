@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 class LayoutLMv2FeatureExtractor(LayoutLMv2ImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
-            "The class LayoutLMv2FeatureExtractor is deprecated and will be removed in version 4.27 of Transformers."
+            "The class LayoutLMv2FeatureExtractor is deprecated and will be removed in version 5 of Transformers."
             " Please use LayoutLMv2ImageProcessor instead.",
             FutureWarning,
         )

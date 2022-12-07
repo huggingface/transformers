@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 class PerceiverFeatureExtractor(PerceiverImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
-            "The class PerceiverFeatureExtractor is deprecated and will be removed in version 4.27 of Transformers."
+            "The class PerceiverFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
             " Please use PerceiverImageProcessor instead.",
             FutureWarning,
         )
