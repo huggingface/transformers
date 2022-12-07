@@ -536,7 +536,7 @@ class DPTReassembleStage(nn.Module):
 
         self.config = config
         self.layers = nn.ModuleList()
-        if config.embedding_type == "vit_hybrid":
+        if config.embedding_type == "hybrid":
             self._init_reassemble_dpt_hybrid(config)
         else:
             self._init_reassemble_dpt(config)

@@ -80,7 +80,7 @@ class DPTConfig(PretrainedConfig):
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
         embedding_type (`str`, *optional*, defaults to `"patch_embedding"`):
-            The type of embedding to use. Can be one of [`"patch_embedding"`, `"vit_hybrid"`].
+            The type of embedding to use. Can be one of [`"patch_embedding"`, `"hybrid"`].
         reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
         neck_hidden_sizes (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
@@ -100,11 +100,11 @@ class DPTConfig(PretrainedConfig):
         semantic_classifier_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the semantic classification head.
         backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
-            Used only for the `vit_hybrid` embedding type. The shape of the feature maps of the backbone.
+            Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
         neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
-            Used only for the `vit_hybrid` embedding type. The stages of the readout layers to ignore.
+            Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
         backbone_config (`Dict[str, Any]`, *optional*, defaults to `None`):
-            Used only for the `vit_hybrid` embedding type. The configuration of the backbone in a dictionary.
+            Used only for the `hybrid` embedding type. The configuration of the backbone in a dictionary.
 
     Example:
 
@@ -158,9 +158,9 @@ class DPTConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
 
-        if embedding_type not in ["patch_embedding", "vit_hybrid"]:
-            raise ValueError("Embedding type must be one of ['patch_embedding', 'vit_hybrid']")
-        if embedding_type == "vit_hybrid":
+        if embedding_type not in ["patch_embedding", "hybrid"]:
+            raise ValueError("Embedding type must be one of ['patch_embedding', 'hybrid']")
+        if embedding_type == "hybrid":
             logger.info("Initializing the config with a `BiT` backbone.")
             if backbone_config is None:
                 backbone_config = {

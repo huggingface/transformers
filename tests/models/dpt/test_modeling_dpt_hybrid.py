@@ -61,7 +61,7 @@ class DPTModelTester:
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         num_labels=3,
-        embedding_type="vit_hybrid",
+        embedding_type="hybrid",
         backbone_featmap_shape=[1, 384, 24, 24],
         scope=None,
     ):

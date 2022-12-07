@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_dpt_config(checkpoint_url):
-    config = DPTConfig(embedding_type="vit_hybrid")
+    config = DPTConfig(embedding_type="hybrid")
 
     if "large" in checkpoint_url:
         config.hidden_size = 1024
