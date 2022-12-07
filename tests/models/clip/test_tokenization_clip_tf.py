@@ -53,10 +53,10 @@ class GPTTokenizationTest(unittest.TestCase):
             # "Hi",
             "This is a straightforward English test sentence.",
             # "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
-            # "Now we're going to add some Chinese: 一 二 三 一二三",
-            # "And some much more rare Chinese: 齉 堃 齉堃",
-            # "Je vais aussi écrire en français pour tester les accents",
-            # "Classical Irish also has some unusual characters, so in they go: Gaelaċ, ꝼ",
+            "Now we're going to add some Chinese: 一 二 三 一二三",
+            "And some much more rare Chinese: 齉 堃 齉堃",
+            "Je vais aussi écrire en français pour tester les accents",
+            "Classical Irish also has some unusual characters, so in they go: Gaelaċ, ꝼ",
         ]
         self.paired_sentences = list(zip(self.test_sentences, self.test_sentences[::-1]))
 
