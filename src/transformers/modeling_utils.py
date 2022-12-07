@@ -415,7 +415,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
-                if f.read().startswith("version"):
+                if f.read(7) == "version":
                     raise OSError(
                         "You seem to have cloned a repository without having git-lfs installed. Please install "
                         "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
