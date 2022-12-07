@@ -420,7 +420,7 @@ class DonutImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_align_long_axis:
-            images = [self.align_long_axis(image) for image in images]
+            images = [self.align_long_axis(image, size=size) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]
