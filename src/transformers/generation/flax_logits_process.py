@@ -269,9 +269,12 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxSuppressTokensAtBeginLogitsProcessor:
     r"""
+    [`FlaxSuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are
+    not sampled at the begining of the generation.
+
     Args:
-    [`FlaxLogitsProcessor`] supressing a list of tokens at an index.
-        begin_suppress_tokens (`list`):
+        begin_suppress_tokens (`List[int]`):
             Tokens to not sample.
         begin_index (`int`):
             Index where the tokens are suppressed.
@@ -291,8 +294,10 @@ class FlaxSuppressTokensAtBeginLogitsProcessor:
 
 class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
     r"""
+    [`FlaxSuppressTokensLogitsProcessor`] suppresses a list of tokens at each decoding step. The processor will
+    set their log probs to be `-inf` so they are not sampled.
+
     Args:
-    [`FlaxLogitsProcessor`] supressing a list of tokens.
         suppress_tokens (`list`):
             Tokens to not sample.
     """
@@ -308,8 +313,9 @@ class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxForceTokenAtIdxLogitsProcessor(FlaxLogitsProcessor):
     r"""
+    [`FlaxForceTokenAtIdxLogitsProcessor`] forces a token to be sampled at an index.
+
     Args:
-    [`FlaxLogitsProcessor`] that forces a token to be sampled at an index.
         apply_idx (`int`):
             Index where sampling is forced.
         token_id (`int`):
@@ -332,14 +338,17 @@ class FlaxForceTokenAtIdxLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
     r"""
+    [`FlaxForceTokensLogitsProcessor`] takes a list of pairs of integers which indicates a mapping from generation
+    indices to token indices that will be forced before sampling. The processor will set their log probs to `inf` so
+    that they are sampled at their corresponding index.
+
     Args:
-    [`FlaxLogitsProcessor`] that forces tokens to be sampled at given indices.
         force_token_map (`list`):
             Map giving token ids and indices where they will be forced to be sampled.
     """
 
     def __init__(self, force_token_map):
-        self.processors = [FlaxForceTokenAtIdxLogitsProcessor(i[0], i[1]) for i in force_token_map]
+        self.processors = dict(force_token_map)
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
         for processor in self.processors:
