@@ -172,26 +172,32 @@ class FlaxGenerationMixin:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         return jnp.array(decoder_start_token_id).reshape(1, -1).repeat(batch_size, axis=0)
 
-    def _get_decoder_start_token_id(
-        self,
-        decoder_start_token_id: int = None,
-        bos_token_id: int = None,
-    ) -> int:
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+        # retrieve decoder_start_token_id for encoder-decoder models
+        # fall back to bos_token_id if necessary
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
-
         if decoder_start_token_id is not None:
-            start_token = decoder_start_token_id
+            return decoder_start_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "decoder_start_token_id")
+            and self.config.decoder.decoder_start_token_id is not None
+        ):
+            return self.config.decoder.decoder_start_token_id
         elif bos_token_id is not None:
-            start_token = bos_token_id
-        else:
-            raise ValueError(
-                "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
-            )
-
-        return start_token
+            return bos_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "bos_token_id")
+            and self.config.decoder.bos_token_id is not None
+        ):
+            return self.config.decoder.bos_token_id
+        raise ValueError(
+            "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+        )
 
     @staticmethod
     def _expand_to_num_beams(tensor, num_beams):
@@ -295,7 +301,7 @@ class FlaxGenerationMixin:
 
         Most of these parameters are explained in more detail in [this blog
         post](https://huggingface.co/blog/how-to-generate).
-        
+
         Parameters:
             input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
@@ -324,12 +330,17 @@ class FlaxGenerationMixin:
                 Number of beams for beam search. 1 means no beam search.
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
-            suppress_tokens (`list`, *optional*):
-                Token ids to not sample
-            begin_suppress_tokens (`list`, *optional*):
-                Token ids to not sample during the first sample step
-            forced_decoder_ids (`list`, *optional*):
-                Sample indices and token ids to force sampling at beginning of generation
+            suppress_tokens (`List[int]`, *optional*, defaults to model.config.suppress_tokens):
+                A list of tokens that will be supressed at generation. The `FlaxSupressTokensLogitsProcessor` will set
+                their log probs to `-inf` so that they are not sampled.
+            begin_suppress_tokens (`List[int]`, *optional*, defaults to model.config.begin_supress_tokens):
+                A list of tokens that will be supressed at the begining of the generation. The 
+                `FlaxSuppressTokensAtBeginLogitsProcessor` will set their log probs to `-inf` so that they are
+                not sampled.
+            forced_decoder_ids (`List[List[int]]`, *optional*, defaults to model.config.forced_decoder_ids):
+                A list of pairs of integers which indicates a mapping from generation indices to token indices that
+                will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
+                be a token of index 123.
             trace (`bool`, *optional*, defaults to `True`):
                 Whether to trace generation. Setting `trace=False` should only be used for debugging and will lead to a
                 considerably slower runtime.
@@ -339,9 +350,12 @@ class FlaxGenerationMixin:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
                 is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific kwargs
                 should be prefixed with *decoder_*. Also accepts `encoder_outputs` to skip encoder part.
+
         Return:
             [`~utils.ModelOutput`].
+
         Examples:
+        
         ```python
         >>> from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
 

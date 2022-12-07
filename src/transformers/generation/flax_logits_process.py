@@ -267,7 +267,7 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
-class FlaxSuppressTokensAtBeginLogitsProcessor:
+class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxSuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
     generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are
