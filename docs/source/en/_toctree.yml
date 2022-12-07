@@ -388,6 +388,8 @@
       sections:
       - local: model_doc/beit
         title: BEiT
+      - local: model_doc/bit
+        title: BiT
       - local: model_doc/conditional_detr
         title: Conditional DETR
       - local: model_doc/convnext
@@ -444,6 +446,8 @@
         title: VideoMAE
       - local: model_doc/vit
         title: Vision Transformer (ViT)
+      - local: model_doc/vit_hybrid
+        title: ViT Hybrid
       - local: model_doc/vit_mae
         title: ViTMAE
       - local: model_doc/vit_msn

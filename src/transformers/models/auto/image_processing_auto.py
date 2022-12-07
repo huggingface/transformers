@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitImageProcessor"),
+        ("bit", "BitImageProcessor"),
         ("chinese_clip", "ChineseCLIPImageProcessor"),
         ("clip", "CLIPImageProcessor"),
         ("clipseg", "ViTImageProcessor"),
@@ -79,6 +80,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("videomae", "VideoMAEImageProcessor"),
         ("vilt", "ViltImageProcessor"),
         ("vit", "ViTImageProcessor"),
+        ("vit_hybrid", "ViTHybridImageProcessor"),
         ("vit_mae", "ViTImageProcessor"),
         ("vit_msn", "ViTImageProcessor"),
         ("xclip", "CLIPImageProcessor"),
