@@ -269,9 +269,9 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    [`FlaxSuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
-    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are
-    not sampled at the begining of the generation.
+    [`FlaxLogitsProcessor`] supressing a list of tokens as soon as the `generate` function starts generating using
+    `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are not sampled at the
+    begining of the generation.
 
     Args:
         begin_suppress_tokens (`List[int]`):
@@ -294,8 +294,8 @@ class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    [`FlaxSuppressTokensLogitsProcessor`] suppresses a list of tokens at each decoding step. The processor will
-    set their log probs to be `-inf` so they are not sampled.
+    [`FlaxLogitsProcessor`] suppressing a list of tokens at each decoding step. The processor will set their log probs
+    to be `-inf` so they are not sampled.
 
     Args:
         suppress_tokens (`list`):
@@ -313,7 +313,7 @@ class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxForceTokenAtIdxLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    [`FlaxForceTokenAtIdxLogitsProcessor`] forces a token to be sampled at an index.
+    [`FlaxLogitsProcessor`] forcing a token to be sampled at an index.
 
     Args:
         apply_idx (`int`):
@@ -338,9 +338,9 @@ class FlaxForceTokenAtIdxLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    [`FlaxForceTokensLogitsProcessor`] takes a list of pairs of integers which indicates a mapping from generation
-    indices to token indices that will be forced before sampling. The processor will set their log probs to `inf` so
-    that they are sampled at their corresponding index.
+    [`FlaxLogitsProcessor`] that takes a list of pairs of integers which indicates a mapping from generation indices to
+    token indices that will be forced before sampling. The processor will set their log probs to `inf` so that they are
+    sampled at their corresponding index.
 
     Args:
         force_token_map (`list`):

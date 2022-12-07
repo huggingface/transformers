@@ -128,8 +128,7 @@ class BeamSearchState:
 class FlaxGenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in
-    [`FlaxPreTrainedModel`].
-    The class exposes [`~generation.FlaxGenerationMixin.generate`], which can be used for:
+    [`FlaxPreTrainedModel`]. The class exposes [`~generation.FlaxGenerationMixin.generate`], which can be used for:
             - *greedy decoding* by calling [`~generation.FlaxGenerationMixin._greedy_search`] if `num_beams=1` and
               `do_sample=False`.
             - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
@@ -335,8 +334,8 @@ class FlaxGenerationMixin:
                 their log probs to `-inf` so that they are not sampled.
             begin_suppress_tokens (`List[int]`, *optional*, defaults to model.config.begin_supress_tokens):
                 A list of tokens that will be supressed at the begining of the generation. The
-                `FlaxSuppressTokensAtBeginLogitsProcessor` will set their log probs to `-inf` so that they are
-                not sampled.
+                `FlaxSuppressTokensAtBeginLogitsProcessor` will set their log probs to `-inf` so that they are not
+                sampled.
             forced_decoder_ids (`List[List[int]]`, *optional*, defaults to model.config.forced_decoder_ids):
                 A list of pairs of integers which indicates a mapping from generation indices to token indices that
                 will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
