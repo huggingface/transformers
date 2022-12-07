@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import NatForImageClassification, NatModel
+    from transformers import NatBackbone, NatForImageClassification, NatModel
     from transformers.models.nat.modeling_nat import NAT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -164,7 +164,15 @@ class NatModelTester:
 @require_torch
 class NatModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (NatModel, NatForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            NatModel,
+            NatForImageClassification,
+            NatBackbone,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
 
     test_torchscript = False
