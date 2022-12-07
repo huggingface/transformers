@@ -275,6 +275,21 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @require_torch
     @slow
+    def test_whisper_timestamp_prediction(self):
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model.forced_decoder_ids = processor.get_decoder_prompt_ids(no_timestamps=False)
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        audio = processor(filename).input_values
+        output = model.generate(audio)
+
+
+        # output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
+        # self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
+
+    @require_torch
+    @slow
     def test_torch_speech_encoder_decoder(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
