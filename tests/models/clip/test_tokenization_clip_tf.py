@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from transformers import TFCLIPTextModel, is_keras_nlp_available, is_tf_available
+from transformers import is_keras_nlp_available, is_tf_available
 from transformers.models.clip.tokenization_clip import CLIPTokenizer
 from transformers.testing_utils import require_keras_nlp, slow
 
@@ -23,18 +23,18 @@ if is_tf_available():
         def __init__(self, tokenizer):
             super().__init__()
             self.tokenizer = tokenizer
-            self.model = TFCLIPTextModel.from_pretrained(TINY_MODEL_CHECKPOINT)
+            # self.model = TFCLIPTextModel.from_pretrained(TINY_MODEL_CHECKPOINT)
 
         @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"),))
         def serving(self, text):
-
             tokenized = self.tokenizer(text)
-            input_ids_dense = tokenized["input_ids"]  # .to_tensor()
+            return tokenized
+            # input_ids_dense = tokenized["input_ids"]
 
-            input_mask = tf.cast(input_ids_dense > 0, tf.int32)
-            outputs = self.model(input_ids=input_ids_dense, attention_mask=input_mask)["pooler_output"]
+            # input_mask = tf.cast(input_ids_dense > 0, tf.int32)
+            # outputs = self.model(input_ids=input_ids_dense, attention_mask=input_mask)["pooler_output"]
 
-            return outputs
+            # return outputs
 
 
 @require_keras_nlp
@@ -64,15 +64,15 @@ class GPTTokenizationTest(unittest.TestCase):
         for tokenizer, tf_tokenizer in zip(self.tokenizers, self.tf_tokenizers):
             for test_inputs in self.test_sentences:
                 python_outputs = tokenizer([test_inputs], return_tensors="tf")
-                tf_outputs = tf_tokenizer([test_inputs])
+                tf_outputs = tf_tokenizer(tf.convert_to_tensor([test_inputs]))
 
                 for key in python_outputs.keys():
                     # convert them to numpy to avoid messing with ragged tensors
                     python_outputs_values = python_outputs[key].numpy()
                     tf_outputs_values = tf_outputs[key].numpy()
 
-                    print(python_outputs_values, tf_outputs_values)
-                    print(tokenizer.tokenize(test_inputs))
+                    # print(test_inputs, python_outputs_values, tf_outputs_values)
+                    # print(tokenizer.tokenize(test_inputs))
                     self.assertTrue(tf.reduce_all(python_outputs_values.shape == tf_outputs_values.shape))
                     self.assertTrue(tf.reduce_all(tf.cast(python_outputs_values, tf.int64) == tf_outputs_values))
 
@@ -81,7 +81,7 @@ class GPTTokenizationTest(unittest.TestCase):
         for tf_tokenizer in self.tf_tokenizers:
             compiled_tokenizer = tf.function(tf_tokenizer)
             for test_inputs in self.test_sentences:
-                test_inputs = tf.constant(test_inputs)
+                test_inputs = tf.constant([test_inputs])
                 compiled_outputs = compiled_tokenizer(test_inputs)
                 eager_outputs = tf_tokenizer(test_inputs)
 
@@ -98,9 +98,9 @@ class GPTTokenizationTest(unittest.TestCase):
                 save_path = Path(tempdir) / "saved.model"
                 tf.saved_model.save(model, save_path, signatures={"serving_default": model.serving})
                 loaded_model = tf.saved_model.load(save_path)
-            loaded_output = loaded_model.signatures["serving_default"](test_inputs)["output_0"]
+            loaded_output = loaded_model.signatures["serving_default"](test_inputs)  # ["output_0"]
             # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
-            self.assertTrue(tf.reduce_all(out == loaded_output))
+            self.assertTrue(tf.reduce_all(out["input_ids"].to_tensor() == loaded_output["input_ids"].to_tensor()))
 
     @slow
     def test_from_config(self):

@@ -5,8 +5,7 @@ import tensorflow as tf
 
 from keras_nlp.tokenizers import BytePairTokenizer
 from keras_nlp.tokenizers.byte_pair_tokenizer import remove_strings_from_inputs, split_strings_for_bpe
-
-# from tensorflow_text import pad_model_inputs
+from tensorflow_text import pad_model_inputs
 from transformers import BasicTokenizer, CLIPTokenizer
 
 
@@ -21,22 +20,20 @@ class CLIPKerasNLPTokenizer(BytePairTokenizer):
 
     def tokenize(self, inputs):
         if not isinstance(inputs, (tf.Tensor, tf.RaggedTensor)):
-            inputs = [" ".join(self.nlp.tokenize(inputs[0]))]
+            inputs = [" ".join(self.nlp.tokenize(inputs))]
             inputs = tf.convert_to_tensor(inputs)
-            # inputs = tf.strings.lower(inputs, encoding="")
+
+        inputs = tf.strings.lower(inputs, encoding="")
 
         scalar_input = inputs.shape.rank == 0
         if scalar_input:
             inputs = tf.expand_dims(inputs, 0)
-
         raw_tokens = split_strings_for_bpe(
             inputs
         )  # This is an english sentence -> ["This", " is", " an", " english", "sentence"]
         token_row_splits = raw_tokens.row_splits
-        # flat_tokens = tf.strings.regex_replace(raw_tokens.flat_values, "^ ", "")
-        flat_tokens = tf.strings.regex_replace(
-            raw_tokens.flat_values, "^ ", ""
-        )  # -> ["This", "is", "an", "english", "sentence"]
+        flat_tokens = tf.strings.regex_replace(raw_tokens.flat_values, "^ ", "")
+        # flat_tokens = tf.strings.regex_replace(raw_tokens.flat_values, "^ ", "") # -> ["This", "is", "an", "english", "sentence"]
 
         # first = tf.reshape(flat_tokens, (1,-1)) # (10, ) -> (1,10) [["This", " is", " an", " english", "sentence"]]
         # second = tf.ragged.constant([["</w>"] * flat_tokens.shape[-1]]) # [["</w>", "</w>, ...]]
@@ -91,8 +88,8 @@ class CLIPKerasNLPTokenizer(BytePairTokenizer):
     def _bpe_merge_one_step(self, words, mask):
         """Perform one step of byte-pair merge."""
         # Get all word pairs.
-        first, second = words[:, :-1], words[:, 1:]
-        second = tf.concat([second[:, :-1], second[:, -1:] + "</w>"], axis=-1)
+        first, second = words[:, :-1], words[:, 1:]  # sentence</w> -> ([s, e, n, t, e, n, c], [e, n, t, e, n, c, e])
+        second = tf.concat([second[:, :-1], second[:, -1:] + "</w>"], axis=-1)  # [e, n, t, e, n, c, e</w>]
 
         # Mask empty.
         non_empty_mask = second.nested_row_lengths()[0] != 0
@@ -252,33 +249,36 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
             "eos_token_id": self.eos_token_id,
         }
 
-    def call(self, x, max_length: int = None):
+    def tokenize(self, x):
         input_ids = self.tf_tokenizer(x)
-        input_ids = tf.reshape(input_ids, (1, -1))
 
-        bos_tokens = tf.constant(
-            [[self.bos_token_id]],
+        oned_tokens = tf.ones(1)
+        bos_tokens = tf.cast((oned_tokens * self.bos_token_id), tf.int32)
+        eos_tokens = tf.cast((oned_tokens * self.eos_token_id), tf.int32)
+
+        input_ids = tf.concat([bos_tokens, input_ids, eos_tokens], axis=0)
+        return input_ids
+
+    def call(self, x, max_length: int = None):
+        input_ids = tf.map_fn(
+            self.tokenize,
+            x,
             dtype=tf.int32,
-        )
-        eos_tokens = tf.constant(
-            [[self.eos_token_id]],
-            dtype=tf.int32,
+            fn_output_signature=tf.RaggedTensorSpec(
+                ragged_rank=0,
+                dtype=tf.int32,
+            ),
         )
 
-        print(bos_tokens)
-        print(eos_tokens)
-        print(input_ids)
-
-        input_ids = tf.concat([bos_tokens, input_ids, eos_tokens], axis=-1)
         attention_mask = tf.ones_like(input_ids)
 
-        # if self.pad_token_id is not None:
-        #     # pad the tokens up to max length
-        #     max_length = max_length if max_length is not None else self.max_length
+        if self.pad_token_id is not None:
+            # pad the tokens up to max length
+            max_length = max_length if max_length is not None else self.max_length
 
-        #     if max_length is not None:
-        #         input_ids, attention_mask = pad_model_inputs(
-        #             input_ids, max_seq_length=max_length, pad_value=self.pad_token_id
-        #         )
+            if max_length is not None:
+                input_ids, attention_mask = pad_model_inputs(
+                    input_ids, max_seq_length=max_length, pad_value=self.pad_token_id
+                )
 
         return {"attention_mask": attention_mask, "input_ids": input_ids}
