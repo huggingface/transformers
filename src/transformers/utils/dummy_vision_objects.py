@@ -10,6 +10,18 @@ class ImageProcessingMixin(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+def center_crop(*args, **kwargs):
+    requires_backends(center_crop, ["vision"])
+
+
+def normalize(*args, **kwargs):
+    requires_backends(normalize, ["vision"])
+
+
+def pad(*args, **kwargs):
+    requires_backends(pad, ["vision"])
+
+
 def rescale(*args, **kwargs):
     requires_backends(rescale, ["vision"])
 
