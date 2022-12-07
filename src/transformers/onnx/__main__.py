@@ -217,7 +217,8 @@ def main():
         action="store_true",
         help=(
             "Whether to use transformers.onnx instead of optimum.exporters.onnx to perform the ONNX export. It can be "
-            "when exporting a model supported in transformers but not in optimum, otherwise it is not recommended."
+            "useful when exporting a model supported in transformers but not in optimum, otherwise it is not "
+            "recommended."
         )
     )
 
