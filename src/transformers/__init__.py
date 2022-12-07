@@ -1272,6 +1272,7 @@ else:
     _import_structure["models.dinat"].extend(
         [
             "DINAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DinatBackbone",
             "DinatForImageClassification",
             "DinatModel",
             "DinatPreTrainedModel",
@@ -4386,6 +4387,7 @@ if TYPE_CHECKING:
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DinatBackbone,
             DinatForImageClassification,
             DinatModel,
             DinatPreTrainedModel,

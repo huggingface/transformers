@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DinatForImageClassification, DinatModel
+    from transformers import DinatBackbone, DinatForImageClassification, DinatModel
     from transformers.models.dinat.modeling_dinat import DINAT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -66,6 +66,7 @@ class DinatModelTester:
         use_labels=True,
         type_sequence_label_size=10,
         encoder_stride=8,
+        out_features=["stage1", "stage2"],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -91,6 +92,7 @@ class DinatModelTester:
         self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
+        self.out_features = out_features
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -123,6 +125,7 @@ class DinatModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
+            out_features=self.out_features,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -156,6 +159,19 @@ class DinatModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = DinatBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -167,7 +183,15 @@ class DinatModelTester:
 @require_torch
 class DinatModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (DinatModel, DinatForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            DinatModel,
+            DinatForImageClassification,
+            DinatBackbone,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
 
     test_torchscript = False
@@ -198,6 +222,10 @@ class DinatModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    def test_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
 
     def test_inputs_embeds(self):
         # Dinat does not use inputs_embeds
