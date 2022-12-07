@@ -39,7 +39,7 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithIntermediateActivations,
-    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndIntermediateActivations,
     DepthEstimatorOutput,
     SemanticSegmenterOutput,
 )
@@ -853,7 +853,7 @@ class DPTModel(DPTPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
+        output_type=BaseModelOutputWithPoolingAndIntermediateActivations,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -865,7 +865,7 @@ class DPTModel(DPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutputWithPoolingAndIntermediateActivations]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -899,7 +899,7 @@ class DPTModel(DPTPreTrainedModel):
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
             return head_outputs + encoder_outputs[1:] + embedding_output[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithPoolingAndIntermediateActivations(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
