@@ -358,7 +358,7 @@ class Trainer:
             self.is_model_parallel = False
 
         # At this stage the model is already loaded
-        if getattr(self, "is_loaded_in_8bit", False):
+        if getattr(model, "is_loaded_in_8bit", False):
             raise ValueError(
                 "The model you have picked is already loaded in 8-bit precision. "
                 "Training an 8-bit model is not supported yet. "
