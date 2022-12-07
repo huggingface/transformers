@@ -297,7 +297,7 @@ class ConvNextPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvNextModel):
+        if isinstance(module, (ConvNextModel, ConvNextBackbone)):
             module.gradient_checkpointing = value
 
 
@@ -545,7 +545,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel):
         outputs = self.encoder(
             embedding_output,
             output_hidden_states=True,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         hidden_states = outputs.hidden_states

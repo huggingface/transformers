@@ -56,6 +56,7 @@ class ConvNextModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         num_labels=3,
+        out_features=["stage2", "stage3", "stage4"],
         scope=None,
     ):
         self.parent = parent
@@ -71,6 +72,7 @@ class ConvNextModelTester:
         self.hidden_act = hidden_act
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.out_features = out_features
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -93,6 +95,7 @@ class ConvNextModelTester:
             hidden_act=self.hidden_act,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            out_features=self.out_features,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -113,6 +116,20 @@ class ConvNextModelTester:
         model.eval()
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = ConvNextBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -166,6 +183,10 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ConvNext does not support input and output embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="ConvNext does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
         pass
 
     def test_forward_signature(self):
