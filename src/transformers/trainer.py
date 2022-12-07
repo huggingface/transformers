@@ -357,6 +357,13 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
+        # At this stage the model is already loaded
+        if getattr(model, "is_loaded_in_8bit", False):
+            raise ValueError(
+                "The model you want to train is loaded in 8-bit precision. "
+                "Training an 8-bit model is not supported yet. "
+            )
+
         # Setup Sharded DDP training
         self.sharded_ddp = None
         if len(args.sharded_ddp) > 0:
