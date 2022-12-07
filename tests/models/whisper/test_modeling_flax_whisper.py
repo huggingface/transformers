@@ -17,15 +17,18 @@
 import inspect
 import unittest
 
-from datasets import load_dataset
-
 from transformers import WhisperConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 from transformers.utils import cached_property
+from transformers.utils.import_utils import is_datasets_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
+
+if is_datasets_available():
+    import datasets
+    from datasets import load_dataset
 
 if is_flax_available():
     import numpy as np
@@ -290,6 +293,86 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         # fmt: on
         self.assertTrue(np.allclose(logits[0][0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
 
+    def test_small_en_logits_librispeech(self):
+        model = FlaxWhisperModel.from_pretrained("openai/whisper-small.en", from_pt=True)
+        input_speech = self._load_datasamples(1)
+        feature_extractor = WhisperFeatureExtractor()
+        input_features = feature_extractor(input_speech, return_tensors="np").input_features
+
+        logits = model(
+            input_features,
+            decoder_input_ids=np.array([model.config.decoder_start_token_id]),
+            output_hidden_states=False,
+            output_attentions=False,
+            return_dict=False,
+        )
+
+        logits = logits[0] @ model.params["model"]["decoder"]["embed_tokens"]["embedding"].T
+
+        # fmt: off
+        EXPECTED_LOGITS = np.array(
+            [
+                -3.6784, -7.7211, -9.5070, -11.9286, -7.6489, -9.7026, -5.6188,
+                -8.0104, -4.6238, -5.1833, -9.0485, -3.4079, -5.4874, -2.6935,
+                -6.3479, -7.3398, -6.9558, -7.6867, -7.4748, -8.3463, -9.9781,
+                -10.8389, -10.3105, -11.7201, -9.7261, -7.1590, -5.9272, -12.4509,
+                -11.1146, -8.1918
+            ]
+        )
+        # fmt: on
+        self.assertTrue(np.allclose(logits[0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
+
+    def test_large_logits_librispeech(self):
+        model = FlaxWhisperModel.from_pretrained("openai/whisper-large", from_pt=True)
+        input_speech = self._load_datasamples(1)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        processed_inputs = processor(
+            audio=input_speech, text="This part of the speech", add_special_tokens=False, return_tensors="np"
+        )
+        input_features = processed_inputs.input_features
+        decoder_input_ids = processed_inputs.labels
+
+        logits = model(
+            input_features,
+            decoder_input_ids=decoder_input_ids,
+            output_hidden_states=False,
+            output_attentions=False,
+            return_dict=False,
+        )
+
+        logits = logits[0] @ model.params["model"]["decoder"]["embed_tokens"]["embedding"].T
+
+        # fmt: off
+        EXPECTED_LOGITS = np.array(
+            [
+                2.1382, 0.9381, 4.4671, 3.5589, 2.4022, 3.8576, -0.6521, 2.5472,
+                1.8301, 1.9957, 2.3432, 1.4678, 0.5459, 2.2597, 1.5179, 2.5357,
+                1.1624, 0.6194, 1.0757, 1.8259, 2.4076, 1.6601, 2.3503, 1.3376,
+                1.9891, 1.8635, 3.8931, 5.3699, 4.4772, 3.9184
+            ]
+        )
+        # fmt: on
+        self.assertTrue(np.allclose(logits[0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
+
+    def test_tiny_en_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+        model.config.decoder_start_token_id = 50257
+
+        input_speech = self._load_datasamples(1)
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="jax"
+        ).input_features
+
+        generated_ids = model.generate(input_features, num_beams=5, max_length=20).sequences
+        transcript = processor.tokenizer.decode(generated_ids[0])
+
+        EXPECTED_TRANSCRIPT = (
+            "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle"
+            " classes and we are glad"
+        )
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
     def test_tiny_generation(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny", from_pt=True)
@@ -299,7 +382,7 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
             raw_speech=input_speech, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="jax"
         ).input_features
 
-        generated_ids = model.generate(input_features, num_beams=5, max_length=20)
+        generated_ids = model.generate(input_features, num_beams=5, max_length=20).sequences
         transcript = processor.tokenizer.decode(generated_ids[0])
 
         EXPECTED_TRANSCRIPT = (
@@ -307,3 +390,121 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
             " classes and we are glad"
         )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    def test_large_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
+
+        input_speech = self._load_datasamples(1)
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="jax"
+        ).input_features
+
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+
+        generated_ids = model.generate(input_features, num_beams=5, max_length=20).sequences
+        transcript = processor.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    def test_large_generation_multilingual(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
+
+        ds = load_dataset("common_voice", "ja", split="test", streaming=True)
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        input_speech = next(iter(ds))["audio"]["array"]
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="np")
+
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
+        generated_ids = model.generate(input_features, do_sample=False, max_length=20).sequences
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        generated_ids = model.generate(
+            input_features,
+            do_sample=False,
+            max_length=20,
+        ).sequences
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = " Kimura-san called me."
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
+        generated_ids = model.generate(input_features, do_sample=False, max_length=20).sequences
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    def test_large_batched_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
+
+        input_speech = self._load_datasamples(4)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="np").input_features
+        generated_ids = model.generate(input_features, max_length=20).sequences
+
+        # fmt: off
+        EXPECTED_LOGITS = np.array(
+            [
+                [50258, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281],
+                [50258, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257],
+                [50258, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256],
+                [50258, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 11]
+            ]
+        )
+        # fmt: on
+
+        self.assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+
+        # fmt: off
+        EXPECTED_TRANSCRIPT = [
+            " Mr. Quilter is the apostle of the middle classes and we are glad to",
+            " Nor is Mr. Quilter's manner less interesting than his matter.",
+            " He tells us that at this festive season of the year, with Christmas and roast beef",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,",
+        ]
+        # fmt: on
+
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    def test_tiny_en_batched_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+
+        input_speech = self._load_datasamples(4)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="np").input_features
+        generated_ids = model.generate(input_features, max_length=20).sequences
+
+        # fmt: off
+        EXPECTED_LOGITS = np.array(
+            [
+                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284],
+                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256],
+                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236],
+                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460]
+            ]
+
+        )
+        # fmt: on
+
+        self.assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+
+        # fmt: off
+        EXPECTED_TRANSCRIPT = [
+            " Mr. Quilter is the apostle of the middle classes, and we are glad to",
+            " Nor is Mr. Quilter's manner less interesting than his matter.",
+            " He tells us that at this festive season of the year, with Christmas and roast beef looming",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can",
+        ]
+        # fmt: on
+
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
