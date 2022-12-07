@@ -672,6 +672,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "PyTorchBenchmarkArguments",
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
+    "BitBackbone",
     "MaskFormerSwinBackbone",
     "ResNetBackbone",
     "AutoBackbone",
