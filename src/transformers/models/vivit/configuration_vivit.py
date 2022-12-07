@@ -30,7 +30,7 @@ VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ViViTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~ViViTModel`]. It is used to instantiate an ViViT
+    This is the configuration class to store the configuration of a [`ViViTModel`]. It is used to instantiate a ViViT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ViViT
     [vivit-b-16x2-kinetics400](https://huggingface.co/jegormeister/vivit-b-16x2-kinetics400) architecture.
