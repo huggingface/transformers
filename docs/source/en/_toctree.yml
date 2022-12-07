@@ -532,6 +532,8 @@
         title: ViTMAE
       - local: model_doc/vit_msn
         title: ViTMSN
+      - local: model_doc/vivit
+        title: Vivit
       - local: model_doc/yolos
         title: YOLOS
       title: Vision models
