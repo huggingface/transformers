@@ -41,7 +41,7 @@ from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig
 from transformers import RobertaConfig, RobertaModel
-from transformers import BertConfig
+from transformers import BertConfig, BertModel
 from transformers.models.bert.modeling_bert import BertOutput, BertIntermediate, BertSelfOutput, BertSelfAttention, BertAttention
 from transformers.modeling_utils import (
     PreTrainedModel,
@@ -59,11 +59,11 @@ if not is_torch_greater_or_equal_than_1_10:
     )
 
 _CONFIG_FOR_DOC = "BridgeTowerConfig"
-_CHECKPOINT_FOR_DOC = ""
+_CHECKPOINT_FOR_DOC = "BridgeTower/bridgetower-base"
 
 BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "",
-    # See all bridgetower models at https://huggingface.co/models?filter=bridgetower
+    "BridgeTower/bridgetower-base",
+    # See all bridgetower models at https://huggingface.co/BridgeTower
 ]
 
 class BridgeTowerPreTrainedModel(PreTrainedModel):
@@ -190,42 +190,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         self.cross_modal_text_link_tower.apply(self._init_weights)
         self.cross_modal_image_link_tower.apply(self._init_weights)
-
-
-        # ===================== Load Pretrained METER Weights ===================== 
-
-        if (config.load_path != "" and not config.test_only):
-            ckpt = torch.load(config.load_path, map_location="cpu")
-            state_dict = ckpt["state_dict"]
-
-            # with open('./original_model_dict.txt', 'w') as f:
-            #     for name, param in state_dict.items():
-            #         print(name, param.shape, param.type(), file=f)
-
-            if config.only_load_cross_modal_from_meter:
-                state_dict = {k: v for k, v in state_dict.items() if k.startswith("cross_modal")}
-                # print(state_dict.keys())
-            else:
-                if self.is_clip:
-                    state_dict = adapt_position_encoding(state_dict, after=resolution_after, patch_size=config.patch_size)
-                else:
-                    state_dict = swin_adapt_position_encoding(state_dict, after=resolution_after, before=config.resolution_before)
-            
-            if config.link_tower_type == 'add' and 'cross_modal_text_layernorm.5.weight' in state_dict.keys(): # For old version migration
-                old_layernorm_dict = {}
-                for name, param in state_dict.items():
-                    if 'cross_modal_text_layernorm' in name or 'cross_modal_image_layernorm' in name:
-                        old_layernorm_dict[name] = param
-                for name in list(old_layernorm_dict.keys()):
-                    if '0' in name:
-                        state_dict.pop(name)
-                        state_dict[name.replace('.0', '')] = old_layernorm_dict[name]
-                    else:
-                        state_dict.pop(name)
-                        name_index = name.split('.')[1]
-                        state_dict[name.replace('layernorm', 'link_tower').replace(f'{name_index}.', f'{str(int(name_index) - 1)}.LayerNorm.')] = old_layernorm_dict[name]
-
-            self.load_state_dict(state_dict, strict=False)
 
         # ===================== Freeze specified modules ===================== #
         
@@ -385,18 +349,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             for p in self.itm_score.parameters():
                 p.requires_grad = False
 
-        # ===================== load downstream (test_only) ======================
-
-        if config.load_path != "" and config.test_only:
-            ckpt = torch.load(config.load_path, map_location="cpu")
-            state_dict = ckpt["state_dict"]
-            if self.is_clip:
-                state_dict = adapt_position_encoding(state_dict, after=resolution_after, patch_size=config.patch_size)
-            else:
-                state_dict = swin_adapt_position_encoding(state_dict, after=resolution_after, before=config.resolution_before)
-            self.load_state_dict(state_dict, strict=False)
-
-        #meter_utils.set_metrics(self)
         self.current_tasks = list()
 
     def forward(
