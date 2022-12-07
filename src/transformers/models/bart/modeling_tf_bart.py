@@ -1488,8 +1488,8 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
 
 @add_start_docstrings(
     """
-    Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for
-    GLUE tasks.
+    Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    tasks.
     """,
     BART_START_DOCSTRING,
 )
