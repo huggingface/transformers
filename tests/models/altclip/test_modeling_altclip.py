@@ -296,7 +296,7 @@ class AltCLIPModelTester:
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
-        config = self.get_config(text_config, vision_config)
+        config = self.get_config()
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
