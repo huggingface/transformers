@@ -29,7 +29,7 @@ if is_tf_available():
         def serving(self, text):
 
             tokenized = self.tokenizer(text)
-            input_ids_dense = tokenized["input_ids"].to_tensor()
+            input_ids_dense = tokenized["input_ids"]  # .to_tensor()
 
             input_mask = tf.cast(input_ids_dense > 0, tf.int32)
             outputs = self.model(input_ids=input_ids_dense, attention_mask=input_mask)["pooler_output"]
@@ -50,28 +50,31 @@ class GPTTokenizationTest(unittest.TestCase):
         assert len(self.tokenizers) == len(self.tf_tokenizers)
 
         self.test_sentences = [
+            # "Hi",
             "This is a straightforward English test sentence.",
-            "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
-            "Now we're going to add some Chinese: 一 二 三 一二三",
-            "And some much more rare Chinese: 齉 堃 齉堃",
-            "Je vais aussi écrire en français pour tester les accents",
-            "Classical Irish also has some unusual characters, so in they go: Gaelaċ, ꝼ",
+            # "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
+            # "Now we're going to add some Chinese: 一 二 三 一二三",
+            # "And some much more rare Chinese: 齉 堃 齉堃",
+            # "Je vais aussi écrire en français pour tester les accents",
+            # "Classical Irish also has some unusual characters, so in they go: Gaelaċ, ꝼ",
         ]
         self.paired_sentences = list(zip(self.test_sentences, self.test_sentences[::-1]))
 
-    # def test_output_equivalence(self):
-    #     for tokenizer, tf_tokenizer in zip(self.tokenizers, self.tf_tokenizers):
-    #         for test_inputs in self.test_sentences:
-    #             python_outputs = tokenizer([test_inputs], return_tensors="tf")
-    #             tf_outputs = tf_tokenizer([test_inputs])
+    def test_output_equivalence(self):
+        for tokenizer, tf_tokenizer in zip(self.tokenizers, self.tf_tokenizers):
+            for test_inputs in self.test_sentences:
+                python_outputs = tokenizer([test_inputs], return_tensors="tf")
+                tf_outputs = tf_tokenizer([test_inputs])
 
-    #             for key in python_outputs.keys():
-    #                 # convert them to numpy to avoid messing with ragged tensors
-    #                 python_outputs_values = python_outputs[key].numpy()
-    #                 tf_outputs_values = tf_outputs[key].numpy()
+                for key in python_outputs.keys():
+                    # convert them to numpy to avoid messing with ragged tensors
+                    python_outputs_values = python_outputs[key].numpy()
+                    tf_outputs_values = tf_outputs[key].numpy()
 
-    #                 self.assertTrue(tf.reduce_all(python_outputs_values.shape == tf_outputs_values.shape))
-    #                 self.assertTrue(tf.reduce_all(tf.cast(python_outputs_values, tf.int64) == tf_outputs_values))
+                    print(python_outputs_values, tf_outputs_values)
+                    print(tokenizer.tokenize(test_inputs))
+                    self.assertTrue(tf.reduce_all(python_outputs_values.shape == tf_outputs_values.shape))
+                    self.assertTrue(tf.reduce_all(tf.cast(python_outputs_values, tf.int64) == tf_outputs_values))
 
     @slow
     def test_graph_mode(self):
@@ -112,16 +115,16 @@ class GPTTokenizationTest(unittest.TestCase):
             for key in from_config_output.keys():
                 self.assertTrue(tf.reduce_all(from_config_output[key] == out[key]))
 
-    @slow
-    def test_padding(self):
-        for tf_tokenizer in self.tf_tokenizers:
-            # for the test to run
-            tf_tokenizer.pad_token_id = 123123
+    # @slow
+    # def test_padding(self):
+    #     for tf_tokenizer in self.tf_tokenizers:
+    #         # for the test to run
+    #         tf_tokenizer.pad_token_id = 123123
 
-            for max_length in [3, 5, 1024]:
-                test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
-                out = tf_tokenizer(test_inputs, max_length=max_length)
+    #         for max_length in [3, 5, 1024]:
+    #             test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
+    #             out = tf_tokenizer(test_inputs, max_length=max_length)
 
-                out_length = out["input_ids"].numpy().shape[1]
+    #             out_length = out["input_ids"].numpy().shape[1]
 
-                assert out_length == max_length
+    #             assert out_length == max_length
