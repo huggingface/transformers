@@ -827,7 +827,6 @@ class DPTModel(DPTPreTrainedModel):
             self.embeddings = DPTViTEmbeddings(config)
         else:
             self.embeddings = DPTViTHybridEmbeddings(config)
-            self.is_hybird = True
         self.encoder = DPTViTEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -837,7 +836,7 @@ class DPTModel(DPTPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        if self.is_hybrid:
+        if self.config.is_hybrid:
             return self.embeddings
         else:
             return self.embeddings.patch_embeddings
