@@ -88,7 +88,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         self.size_divisor = 0
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
-        self.class_info = class_info_file
+        self.class_info_file = class_info_file
         self.metadata = prepare_metadata(class_info_file)
         self.num_text = num_text
         self.repo_path = repo_path
@@ -116,7 +116,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
             "ignore_index": self.ignore_index,
             "max_seq_length": self.max_seq_length,
             "task_seq_length": self.task_seq_length,
-            "class_info": self.class_info,
+            "class_info_file": self.class_info_file,
             "metadata": self.metadata,
             "num_text": self.num_text,
             "repo_path": self.repo_path,
@@ -167,6 +167,8 @@ class OneFormerImageProcessorTester(unittest.TestCase):
 @require_vision
 class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
     image_processing_class = OneFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
+    # only for test_feat_extracttion_common.test_feat_extract_to_json_string
+    feature_extraction_class = image_processing_class
 
     def setUp(self):
         self.image_processing_tester = OneFormerImageProcessorTester(self)
@@ -187,7 +189,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         self.assertTrue(hasattr(image_processor, "num_labels"))
         self.assertTrue(hasattr(image_processor, "max_seq_length"))
         self.assertTrue(hasattr(image_processor, "task_seq_length"))
-        self.assertTrue(hasattr(image_processor, "class_info"))
+        self.assertTrue(hasattr(image_processor, "class_info_file"))
         self.assertTrue(hasattr(image_processor, "num_text"))
         self.assertTrue(hasattr(image_processor, "repo_path"))
 
@@ -366,7 +368,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             num_labels=self.image_processing_tester.num_classes,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="shi-labs/oneformer_demo",
+            class_info_file="ade20k_panoptic.json",
             num_text=self.image_processing_tester.num_text,
             repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
@@ -498,7 +500,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             size=(512, 512),
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="shi-labs/oneformer_demo",
+            class_info_file="ade20k_panoptic.json",
             num_text=self.image_processing_tester.num_text,
             repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
@@ -585,7 +587,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             size=(512, 512),
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="shi-labs/oneformer_demo",
+            class_info_file="ade20k_panoptic.json",
             num_text=self.image_processing_tester.num_text,
             repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
@@ -672,7 +674,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             size=(512, 512),
             max_seq_length=77,
             task_seq_length=77,
-            class_info="shi-labs/oneformer_demo",
+            class_info_file="ade20k_panoptic.json",
             num_text=self.image_processing_tester.num_text,
             repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
@@ -737,7 +739,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             num_labels=self.image_processing_tester.num_classes,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="shi-labs/oneformer_demo",
+            class_info_file="ade20k_panoptic.json",
             num_text=self.image_processing_tester.num_text,
             repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
@@ -767,7 +769,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             num_labels=self.image_processing_tester.num_classes,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="shi-labs/oneformer_demo",
+            class_info_file="ade20k_panoptic.json",
             num_text=self.image_processing_tester.num_text,
             repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
@@ -794,7 +796,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             num_labels=self.image_processing_tester.num_classes,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="shi-labs/oneformer_demo",
+            class_info_file="ade20k_panoptic.json",
             num_text=self.image_processing_tester.num_text,
             repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
@@ -815,7 +817,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             num_labels=self.image_processing_tester.num_classes,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="shi-labs/oneformer_demo",
+            class_info_file="ade20k_panoptic.json",
             num_text=self.image_processing_tester.num_text,
             repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
