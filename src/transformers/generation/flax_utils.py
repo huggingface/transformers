@@ -334,7 +334,7 @@ class FlaxGenerationMixin:
                 A list of tokens that will be supressed at generation. The `FlaxSupressTokensLogitsProcessor` will set
                 their log probs to `-inf` so that they are not sampled.
             begin_suppress_tokens (`List[int]`, *optional*, defaults to model.config.begin_supress_tokens):
-                A list of tokens that will be supressed at the begining of the generation. The 
+                A list of tokens that will be supressed at the begining of the generation. The
                 `FlaxSuppressTokensAtBeginLogitsProcessor` will set their log probs to `-inf` so that they are
                 not sampled.
             forced_decoder_ids (`List[List[int]]`, *optional*, defaults to model.config.forced_decoder_ids):
