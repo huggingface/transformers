@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitFeatureExtractor"),
+        ("chinese_clip", "ChineseCLIPFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
         ("conditional_detr", "ConditionalDetrFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
@@ -66,11 +67,16 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("regnet", "ConvNextFeatureExtractor"),
         ("resnet", "ConvNextFeatureExtractor"),
         ("segformer", "SegformerFeatureExtractor"),
+        ("sew", "Wav2Vec2FeatureExtractor"),
+        ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
         ("swinv2", "ViTFeatureExtractor"),
         ("table-transformer", "DetrFeatureExtractor"),
+        ("timesformer", "VideoMAEFeatureExtractor"),
         ("trillsson_efficient", "Trillsson_efficientFeatureExtractor"),
+        ("unispeech", "Wav2Vec2FeatureExtractor"),
+        ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
         ("van", "ConvNextFeatureExtractor"),
         ("videomae", "VideoMAEFeatureExtractor"),
         ("vilt", "ViltFeatureExtractor"),
@@ -79,6 +85,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("vit_msn", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
+        ("wavlm", "Wav2Vec2FeatureExtractor"),
+        ("whisper", "WhisperFeatureExtractor"),
         ("xclip", "CLIPFeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]

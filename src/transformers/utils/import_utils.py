@@ -445,7 +445,14 @@ def is_torch_tpu_available(check_device=True):
 
 
 def is_torchdynamo_available():
-    return importlib.util.find_spec("torchdynamo") is not None
+    if not is_torch_available():
+        return False
+    try:
+        import torch._dynamo as dynamo  # noqa: F401
+
+        return True
+    except Exception:
+        return False
 
 
 def is_torch_tensorrt_fx_available():
