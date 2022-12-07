@@ -1525,7 +1525,7 @@ class AltCLIPVisionTransformer(nn.Module):
         self.encoder = AltCLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
-    @add_start_docstrings_to_model_forward(AltCLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ALTCLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AltCLIPVisionConfig)
     def forward(
         self,
