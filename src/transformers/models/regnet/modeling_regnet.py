@@ -275,7 +275,6 @@ class RegNetEncoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RegNet,resnet->regnet
 class RegNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -287,6 +286,7 @@ class RegNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
+    # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel._init_weights
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")

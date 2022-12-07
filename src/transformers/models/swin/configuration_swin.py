@@ -84,7 +84,7 @@ class SwinConfig(PretrainedConfig):
         encoder_stride (`int`, `optional`, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
-        Example:
+    Example:
 
     ```python
     >>> from transformers import SwinConfig, SwinModel

@@ -267,7 +267,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ResNetModel):
+        if isinstance(module, (ResNetModel, ResNetBackbone)):
             module.gradient_checkpointing = value
 
 
@@ -436,7 +436,8 @@ class ResNetBackbone(ResNetPreTrainedModel):
         super().__init__(config)
 
         self.stage_names = config.stage_names
-        self.resnet = ResNetModel(config)
+        self.embedder = ResNetEmbeddings(config)
+        self.encoder = ResNetEncoder(config)
 
         self.out_features = config.out_features
 
@@ -490,7 +491,9 @@ class ResNetBackbone(ResNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.resnet(pixel_values, output_hidden_states=True, return_dict=True)
+        embedding_output = self.embedder(pixel_values)
+
+        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
 
         hidden_states = outputs.hidden_states
 
