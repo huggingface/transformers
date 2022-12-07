@@ -592,7 +592,10 @@ class BitEncoder(nn.Module):
         dilation = 1
 
         layer_dropouts = [
-            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+            x.tolist()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), dtype=torch.float32).split(
+                config.depths
+            )
         ]
 
         for stage_idx, (current_depth, current_hidden_size, layer_dropout) in enumerate(
