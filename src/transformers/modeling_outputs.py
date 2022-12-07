@@ -85,7 +85,8 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
 @dataclass
 class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
     """
-    Base class for model's outputs that also contains a pooling of the last hidden states.
+    Base class for model's outputs that also contains a pooling of the last hidden states as well as intermediate
+    activations that can be used by the model at later stages.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
