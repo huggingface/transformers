@@ -515,7 +515,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        past_key_values = None,
+        past_key_values: Optional[Tuple[Tuple[tf.tensor]]] =  None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
