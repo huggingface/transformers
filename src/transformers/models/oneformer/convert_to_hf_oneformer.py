@@ -36,12 +36,7 @@ try:
 except ImportError:
     pass
 from transformers import CLIPTokenizer
-from transformers.models.oneformer.dataset_info_oneformer import (
-    ADE20K_150_CATEGORIES,
-    CITYSCAPES_CATEGORIES,
-    COCO_CATEGORIES,
-)
-from transformers.models.oneformer.feature_extraction_oneformer import OneFormerFeatureExtractor
+from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
 from transformers.models.oneformer.modeling_oneformer import (
     OneFormerConfig,
     OneFormerForUniversalSegmentation,
@@ -229,21 +224,21 @@ class OriginalOneFormerConfigToOursConverter:
 
 
 class OriginalOneFormerConfigToFeatureExtractorConverter:
-    def __call__(self, original_config: object, model_repo: str) -> OneFormerFeatureExtractor:
+    def __call__(self, original_config: object, model_repo: str) -> OneFormerImageProcessor:
         model = original_config.MODEL
         model_input = original_config.INPUT
         dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST_PANOPTIC[0])
 
         if "ade20k" in model_repo:
-            class_info = ADE20K_150_CATEGORIES
+            class_info_file = "ade20k_panoptic.json" 
         elif "coco" in model_repo:
-            class_info = COCO_CATEGORIES
+            class_info_file = "coco_panoptic.json"
         elif "cityscapes" in model_repo:
-            class_info = CITYSCAPES_CATEGORIES
+            class_info_file = "cityscapes_panoptic.json"
         else:
             raise ValueError("Invalid Dataset!")
 
-        return OneFormerFeatureExtractor(
+        return OneFormerImageProcessor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
@@ -254,7 +249,7 @@ class OriginalOneFormerConfigToFeatureExtractorConverter:
             task_seq_length=original_config.INPUT.TASK_SEQ_LEN,
             max_seq_length=original_config.INPUT.MAX_SEQ_LEN,
             repo_path=model_repo,
-            class_info=class_info,
+            class_info_file=class_info_file,
         )
 
 
@@ -970,7 +965,7 @@ class OriginalOneFormerCheckpointToOursConverter:
 def test(
     original_model,
     our_model: OneFormerForUniversalSegmentation,
-    feature_extractor: OneFormerFeatureExtractor,
+    feature_extractor: OneFormerImageProcessor,
     model_repo: str,
 ):
     def pad_tokens_to_max_len(tokens, max_len=77):

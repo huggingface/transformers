@@ -17,9 +17,9 @@
 import math
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
-
+import json
 import numpy as np
-
+from huggingface_hub import hf_hub_download
 from transformers import CLIPTokenizer
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from transformers.image_transforms import (
@@ -313,17 +313,16 @@ def get_oneformer_resize_output_image_size(
     return output_size
 
 
-def prepare_metadata(class_info):
+def prepare_metadata(class_info_file):
+    class_info = json.load(open(hf_hub_download("shi-labs/oneformer_demo", class_info_file, repo_type="dataset"), "r"))
     metadata = {}
     class_names = []
     thing_ids = []
-    for idx in range(len(class_info)):
-        info = class_info[idx]
-        id = info["id"]
-        metadata[str(id)] = info["name"]
+    for key,info in class_info.items():
+        metadata[key] = info["name"]
         class_names.append(info["name"])
         if info["isthing"]:
-            thing_ids.append(id)
+            thing_ids.append(int(id))
     metadata["thing_ids"] = thing_ids
     metadata["class_names"] = class_names
     return metadata
@@ -380,8 +379,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
             Sequence length for input task token.
         repo_path (`str`):
             Model repo on huggingface hub
-        class_info (`dict`):
-            Dictionary containing class names and if the class belongs to thing category.
+        class_info_file (`str`):
+            JSON file containing class information for the dataset.
         num_text (`int`, *optional*):
             Number of text entries in the text input list.
     """
@@ -404,7 +403,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         max_seq_length: Optional[int] = 77,
         task_seq_length: int = 77,
         repo_path: str = None,
-        class_info: dict = None,
+        class_info_file: str = None,
         num_text: Optional[int] = None,
         **kwargs
     ):
@@ -444,8 +443,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.reduce_labels = reduce_labels
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
-        self.class_info = class_info
-        self.metadata = prepare_metadata(class_info)
+        self.class_info_file = class_info_file
+        self.metadata = prepare_metadata(class_info_file)
         self.num_text = num_text
         self.repo_path = repo_path
 

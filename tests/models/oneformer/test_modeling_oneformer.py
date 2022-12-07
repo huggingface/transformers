@@ -35,7 +35,7 @@ if is_torch_available():
     from transformers import OneFormerForUniversalSegmentation, OneFormerModel
 
     if is_vision_available():
-        from transformers import OneFormerFeatureExtractor
+        from transformers import OneFormerImageProcessor
 
 if is_vision_available():
     from PIL import Image
@@ -438,14 +438,14 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         return "shi-labs/oneformer_ade20k_swin_tiny"
 
     @cached_property
-    def default_feature_extractor(self):
-        return OneFormerFeatureExtractor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+    def default_image_processor(self):
+        return OneFormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = OneFormerModel.from_pretrained(self.model_checkpoints).to(torch_device)
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(image, ["semantic"], return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, ["semantic"], return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -488,9 +488,9 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
 
     def test_inference_universal_segmentation_head(self):
         model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(image, ["semantic"], return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, ["semantic"], return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -522,8 +522,8 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
 
     def test_with_segmentation_maps_and_loss(self):
         dummy_model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
-        feature_extractor = self.default_feature_extractor
-        feature_extractor.num_text = (
+        image_processor = self.default_image_processor
+        image_processor.num_text = (
             dummy_model.config.general_config["num_queries"]
             - dummy_model.config.text_encoder_config["text_encoder_n_ctx"]
         )
@@ -531,7 +531,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         model = OneFormerForUniversalSegmentation(dummy_model.config).to(torch_device).eval()
         del dummy_model
 
-        inputs = feature_extractor(
+        inputs = image_processor(
             [np.zeros((3, 512, 640)), np.zeros((3, 512, 640))],
             ["semantic", "semantic"],
             segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],

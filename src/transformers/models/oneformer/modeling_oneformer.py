@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "OneFormerConfig"
 _CHECKPOINT_FOR_DOC = "shi-labs/oneformer_ade20k_swin_tiny"
-_FEAT_EXTRACTOR_FOR_DOC = "OneFormerFeatureExtractor"
+_IMAGE_PROCESSOR_FOR_DOC = "OneFormerImageProcessor"
 
 ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "shi-labs/oneformer_ade20k_swin_tiny",
@@ -862,10 +862,10 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     """
     Class for outputs of [`OneFormerForUniversalSegmentationOutput`].
 
-    This output can be directly passed to [`~OneFormerFeatureExtractor.post_process_semantic_segmentation`] or
-    [`~OneFormerFeatureExtractor.post_process_instance_segmentation`] or
-    [`~OneFormerFeatureExtractor.post_process_panoptic_segmentation`] depending on the task. Please, see
-    [`~OneFormerFeatureExtractor] for details regarding usage.
+    This output can be directly passed to [`~OneFormerImageProcessor.post_process_semantic_segmentation`] or
+    [`~OneFormerImageProcessor.post_process_instance_segmentation`] or
+    [`~OneFormerImageProcessor.post_process_panoptic_segmentation`] depending on the task. Please, see
+    [`~OneFormerImageProcessor] for details regarding usage.
 
     Args:
         loss (`torch.Tensor`, *optional*):
@@ -2989,11 +2989,11 @@ ONEFORMER_START_DOCSTRING = r"""
 ONEFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`OneFormerFeatureExtractor`]. See
-            [`OneFormerFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`OneFormerImageProcessor`]. See
+            [`OneFormerImageProcessor.__call__`] for details.
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Task inputs. Task inputs can be obtained using [`OneFormerFeatureExtractor`]. See
-            [`OneFormerFeatureExtractor.__call__`] for details.
+            Task inputs. Task inputs can be obtained using [`OneFormerImageProcessor`]. See
+            [`OneFormerImageProcessor.__call__`] for details.
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 
@@ -3138,16 +3138,16 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPTokenizer, OneFormerFeatureExtractor, OneFormerModel
+        >>> from transformers import CLIPTokenizer, OneFormerImageProcessor, OneFormerModel
 
         >>> # download texting image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> # load feature extractor for preprocessing the inputs
-        >>> feature_extractor = OneFormerFeatureExtractor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+        >>> image_processor = OneFormerImageProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
         >>> model = OneFormerModel.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
-        >>> inputs = feature_extractor(image, ["semantic"], return_tensors="pt")
+        >>> inputs = image_processor(image, ["semantic"], return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -3325,13 +3325,13 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         Universal segmentation example:
 
         ```python
-        >>> from transformers import OneFormerFeatureExtractor, OneFormerForUniversalSegmentation
+        >>> from transformers import OneFormerImageProcessor, OneFormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import requests
         >>> import torch
 
         >>> # load OneFormer fine-tuned on ADE20k for universal segmentation
-        >>> feature_extractor = OneFormerFeatureExtractor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+        >>> image_processor = OneFormerImageProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
         >>> model = OneFormerForUniversalSegmentation.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
 
         >>> url = (
@@ -3340,7 +3340,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> ######## Semantic Segmentation ########
-        >>> inputs = feature_extractor(image, ["semantic"], return_tensors="pt")
+        >>> inputs = image_processor(image, ["semantic"], return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -3357,7 +3357,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         '👉 Semantic Predictions Shape: [512, 683]'
 
         >>> ######## Instance Segmentation ########
-        >>> inputs = feature_extractor(image, ["instance"], return_tensors="pt")
+        >>> inputs = image_processor(image, ["instance"], return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -3374,7 +3374,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         '👉 Instance Predictions Shape: [512, 683]'
 
         >>> ######## Panoptic Segmentation ########
-        >>> inputs = feature_extractor(image, ["panoptic"], return_tensors="pt")
+        >>> inputs = image_processor(image, ["panoptic"], return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

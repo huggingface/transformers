@@ -28,7 +28,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_oneformer"] = ["OneFormerFeatureExtractor"]
     _import_structure["image_processing_oneformer"] = ["OneFormerImageProcessor"]
 
 
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_oneformer import OneFormerFeatureExtractor
         from .image_processing_oneformer import OneFormerImageProcessor
     try:
         if not is_torch_available():
