@@ -58,8 +58,9 @@ def export_with_optimum(args):
     proc.wait()
 
     logger.info(
-        "The export was done by optimum.exporters.onnx, it is suggested to use this tool directly for the future, more"
-        " information here: https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model."
+        "The export was done by optimum.exporters.onnx, it is suggested to use this tool directly for the future, you "
+        "can find more information here: "
+        "https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model."
     )
 
 
@@ -173,8 +174,9 @@ def export_with_transformers(args):
         validate_model_outputs(onnx_config, preprocessor, model, args.output, onnx_outputs, args.atol)
         logger.info(f"All good, model saved at: {args.output.as_posix()}")
         logger.info(
-            "The export was done by transformers.onnx, the recommended way is by using optimum.exporters.onnx, more "
-            "information here: https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model."
+            "The export was done by transformers.onnx, the recommended way is using optimum.exporters.onnx, you can "
+            "find more information here: "
+            "https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model."
         )
 
 
