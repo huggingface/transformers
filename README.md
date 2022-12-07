@@ -101,6 +101,7 @@ In Audio:
 - [Audio Classification with Audio Spectrogram Transformer](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
 
 In Multimodal tasks:
+- [Table Question Answering with TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
 - [Visual Question Answering with ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
 - [Zero-shot Image Classification with CLIP](https://huggingface.co/openai/clip-vit-large-patch14)
 - [Document Question Answering with LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
