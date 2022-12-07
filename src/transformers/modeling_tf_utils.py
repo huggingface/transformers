@@ -2720,13 +2720,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
 
-        # we might need to extend the variable scope for composite models
-        if load_weight_prefix is not None:
-            with tf.compat.v1.variable_scope(load_weight_prefix):
-                model(model.dummy_inputs)  # build the network with dummy inputs
-        else:
-            model(model.dummy_inputs)  # build the network with dummy inputs
-
         if from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
@@ -2734,7 +2727,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return load_pytorch_checkpoint_in_tf2_model(
                 model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info
             )
-        elif safetensors_from_pt:
+
+        # we might need to extend the variable scope for composite models
+        if load_weight_prefix is not None:
+            with tf.compat.v1.variable_scope(load_weight_prefix):
+                model(model.dummy_inputs)  # build the network with dummy inputs
+        else:
+            model(model.dummy_inputs)  # build the network with dummy inputs
+
+        if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
 
             state_dict = safe_load_file(resolved_archive_file)
