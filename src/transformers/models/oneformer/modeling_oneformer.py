@@ -46,7 +46,6 @@ from ...utils import (
 from .backbone_dinat_oneformer import OneFormerDinatModel
 from .backbone_swin_oneformer import OneFormerSwinEncoder, OneFormerSwinModel
 from .configuration_oneformer import OneFormerConfig
-from .load_custom import load_cuda_kernels
 
 
 logger = logging.get_logger(__name__)
@@ -66,17 +65,6 @@ ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-
-if is_torch_cuda_available() and is_ninja_available():
-    logger.info("Loading custom CUDA kernels...")
-    try:
-        MultiScaleDeformableAttention = load_cuda_kernels()
-    except Exception as e:
-        logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-        MultiScaleDeformableAttention = None
-else:
-    MultiScaleDeformableAttention = None
 
 
 def _get_clones(module, N):
@@ -1015,55 +1003,6 @@ class OneFormerSwinTransformerBackbone(nn.Module):
 
 # Pixel Decoder Classes #
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
-class MultiScaleDeformableAttentionFunction(Function):
-    @staticmethod
-    def forward(
-        context,
-        value,
-        value_spatial_shapes,
-        value_level_start_index,
-        sampling_locations,
-        attention_weights,
-        im2col_step,
-    ):
-        context.im2col_step = im2col_step
-        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            context.im2col_step,
-        )
-        context.save_for_backward(
-            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
-        )
-        return output
-
-    @staticmethod
-    @once_differentiable
-    def backward(context, grad_output):
-        (
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-        ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            context.im2col_step,
-        )
-
-        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
 class OneFormerPixelDecoderFrozenBatchNorm2d(nn.Module):
     """
@@ -1213,19 +1152,8 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
             )
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-        try:
-            # GPU
-            output = MultiScaleDeformableAttentionFunction.apply(
-                value,
-                spatial_shapes,
-                level_start_index,
-                sampling_locations,
-                attention_weights,
-                self.im2col_step,
-            )
-        except Exception:
-            # CPU
-            output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+        # CPU
+        output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -1349,9 +1277,6 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-        for module in self.modules():
-            if isinstance(module, MultiScaleDeformableAttentionFunction):
-                module._reset_parameters()
 
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
@@ -1552,9 +1477,6 @@ class OneFormerPixelDecoder(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-        for m in self.modules():
-            if isinstance(m, MultiScaleDeformableAttentionFunction):
-                m._reset_parameters()
         nn.init.normal_(self.level_embed, std=0)
 
     def get_valid_ratio(self, mask):
