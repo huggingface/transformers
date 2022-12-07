@@ -42,11 +42,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_vivit"] = [
         "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ViViTLayer",
         "ViViTModel",
         "ViViTPreTrainedModel",
         "ViViTForVideoClassification",
-        "load_tf_weights_in_vivit",
     ]
 
 
@@ -71,10 +69,8 @@ if TYPE_CHECKING:
         from .modeling_vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViViTForVideoClassification,
-            ViViTLayer,
             ViViTModel,
             ViViTPreTrainedModel,
-            load_tf_weights_in_vivit,
         )
 
 

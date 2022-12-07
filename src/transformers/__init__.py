@@ -6236,10 +6236,8 @@ if TYPE_CHECKING:
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViViTForVideoClassification,
-            ViViTLayer,
             ViViTModel,
             ViViTPreTrainedModel,
-            load_tf_weights_in_vivit,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

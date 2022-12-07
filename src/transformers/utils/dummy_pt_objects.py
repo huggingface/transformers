@@ -7413,13 +7413,6 @@ class ViViTForVideoClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class ViViTLayer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ViViTModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7432,10 +7425,6 @@ class ViViTPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-
-def load_tf_weights_in_vivit(*args, **kwargs):
-    requires_backends(load_tf_weights_in_vivit, ["torch"])
 
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
