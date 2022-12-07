@@ -12,7 +12,7 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-tensorflow,testing]
 
 # If set to nothing, will install the latest version
-ARG TENSORFLOW='2.10'
+ARG TENSORFLOW='2.11'
 
 RUN [ ${#TENSORFLOW} -gt 0 ] && VERSION='tensorflow=='$TENSORFLOW'.*' ||  VERSION='tensorflow'; python3 -m pip install --no-cache-dir -U $VERSION
 RUN python3 -m pip uninstall -y torch flax
