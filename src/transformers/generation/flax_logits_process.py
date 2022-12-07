@@ -348,7 +348,7 @@ class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
     """
 
     def __init__(self, force_token_map):
-        self.processors = dict(force_token_map)
+        self.processors = [FlaxForceTokenAtIdxLogitsProcessor(i[0], i[1]) for i in force_token_map]
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
         for processor in self.processors:
