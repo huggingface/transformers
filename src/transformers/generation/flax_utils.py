@@ -355,7 +355,7 @@ class FlaxGenerationMixin:
             [`~utils.ModelOutput`].
 
         Examples:
-        
+
         ```python
         >>> from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
 
@@ -379,6 +379,8 @@ class FlaxGenerationMixin:
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
+        if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
+            forced_decoder_ids = self.config.forced_decoder_ids
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
         if decoder_start_token_id is None and self.config.is_encoder_decoder:
@@ -398,8 +400,6 @@ class FlaxGenerationMixin:
             # add encoder_outputs to model_kwargs
             if model_kwargs.get("encoder_outputs") is None:
                 model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
-            if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
-                forced_decoder_ids = self.config.forced_decoder_ids
             # prepare decoder_input_ids for generation
             input_ids = self._prepare_decoder_input_ids_for_generation(
                 batch_size,
@@ -458,6 +458,7 @@ class FlaxGenerationMixin:
                 input_ids_seq_length,
                 suppress_tokens=suppress_tokens,
                 begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
             return self._greedy_search(
                 input_ids,
@@ -481,6 +482,7 @@ class FlaxGenerationMixin:
                 input_ids_seq_length,
                 suppress_tokens=suppress_tokens,
                 begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
             return self._sample(
                 input_ids,
@@ -518,6 +520,7 @@ class FlaxGenerationMixin:
                 input_ids_seq_length,
                 suppress_tokens=suppress_tokens,
                 begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
 
             return self._beam_search(
@@ -595,8 +598,6 @@ class FlaxGenerationMixin:
         begin_suppress_tokens = (
             begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
         )
-        if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
-            forced_decoder_ids = self.config.forced_decoder_ids
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
