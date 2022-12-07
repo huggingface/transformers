@@ -99,6 +99,10 @@ class DPTConfig(PretrainedConfig):
             The index that is ignored by the loss function of the semantic segmentation model.
         semantic_classifier_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the semantic classification head.
+        backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
+            Used only for the `vit_hybrid` embedding type. The shape of the feature maps of the backbone.
+        neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
+            Used only for the `vit_hybrid` embedding type. The stages of the readout layers to ignore.
 
     Example:
 
@@ -143,6 +147,8 @@ class DPTConfig(PretrainedConfig):
         auxiliary_loss_weight=0.4,
         semantic_loss_ignore_index=255,
         semantic_classifier_dropout=0.1,
+        backbone_featmap_shape=[1, 1024, 24, 24],
+        neck_ignore_stages=[0, 1],
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -163,9 +169,16 @@ class DPTConfig(PretrainedConfig):
             }
             self.backbone_config = BitConfig(**backbone_config)
             self.is_hybrid = True
+            self.backbone_featmap_shape = backbone_featmap_shape
+            self.neck_ignore_stages = neck_ignore_stages
+
+            if readout_type != "project":
+                raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
         else:
             self.backbone_config = None
             self.is_hybrid = False
+            self.backbone_featmap_shape = None
+            self.neck_ignore_stages = []
 
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

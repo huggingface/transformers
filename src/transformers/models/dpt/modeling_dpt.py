@@ -92,20 +92,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         self.residual_feature_map_index = [0, 1]  # Always take the output of the first and second backbone stage
 
         if feature_size is None:
-            # with torch.no_grad():
-            #     # NOTE Most reliable way of determining spatial output dimensions is to run forward pass
-            #     training = self.backbone.training
-            #     if training:
-            #         self.backbone.eval()
-            #     feature_map = self.backbone(torch.zeros(1, num_channels, image_size[0], image_size[1])).feature_maps[
-            #         -1
-            #     ]
-            #     feature_size = feature_map.shape[-2:]
-            #     feature_dim = feature_map.shape[1]
-            #     self.backbone.train(training)
-
-            # TODO: add it on the config
-            feat_map_shape = (1, 1024, 24, 24)
+            feat_map_shape = config.backbone_featmap_shape
             feature_size = feat_map_shape[-2:]
             feature_dim = feat_map_shape[1]
         else:
@@ -158,6 +145,7 @@ class DPTViTHybridEmbeddings(nn.Module):
 
         features = backbone_output.feature_maps[-1]
 
+        # Retrieve also the intermediate activations to use them at later stages
         output_hidden_states = [backbone_output.feature_maps[index] for index in self.residual_feature_map_index]
 
         embeddings = self.projection(features).flatten(2).transpose(1, 2)
@@ -168,6 +156,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         # add positional encoding to each token
         embeddings = embeddings + position_embeddings
 
+        # Return hidden states and intermediate activations
         return BaseModelOutputWithIntermediateActivations(
             last_hidden_states=embeddings,
             intermediate_activations=output_hidden_states,
@@ -543,9 +532,13 @@ class DPTReassembleStage(nn.Module):
         else:
             self._init_reassemble_dpt(config)
 
+        self.neck_ignore_stages = config.neck_ignore_stages
+
     def _init_reassemble_dpt_hybrid(self, config):
         r""" "
-        This needs to be re-defined since for `DPTHybrid` the first 2 reassemble layers are set to `nn.Identity()`.
+        This needs to be re-defined since for `DPTHybrid` the first 2 reassemble layers are set to `nn.Identity()`. For
+        DPT-Hybrid the first 2 reassemble layers are set to `nn.Identity()`, please check the official implementation:
+        https://github.com/isl-org/DPT/blob/f43ef9e08d70a752195028a51be5e1aff227b913/dpt/vit.py#L438 for more details.
         """
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
             if i <= 1:
@@ -553,15 +546,15 @@ class DPTReassembleStage(nn.Module):
             elif i > 1:
                 self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
 
-        if config.readout_type == "project":
-            self.readout_projects = nn.ModuleList()
-            for i in range(len(config.neck_hidden_sizes)):
-                if i <= 1:
-                    self.readout_projects.append(nn.Sequential(nn.Identity()))
-                elif i > 1:
-                    self.readout_projects.append(
-                        nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
-                    )
+        # When using DPT-Hybrid the readout type is set to "project". The sanity check is done on the config file
+        self.readout_projects = nn.ModuleList()
+        for i in range(len(config.neck_hidden_sizes)):
+            if i <= 1:
+                self.readout_projects.append(nn.Sequential(nn.Identity()))
+            elif i > 1:
+                self.readout_projects.append(
+                    nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
+                )
 
     def _init_reassemble_dpt(self, config):
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
@@ -574,7 +567,7 @@ class DPTReassembleStage(nn.Module):
                     nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    def forward(self, hidden_states: List[torch.Tensor], ignore_index: Optional[List] = []) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
@@ -585,7 +578,7 @@ class DPTReassembleStage(nn.Module):
         out = []
 
         for i, hidden_state in enumerate(hidden_states):
-            if i not in ignore_index:
+            if i not in self.neck_ignore_stages:
                 # reshape to (B, C, H, W)
                 hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
                 batch_size, sequence_length, num_channels = hidden_state.shape
@@ -942,8 +935,6 @@ class DPTNeck(nn.Module):
         # fusion
         self.fusion_stage = DPTFeatureFusionStage(config)
 
-        self.is_using_hybrid = config.embedding_type == "vit_hybrid"
-
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if not isinstance(hidden_states, list):
             raise ValueError("hidden_states should be a list of tensors")
@@ -952,10 +943,7 @@ class DPTNeck(nn.Module):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
         # postprocess hidden states
-        if self.is_using_hybrid:
-            features = self.reassemble_stage(hidden_states, ignore_index=[0, 1])
-        else:
-            features = self.reassemble_stage(hidden_states)
+        features = self.reassemble_stage(hidden_states)
 
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
