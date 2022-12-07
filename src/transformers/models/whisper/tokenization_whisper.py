@@ -584,5 +584,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
-        forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(self.prefix_tokens)]
+        # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>
+        # we don't want to force the bos token at position 1, as this is the starting token
+        # when we generate, so we slice the prefix tokens to: <|lang_id|> <|task|> <|notimestamps|>
+        # to get the forced tokens
+        forced_tokens = self.prefix_tokens[1:]
+        forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_tokens)]
         return forced_decoder_ids
