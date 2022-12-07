@@ -268,6 +268,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
         ("albert", "TFAlbertForSequenceClassification"),
+        ("bart", "TFBartForSequenceClassification"),
         ("bert", "TFBertForSequenceClassification"),
         ("camembert", "TFCamembertForSequenceClassification"),
         ("convbert", "TFConvBertForSequenceClassification"),

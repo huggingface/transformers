@@ -63,7 +63,12 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_bart"] = ["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"]
+    _import_structure["modeling_tf_bart"] = [
+        "TFBartForConditionalGeneration",
+        "TFBartForSequenceClassification",
+        "TFBartModel",
+        "TFBartPretrainedModel",
+    ]
 
 try:
     if not is_flax_available():
@@ -116,7 +121,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
+        from .modeling_tf_bart import (
+            TFBartForConditionalGeneration,
+            TFBartForSequenceClassification,
+            TFBartModel,
+            TFBartPretrainedModel,
+        )
 
     try:
         if not is_flax_available():
