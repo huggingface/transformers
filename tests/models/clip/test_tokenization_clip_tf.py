@@ -115,16 +115,16 @@ class GPTTokenizationTest(unittest.TestCase):
             for key in from_config_output.keys():
                 self.assertTrue(tf.reduce_all(from_config_output[key] == out[key]))
 
-    # @slow
-    # def test_padding(self):
-    #     for tf_tokenizer in self.tf_tokenizers:
-    #         # for the test to run
-    #         tf_tokenizer.pad_token_id = 123123
+    @slow
+    def test_padding(self):
+        for tf_tokenizer in self.tf_tokenizers:
+            # for the test to run
+            tf_tokenizer.pad_token_id = 123123
 
-    #         for max_length in [3, 5, 1024]:
-    #             test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
-    #             out = tf_tokenizer(test_inputs, max_length=max_length)
+            for max_length in [3, 5, 1024]:
+                test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
+                out = tf_tokenizer(test_inputs, max_length=max_length)
 
-    #             out_length = out["input_ids"].numpy().shape[1]
+                out_length = out["input_ids"].numpy().shape[1]
 
-    #             assert out_length == max_length
+                assert out_length == max_length
