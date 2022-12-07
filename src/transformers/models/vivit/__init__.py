@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_vivit": ["VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViViTConfig"],
+    "configuration_vivit": ["VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VivitConfig"],
 }
 try:
     if not is_vision_available():
@@ -30,7 +30,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_vivit"] = ["ViViTImageProcessor"]
+    _import_structure["image_processing_vivit"] = ["VivitImageProcessor"]
 
 
 try:
@@ -41,14 +41,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_vivit"] = [
         "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ViViTModel",
-        "ViViTPreTrainedModel",
-        "ViViTForVideoClassification",
+        "VivitModel",
+        "VivitPreTrainedModel",
+        "VivitForVideoClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViViTConfig
+    from .configuration_vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
 
     try:
         if not is_vision_available():
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_vivit import ViViTImageProcessor
+        from .image_processing_vivit import VivitImageProcessor
 
     try:
         if not is_torch_available():
@@ -66,9 +66,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViViTForVideoClassification,
-            ViViTModel,
-            ViViTPreTrainedModel,
+            VivitForVideoClassification,
+            VivitModel,
+            VivitPreTrainedModel,
         )
 
 

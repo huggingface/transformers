@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViViT model."""
+""" PyTorch Vivit model."""
 
 
 import math
@@ -28,18 +28,18 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_vivit import ViViTConfig
+from .configuration_vivit import VivitConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "vivit-b-16x2-kinetics400"
-_CONFIG_FOR_DOC = "ViViTConfig"
-_TOKENIZER_FOR_DOC = "ViViTTokenizer"
+_CONFIG_FOR_DOC = "VivitConfig"
+_TOKENIZER_FOR_DOC = "VivitTokenizer"
 
 VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "vivit-b-16x2-kinetics400",
-    # See all ViViT models at https://huggingface.co/models?filter=vivit
+    # See all Vivit models at https://huggingface.co/models?filter=vivit
 ]
 
 
@@ -119,7 +119,7 @@ def load_tf_weights_in_vivit(model, config, tf_checkpoint_path):
 
 class TubeletEmbeddings(nn.Module):
     """
-    Construct ViViT Tubelet embeddings.
+    Construct Vivit Tubelet embeddings.
 
     This module turns a batch of videos of shape (batch_size, num_frames, num_channels, height, width) into a tensor of
     shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
@@ -156,9 +156,9 @@ class TubeletEmbeddings(nn.Module):
         return x
 
 
-class ViViTEmbeddings(nn.Module):
+class VivitEmbeddings(nn.Module):
     """
-    ViViT Embeddings.
+    Vivit Embeddings.
 
     Creates embeddings from a video using TubeletEmbeddings, adds CLS token and positional embeddings.
 
@@ -194,9 +194,9 @@ class ViViTEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ViViT
-class ViViTSelfAttention(nn.Module):
-    def __init__(self, config: ViViTConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Vivit
+class VivitSelfAttention(nn.Module):
+    def __init__(self, config: VivitConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -255,14 +255,14 @@ class ViViTSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ViViT
-class ViViTSelfOutput(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Vivit
+class VivitSelfOutput(nn.Module):
     """
-    The residual connection is defined in ViViTLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in VivitLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config: ViViTConfig) -> None:
+    def __init__(self, config: VivitConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -275,11 +275,11 @@ class ViViTSelfOutput(nn.Module):
         return hidden_states
 
 
-class ViViTAttention(nn.Module):
+class VivitAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = ViViTSelfAttention(config)
-        self.output = ViViTSelfOutput(config)
+        self.attention = VivitSelfAttention(config)
+        self.output = VivitSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -294,7 +294,7 @@ class ViViTAttention(nn.Module):
         return outputs
 
 
-class ViViTIntermediate(nn.Module):
+class VivitIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -313,7 +313,7 @@ class ViViTIntermediate(nn.Module):
         return hidden_states
 
 
-class ViViTOutput(nn.Module):
+class VivitOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -329,22 +329,22 @@ class ViViTOutput(nn.Module):
         return hidden_states
 
 
-class ViViTLayer(nn.Module):
+class VivitLayer(nn.Module):
     """This corresponds to the EncoderBlock class in the scenic/vivit implementation."""
 
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ViViTAttention(config)
-        self.intermediate = ViViTIntermediate(config)
-        self.output = ViViTOutput(config)
+        self.attention = VivitAttention(config)
+        self.intermediate = VivitIntermediate(config)
+        self.output = VivitOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViViT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in Vivit, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -354,7 +354,7 @@ class ViViTLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in ViViT, layernorm is also applied after self-attention
+        # in Vivit, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
 
@@ -366,11 +366,11 @@ class ViViTLayer(nn.Module):
         return outputs
 
 
-class ViViTEncoder(nn.Module):
+class VivitEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ViViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([VivitLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -423,7 +423,7 @@ class ViViTEncoder(nn.Module):
         )
 
 
-class ViViTPooler(nn.Module):
+class VivitPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -438,13 +438,13 @@ class ViViTPooler(nn.Module):
         return pooled_output
 
 
-class ViViTPreTrainedModel(PreTrainedModel):
+class VivitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ViViTConfig
+    config_class = VivitConfig
     base_model_prefix = "vivit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -466,7 +466,7 @@ class ViViTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ViViTEncoder):
+        if isinstance(module, VivitEncoder):
             module.gradient_checkpointing = value
 
 
@@ -476,7 +476,7 @@ VIVIT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ViViTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`VivitConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -484,8 +484,8 @@ VIVIT_START_DOCSTRING = r"""
 VIVIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViViTImageProcessor`]. See
-            [`ViViTImageProcessor.preprocess`] for details.
+            Pixel values. Pixel values can be obtained using [`VivitImageProcessor`]. See
+            [`VivitImageProcessor.preprocess`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -505,19 +505,19 @@ VIVIT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ViViT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Vivit Model transformer outputting raw hidden-states without any specific head on top.",
     VIVIT_START_DOCSTRING,
 )
-class ViViTModel(ViViTPreTrainedModel):
+class VivitModel(VivitPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ViViTEmbeddings(config)
-        self.encoder = ViViTEncoder(config)
+        self.embeddings = VivitEmbeddings(config)
+        self.encoder = VivitEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViViTPooler(config) if add_pooling_layer else None
+        self.pooler = VivitPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -552,7 +552,7 @@ class ViViTModel(ViViTPreTrainedModel):
         >>> from decord import VideoReader, cpu
         >>> import numpy as np
 
-        >>> from transformers import ViViTImageProcessor, ViViTModel
+        >>> from transformers import VivitImageProcessor, VivitModel
         >>> from huggingface_hub import hf_hub_download
 
 
@@ -576,8 +576,8 @@ class ViViTModel(ViViTPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = ViViTImageProcessor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
-        >>> model = ViViTModel.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+        >>> feature_extractor = VivitImageProcessor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+        >>> model = VivitModel.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
 
         >>> # prepare video for the model
         >>> inputs = feature_extractor(list(video), return_tensors="pt")
@@ -624,16 +624,16 @@ class ViViTModel(ViViTPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ViViT Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
+    """Vivit Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.""",
     VIVIT_START_DOCSTRING,
 )
-class ViViTForVideoClassification(ViViTPreTrainedModel):
+class VivitForVideoClassification(VivitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vivit = ViViTModel(config, add_pooling_layer=False)
+        self.vivit = VivitModel(config, add_pooling_layer=False)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
@@ -668,7 +668,7 @@ class ViViTForVideoClassification(ViViTPreTrainedModel):
         >>> import torch
         >>> import numpy as np
 
-        >>> from transformers import ViViTImageProcessor, ViViTForVideoClassification
+        >>> from transformers import VivitImageProcessor, VivitForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
@@ -694,8 +694,8 @@ class ViViTForVideoClassification(ViViTPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = ViViTImageProcessor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
-        >>> model = ViViTForVideoClassification.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+        >>> feature_extractor = VivitImageProcessor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+        >>> model = VivitForVideoClassification.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
 
         >>> inputs = feature_extractor(list(video), return_tensors="pt")
 
