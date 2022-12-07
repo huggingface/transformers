@@ -274,6 +274,10 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         print(f"Saving feature extractor to {pytorch_dump_folder_path}")
         feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        model.push_to_hub("ybelkada/dpt-hybrid-midas")
+        feature_extractor.push_to_hub("ybelkada/dpt-hybrid-midas")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
