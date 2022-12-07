@@ -61,8 +61,8 @@ class DPTModelTester:
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         num_labels=3,
-        embedding_type="hybrid",
         backbone_featmap_shape=[1, 384, 24, 24],
+        is_hybrid=True,
         scope=None,
     ):
         self.parent = parent
@@ -82,9 +82,9 @@ class DPTModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.num_labels = num_labels
-        self.embedding_type = embedding_type
         self.backbone_featmap_shape = backbone_featmap_shape
         self.scope = scope
+        self.is_hybrid = is_hybrid
         # sequence length of DPT = num_patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
@@ -125,7 +125,7 @@ class DPTModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            embedding_type=self.embedding_type,
+            is_hybrid=self.is_hybrid,
             backbone_config=backbone_config,
             backbone_featmap_shape=self.backbone_featmap_shape,
         )

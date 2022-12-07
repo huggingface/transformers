@@ -584,7 +584,7 @@ class DPTReassembleStage(nn.Module):
 
         self.config = config
         self.layers = nn.ModuleList()
-        if config.embedding_type == "hybrid":
+        if config.is_hybrid:
             self._init_reassemble_dpt_hybrid(config)
         else:
             self._init_reassemble_dpt(config)
@@ -868,13 +868,12 @@ class DPTModel(DPTPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
-        self.is_hybrid = False
 
         # vit encoder
-        if config.embedding_type == "patch_embedding":
-            self.embeddings = DPTViTEmbeddings(config)
-        else:
+        if config.is_hybrid:
             self.embeddings = DPTViTHybridEmbeddings(config)
+        else:
+            self.embeddings = DPTViTEmbeddings(config)
         self.encoder = DPTViTEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

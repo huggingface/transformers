@@ -79,8 +79,8 @@ class DPTConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
-        embedding_type (`str`, *optional*, defaults to `"patch_embedding"`):
-            The type of embedding to use. Can be one of [`"patch_embedding"`, `"hybrid"`].
+        is_hybrid (`bool`, *optional*, defaults to `False`):
+            Whether to use a hybrid backbone. Useful in the context of loading DPT-Hybrid models.
         reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
         neck_hidden_sizes (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
@@ -136,7 +136,7 @@ class DPTConfig(PretrainedConfig):
         image_size=384,
         patch_size=16,
         num_channels=3,
-        embedding_type="patch_embedding",
+        is_hybrid=False,
         qkv_bias=True,
         backbone_out_indices=[2, 5, 8, 11],
         readout_type="project",
@@ -157,10 +157,9 @@ class DPTConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
+        self.is_hybrid = is_hybrid
 
-        if embedding_type not in ["patch_embedding", "hybrid"]:
-            raise ValueError("Embedding type must be one of ['patch_embedding', 'hybrid']")
-        if embedding_type == "hybrid":
+        if self.is_hybrid:
             if backbone_config is None:
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = {
@@ -181,7 +180,6 @@ class DPTConfig(PretrainedConfig):
                     f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
                 )
 
-            self.is_hybrid = True
             self.backbone_featmap_shape = backbone_featmap_shape
             self.neck_ignore_stages = neck_ignore_stages
 
@@ -189,10 +187,8 @@ class DPTConfig(PretrainedConfig):
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
         else:
             self.backbone_config = None
-            self.is_hybrid = False
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
-        self.embedding_type = embedding_type
 
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
