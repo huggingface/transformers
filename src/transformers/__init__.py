@@ -543,8 +543,8 @@ _import_structure = {
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ViViTConfig",
-        "ViViTImageProcessor",
+        "VivitConfig",
+        "VivitImageProcessor",
     ],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -998,16 +998,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-    _import_structure["models.vivit"].extend(
-        [
-            "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ViViTLayer",
-            "ViViTModel",
-            "ViViTPreTrainedModel",
-            "ViViTForVideoClassification",
-            "load_tf_weights_in_vivit",
-        ]
-    )
 
     _import_structure["models.albert"].extend(
         [
@@ -2768,6 +2758,14 @@ else:
             "ViTMSNPreTrainedModel",
         ]
     )
+    _import_structure["models.vivit"].extend(
+        [
+            "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VivitForVideoClassification",
+            "VivitModel",
+            "VivitPreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4389,7 +4387,7 @@ if TYPE_CHECKING:
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
-    from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViViTConfig, ViViTImageProcessor
+    from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig, VivitImageProcessor
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -6229,9 +6227,9 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViViTForVideoClassification,
-            ViViTModel,
-            ViViTPreTrainedModel,
+            VivitForVideoClassification,
+            VivitModel,
+            VivitPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

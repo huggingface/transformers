@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ViViT model configuration"""
+""" Vivit model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -24,15 +24,15 @@ VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "vivit-b-16x2-kinetics400": (
         "https://huggingface.co/jegormeister/vivit-b-16x2-kinetics400/resolve/main/config.json"
     ),
-    # See all ViViT models at https://huggingface.co/models?filter=vivit
+    # See all Vivit models at https://huggingface.co/models?filter=vivit
 }
 
 
-class ViViTConfig(PretrainedConfig):
+class VivitConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViViTModel`]. It is used to instantiate a ViViT
+    This is the configuration class to store the configuration of a [`VivitModel`]. It is used to instantiate a Vivit
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ViViT
+    defaults will yield a similar configuration to that of the Vivit
     [vivit-b-16x2-kinetics400](https://huggingface.co/jegormeister/vivit-b-16x2-kinetics400) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -71,13 +71,13 @@ class ViViTConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import ViViTModel, ViViTConfig
+    >>> from transformers import VivitModel, VivitConfig
 
-    >>> # Initializing a ViViT vivit-b-16x2-kinetics400 style configuration
-    >>> configuration = ViViTConfig()
+    >>> # Initializing a Vivit vivit-b-16x2-kinetics400 style configuration
+    >>> configuration = VivitConfig()
 
     >>> # Initializing a model from the vivit-b-16x2-kinetics400 style configuration
-    >>> model = ViViTModel(configuration)
+    >>> model = VivitModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

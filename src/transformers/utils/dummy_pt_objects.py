@@ -7406,21 +7406,21 @@ class ViTMSNPreTrainedModel(metaclass=DummyObject):
 VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ViViTForVideoClassification(metaclass=DummyObject):
+class VivitForVideoClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ViViTModel(metaclass=DummyObject):
+class VivitModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ViViTPreTrainedModel(metaclass=DummyObject):
+class VivitPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
