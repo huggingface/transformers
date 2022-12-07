@@ -38,27 +38,27 @@ def create_rename_keys(config):
 
     # fmt: off
     # stem
-    rename_keys.append(("backbone.downsample_layers.0.0.weight", "backbone.convnext.embeddings.patch_embeddings.weight"))
-    rename_keys.append(("backbone.downsample_layers.0.0.bias", "backbone.convnext.embeddings.patch_embeddings.bias"))
-    rename_keys.append(("backbone.downsample_layers.0.1.weight", "backbone.convnext.embeddings.layernorm.weight"))
-    rename_keys.append(("backbone.downsample_layers.0.1.bias", "backbone.convnext.embeddings.layernorm.bias"))
+    rename_keys.append(("backbone.downsample_layers.0.0.weight", "backbone.embeddings.patch_embeddings.weight"))
+    rename_keys.append(("backbone.downsample_layers.0.0.bias", "backbone.embeddings.patch_embeddings.bias"))
+    rename_keys.append(("backbone.downsample_layers.0.1.weight", "backbone.embeddings.layernorm.weight"))
+    rename_keys.append(("backbone.downsample_layers.0.1.bias", "backbone.embeddings.layernorm.bias"))
     # stages
     for i in range(len(config.backbone_config.depths)):
         for j in range(config.backbone_config.depths[i]):
-            rename_keys.append((f"backbone.stages.{i}.{j}.gamma", f"backbone.convnext.encoder.stages.{i}.layers.{j}.layer_scale_parameter"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.weight", f"backbone.convnext.encoder.stages.{i}.layers.{j}.dwconv.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.bias", f"backbone.convnext.encoder.stages.{i}.layers.{j}.dwconv.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.norm.weight", f"backbone.convnext.encoder.stages.{i}.layers.{j}.layernorm.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.norm.bias", f"backbone.convnext.encoder.stages.{i}.layers.{j}.layernorm.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.weight", f"backbone.convnext.encoder.stages.{i}.layers.{j}.pwconv1.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.bias", f"backbone.convnext.encoder.stages.{i}.layers.{j}.pwconv1.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.weight", f"backbone.convnext.encoder.stages.{i}.layers.{j}.pwconv2.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.bias", f"backbone.convnext.encoder.stages.{i}.layers.{j}.pwconv2.bias"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.gamma", f"backbone.encoder.stages.{i}.layers.{j}.layer_scale_parameter"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.weight", f"backbone.encoder.stages.{i}.layers.{j}.dwconv.weight"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.bias", f"backbone.encoder.stages.{i}.layers.{j}.dwconv.bias"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.norm.weight", f"backbone.encoder.stages.{i}.layers.{j}.layernorm.weight"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.norm.bias", f"backbone.encoder.stages.{i}.layers.{j}.layernorm.bias"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.weight", f"backbone.encoder.stages.{i}.layers.{j}.pwconv1.weight"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.bias", f"backbone.encoder.stages.{i}.layers.{j}.pwconv1.bias"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.weight", f"backbone.encoder.stages.{i}.layers.{j}.pwconv2.weight"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.bias", f"backbone.encoder.stages.{i}.layers.{j}.pwconv2.bias"))
         if i > 0:
-            rename_keys.append((f"backbone.downsample_layers.{i}.0.weight", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.0.weight"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.0.bias", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.0.bias"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.1.weight", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.1.weight"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.1.bias", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.1.bias"))
+            rename_keys.append((f"backbone.downsample_layers.{i}.0.weight", f"backbone.encoder.stages.{i}.downsampling_layer.0.weight"))
+            rename_keys.append((f"backbone.downsample_layers.{i}.0.bias", f"backbone.encoder.stages.{i}.downsampling_layer.0.bias"))
+            rename_keys.append((f"backbone.downsample_layers.{i}.1.weight", f"backbone.encoder.stages.{i}.downsampling_layer.1.weight"))
+            rename_keys.append((f"backbone.downsample_layers.{i}.1.bias", f"backbone.encoder.stages.{i}.downsampling_layer.1.bias"))
 
         rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.{i}.weight"))
         rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.{i}.bias"))
@@ -110,9 +110,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
 
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    assert missing_keys == ["backbone.convnext.layernorm.weight", "backbone.convnext.layernorm.bias"]
-    assert len(unexpected_keys) == 0, f"Unexpected keys: {unexpected_keys}"
+    model.load_state_dict(state_dict)
 
     # verify on image
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"

@@ -29,7 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import ConvNextForImageClassification, ConvNextModel
+    from transformers import ConvNextBackbone, ConvNextForImageClassification, ConvNextModel
     from transformers.models.convnext.modeling_convnext import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -132,6 +132,7 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
         (
             ConvNextModel,
             ConvNextForImageClassification,
+            ConvNextBackbone,
         )
         if is_torch_available()
         else ()
