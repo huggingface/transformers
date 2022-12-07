@@ -103,7 +103,7 @@ class DPTConfig(PretrainedConfig):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
         neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
-        backbone_config (`Dict[str, Any]`, *optional*, defaults to `None`):
+        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*, defaults to `None`):
             Used only for the `hybrid` embedding type. The configuration of the backbone in a dictionary.
 
     Example:
@@ -161,8 +161,8 @@ class DPTConfig(PretrainedConfig):
         if embedding_type not in ["patch_embedding", "hybrid"]:
             raise ValueError("Embedding type must be one of ['patch_embedding', 'hybrid']")
         if embedding_type == "hybrid":
-            logger.info("Initializing the config with a `BiT` backbone.")
             if backbone_config is None:
+                logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = {
                     "global_padding": "same",
                     "layer_type": "bottleneck",
@@ -170,9 +170,17 @@ class DPTConfig(PretrainedConfig):
                     "out_features": ["stage1", "stage2", "stage3"],
                     "embedding_dynamic_padding": True,
                 }
-            elif not isinstance(backbone_config, dict):
-                raise ValueError("backbone_config must be a dictionary.")
-            self.backbone_config = BitConfig(**backbone_config)
+                self.backbone_config = BitConfig(**backbone_config)
+            elif isinstance(backbone_config, dict):
+                logger.info("Initializing the config with a `BiT` backbone.")
+                self.backbone_config = BitConfig(**backbone_config)
+            elif isinstance(backbone_config, PretrainedConfig):
+                self.backbone_config = backbone_config
+            else:
+                raise ValueError(
+                    f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
+                )
+
             self.is_hybrid = True
             self.backbone_featmap_shape = backbone_featmap_shape
             self.neck_ignore_stages = neck_ignore_stages
