@@ -168,7 +168,8 @@ class TextGenerationPipeline(Pipeline):
             args (`str` or `List[str]`):
                 One or several prompts (or one list of prompts) to complete.
             return_tensors (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to `True`, the decoded text is not returned.
+                Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
+                `True`, the decoded text is not returned.
             return_text (`bool`, *optional*, defaults to `True`):
                 Whether or not to return the decoded texts in the outputs.
             return_full_text (`bool`, *optional*, defaults to `True`):
@@ -193,7 +194,8 @@ class TextGenerationPipeline(Pipeline):
                 corresponding to your framework [here](./model#generative-models)).
 
         Return:
-            A list or a list of list of `dict`: Returns one of the following dictionaries (cannot return a combination of both `generated_text` and `generated_token_ids`):
+            A list or a list of list of `dict`: Returns one of the following dictionaries (cannot return a combination
+            of both `generated_text` and `generated_token_ids`):
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
             - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
