@@ -593,9 +593,9 @@ class DPTReassembleStage(nn.Module):
 
     def _init_reassemble_dpt_hybrid(self, config):
         r""" "
-        This needs to be re-defined since for `DPTHybrid` the first 2 reassemble layers are set to `nn.Identity()`. For
-        DPT-Hybrid the first 2 reassemble layers are set to `nn.Identity()`, please check the official implementation:
-        https://github.com/isl-org/DPT/blob/f43ef9e08d70a752195028a51be5e1aff227b913/dpt/vit.py#L438 for more details.
+        For DPT-Hybrid the first 2 reassemble layers are set to `nn.Identity()`, please check the official
+        implementation: https://github.com/isl-org/DPT/blob/f43ef9e08d70a752195028a51be5e1aff227b913/dpt/vit.py#L438
+        for more details.
         """
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
             if i <= 1:
