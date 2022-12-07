@@ -32,7 +32,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
-from transformers.utils.import_utils import is_sagemaker_mp_enabled
+from transformers.utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -68,11 +68,15 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     is_safetensors_available,
+    is_torch_tpu_available,
     logging,
     replace_return_docstrings,
 )
 from .utils.versions import require_version_core
 
+
+XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
+XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
@@ -181,6 +185,17 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
     for t in parameter.parameters():
         last_dtype = t.dtype
         if t.is_floating_point():
+            # Adding fix for https://github.com/pytorch/xla/issues/4152
+            # Fixes issue where the model code passes a value that is out of range for XLA_USE_BF16=1
+            # and XLA_DOWNCAST_BF16=1 so the conversion would cast it to -inf
+            if is_torch_tpu_available():
+                if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES:
+                    return torch.bfloat16
+                if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES:
+                    if t.dtype == torch.float:
+                        return torch.bfloat16
+                    if t.dtype == torch.double:
+                        return torch.float32
             return t.dtype
 
     if last_dtype is not None:
@@ -593,13 +608,22 @@ def _load_state_dict_into_meta_model(
 
         module_name = param_name
 
-        # We convert floating dtypes to the `dtype` passed.We want to keep the buffers/params
+        # We convert floating dtypes to the `dtype` passed. We want to keep the buffers/params
         # in int/uint/bool and not cast them.
         if dtype is not None and torch.is_floating_point(param):
             param = param.to(dtype)
-        # For compatibility with PyTorch which loads float16/bfloat16 weights in fp32
-        if is_safetensors and dtype is None and torch.is_floating_point(param):
-            param = param.to(torch.float32)
+
+        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
+        if dtype is None:
+            old_param = model
+            splits = param_name.split(".")
+            for split in splits:
+                old_param = getattr(old_param, split)
+                if old_param is None:
+                    break
+
+            if old_param is not None:
+                param = param.to(old_param.dtype)
 
         if device_map is None:
             param_device = "cpu"
@@ -2810,9 +2834,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
-PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
-    object="model", object_class="AutoModel", object_files="model file"
-)
+if PreTrainedModel.push_to_hub.__doc__ is not None:
+    PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
+        object="model", object_class="AutoModel", object_files="model file"
+    )
 
 
 class PoolerStartLogits(nn.Module):
