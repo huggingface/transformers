@@ -360,7 +360,7 @@ class Trainer:
         # At this stage the model is already loaded
         if getattr(model, "is_loaded_in_8bit", False):
             raise ValueError(
-                "The model you have picked is already loaded in 8-bit precision. "
+                "The model you want to train is loaded in 8-bit precision. "
                 "Training an 8-bit model is not supported yet. "
             )
 
