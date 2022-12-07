@@ -671,15 +671,6 @@ class BitPreTrainedModel(PreTrainedModel):
         if isinstance(module, BitModel):
             module.gradient_checkpointing = value
 
-    @torch.no_grad()
-    def _get_feature_map(self, dummy_image):
-        training = self.training
-        if training:
-            self.eval()
-        feature_map = self(dummy_image).feature_maps[-1]
-        self.train(training)
-        return feature_map
-
 
 BIT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it

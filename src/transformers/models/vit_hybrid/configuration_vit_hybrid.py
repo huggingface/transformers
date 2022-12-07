@@ -69,6 +69,8 @@ class ViTHybridConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*, defaults to `None`):
+            The configuration of the backbone in a dictionary or the config object of the backbone.
 
     Example:
 
