@@ -417,6 +417,7 @@ TRILLSSON_EFFICIENT_START_DOCSTRING = r"""
     [`PreTrainedModel`]. Check the superclass documentation for the generic methods the library implements for all its
     model (such as downloading or saving etc.). This model is a PyTorch [torch.nn.Module](https:
         //pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+
     Parameters:
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
