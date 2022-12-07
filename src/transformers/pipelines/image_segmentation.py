@@ -111,8 +111,8 @@ class ImageSegmentationPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
             task_inputs (`List[str]`):
-                The value of task token inputs for task-dynamic inference, choose [`semantic`, `instance` and
-                `panoptic`]. The pipeline uses task_inputs for [`~OneFormerForUniversalSegmentation`]
+                The value of task token inputs for task-dynamic inference, choose [`semantic`, `instance` or
+                `panoptic`]. task_inputs is only needed for [`~OneFormerForUniversalSegmentation`]
             subtask (`str`, *optional*):
                 Segmentation task to be performed, choose [`semantic`, `instance` and `panoptic`] depending on model
                 capabilities. If not set, the pipeline will attempt tp resolve in the following order:
