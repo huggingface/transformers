@@ -820,7 +820,7 @@ class DPTModel(DPTPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
-        self.is_hybird = False
+        self.is_hybrid = False
 
         # vit encoder
         if config.embedding_type == "patch_embedding":
