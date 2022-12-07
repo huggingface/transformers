@@ -1488,8 +1488,8 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
 
 @add_start_docstrings(
     """
-        Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for
-        GLUE tasks.
+    Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for
+    GLUE tasks.
     """,
     BART_START_DOCSTRING,
 )
@@ -1594,10 +1594,10 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         return TFSeq2SeqSequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            cross_attentions=outputs.cross_attentions,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
@@ -1605,19 +1605,19 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
 
     def serving_output(self, output):
         logits = tf.convert_to_tensor(output.logits)
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
 
         return TFSeq2SeqSequenceClassifierOutput(
             logits=logits,
-            cross_attentions=cross_attns,
             past_key_values=pkv,
             decoder_hidden_states=dec_hs,
             decoder_attentions=dec_attns,
+            cross_attentions=cross_attns,
             encoder_last_hidden_state=output.encoder_last_hidden_state,
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
