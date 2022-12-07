@@ -489,8 +489,6 @@ class ConvNextBackbone(ConvNextPreTrainedModel):
         self.encoder = ConvNextEncoder(config)
 
         self.out_features = config.out_features
-        if "stem" in self.out_features:
-            raise ValueError("This backbone does not support 'stem' in the `out_features`.")
 
         out_feature_channels = {}
         out_feature_channels["stem"] = config.hidden_sizes[0]
@@ -499,9 +497,11 @@ class ConvNextBackbone(ConvNextPreTrainedModel):
 
         self.out_feature_channels = out_feature_channels
 
-        self.hidden_states_norms = nn.ModuleList(
-            [ConvNextLayerNorm(num_channels, data_format="channels_first") for num_channels in config.hidden_sizes]
-        )
+        # Add layer norms to hidden states of out_features
+        hidden_states_norms = dict()
+        for stage, num_channels in zip(self.out_features, self.channels):
+            hidden_states_norms[stage] = ConvNextLayerNorm(num_channels, data_format="channels_first")
+        self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
         # initialize weights and apply final processing
         self.post_init()
@@ -554,7 +554,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel):
         # we skip the stem
         for idx, (stage, hidden_state) in enumerate(zip(self.stage_names[1:], hidden_states[1:])):
             if stage in self.out_features:
-                hidden_state = self.hidden_states_norms[idx](hidden_state)
+                hidden_state = self.hidden_states_norms[stage](hidden_state)
                 feature_maps += (hidden_state,)
 
         if not return_dict:
