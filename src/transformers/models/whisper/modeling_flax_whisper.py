@@ -171,7 +171,6 @@ WHISPER_DECODE_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartAttention
 class FlaxWhisperAttention(nn.Module):
     config: WhisperConfig
     embed_dim: int
@@ -328,7 +327,6 @@ class FlaxWhisperAttention(nn.Module):
         return key, value, attention_mask
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayer
 class FlaxWhisperEncoderLayer(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -353,8 +351,8 @@ class FlaxWhisperEncoderLayer(nn.Module):
         )
         self.fc2 = nn.Dense(
             self.embed_dim,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
             dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
@@ -385,7 +383,6 @@ class FlaxWhisperEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayerCollection
 class FlaxWhisperEncoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -432,7 +429,6 @@ class FlaxWhisperEncoderLayerCollection(nn.Module):
         )
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayer
 class FlaxWhisperDecoderLayer(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -515,7 +511,6 @@ class FlaxWhisperDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection
 class FlaxWhisperDecoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -651,7 +646,6 @@ class FlaxWhisperEncoder(nn.Module):
         )
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartDecoder
 class FlaxWhisperDecoder(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -772,7 +766,6 @@ class FlaxWhisperModule(nn.Module):
         return self.decoder
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartPreTrainedModel
 class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix: str = "model"
@@ -1094,7 +1087,6 @@ append_call_sample_docstring(
 )
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule
 class FlaxWhisperForConditionalGenerationModule(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -1161,7 +1153,6 @@ class FlaxWhisperForConditionalGenerationModule(nn.Module):
         )
 
 
-# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGeneration
 @add_start_docstrings("The Whisper Model with a language modeling head.", WHISPER_START_DOCSTRING)
 class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
     module_class = FlaxWhisperForConditionalGenerationModule
