@@ -932,6 +932,12 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
+class BackboneBaseModel(nn.Module):
+
+    def forward_with_filtered_kwargs(self, *args, **kwargs):
+        return self(*args, **kwargs)
+
+
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
     r"""
     Base class for all models.
