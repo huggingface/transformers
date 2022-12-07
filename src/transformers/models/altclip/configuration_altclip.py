@@ -149,12 +149,11 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.pooler_fn = pooler_fn
 
 
-# Copied from transformers.models.clip.configuration_clip.AltCLIPVisionConfig with CLIP->AltCLIP
 class AltCLIPVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate an CLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the CLIP
+    This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
+    AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the AltCLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -191,13 +190,13 @@ class AltCLIPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import AltCLIPVisionConfig, CLIPVisionModel
+    >>> from transformers import AltCLIPVisionConfig, AltCLIPVisionModel
 
     >>> # Initializing a AltCLIPVisionConfig with openai/clip-vit-base-patch32 style configuration
     >>> configuration = AltCLIPVisionConfig()
 
-    >>> # Initializing a CLIPVisionModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
-    >>> model = CLIPVisionModel(configuration)
+    >>> # Initializing a AltCLIPVisionModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
+    >>> model = AltCLIPVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

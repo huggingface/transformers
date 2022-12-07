@@ -215,7 +215,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaEmbeddings with XLMRoberta->AltRoberta
+# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->AltRoberta
 class AltRobertaEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -303,7 +303,7 @@ class AltRobertaEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaSelfAttention with XLMRoberta->AltRoberta
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->AltRoberta
 class AltRobertaSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -411,7 +411,7 @@ class AltRobertaSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in XLMRobertaModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in AltRobertaModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -438,7 +438,7 @@ class AltRobertaSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaSelfOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
 class AltRobertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -453,7 +453,7 @@ class AltRobertaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaAttention with XLMRoberta->AltRoberta
+# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->AltRoberta
 class AltRobertaAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -503,7 +503,7 @@ class AltRobertaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaIntermediate with XLMRoberta->AltRoberta
+# Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate with Roberta->AltRoberta
 class AltRobertaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -519,7 +519,7 @@ class AltRobertaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput
 class AltRobertaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -534,7 +534,7 @@ class AltRobertaOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaLayer with XLMRoberta->AltRoberta
+# Copied from transformers.models.roberta.modeling_roberta.RobertaLayer with Roberta->AltRoberta
 class AltRobertaLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -621,7 +621,7 @@ class AltRobertaLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaEncoder with XLMRoberta->AltRoberta
+# Copied from transformers.models.roberta.modeling_roberta.RobertaEncoder with Roberta->AltRoberta
 class AltRobertaEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -719,7 +719,7 @@ class AltRobertaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaPooler
+# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler
 class AltRobertaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -777,7 +777,7 @@ class AltRobertaPreTrainedModel(PreTrainedModel):
             ]
 
 
-# Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaModel with XLMRoberta->AltRoberta, XLMRoberta->XLM_ROBERTA
+# Copied from transformers.models.roberta.modeling_roberta.RobertaModel with Roberta->AltRoberta, ROBERTA->ALTROBERTA
 class AltRobertaModel(AltRobertaPreTrainedModel):
     """
 
@@ -960,6 +960,7 @@ class AltRobertaModel(AltRobertaPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+
 class AltCLIPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1138,7 +1139,7 @@ class AltCLIPTextModel(AltRobertaPreTrainedModel):
         pooler_output = self.pooler(projection_state)
 
         if not return_dict:
-            return ( projection_state, pooler_output ) + outputs[2:4]
+            return (projection_state, pooler_output) + outputs[2:4]
 
         return BaseModelOutputWithPoolingAndprojection(
             last_hidden_state=projection_state,
@@ -1271,63 +1272,116 @@ class AltCLIPMLP(nn.Module):
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->AltCLIP
 class AltCLIPEncoderLayer(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`AltCLIPEncoderLayer`].
+
+    Args:
+        config: AltCLIPConfig
+    """
+
     def __init__(self, config: AltCLIPConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = AltCLIPAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.mlp = AltCLIPMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.config = config
+        self.layers = nn.ModuleList([AltCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
-        """
+        inputs_embeds,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
+        r"""
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Causal mask for the text model. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        hidden_states = residual + hidden_states
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
 
-        outputs = (hidden_states,)
+        hidden_states = inputs_embeds
+        for idx, encoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+            if self.gradient_checkpointing and self.training:
 
-        if output_attentions:
-            outputs += (attn_weights,)
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
 
-        return outputs
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(encoder_layer),
+                    hidden_states,
+                    attention_mask,
+                    causal_attention_mask,
+                )
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    causal_attention_mask,
+                    output_attentions=output_attentions,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->AltCLIP
 class AltCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`CLIPEncoderLayer`].
+    [`AltCLIPEncoderLayer`].
 
     Args:
-        config: CLIPConfig
+        config: AltCLIPConfig
     """
 
     def __init__(self, config: AltCLIPConfig):
@@ -1471,7 +1525,7 @@ class AltCLIPVisionTransformer(nn.Module):
         self.encoder = AltCLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
-    @add_start_docstrings_to_model_forward(ALTCLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(AltCLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AltCLIPVisionConfig)
     def forward(
         self,
@@ -1555,7 +1609,6 @@ class AltCLIPOutput(ModelOutput):
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
-
 
 
 class AltCLIPModel(AltCLIPPreTrainedModel):

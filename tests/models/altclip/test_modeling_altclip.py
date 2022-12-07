@@ -136,6 +136,8 @@ class AltCLIPVisionModelTester:
         config, pixel_values = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
+
+
 class AltCLIPTextModelTester:
     def __init__(
         self,

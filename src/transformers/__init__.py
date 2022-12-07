@@ -4094,7 +4094,12 @@ if TYPE_CHECKING:
         )
 
         # PyTorch model imports
-        from .models.altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST, AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
+        from .models.altclip import (
+            ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AltCLIPModel,
+            AltCLIPTextModel,
+            AltCLIPVisionModel,
+        )
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ASTForAudioClassification,
