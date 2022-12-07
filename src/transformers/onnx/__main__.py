@@ -13,17 +13,18 @@
 # limitations under the License.
 import subprocess
 import sys
+import warnings
 from argparse import ArgumentParser
 from pathlib import Path
 
 from packaging import version
 
-from .. import AutoFeatureExtractor, AutoTokenizer, AutoProcessor
-from .convert import export, validate_model_outputs
+from .. import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
 from ..utils import logging
 from ..utils.import_utils import is_optimum_available
-from .utils import get_preprocessor
+from .convert import export, validate_model_outputs
 from .features import FeaturesManager
+from .utils import get_preprocessor
 
 
 MIN_OPTIMUM_VERSION = "1.5.0"
@@ -173,10 +174,11 @@ def export_with_transformers(args):
 
         validate_model_outputs(onnx_config, preprocessor, model, args.output, onnx_outputs, args.atol)
         logger.info(f"All good, model saved at: {args.output.as_posix()}")
-        logger.info(
-            "The export was done by transformers.onnx, the recommended way is using optimum.exporters.onnx, you can "
-            "find more information here: "
-            "https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model."
+        warnings.warn(
+            "The export was done by transformers.onnx which will be deprecated in v5, the recommended way is using "
+            "optimum.exporters.onnx, you can find more information here: "
+            "https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model.",
+            FutureWarning,
         )
 
 
@@ -221,11 +223,11 @@ def main():
             "Whether to use transformers.onnx instead of optimum.exporters.onnx to perform the ONNX export. It can be "
             "useful when exporting a model supported in transformers but not in optimum, otherwise it is not "
             "recommended."
-        )
+        ),
     )
 
     args = parser.parse_args()
-    if args.export_with_transformers:
+    if args.export_with_transformers or not is_optimum_available():
         export_with_transformers(args)
     else:
         export_with_optimum(args)
