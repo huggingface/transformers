@@ -11,7 +11,6 @@ from transformers import BasicTokenizer, CLIPTokenizer
 
 class CLIPKerasNLPTokenizer(BytePairTokenizer):
     def __init__(self, vocab, merges, bos_token_id=None, eos_token_id=None, sequence_length=None):
-        self.append_token = tf.convert_to_tensor("</w>")
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         super().__init__(vocab, merges, sequence_length)
@@ -22,16 +21,12 @@ class CLIPKerasNLPTokenizer(BytePairTokenizer):
             inputs = tf.expand_dims(inputs, 0)
         raw_tokens = split_strings_for_bpe(
             inputs
-        )  # This is an english sentence -> ["This", " is", " an", " english", "sentence"]
+        )  # "This is an english sentence" -> ["This", " is", " a", " straightforward". " english", " sentence"]
         token_row_splits = raw_tokens.row_splits
-        flat_tokens = tf.strings.regex_replace(raw_tokens.flat_values, "^ ", "")
-        # flat_tokens = tf.strings.regex_replace(raw_tokens.flat_values, "^ ", "") # -> ["This", "is", "an", "english", "sentence"]
+        flat_tokens = tf.strings.regex_replace(
+            raw_tokens.flat_values, "^ ", ""
+        )  # ["This", "is", "a", "straightforward", "english", "sentence"]
 
-        # first = tf.reshape(flat_tokens, (1,-1)) # (10, ) -> (1,10) [["This", " is", " an", " english", "sentence"]]
-        # second = tf.ragged.constant([["</w>"] * flat_tokens.shape[-1]]) # [["</w>", "</w>, ...]]
-        # flat_tokens_ = tf.reshape(tf.strings.join(tf.concat([first, second], axis=0)), (-1)) # [["This</w>", "is</w>", " an</w>", " english</w>", "sentence"]]
-        # tokenized = self.token_to_id_map.lookup(flat_tokens_) # [1, 2, 3, -1, 0]
-        # self.cache.insert(tf.boolean_mask(flat_tokens, tokenized != -1), tf.boolean_mask(flat_tokens, tokenized != -1))
         # Check cache.
         cache_lookup = self.cache.lookup(flat_tokens)
         cache_mask = cache_lookup == ""
@@ -49,10 +44,13 @@ class CLIPKerasNLPTokenizer(BytePairTokenizer):
             process_unseen_tokens,
             lambda: cache_lookup,
         )
-        tokens = tf.strings.split(tokenized_words, sep=" ")  # ["This</w>", "is</w>", "an", "english", "sent ence"]
-        tokens = tf.concat([tokens[:, :-1], tokens[:, -1:] + "</w>"], axis=-1)
-        # return tokens
-        # return tokens
+        tokens = tf.strings.split(
+            tokenized_words, sep=" "
+        )  # [["This"], ["is"], ["a"], ["straight", "forward"], ["english"], ["sentence"]]
+        tokens = tf.concat(
+            [tokens[:, :-1], tokens[:, -1:] + "</w>"], axis=-1
+        )  # [["This</w>"], ["is</w>"], ["a</w>"], ["straight", "forward</w>"], ["english</w>"], ["sentence</w>"]]
+
         if self.compute_dtype != tf.string:
             # Encode merged tokens.
             tokens = self.token_to_id_map.lookup(tokens)
@@ -80,7 +78,7 @@ class CLIPKerasNLPTokenizer(BytePairTokenizer):
     def _bpe_merge_one_step(self, words, mask):
         """Perform one step of byte-pair merge."""
         # Get all word pairs.
-        first, second = words[:, :-1], words[:, 1:]  # sentence</w> -> ([s, e, n, t, e, n, c], [e, n, t, e, n, c, e])
+        first, second = words[:, :-1], words[:, 1:]  # sentence -> ([s, e, n, t, e, n, c], [e, n, t, e, n, c, e])
         second = tf.concat([second[:, :-1], second[:, -1:] + "</w>"], axis=-1)  # [e, n, t, e, n, c, e</w>]
 
         # Mask empty.
@@ -252,8 +250,8 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
 
     def call(self, x, max_length: int = None):
         if not isinstance(x, (tf.Tensor, tf.RaggedTensor)):
-          x = [" ".join(self.nlp.tokenize(k)) for k in x]
-          x = tf.convert_to_tensor(x)
+            x = [" ".join(self.nlp.tokenize(k)) for k in x]
+            x = tf.convert_to_tensor(x)
 
         input_ids = tf.map_fn(
             self.tokenize,
