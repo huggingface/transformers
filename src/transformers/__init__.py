@@ -1189,10 +1189,10 @@ else:
     _import_structure["models.cpmant"].extend(
         [
             "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CPMAntForCausalLM",
             "CPMAntLayer",
             "CPMAntModel",
             "CPMAntPreTrainedModel",
-            "CPMAntForCausalLM",
             "load_tf_weights_in_cpmant",
         ]
     )
