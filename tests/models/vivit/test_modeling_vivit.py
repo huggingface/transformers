@@ -230,7 +230,6 @@ class VivitModelTest(ModelTesterMixin, unittest.TestCase):
 
             for model_class in self.all_model_classes:
                 seq_len = self.model_tester.seq_length
-                num_frames = self.model_tester.video_size[0]
 
                 inputs_dict["output_attentions"] = True
                 inputs_dict["output_hidden_states"] = False
