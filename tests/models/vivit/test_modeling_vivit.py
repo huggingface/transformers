@@ -253,7 +253,6 @@ class VivitModelTest(ModelTesterMixin, unittest.TestCase):
                 attentions = outputs.attentions
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-                # attentions has shape (batch_size x num_frames) x num_heads x (num_patches per frame + 1) x (num_patches per frame + 1)
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, seq_len, seq_len],
@@ -275,7 +274,6 @@ class VivitModelTest(ModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
-                # attentions has shape (batch_size x num_frames) x num_heads x (num_patches per frame + 1) x (num_patches per frame + 1)
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, seq_len, seq_len],
@@ -340,8 +338,6 @@ class VivitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_for_video_classification(self):
         model = VivitForVideoClassification.from_pretrained("jegormeister/vivit-b-16x2-kinetics400").to(torch_device)
-
-        model.to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
