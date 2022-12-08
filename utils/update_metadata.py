@@ -102,6 +102,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "AutoModel",
     ),
     ("depth-estimation", "MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "AutoModelForDepthEstimation"),
+    ("video-classification", "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "AutoModelForVideoClassification"),
 ]
 
 

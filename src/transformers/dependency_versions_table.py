@@ -9,6 +9,7 @@ deps = {
     "cookiecutter": "cookiecutter==1.7.3",
     "dataclasses": "dataclasses",
     "datasets": "datasets!=2.5.0",
+    "decord": "decord==0.6.0",
     "deepspeed": "deepspeed>=0.6.5",
     "dill": "dill<0.3.5",
     "evaluate": "evaluate>=0.2.0",

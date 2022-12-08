@@ -103,6 +103,7 @@ _deps = [
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
+    "decord==0.6.0",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
     "evaluate>=0.2.0",
@@ -286,7 +287,7 @@ extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-
+extras["video"] = deps_list("decord")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -332,6 +333,7 @@ extras["all"] = (
     + extras["timm"]
     + extras["codecarbon"]
     + extras["accelerate"]
+    + extras["video"]
 )
 
 # Might need to add doc-builder and some specific deps in the future

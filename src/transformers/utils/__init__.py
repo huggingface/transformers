@@ -104,6 +104,7 @@ from .import_utils import (
     is_bs4_available,
     is_coloredlogs_available,
     is_datasets_available,
+    is_decord_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
