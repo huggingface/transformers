@@ -57,7 +57,7 @@ class ViTHybridModelTester:
         attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
-        backbone_featmap_shape=[1, 192, 4, 4],
+        backbone_featmap_shape=[1, 16, 4, 4],
         scope=None,
     ):
         self.parent = parent
@@ -103,7 +103,7 @@ class ViTHybridModelTester:
             "depths": [3, 4, 9],
             "out_features": ["stage1", "stage2", "stage3"],
             "embedding_dynamic_padding": True,
-            "hidden_sizes": [48, 96, 192, 384],
+            "hidden_sizes": [4, 8, 16, 32],
             "num_groups": 2,
         }
 
