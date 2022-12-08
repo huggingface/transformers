@@ -14,6 +14,18 @@ def center_crop(*args, **kwargs):
     requires_backends(center_crop, ["vision"])
 
 
+def center_to_corners_format(*args, **kwargs):
+    requires_backends(center_to_corners_format, ["vision"])
+
+
+def corners_to_center_format(*args, **kwargs):
+    requires_backends(corners_to_center_format, ["vision"])
+
+
+def id_to_rgb(*args, **kwargs):
+    requires_backends(id_to_rgb, ["vision"])
+
+
 def normalize(*args, **kwargs):
     requires_backends(normalize, ["vision"])
 
@@ -28,6 +40,10 @@ def rescale(*args, **kwargs):
 
 def resize(*args, **kwargs):
     requires_backends(resize, ["vision"])
+
+
+def rgb_to_id(*args, **kwargs):
+    requires_backends(rgb_to_id, ["vision"])
 
 
 def to_pil_image(*args, **kwargs):
