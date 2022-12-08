@@ -171,3 +171,16 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
                 self.assertSequenceEqual(
                     tokens_r_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
+
+    @require_torch
+    def test_global_attention_mask(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                src_text = ["A long paragraph.", "Hi I am using huggingface transformers"]
+                expected_global_attention_mask = [[0, 0, 0, 0, 0, 0, -1, -1, -1, -1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+
+                inputs = tokenizer_r(src_text, padding=False)
+                inputs["global_attention_mask"] = [[0] * len(y) for y in inputs["input_ids"]]
+                outputs = tokenizer_r.pad(inputs)
+                self.assertSequenceEqual(outputs["global_attention_mask"], expected_global_attention_mask)
