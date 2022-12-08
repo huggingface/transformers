@@ -915,6 +915,9 @@ else:
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AltCLIPPreTrainedModel",
+            "AltRobertaModel",
+            "AltRobertaPreTrainedModel"
             "AltCLIPModel",
             "AltCLIPTextModel",
             "AltCLIPVisionModel",
@@ -4096,6 +4099,9 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AltCLIPPreTrainedModel,
+            AltRobertaModel,
+            AltRobertaPreTrainedModel,
             AltCLIPModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
