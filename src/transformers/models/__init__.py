@@ -41,6 +41,7 @@ from . import (
     canine,
     chinese_clip,
     clip,
+    blip,
     clipseg,
     codegen,
     conditional_detr,

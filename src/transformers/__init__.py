@@ -188,6 +188,14 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.blip": [
+        "BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BLIPConfig",
+       
+        "BLIPTextConfig",
+       
+        "BLIPVisionConfig",
+    ],
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPSegConfig",
@@ -1141,6 +1149,17 @@ else:
             "CLIPTextModelWithProjection",
             "CLIPVisionModel",
             "CLIPVisionModelWithProjection",
+        ]
+    )
+    _import_structure["models.blip"].extend(
+        [
+            "BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BLIPModel",
+            "BLIPPreTrainedModel",
+            "BLIPTextModel",
+            "BLIPTextModelWithProjection",
+            "BLIPVisionModel",
+            "BLIPVisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -3451,6 +3470,14 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.blip import (
+        BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BLIPConfig,
+       
+        BLIPTextConfig,
+       
+        BLIPVisionConfig,
+    )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
@@ -4276,6 +4303,15 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
+        )
+        from .models.blip import (
+            BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BLIPModel,
+            BLIPPreTrainedModel,
+            BLIPTextModel,
+            BLIPTextModelWithProjection,
+            BLIPVisionModel,
+            BLIPVisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,
