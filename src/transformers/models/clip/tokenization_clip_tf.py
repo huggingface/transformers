@@ -14,17 +14,9 @@ class CLIPKerasNLPTokenizer(BytePairTokenizer):
         self.append_token = tf.convert_to_tensor("</w>")
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.nlp = BasicTokenizer(do_lower_case=True)
-
         super().__init__(vocab, merges, sequence_length)
 
     def tokenize(self, inputs):
-        if not isinstance(inputs, (tf.Tensor, tf.RaggedTensor)):
-            inputs = [" ".join(self.nlp.tokenize(inputs))]
-            inputs = tf.convert_to_tensor(inputs)
-
-        inputs = tf.strings.lower(inputs, encoding="")
-
         scalar_input = inputs.shape.rank == 0
         if scalar_input:
             inputs = tf.expand_dims(inputs, 0)
@@ -187,6 +179,7 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
         self.max_length = max_length
         self.vocab = vocab
         self.merges = merges
+        self.nlp = BasicTokenizer(do_lower_case=True)
         self.tf_tokenizer = CLIPKerasNLPTokenizer(vocab, merges, sequence_length=max_length)
 
     @classmethod
@@ -197,7 +190,6 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
         Examples:
         ```python
         from transformers import AutoTokenizer, TFCLIPTokenizer
-
         tokenizer = AutoTokenizer.from_pretrained("CLIP")
         tf_tokenizer = TFCLIPTokenizer.from_tokenizer(tokenizer)
         ```
@@ -224,7 +216,6 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
         Examples:
         ```python
         from transformers import TFCLIPTokenizer
-
         tf_tokenizer = TFCLIPTokenizer.from_pretrained("CLIP")
         ```
         """
@@ -260,6 +251,10 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
         return input_ids
 
     def call(self, x, max_length: int = None):
+        if not isinstance(x, (tf.Tensor, tf.RaggedTensor)):
+          x = [" ".join(self.nlp.tokenize(k)) for k in x]
+          x = tf.convert_to_tensor(x)
+
         input_ids = tf.map_fn(
             self.tokenize,
             x,

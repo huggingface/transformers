@@ -50,9 +50,9 @@ class GPTTokenizationTest(unittest.TestCase):
         assert len(self.tokenizers) == len(self.tf_tokenizers)
 
         self.test_sentences = [
-            # "Hi",
+            "Hi",
             "This is a straightforward English test sentence.",
-            # "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
+            "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
             "Now we're going to add some Chinese: 一 二 三 一二三",
             "And some much more rare Chinese: 齉 堃 齉堃",
             "Je vais aussi écrire en français pour tester les accents",
@@ -64,7 +64,7 @@ class GPTTokenizationTest(unittest.TestCase):
         for tokenizer, tf_tokenizer in zip(self.tokenizers, self.tf_tokenizers):
             for test_inputs in self.test_sentences:
                 python_outputs = tokenizer([test_inputs], return_tensors="tf")
-                tf_outputs = tf_tokenizer(tf.convert_to_tensor([test_inputs]))
+                tf_outputs = tf_tokenizer([test_inputs])
 
                 for key in python_outputs.keys():
                     # convert them to numpy to avoid messing with ragged tensors
@@ -92,7 +92,7 @@ class GPTTokenizationTest(unittest.TestCase):
     def test_saved_model(self):
         for tf_tokenizer in self.tf_tokenizers:
             model = ModelToSave(tokenizer=tf_tokenizer)
-            test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
+            test_inputs = [self.test_sentences[0]]
             out = model.serving(test_inputs)  # Build model with some sample inputs
             with TemporaryDirectory() as tempdir:
                 save_path = Path(tempdir) / "saved.model"
@@ -105,7 +105,7 @@ class GPTTokenizationTest(unittest.TestCase):
     @slow
     def test_from_config(self):
         for tf_tokenizer in self.tf_tokenizers:
-            test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
+            test_inputs = [self.test_sentences[0]]
             out = tf_tokenizer(test_inputs)  # Build model with some sample inputs
 
             config = tf_tokenizer.get_config()
@@ -122,7 +122,7 @@ class GPTTokenizationTest(unittest.TestCase):
             tf_tokenizer.pad_token_id = 123123
 
             for max_length in [3, 5, 1024]:
-                test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
+                test_inputs = [self.test_sentences[0]]
                 out = tf_tokenizer(test_inputs, max_length=max_length)
 
                 out_length = out["input_ids"].numpy().shape[1]
