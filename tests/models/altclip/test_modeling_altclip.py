@@ -16,7 +16,8 @@
 
 
 import unittest
-
+import tempfile
+import os
 import numpy as np
 
 from transformers import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig, is_torch_available
@@ -38,11 +39,6 @@ if is_torch_available():
 
     from transformers import AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
     from transformers.models.altclip.modeling_altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
-
-if is_vision_available():
-    from PIL import Image
-
-    from transformers import AltCLIPProcessor
 
 
 class AltCLIPVisionModelTester:
