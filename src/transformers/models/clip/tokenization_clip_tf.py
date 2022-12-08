@@ -188,6 +188,7 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
         Examples:
         ```python
         from transformers import AutoTokenizer, TFCLIPTokenizer
+
         tokenizer = AutoTokenizer.from_pretrained("CLIP")
         tf_tokenizer = TFCLIPTokenizer.from_tokenizer(tokenizer)
         ```
@@ -214,6 +215,7 @@ class TFCLIPTokenizer(tf.keras.layers.Layer):
         Examples:
         ```python
         from transformers import TFCLIPTokenizer
+
         tf_tokenizer = TFCLIPTokenizer.from_pretrained("CLIP")
         ```
         """
