@@ -15,16 +15,9 @@
 """ AltCLIP model configuration"""
 import copy
 import os
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
+from typing import TYPE_CHECKING, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 

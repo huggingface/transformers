@@ -20,9 +20,9 @@ import tempfile
 import os
 import numpy as np
 
-from transformers import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig, is_torch_available
+from transformers import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -308,7 +308,7 @@ class AltCLIPModelTester:
         model.eval()
 
         with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+            model(input_ids, pixel_values, attention_mask)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
