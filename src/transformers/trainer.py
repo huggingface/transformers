@@ -171,6 +171,7 @@ if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
+    from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
 
 if is_fairscale_available():
     dep_version_check("fairscale")
@@ -416,6 +417,32 @@ class Trainer:
                 self.fsdp = ShardingStrategy.SHARD_GRAD_OP
             elif FSDPOption.NO_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.NO_SHARD
+
+        if len(args.xla_fsdp) > 0:
+            fsdp_kwargs = args.xla_fsdp
+            fsdp_wrap = lambda m: FSDP(m, **fsdp_kwargs)
+            # A wrapper for gradient checkpointing
+            grad_ckpt_wrap = checkpoint_module if args.xla_fsdp_grad_ckpt else (lambda m: m)
+            if args.xla_fsdp_nested:
+                for submodule in model.children():
+                    submodule = fsdp_wrap(grad_ckpt_wrap(submodule))
+            # Wrap the base model with an outer FSDP wrapper
+            # Also, copy the signature of the original model's forward method -- otherwise
+            # Hugging Face datasets drops the columns not appearing in the forward method's argument
+            # in its `_remove_unused_columns` in trainer.py
+            forward_signature = inspect.signature(model.forward.__func__)
+            model = fsdp_wrap(model)
+            model.forward.__func__.__signature__ = forward_signature
+
+            # Patch `xm.optimizer_step` not to reduce gradients in this case,
+            # as FSDP does not need gradient reduction over sharded parameters.
+            def patched_optimizer_step(optimizer, barrier=False, optimizer_args={}):
+                loss = optimizer.step(**optimizer_args)
+                if barrier:
+                    xm.mark_step()
+                return loss
+
+            xm.optimizer_step = patched_optimizer_step
 
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
