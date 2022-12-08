@@ -1989,13 +1989,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif not low_cpu_mem_usage:
                 raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
 
-        # if keep_in_fp32_modules is not None and not low_cpu_mem_usage:
-        #     # Force `low_cpu_mem_usage` to be set to `True` - check the PR:
-        #     logger.warning(
-        #         "The argument `keep_in_fp32_modules` is used, force-enabling `low_cpu_mem_usage` to load the model"
-        #     )
-        #     low_cpu_mem_usage = True
-
         if low_cpu_mem_usage:
             # low_cpu_mem_usage requires PyTorch >= 1.9 to have the meta device.
             require_version_core("torch>=1.9")
@@ -2273,6 +2266,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             #    weights entry that is of a floating type - we assume all floating dtype weights are of the same dtype
             # we also may have config.torch_dtype available, but we won't rely on it till v5
             dtype_orig = None
+
             if torch_dtype is not None:
                 if isinstance(torch_dtype, str):
                     if torch_dtype == "auto":
@@ -2294,7 +2288,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = [k for k in state_dict.keys()]
-            if low_cpu_mem_usage:
+            if low_cpu_mem_usage or cls._keep_in_fp32_modules is not None:
                 state_dict = None
 
         config.name_or_path = pretrained_model_name_or_path

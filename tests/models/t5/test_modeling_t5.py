@@ -830,6 +830,7 @@ def use_task_specific_params(model, task):
 @require_torch
 @require_accelerate
 @require_tokenizers
+@slow
 class T5ModelFp16Tests(unittest.TestCase):
     def test_fp16_fp32_conversion(self):
         r"""
