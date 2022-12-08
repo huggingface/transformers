@@ -15,10 +15,12 @@
 """ Testing suite for the PyTorch AltCLIP model. """
 
 
+import inspect
 import unittest
 import tempfile
 import os
 import numpy as np
+import torch.nn as nn
 
 from transformers import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -114,24 +116,81 @@ class AltCLIPVisionModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    # def create_and_check_model_with_projection(self, config, pixel_values):
-    #     model = AltCLIPVisionModelWithProjection(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     with torch.no_grad():
-    #         result = model(pixel_values)
-    #     # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-    #     image_size = (self.image_size, self.image_size)
-    #     patch_size = (self.patch_size, self.patch_size)
-    #     num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-    #     self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-    #     self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
+
+
+@require_torch
+class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as CLIP does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (AltCLIPVisionModel,) if is_torch_available() else ()
+    fx_compatible = True
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = AltCLIPVisionModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="CLIP does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLIPVisionModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 class AltCLIPTextModelTester:
