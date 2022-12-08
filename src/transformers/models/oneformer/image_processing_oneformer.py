@@ -14,11 +14,13 @@
 # limitations under the License.
 """Image processor class for OneFormer."""
 
+import json
 import math
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
-import json
+
 import numpy as np
+
 from huggingface_hub import hf_hub_download
 from transformers import CLIPTokenizer
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict

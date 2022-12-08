@@ -13,13 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """OneFormer model configuration"""
-from typing import Dict, Optional
 import copy
+from typing import Dict, Optional
+
+from transformers import AutoConfig, MaskFormerSwinConfig
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
-
-from transformers import MaskFormerSwinConfig, AutoConfig
 
 
 logger = logging.get_logger(__name__)

@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 
+from transformers import AutoBackbone, MaskFormerSwinConfig
 from transformers.utils import logging
 
 from ...activations import ACT2FN
@@ -41,7 +42,6 @@ from ...utils import (
 )
 from .backbone_dinat_oneformer import OneFormerDinatModel
 from .configuration_oneformer import OneFormerConfig
-from transformers import AutoBackbone, MaskFormerSwinConfig
 
 
 logger = logging.get_logger(__name__)
