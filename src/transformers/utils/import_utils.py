@@ -455,6 +455,15 @@ def is_torchdynamo_available():
         return False
 
 
+def is_torch_compile_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    return hasattr(torch, "compile")
+
+
 def is_torch_tensorrt_fx_available():
     if importlib.util.find_spec("torch_tensorrt") is None:
         return False
