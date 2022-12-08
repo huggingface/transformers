@@ -612,8 +612,10 @@ def _load_state_dict_into_meta_model(
         # We convert floating dtypes to the `dtype` passed. We want to keep the buffers/params
         # in int/uint/bool and not cast them.
         if dtype is not None and torch.is_floating_point(param):
-            if keep_in_fp32_modules is not None and any(
-                module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules
+            if (
+                keep_in_fp32_modules is not None
+                and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                and dtype != torch.bfloat16
             ):
                 param = param.to(torch.float32)
             else:
@@ -2260,20 +2262,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Time to load the checkpoint
                 state_dict = load_state_dict(resolved_archive_file)
 
-            # Check if `_keep_in_fp32_modules` is not None
-            # but not force users to have `accelerate`
-            if cls._keep_in_fp32_modules is not None:
-                if not is_accelerate_available():
-                    use_keep_in_fp32_modules = False
-                    logger.warning(
-                        " `_keep_in_fp32_modules` is not set to `None` and you don't have `accelerate` installed",
-                        " it is recommended to have `accelerate` installed in this case `pip install accelerate`.",
-                    )
-                else:
-                    use_keep_in_fp32_modules = True
-            else:
-                use_keep_in_fp32_modules = False
-
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
@@ -2297,6 +2285,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             f"`torch_dtype` can be either a `torch.dtype` or `auto`, but received {torch_dtype}"
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+
+            # Check if `_keep_in_fp32_modules` is not None
+            # but not force users to have `accelerate`
+            if cls._keep_in_fp32_modules is not None:
+                if not is_accelerate_available() or torch_dtype == torch.bfloat16:
+                    use_keep_in_fp32_modules = False
+                    logger.warning(
+                        " `_keep_in_fp32_modules` is not set to `None` and you don't have `accelerate` installed",
+                        " it is recommended to have `accelerate` installed in this case `pip install accelerate`.",
+                    )
+                else:
+                    use_keep_in_fp32_modules = True
+            else:
+                use_keep_in_fp32_modules = False
 
             if is_sharded:
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
