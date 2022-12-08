@@ -242,6 +242,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "MaskFormerForInstanceSegmentation",
     "XCLIPVisionModel",
     "XCLIPTextModel",
+    "AltCLIPTextModel",
+    "AltCLIPVisionModel",
+    "AltRobertaModel",
 ]
 
 # Update this list for models that have multiple model types for the same
