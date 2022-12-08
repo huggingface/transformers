@@ -131,7 +131,7 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (AltCLIPVisionModel,) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -183,14 +183,17 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @slow
+    @unittest.skip(reason="AltCLIPVisionModel use the same cv backbone with CLIP model.")
     def test_model_from_pretrained(self):
-        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        pass
+        
 
 
 class AltCLIPTextModelTester:
