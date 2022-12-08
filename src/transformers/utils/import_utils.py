@@ -1013,7 +1013,7 @@ class DummyObject(type):
     """
 
     def __getattribute__(cls, key):
-        if key.startswith("_"):
+        if key.startswith("_") and key != "_from_config":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
 
