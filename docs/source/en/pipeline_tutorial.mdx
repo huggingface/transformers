@@ -33,99 +33,188 @@ While each task has an associated [`pipeline`], it is simpler to use the general
 ```py
 >>> from transformers import pipeline
 
->>> generator = pipeline(task="text-generation")
+>>> generator = pipeline(task="automatic-speech-recognition")
 ```
 
 2. Pass your input text to the [`pipeline`]:
 
 ```py
->>> generator(
-...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
-... )  # doctest: +SKIP
-[{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Iron-priests at the door to the east, and thirteen for the Lord Kings at the end of the mountain'}]
+>>> generator("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+{'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP LIVE UP THE TRUE MEANING OF ITS TREES'}
 ```
 
-If you have more than one input, pass your input as a list:
+Not the result you had in mind? Check out some of the [most downloaded automatic speech recognition models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=downloads) on the Hub to see if you can get a better transcription.
+Let's try [openai/whisper-large](https://huggingface.co/openai/whisper-large):
 
 ```py
->>> generator(
-...     [
-...         "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
-...         "Nine for Mortal Men, doomed to die, One for the Dark Lord on his dark throne",
-...     ]
-... )  # doctest: +SKIP
+>>> generator = pipeline(model="openai/whisper-large")
+>>> generator("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+{'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
-Any additional parameters for your task can also be included in the [`pipeline`]. The `text-generation` task has a [`~generation.GenerationMixin.generate`] method with several parameters for controlling the output. For example, if you want to generate more than one output, set the `num_return_sequences` parameter:
+Now this result looks more accurate!
+We really encourage you to check out the Hub for models in different languages, models specialized in your field, and more.
+You can check out and compare model results directly from your browser on the Hub to see if it fits or 
+handles corner cases better than other ones.
+And if you don't find a model for your use case, you can always start [training](training) your own!
+
+If you have several inputs, you can pass your input as a list:
 
 ```py
->>> generator(
-...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
-...     num_return_sequences=2,
-... )  # doctest: +SKIP
+generator(
+    [
+        "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac",
+        "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac",
+    ]
+)
 ```
 
-### Choose a model and tokenizer
+If you want to iterate over a whole dataset, or want to use it for inference in a webserver, check out dedicated parts
 
-The [`pipeline`] accepts any model from the [Hub](https://huggingface.co/models). There are tags on the Hub that allow you to filter for a model you'd like to use for your task. Once you've picked an appropriate model, load it with the corresponding `AutoModelFor` and [`AutoTokenizer`] class. For example, load the [`AutoModelForCausalLM`] class for a causal language modeling task:
+[Using pipelines on a dataset](#using-pipelines-on-a-dataset)
+
+[Using pipelines for a webserver](./pipeline_webserver)
+
+## Parameters
+
+[`pipeline`] supports many parameters; some are task specific, and some are general to all pipelines.
+In general you can specify parameters anywhere you want:
 
 ```py
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
->>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+generator(model="openai/whisper-large", my_parameter=1)
+out = generate(...)  # This will use `my_parameter=1`.
+out = generate(..., my_parameter=2)  # This will override and use `my_parameter=2`.
+out = generate(...)  # This will go back to using `my_parameter=1`.
 ```
 
-Create a [`pipeline`] for your task, and specify the model and tokenizer you've loaded:
+Let's check out 3 important ones:
+
+### Device
+
+If you use `device=n`, the pipeline automatically puts the model on the specified device.
+This will work regardless of whether you are using PyTorch or Tensorflow.
 
 ```py
->>> from transformers import pipeline
-
->>> generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer)
+generator(model="openai/whisper-large", device=0)
 ```
 
-Pass your input text to the [`pipeline`] to generate some text:
+If the model is too large for a single GPU, you can set `device_map="auto"` to allow 🤗 [Accelerate](https://huggingface.co/docs/accelerate) to automatically determine how to load and store the model weights.
 
 ```py
->>> generator(
-...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
-... )  # doctest: +SKIP
-[{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Dragon-lords (for them to rule in a world ruled by their rulers, and all who live within the realm'}]
+#!pip install accelerate
+generator(model="openai/whisper-large", device_map="auto")
 ```
 
-## Audio pipeline
+### Batch size
 
-The [`pipeline`] also supports audio tasks like audio classification and automatic speech recognition.
+By default, pipelines will not batch inference for reasons explained in detail [here](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching). The reason is that batching is not necessarily faster, and can actually be quite slower in some cases.
 
-For example, let's classify the emotion in this audio clip:
+But if it works in your use case, you can use:
 
 ```py
->>> from datasets import load_dataset
->>> import torch
-
->>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
->>> ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
->>> audio_file = ds[0]["audio"]["path"]
+generator(model="openai/whisper-large", device=0, batch_size=2)
+audio_filenames = [f"audio_{i}.flac" for i in range(10)]
+texts = generator(audio_filenames)
 ```
 
-Find an [audio classification](https://huggingface.co/models?pipeline_tag=audio-classification) model on the Model Hub for emotion recognition and load it in the [`pipeline`]:
+This runs the pipeline on the 10 provided audio files, but it will pass them in batches of 2
+to the model (which is on a GPU, where batching is more likely to help) without requiring any further code from you. 
+The output should always match what you would have received without batching. It is only meant as a way to help you get more speed out of a pipeline.
+
+Pipelines can also alleviate some of the complexities of batching because, for some pipelines, a single item (like a long audio file) needs to be chunked into multiple parts to be processed by a model. The pipeline performs this [*chunk batching*](./main_classes/pipelines#pipeline-chunk-batching) for you.
+
+### Task specific parameters
+
+All tasks provide task specific parameters which allow for additional flexibility and options to help you get your job done.
+For instance, the [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] method has a `return_timestamps` parameter which sounds promising for subtitling videos:
+
 
 ```py
->>> from transformers import pipeline
-
->>> audio_classifier = pipeline(
-...     task="audio-classification", model="ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
-... )
+>>> # Not using whisper, as it cannot provide timestamps.
+>>> generator = pipeline(model="facebook/wav2vec2-large-960h-lv60-self", return_timestamps="word")
+>>> generator("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+{'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP AND LIVE OUT THE TRUE MEANING OF ITS CREED',
+ 'chunks': [
+      {'text': 'I', 'timestamp': (1.22, 1.24)},
+      {'text': 'HAVE', 'timestamp': (1.42, 1.58)},
+      {'text': 'A', 'timestamp': (1.66, 1.68)},
+      {'text': 'DREAM', 'timestamp': (1.76, 2.14)},
+      {'text': 'BUT', 'timestamp': (3.68, 3.8)},
+      {'text': 'ONE', 'timestamp': (3.94, 4.06)},
+      {'text': 'DAY', 'timestamp': (4.16, 4.3)},
+      {'text': 'THIS', 'timestamp': (6.36, 6.54)},
+      {'text': 'NATION', 'timestamp': (6.68, 7.1)},
+      {'text': 'WILL', 'timestamp': (7.32, 7.56)},
+      {'text': 'RISE', 'timestamp': (7.8, 8.26)},
+      {'text': 'UP', 'timestamp': (8.38, 8.48)},
+      {'text': 'AND', 'timestamp': (10.08, 10.18)},
+      {'text': 'LIVE', 'timestamp': (10.26, 10.48)},
+      {'text': 'OUT', 'timestamp': (10.58, 10.7)},
+      {'text': 'THE', 'timestamp': (10.82, 10.9)},
+      {'text': 'TRUE', 'timestamp': (10.98, 11.18)},
+      {'text': 'MEANING', 'timestamp': (11.26, 11.58)},
+      {'text': 'OF', 'timestamp': (11.66, 11.7)},
+      {'text': 'ITS', 'timestamp': (11.76, 11.88)},
+      {'text': 'CREED', 'timestamp': (12.0, 12.38)}
+]}
 ```
 
-Pass the audio file to the [`pipeline`]:
+As you can see, the model inferred the text and also outputted **when** the various words were pronounced
+in the sentence.
+
+There are many parameters available for each task, so check out each task's API reference to see what you can tinker with!
+For instance, the [`~transformers.AutomaticSpeechRecognitionPipeline`] has a `chunk_length_s` parameter which is helpful for working on really long audio files (for example, subtitling entire movies or hour-long videos) that a model typically cannot handle on its own.
+
+
+If you can't find a parameter that would really help you out, feel free to [request it](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml)!
+
+
+## Using pipelines on a dataset
+
+The pipeline can also run inference on a large dataset. The easiest way we recommend doing this is by using an iterator:
 
 ```py
->>> preds = audio_classifier(audio_file)
->>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
->>> preds
-[{'score': 0.1315, 'label': 'calm'}, {'score': 0.1307, 'label': 'neutral'}, {'score': 0.1274, 'label': 'sad'}, {'score': 0.1261, 'label': 'fearful'}, {'score': 0.1242, 'label': 'happy'}]
+def data():
+    for i in range(1000):
+        yield f"My example {i}"
+
+
+pipe = pipe(model="gpt2", device=0)
+generated_characters = 0
+for out in pipe(data()):
+    generated_characters += len(out["generated_text"])
 ```
+
+The iterator `data()` yields each result, and the pipeline automatically
+recognizes the input is iterable and will start fetching the data while
+it continues to process it on the GPU (this uses [DataLoader](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) under the hood).
+This is important because you don't have to allocate memory for the whole dataset
+and you can feed the GPU as fast as possible.
+
+Since batching could speed things up, it may be useful to try tuning the `batch_size` parameter here.
+
+The simplest way to iterate over a dataset is to just load one from 🤗 [Datasets](https://github.com/huggingface/datasets/):
+
+```py
+# KeyDataset is a util that will just output the item we're interested in.
+from transformers.pipelines.pt_utils import KeyDataset
+
+pipe = pipeline(model="hf-internal-testing/tiny-random-wav2vec2", device=0)
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:10]")
+
+for out in pipe(KeyDataset(dataset["audio"])):
+    print(out)
+```
+
+
+## Using pipelines for a webserver
+
+<Tip>
+Creating an inference engine is a complex topic which deserves it's own
+page.
+</Tip>
+
+[Link](./pipeline_webserver)
 
 ## Vision pipeline
 
@@ -138,7 +227,7 @@ Specify your task and pass your image to the classifier. The image can be a link
 ```py
 >>> from transformers import pipeline
 
->>> vision_classifier = pipeline(task="image-classification")
+>>> vision_classifier = pipeline(model="google/vit-base-patch16-224")
 >>> preds = vision_classifier(
 ...     images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 ... )
@@ -147,25 +236,38 @@ Specify your task and pass your image to the classifier. The image can be a link
 [{'score': 0.4335, 'label': 'lynx, catamount'}, {'score': 0.0348, 'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'}, {'score': 0.0324, 'label': 'snow leopard, ounce, Panthera uncia'}, {'score': 0.0239, 'label': 'Egyptian cat'}, {'score': 0.0229, 'label': 'tiger cat'}]
 ```
 
-## Multimodal pipeline
+### Text pipeline
 
-The [`pipeline`] supports more than one modality. For example, a visual question answering (VQA) task combines text and image. Feel free to use any image link you like and a question you want to ask about the image. The image can be a URL or a local path to the image.
-
-For example, if you use the same image from the vision pipeline above:
-
-```py
->>> image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
->>> question = "Where is the cat?"
-```
-
-Create a pipeline for `vqa` and pass it the image and question:
+Using a [`pipeline`] for NLP tasks is practically identical.
 
 ```py
 >>> from transformers import pipeline
 
->>> vqa = pipeline(task="vqa")
->>> preds = vqa(image=image, question=question)
->>> preds = [{"score": round(pred["score"], 4), "answer": pred["answer"]} for pred in preds]
->>> preds
-[{'score': 0.911, 'answer': 'snow'}, {'score': 0.8786, 'answer': 'in snow'}, {'score': 0.6714, 'answer': 'outside'}, {'score': 0.0293, 'answer': 'on ground'}, {'score': 0.0272, 'answer': 'ground'}]
+>>> # This model is a `zero-shot-classification` model.
+>>> # It will classify text, except you are free to choose any label you might imagine
+>>> classifier = pipeline(model="facebook/bart-large-mnli")
+>>> classifier(
+...     "I have a problem with my iphone that needs to be resolved asap!!",
+...     candidate_labels=["urgent", "not urgent", "phone", "tablet", "computer"],
+... )
+{'sequence': 'I have a problem with my iphone that needs to be resolved asap!!',
+ 'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'],
+ 'scores': [0.504,0.479,0.013,0.003,0.002]}
+```
+
+### Multimodal pipeline
+
+The [`pipeline`] supports more than one modality. For example, a visual question answering (VQA) task combines text and image. Feel free to use any image link you like and a question you want to ask about the image. The image can be a URL or a local path to the image.
+
+For example, if you use this [invoice image](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png):
+
+```py
+>>> from transformers import pipeline
+
+>>> vqa = pipeline(model="impira/layoutlm-document-qa")
+>>> vqa(
+...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     question="What is the invoice number?",
+... )
+[{'score': 0.635722279548645, 'answer': '1110212019', 'start': 22, 'end': 22}]
 ```
