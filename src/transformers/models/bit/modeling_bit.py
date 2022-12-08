@@ -30,7 +30,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneBaseModel, PreTrainedModel
+from ...modeling_utils import BackboneMixin, PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -842,7 +842,7 @@ class BitForImageClassification(BitPreTrainedModel):
     """,
     BIT_START_DOCSTRING,
 )
-class BitBackbone(BitPreTrainedModel, BackboneBaseModel):
+class BitBackbone(BitPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
 
