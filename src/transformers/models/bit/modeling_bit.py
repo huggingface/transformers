@@ -18,6 +18,7 @@ import collections
 import math
 from typing import Optional, Tuple
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
@@ -592,7 +593,8 @@ class BitEncoder(nn.Module):
         dilation = 1
 
         layer_dropouts = [
-            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+            x.tolist()
+            for x in torch.Tensor(np.linspace(0, config.drop_path_rate, sum(config.depths))).split(config.depths)
         ]
 
         for stage_idx, (current_depth, current_hidden_size, layer_dropout) in enumerate(
