@@ -279,7 +279,6 @@ def resize(
         resized_image = to_channel_dimension_format(
             resized_image, data_format, input_channel_dim=ChannelDimension.LAST
         )
-        # resized_image = to_channel_dimension_format(resized_image, data_format)
     return resized_image
 
 
