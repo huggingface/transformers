@@ -259,6 +259,7 @@ def parse_args():
     parser.add_argument(
         "--mask_time_length",
         type=int,
+        default=None,
         help=(
             "Length of each vector mask span to mask along the time axis in the contrastive task."
             " If omitted, will pull value from model config."
