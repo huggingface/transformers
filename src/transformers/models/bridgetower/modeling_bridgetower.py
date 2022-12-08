@@ -97,8 +97,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             tokenizer_config = RobertaConfig(
                 vocab_size=config.vocab_size,
                 hidden_size=config.hidden_size,
-                num_hidden_layers=config.num_layers,
-                num_attention_heads=config.num_heads,
+                num_hidden_layers=config.num_hidden_layers,
+                num_attention_heads=config.num_attention_heads,
                 intermediate_size=config.hidden_size * config.mlp_ratio,
                 max_position_embeddings=config.max_text_len,
                 hidden_dropout_prob=config.drop_rate,
@@ -113,8 +113,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_text_transform = nn.Linear(config.input_text_embed_size, config.hidden_size)
             self.cross_modal_image_transform = nn.Linear(config.input_image_embed_size, config.hidden_size)
         else:
-            self.cross_modal_text_transform = nn.ModuleList([nn.Linear(config.input_text_embed_size, config.hidden_size) for _ in range(config.num_layers)])
-            self.cross_modal_image_transform = nn.ModuleList([nn.Linear(config.input_image_embed_size, config.hidden_size) for _ in range(config.num_layers)])
+            self.cross_modal_text_transform = nn.ModuleList([nn.Linear(config.input_text_embed_size, config.hidden_size) for _ in range(config.num_hidden_layers)])
+            self.cross_modal_image_transform = nn.ModuleList([nn.Linear(config.input_image_embed_size, config.hidden_size) for _ in range(config.num_hidden_layers)])
         self.cross_modal_text_transform.apply(self._init_weights)
         self.cross_modal_image_transform.apply(self._init_weights)
 
@@ -156,9 +156,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 ln.weight.data = self.vit_model.visual.ln_post.weight.data
                 ln.bias.data = self.vit_model.visual.ln_post.bias.data
 
-        self.cross_modal_image_layers = nn.ModuleList([BertCrossLayer(tokenizer_config) for _ in range(config.num_layers)])
+        self.cross_modal_image_layers = nn.ModuleList([BertCrossLayer(tokenizer_config) for _ in range(config.num_hidden_layers)])
         self.cross_modal_image_layers.apply(self._init_weights)
-        self.cross_modal_text_layers = nn.ModuleList([BertCrossLayer(tokenizer_config) for _ in range(config.num_layers)])
+        self.cross_modal_text_layers = nn.ModuleList([BertCrossLayer(tokenizer_config) for _ in range(config.num_hidden_layers)])
         self.cross_modal_text_layers.apply(self._init_weights)
 
         # Class token => Linear => Tanh
@@ -185,8 +185,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_text_link_tower = LinkTower(config, tokenizer_config)
             self.cross_modal_image_link_tower = LinkTower(config, tokenizer_config)
         else:
-            self.cross_modal_text_link_tower = nn.ModuleList([LinkTower(config, tokenizer_config) for _ in range(config.num_layers - 1)])
-            self.cross_modal_image_link_tower = nn.ModuleList([LinkTower(config, tokenizer_config) for _ in range(config.num_layers - 1)])
+            self.cross_modal_text_link_tower = nn.ModuleList([LinkTower(config, tokenizer_config) for _ in range(config.num_hidden_layers - 1)])
+            self.cross_modal_image_link_tower = nn.ModuleList([LinkTower(config, tokenizer_config) for _ in range(config.num_hidden_layers - 1)])
 
         self.cross_modal_text_link_tower.apply(self._init_weights)
         self.cross_modal_image_link_tower.apply(self._init_weights)
@@ -292,9 +292,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         if config.loss_names["nlvr2"] > 0:
             nlvr2_input_scale = 4 # 2 * 2
             if config.nlvr2_head_format == 'pair-biatten':
-                self.nlvr2_biatten_head_attn1 = nn.MultiheadAttention(hs, config.num_heads, dropout=config.drop_rate, batch_first=True)
+                self.nlvr2_biatten_head_attn1 = nn.MultiheadAttention(hs, config.num_attention_heads, dropout=config.drop_rate, batch_first=True)
                 self.nlvr2_biatten_head_attn1.apply(self._init_weights)
-                self.nlvr2_biatten_head_attn2 = nn.MultiheadAttention(hs, config.num_heads, dropout=config.drop_rate, batch_first=True)
+                self.nlvr2_biatten_head_attn2 = nn.MultiheadAttention(hs, config.num_attention_heads, dropout=config.drop_rate, batch_first=True)
                 self.nlvr2_biatten_head_attn2.apply(self._init_weights)
                 self.nlvr2_biatten_head_fc = nn.Sequential(
                     nn.Linear(hs * 2, hs * 2), 
@@ -377,7 +377,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         
         extend_text_masks = self.text_transformer.get_extended_attention_mask(text_masks, input_shape, self.device)
         
-        split_index = len(self.text_transformer.encoder.layer) - self.config.num_layers + 1
+        split_index = len(self.text_transformer.encoder.layer) - self.config.num_hidden_layers + 1
         for layer in self.text_transformer.encoder.layer[:split_index]:
             text_embeds = layer(text_embeds, extend_text_masks)[0]
         

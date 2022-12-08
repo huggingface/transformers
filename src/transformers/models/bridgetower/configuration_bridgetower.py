@@ -88,8 +88,8 @@ class BridgeTowerConfig(PretrainedConfig):
         mlp_ratio=4,
         model_type='bridgetower',
         nlvr2_head_format='pair',
-        num_heads=12,
-        num_layers=6,
+        num_attention_heads=12,
+        num_hidden_layers=6,
         num_nodes=1,
         only_load_cross_modal_from_meter=False,
         patch_size=16,
@@ -104,7 +104,7 @@ class BridgeTowerConfig(PretrainedConfig):
         unfreeze_RoBERTa_layernorm=False,
         unfreeze_ViT_attention=False,
         unfreeze_ViT_layernorm=False,
-        vit='ViT-B-16-weights.pt',
+        vit='ViT-B/16',
         vit_layernorm_init_from_vit=False,
         vit_layernorm_shared=True,
         vit_remove_last=False,
@@ -137,8 +137,8 @@ class BridgeTowerConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.model_type = model_type
         self.nlvr2_head_format = nlvr2_head_format
-        self.num_heads = num_heads
-        self.num_layers = num_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_hidden_layers = num_hidden_layers
         self.num_nodes = num_nodes
         self.only_load_cross_modal_from_meter = only_load_cross_modal_from_meter
         self.patch_size = patch_size

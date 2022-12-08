@@ -218,7 +218,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 288} #TODO: get from config
+        size = size if size is not None else {"shortest_edge": self.image_size}
         size = get_size_dict(size, default_to_square=False)
 
         self.do_resize = do_resize
@@ -288,9 +288,27 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
-    def center_crop(self, image, size):
+    def center_crop(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
+    ) -> np.ndarray:
+        """
+        Center crop an image to (size["height"], size["width"]). If the input size is smaller than `size` along any
+        edge, the image is padded with 0's and then center cropped.
+
+        Args:
+            image (`np.ndarray`):
+                Image to center crop.
+            size (`Dict[str, int]`):
+                Size of the output image.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
         output_size = size["shortest_edge"]
-        return center_crop(image, (output_size, output_size))
+        return center_crop(image, size=(output_size, output_size), data_format=data_format, **kwargs)
 
     def normalize(
         self,
