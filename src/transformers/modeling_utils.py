@@ -2271,6 +2271,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 else:
                     use_keep_in_fp32_modules = True
+            else:
+                use_keep_in_fp32_modules = False
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
