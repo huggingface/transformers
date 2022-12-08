@@ -19,7 +19,14 @@ import tempfile
 import unittest
 
 from transformers import T5Config, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -818,6 +825,36 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
 def use_task_specific_params(model, task):
     model.config.update(model.config.task_specific_params[task])
+
+
+@require_torch
+@require_accelerate
+@require_tokenizers
+class T5ModelFp16Tests(unittest.TestCase):
+    def test_fp16_fp32_conversion(self):
+        r"""
+        A test to check whether the argument `keep_in_fp32_modules` correctly does its job
+        """
+        # Load without using `accelerate`
+        model = T5ForConditionalGeneration.from_pretrained(
+            "t5-small", torch_dtype=torch.float16, keep_in_fp32_modules=["wo"]
+        )
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+
+        # Load without using `accelerate`
+        model = T5ForConditionalGeneration.from_pretrained(
+            "t5-small", torch_dtype=torch.float16, keep_in_fp32_modules=["wo"], low_cpu_mem_usage=True
+        )
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+
+        # Load using `accelerate`
+        model = T5ForConditionalGeneration.from_pretrained(
+            "t5-small", torch_dtype=torch.float16, keep_in_fp32_modules=["wo"], device_map="auto"
+        )
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
 
 @require_torch
