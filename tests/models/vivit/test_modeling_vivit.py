@@ -51,7 +51,7 @@ class VivitModelTester:
         is_training=True,
         use_labels=True,
         num_labels=10,
-        video_size=[32, 224, 224],
+        video_size=[16, 224, 224],  # decreased, because default 32 takes too much RAM at inference
         tubelet_size=[2, 16, 16],
         num_channels=3,
         hidden_size=768,
