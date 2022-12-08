@@ -20,7 +20,6 @@ import unittest
 import tempfile
 import os
 import numpy as np
-import torch.nn as nn
 
 from transformers import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -38,6 +37,7 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
     from transformers import AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
     from transformers.models.altclip.modeling_altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
