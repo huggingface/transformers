@@ -88,7 +88,7 @@ def rename_key(name, config):
         name = "layernorm.weight"
     if name == "norm.bias":
         name = "layernorm.bias"
-    
+
     if (
         "upsample" in name
         or "conv_before_upsample" in name
