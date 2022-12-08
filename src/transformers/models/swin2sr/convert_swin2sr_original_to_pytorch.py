@@ -21,7 +21,7 @@ from PIL import Image
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
+from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution, Swin2SRImageProcessor
 
 
 def get_config(checkpoint_url):
@@ -104,6 +104,10 @@ def rename_key(name, config):
         if config.upsampler in ["pixelshuffle", "pixelshuffle_aux", "nearest+conv"]:
             if "conv_before_upsample.0" in name:
                 name = name.replace("conv_before_upsample.0", "conv_before_upsample")
+            if "upsample.0" in name:
+                name = name.replace("upsample.0", "upsample.convolution_0")
+            if "upsample.2" in name:
+                name = name.replace("upsample.2", "upsample.convolution_1")
             name = "upsample." + name
         elif config.upsampler == "pixelshuffledirect":
             name = name.replace("upsample.0.weight", "upsample.conv.weight")
@@ -174,8 +178,7 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     # verify values
     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    # TODO use processor
-    # processor = Swin2SRImageProcessor()
+    processor = Swin2SRImageProcessor()
     # pixel_values = processor(image, return_tensors="pt").pixel_values
 
     image_size = 126 if "Jpeg" in checkpoint_url else 256
@@ -252,12 +255,12 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving image processor to {pytorch_dump_folder_path}")
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model.push_to_hub(f"nielsr/{model_name}")
-        # processor.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

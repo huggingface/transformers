@@ -959,27 +959,42 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         )
 
 
-# TODO inherit from nn.Module here
-class Upsample(nn.Sequential):
+class Upsample(nn.Module):
     """Upsample module.
 
     Args:
-        scale (int): Scale factor. Supported scales: 2^n and 3.
-        num_features (int): Channel number of intermediate features.
+        scale (`int`):
+            Scale factor. Supported scales: 2^n and 3.
+        num_features (`int`):
+            Channel number of intermediate features.
     """
 
     def __init__(self, scale, num_features):
-        m = []
-        if (scale & (scale - 1)) == 0:  # scale = 2^n
-            for _ in range(int(math.log(scale, 2))):
-                m.append(nn.Conv2d(num_features, 4 * num_features, 3, 1, 1))
-                m.append(nn.PixelShuffle(2))
+        super().__init__()
+
+        self.scale = scale
+        if (scale & (scale - 1)) == 0:
+            # scale = 2^n
+            for i in range(int(math.log(scale, 2))):
+                self.add_module(f"convolution_{i}", nn.Conv2d(num_features, 4 * num_features, 3, 1, 1))
+                self.add_module(f"pixelshuffle_{i}", nn.PixelShuffle(2))
         elif scale == 3:
-            m.append(nn.Conv2d(num_features, 9 * num_features, 3, 1, 1))
-            m.append(nn.PixelShuffle(3))
+            self.convolution = nn.Conv2d(num_features, 9 * num_features, 3, 1, 1)
+            self.pixelshuffle = nn.PixelShuffle(3)
         else:
-            raise ValueError(f"scale {scale} is not supported. Supported scales: 2^n and 3.")
-        super(Upsample, self).__init__(*m)
+            raise ValueError(f"Scale {scale} is not supported. Supported scales: 2^n and 3.")
+
+    def forward(self, hidden_state):
+        if (self.scale & (self.scale - 1)) == 0:
+            for i in range(int(math.log(self.scale, 2))):
+                hidden_state = self.__getattr__(f"convolution_{i}")(hidden_state)
+                hidden_state = self.__getattr__(f"pixelshuffle_{i}")(hidden_state)
+
+        elif self.scale == 3:
+            hidden_state = self.convolution(hidden_state)
+            hidden_state = self.pixelshuffle(hidden_state)
+
+        return hidden_state
 
 
 class UpsampleOneStep(nn.Module):
