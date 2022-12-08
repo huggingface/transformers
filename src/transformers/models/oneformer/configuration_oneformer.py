@@ -67,7 +67,7 @@ class OneFormerConfig(PretrainedConfig):
 
     Raises:
         `ValueError`:
-            Raised if the backbone model type selected is not in `["swin", "dinat"]`
+            Raised if the backbone model type selected is not in `["swin", "dinat", "maskformer-swin"]`
     Examples:
     ```python
     >>> from transformers import OneFormerConfig, OneFormerModel
@@ -81,7 +81,7 @@ class OneFormerConfig(PretrainedConfig):
     ```
     """
     model_type = "oneformer"
-    backbones_supported = ["swin", "dinat"]
+    backbones_supported = ["swin", "dinat", "maskformer-swin"]
 
     def __init__(
         self,
