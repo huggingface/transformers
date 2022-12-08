@@ -196,8 +196,7 @@ class OneFormerConfig(PretrainedConfig):
 
     def to_dict(self) -> Dict[str, any]:
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-        Returns:
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
