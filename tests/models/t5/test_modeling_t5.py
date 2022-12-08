@@ -836,23 +836,19 @@ class T5ModelFp16Tests(unittest.TestCase):
         A test to check whether the argument `keep_in_fp32_modules` correctly does its job
         """
         # Load without using `accelerate`
-        model = T5ForConditionalGeneration.from_pretrained(
-            "t5-small", torch_dtype=torch.float16, keep_in_fp32_modules=["wo"]
-        )
+        model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
         # Load without using `accelerate`
         model = T5ForConditionalGeneration.from_pretrained(
-            "t5-small", torch_dtype=torch.float16, keep_in_fp32_modules=["wo"], low_cpu_mem_usage=True
+            "t5-small", torch_dtype=torch.float16, low_cpu_mem_usage=True
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
-        model = T5ForConditionalGeneration.from_pretrained(
-            "t5-small", torch_dtype=torch.float16, keep_in_fp32_modules=["wo"], device_map="auto"
-        )
+        model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 

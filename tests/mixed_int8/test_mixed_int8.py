@@ -159,9 +159,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         r"""
         Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        model = AutoModelForSeq2SeqLM.from_pretrained(
-            "t5-small", load_in_8bit=True, keep_in_fp32_modules=["wo"], device_map="auto"
-        )
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_8bit=True, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
 

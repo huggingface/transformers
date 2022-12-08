@@ -970,6 +970,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     main_input_name = "input_ids"
     _auto_class = None
     _no_split_modules = None
+    _keep_in_fp32_modules = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1887,9 +1888,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             load_in_8bit_skip_modules (`List[str]`, *optional*):
                 An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such
                 as Jukebox that has several heads in different places and not necessarily at the last position.
-            keep_in_fp32_modules (`List[str]`, *optional*):
-                An explicit list of the modules that we want to keep in full precision. This is somtimes needed to
-                retain the same performance as the full precision model when loading a model in half precision.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -1977,7 +1975,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         load_in_8bit_threshold = kwargs.pop("load_in_8bit_threshold", 6.0)
         load_in_8bit_skip_modules = kwargs.pop("load_in_8bit_skip_modules", None)
-        keep_in_fp32_modules = kwargs.pop("keep_in_fp32_modules", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
 
@@ -1992,12 +1989,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif not low_cpu_mem_usage:
                 raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
 
-        if keep_in_fp32_modules is not None and not low_cpu_mem_usage:
-            # Force `low_cpu_mem_usage` to be set to `True` - check the PR:
-            logger.warning(
-                "The argument `keep_in_fp32_modules` is used, force-enabling `low_cpu_mem_usage` to load the model"
-            )
-            low_cpu_mem_usage = True
+        # if keep_in_fp32_modules is not None and not low_cpu_mem_usage:
+        #     # Force `low_cpu_mem_usage` to be set to `True` - check the PR:
+        #     logger.warning(
+        #         "The argument `keep_in_fp32_modules` is used, force-enabling `low_cpu_mem_usage` to load the model"
+        #     )
+        #     low_cpu_mem_usage = True
 
         if low_cpu_mem_usage:
             # low_cpu_mem_usage requires PyTorch >= 1.9 to have the meta device.
@@ -2315,6 +2312,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
+
+        keep_in_fp32_modules = model._keep_in_fp32_modules
+        if keep_in_fp32_modules is not None:
+            low_cpu_mem_usage = True
 
         if load_in_8bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
