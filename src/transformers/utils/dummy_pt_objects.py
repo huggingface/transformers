@@ -353,6 +353,27 @@ def load_tf_weights_in_albert(*args, **kwargs):
 ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class AltCLIPPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AltRobertaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AltRobertaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AltCLIPModel(metaclass=DummyObject):
     _backends = ["torch"]
 
