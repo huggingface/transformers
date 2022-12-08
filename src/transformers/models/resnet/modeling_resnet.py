@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel, BackboneBaseModel
+from ...modeling_utils import BackboneBaseModel, PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,

@@ -15,6 +15,7 @@
 # limitations under the License.
 import collections
 import gc
+import inspect
 import json
 import os
 import re
@@ -933,9 +934,12 @@ class ModuleUtilsMixin:
 
 
 class BackboneBaseModel(nn.Module):
-
     def forward_with_filtered_kwargs(self, *args, **kwargs):
-        return self(*args, **kwargs)
+
+        signature = dict(inspect.signature(self.forward).parameters)
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
+
+        return self(*args, **filtered_kwargs)
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
