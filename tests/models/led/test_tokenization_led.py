@@ -177,10 +177,16 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                src_text = ["A long paragraph.", "Hi I am using huggingface transformers"]
-                expected_global_attention_mask = [[0, 0, 0, 0, 0, 0, -1, -1, -1, -1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                src_text = ["Summary of the text.", "Another summary."]
+                expected_global_attention_mask = [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, -1, -1]]
 
-                inputs = tokenizer_r(src_text, padding=False)
-                inputs["global_attention_mask"] = [[0] * len(y) for y in inputs["input_ids"]]
-                outputs = tokenizer_r.pad(inputs)
-                self.assertSequenceEqual(outputs["global_attention_mask"], expected_global_attention_mask)
+                global_mask_r = tokenizer_r(src_text, padding=False)
+                global_mask_r["global_attention_mask"] = [[0] * len(y) for y in global_mask_r["input_ids"]]
+                output_mask_r = tokenizer_r.pad(global_mask_r)
+
+                global_mask_p = tokenizer_p(src_text, padding=False)
+                global_mask_p["global_attention_mask"] = [[0] * len(x) for x in global_mask_p["input_ids"]]
+                output_mask_p = tokenizer_p.pad(global_mask_p)
+                self.assertSequenceEqual(output_mask_p["global_attention_mask"], expected_global_attention_mask)
+                self.assertSequenceEqual(output_mask_r["global_attention_mask"], expected_global_attention_mask)
