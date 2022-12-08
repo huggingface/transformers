@@ -57,7 +57,7 @@ class ViTHybridModelTester:
         attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
-        backbone_featmap_shape=[1, 1024, 4, 4],
+        backbone_featmap_shape=[1, 192, 4, 4],
         scope=None,
     ):
         self.parent = parent
@@ -97,6 +97,16 @@ class ViTHybridModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
+        backbone_config = {
+            "global_padding": "same",
+            "layer_type": "bottleneck",
+            "depths": [3, 4, 9],
+            "out_features": ["stage1", "stage2", "stage3"],
+            "embedding_dynamic_padding": True,
+            "hidden_sizes": [48, 96, 192, 384],
+            "num_groups": 2,
+        }
+
         return ViTHybridConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
@@ -111,6 +121,7 @@ class ViTHybridModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             backbone_featmap_shape=self.backbone_featmap_shape,
+            backbone_config=backbone_config,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
