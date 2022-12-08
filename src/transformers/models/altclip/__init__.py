@@ -67,10 +67,10 @@ if TYPE_CHECKING:
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             AltCLIPModel,
             AltCLIPPreTrainedModel,
-            AltRobertaPreTrainedModel,
-            AltRobertaModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
+            AltRobertaModel,
+            AltRobertaPreTrainedModel,
         )
 
 
