@@ -143,6 +143,17 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
             self.assertTrue((input_ids[:, -1] == tokenizer.eos_token_id).all().item())
             self.assertTrue((labels[:, -1] == tokenizer.eos_token_id).all().item())
 
+    @require_torch
+    def test_global_attention_mask(self):
+        for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
+            src_text = ["Summary of the text.", "Another summary."]
+            expected_global_attention_mask = [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, -1, -1]]
+
+            encoded_output = tokenizer(src_text, padding=False)
+            encoded_output["global_attention_mask"] = [[0] * len(x) for x in encoded_output["input_ids"]]
+            outputs = tokenizer.pad(encoded_output)
+            self.assertSequenceEqual(outputs["global_attention_mask"], expected_global_attention_mask)
+            
     def test_pretokenized_inputs(self):
         pass
 
@@ -171,22 +182,3 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
                 self.assertSequenceEqual(
                     tokens_r_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
-
-    @require_torch
-    def test_global_attention_mask(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                src_text = ["Summary of the text.", "Another summary."]
-                expected_global_attention_mask = [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, -1, -1]]
-
-                global_mask_r = tokenizer_r(src_text, padding=False)
-                global_mask_r["global_attention_mask"] = [[0] * len(y) for y in global_mask_r["input_ids"]]
-                output_mask_r = tokenizer_r.pad(global_mask_r)
-
-                global_mask_p = tokenizer_p(src_text, padding=False)
-                global_mask_p["global_attention_mask"] = [[0] * len(x) for x in global_mask_p["input_ids"]]
-                output_mask_p = tokenizer_p.pad(global_mask_p)
-                self.assertSequenceEqual(output_mask_p["global_attention_mask"], expected_global_attention_mask)
-                self.assertSequenceEqual(output_mask_r["global_attention_mask"], expected_global_attention_mask)
