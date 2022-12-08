@@ -153,7 +153,7 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
             encoded_output["global_attention_mask"] = [[0] * len(x) for x in encoded_output["input_ids"]]
             outputs = tokenizer.pad(encoded_output)
             self.assertSequenceEqual(outputs["global_attention_mask"], expected_global_attention_mask)
-            
+
     def test_pretokenized_inputs(self):
         pass
 
