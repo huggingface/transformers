@@ -136,3 +136,11 @@ class CLIPProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor
