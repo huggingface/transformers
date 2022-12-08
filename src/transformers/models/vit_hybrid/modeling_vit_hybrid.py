@@ -166,11 +166,10 @@ class ViTHybridPatchEmbeddings(nn.Module):
         feature_dim = self.backbone.channels[-1]
 
         if feature_size is None:
-            dummy_image = torch.zeros(1, num_channels, image_size[0], image_size[1])
-            with torch.no_grad():
-                feature_map = self.backbone(dummy_image).feature_maps[-1]
-            feature_size = feature_map.shape[-2:]
-            feature_dim = feature_map.shape[1]
+            feature_map = config.backbone_featmap_shape
+
+            feature_size = feature_map[-2:]
+            feature_dim = feature_map[1]
         else:
             feature_size = (
                 feature_size if isinstance(feature_size, collections.abc.Iterable) else (feature_size, feature_size)

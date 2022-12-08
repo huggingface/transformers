@@ -71,6 +71,8 @@ class ViTHybridConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*, defaults to `None`):
             The configuration of the backbone in a dictionary or the config object of the backbone.
+        backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
+            Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
 
     Example:
 
@@ -103,6 +105,7 @@ class ViTHybridConfig(PretrainedConfig):
         image_size=224,
         patch_size=1,
         num_channels=3,
+        backbone_featmap_shape=[1, 1024, 24, 24],
         qkv_bias=True,
         **kwargs
     ):
@@ -128,6 +131,7 @@ class ViTHybridConfig(PretrainedConfig):
                 backbone_config_class = BitConfig
             backbone_config = backbone_config_class(**backbone_config)
 
+        self.backbone_featmap_shape = backbone_featmap_shape
         self.backbone_config = backbone_config
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
