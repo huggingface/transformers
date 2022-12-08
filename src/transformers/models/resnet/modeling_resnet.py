@@ -439,7 +439,7 @@ class ResNetBackbone(ResNetPreTrainedModel):
         self.embedder = ResNetEmbeddings(config)
         self.encoder = ResNetEncoder(config)
 
-        self.out_features = config.out_features if config.out_features is not None else self.stage_names[-1]
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
 
         out_feature_channels = {}
         out_feature_channels["stem"] = config.embedding_size
