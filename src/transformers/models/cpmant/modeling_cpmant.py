@@ -23,27 +23,12 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_cpmant import CPMAntConfig
 
 
@@ -131,6 +116,159 @@ def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
         logger.info(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
     return model
+
+
+def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float("inf")):
+    # This function has been mostly taken from huggingface conversational ai code at
+    # https://medium.com/huggingface/how-to-build-a-state-of-the-art-conversational-ai-with-transfer-learning-2d818ac26313
+
+    if top_k > 0:
+        # Remove all tokens with a probability less than the last token of the top-k
+        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        logits[indices_to_remove] = filter_value
+
+    batch_size = logits.size()[0]
+    if top_p > 0.0:
+        logits = logits.view(batch_size, -1).contiguous()
+        for index in range(len(logits)):
+
+            sorted_logits, sorted_indices = torch.sort(logits[index].view(-1), descending=True)
+            cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+            # Remove tokens with cumulative probability above the threshold
+            sorted_indices_to_remove = cumulative_probs > top_p
+            # Shift the indices to the right to keep also the first token above the threshold
+            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+            sorted_indices_to_remove[..., 0] = 0
+            indices_to_remove = sorted_indices[sorted_indices_to_remove]
+            logits[index][indices_to_remove] = filter_value
+
+        logits = logits.view(batch_size, -1).contiguous()
+
+    return logits
+
+
+def apply_repetition_penalty(
+    logits,
+    batch_size,
+    num_beams,
+    prev_output_tokens,
+    repetition_penalty,
+    start_idx=None,
+    end_idx=None,
+    window_size=None,
+):
+    # only conduct repetition penalty for the output
+    assert repetition_penalty >= 1, "repetition penalty coefficient should >= 1"
+    # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
+    for i in range(batch_size * num_beams):
+        if start_idx is None or end_idx is None:
+            output_tokens = prev_output_tokens[i].tolist()
+        else:
+            if end_idx >= start_idx:
+                if window_size:
+                    output_tokens = prev_output_tokens[i][
+                        max(start_idx, end_idx + 1 - window_size) : end_idx + 1
+                    ].tolist()
+                else:
+                    output_tokens = prev_output_tokens[i][start_idx : end_idx + 1].tolist()
+            else:
+                output_tokens = []
+        for previous_token in set(output_tokens):
+            # if score < 0 then repetition penalty has to
+            # multiplied to reduce the previous token probability
+            if logits[i, previous_token] < 0:
+                logits[i, previous_token] *= repetition_penalty
+            else:
+                logits[i, previous_token] /= repetition_penalty
+
+
+class BeamHypotheses:
+    def __init__(self, n_hyp, max_len, length_penalty, early_stopping):
+        """
+        Initialize n-best list of hypotheses.
+        """
+        self.max_len = max_len
+        self.length_penalty = length_penalty
+        self.early_stopping = early_stopping
+        self.n_hyp = n_hyp
+        self.hyp = []
+        self.worst_score = 1e9
+
+    def __len__(self):
+        """
+        Number of hypotheses in the list.
+        """
+        return len(self.hyp)
+
+    def add(self, hyp, sum_logprobs):
+        """
+        Add a new hypothesis to the list.
+        """
+        score = sum_logprobs / len(hyp) ** self.length_penalty
+
+        if len(self) < self.n_hyp or score > self.worst_score:
+            self.hyp.append((score, hyp))
+            if len(self) > self.n_hyp:
+                sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.hyp)])
+                del self.hyp[sorted_scores[0][1]]
+                self.worst_score = sorted_scores[1][0]
+            else:
+                self.worst_score = min(score, self.worst_score)
+
+    def is_done(self, best_sum_logprobs, cur_len):
+        """
+        If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
+        one in the heap, then we are done with this sentence.
+        """
+        if len(self) < self.n_hyp:
+            return False
+        elif self.early_stopping:
+            return True
+        else:
+            return self.worst_score >= best_sum_logprobs / cur_len**self.length_penalty
+
+
+def pad(orig_items, key, padding_value=0, padding_side="left"):
+    items = []
+    if isinstance(orig_items[0][key], list):
+        assert isinstance(orig_items[0][key][0], torch.Tensor)
+        for it in orig_items:
+            for tr in it[key]:
+                items.append({key: tr})
+    else:
+        assert isinstance(orig_items[0][key], torch.Tensor)
+        items = orig_items
+
+    batch_size = len(items)
+    shape = items[0][key].shape
+    dim = len(shape)
+    assert dim <= 3
+    max_length = max(item[key].shape[-1] for item in items)
+    min_length = min(item[key].shape[-1] for item in items)
+    dtype = items[0][key].dtype
+
+    if dim == 1:
+        return torch.cat([item[key] for item in items], dim=0)
+    elif dim == 2:
+        if max_length == min_length:
+            return torch.cat([item[key] for item in items], dim=0)
+        tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+    else:
+        tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
+
+    for i, item in enumerate(items):
+        if dim == 2:
+            if padding_side == "left":
+                tensor[i, -len(item[key][0]) :] = item[key][0].clone()
+            else:
+                tensor[i, : len(item[key][0])] = item[key][0].clone()
+        elif dim == 3:
+            if padding_side == "left":
+                tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
+            else:
+                tensor[i, : len(item[key][0]), :] = item[key][0].clone()
+
+    return tensor
 
 
 @torch.jit.script  # type: ignore
@@ -245,8 +383,8 @@ class CPMAntAttention(nn.Module):
         """
         Args:
             hidden_q (:
-                obj:*torch.Tensor* of shape `(batch, len_q, dim_model)`): Indices of input sequence tokens. It will
-                be embedded by model's internal embedding lookup matrix.
+                obj:*torch.Tensor* of shape `(batch, len_q, dim_model)`): Indices of input sequence tokens. It will be
+                embedded by model's internal embedding lookup matrix.
             hidden_kv (:
                 obj:*torch.Tensor* of shape `(batch, len_k, dim_model)`): Length of input sequence before padding.
             attention_mask (:
@@ -620,8 +758,8 @@ class CPMAntTransformerBlock(nn.Module):
         """
         Args:
             self_hidden_states (:
-                obj:*torch.Tensor* of shape `(batch, seq_self, dim_model)`): Input of transformer
-                block(self-attention block). It can be the raw embedding of a batch of sequences.
+                obj:*torch.Tensor* of shape `(batch, seq_self, dim_model)`): Input of transformer block(self-attention
+                block). It can be the raw embedding of a batch of sequences.
             self_attention_mask (:
                 obj:*torch.Tensor* of shape `(batch, seq_self, seq_self)`): Avoid invalid areas to participate in the
                 calculation of self-attention.
@@ -725,14 +863,14 @@ class CPMAntEncoder(nn.Module):
         """
         Args:
             hidden-states (:
-                obj:*torch.Tensor* of shape `(batch, seq_enc, dim_model)`): Input of encoder, might be the embedding
-                of a batch of sequences.
+                obj:*torch.Tensor* of shape `(batch, seq_enc, dim_model)`): Input of encoder, might be the embedding of
+                a batch of sequences.
             attention_mask (:
                 obj:*torch.Tensor* of shape `(batch, seq_enc, seq_enc)`): Avoid invalid areas to participate in the
                 calculation
             position_bias(:
-                obj:*torch.Tensor* of shape `(num_heads, seq_enc, seq_enc)`) Provides position information to
-                attention mechanism.
+                obj:*torch.Tensor* of shape `(num_heads, seq_enc, seq_enc)`) Provides position information to attention
+                mechanism.
 
         Return:
             `torch.Tensor` of shape `(batch, seq_enc, dim_model)`: The encoder output.
@@ -1012,53 +1150,6 @@ class CPMAntLayer(nn.Module):
         return layer_output
 
 
-class CPMAntPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-class CPMAntLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = CPMAntPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-class CPMAntOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = CPMAntLMPredictionHead(config)
-
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
-
-
 class CPMAntPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1173,7 +1264,6 @@ class CPMAntModel(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
 
         super().__init__(config)
-        print(config.torch_dtype)
         self.encoder = CPMAntEncoder(
             num_layers=config.num_layers,
             dim_model=config.dim_model,
@@ -1222,7 +1312,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        # return self.embeddings.word_embeddings
+
         embeddings = {
             "prompt": self.prompt_embedding,
             "segment": self.segment_embedding,
@@ -1282,6 +1372,12 @@ class CPMAntModel(CPMAntPreTrainedModel):
         logits = self.input_embedding.projection(hidden_states)
         return logits, hidden_states
 
+
+class CPMAntForCausalLM(CPMAntModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.post_init()
+        
     def inference(
         self,
         input: torch.Tensor,  # (batch, seqlen)
@@ -1339,640 +1435,246 @@ class CPMAntModel(CPMAntPreTrainedModel):
         logits = self.input_embedding.projection(hidden_states)
         return logits, hidden_states, present_key_values
 
+    def _convert_to_tensors(self, input_ids, task_id=2):
+        model_inputs = {}
+        input_ids = [6] + input_ids
+        input_ids = [j for j in input_ids if j != 1]
 
-@add_start_docstrings("""CPMAnt Model with a `language modeling` head on top.""", CPMANT_START_DOCSTRING)
-class CPMAntForMaskedLM(CPMAntPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+        model_inputs["input"] = [x + self.prompt_length * task_id for x in range(self.prompt_length)] + input_ids
+        model_inputs["length"] = len(model_inputs["input"])
+        model_inputs["position"] = list(range(len(model_inputs["input"])))
+        model_inputs["span"] = [0] * len(model_inputs["input"])
+        model_inputs["context"] = [True] * len(model_inputs["input"])
+        model_inputs["segment"] = [0] * self.prompt_length + [2] * len(input_ids)
 
-        if config.is_decoder:
-            logger.warning(
-                "If you want to use `CPMAntForMaskedLM` make sure `config.is_decoder=False` for "
-                "bi-directional self-attention."
+        for key in model_inputs:
+            model_inputs[key] = torch.tensor(model_inputs[key]).int().unsqueeze(0)
+
+        return model_inputs
+
+    def _process_texts(self, input_ids):
+        input_tensors = list(map(self._convert_to_tensors, input_ids))
+        keys = set(input_tensors[0].keys())
+        padded = {}
+        for key in keys:
+            padded[key] = pad(input_tensors, key, padding_side="left")
+        return padded
+
+    def generate(self, input_ids, **kwargs):
+        input_ids = input_ids.detach().tolist()
+        model_inputs = self._process_texts(input_ids)
+        with torch.inference_mode():
+            result = self._decode(model_inputs, **kwargs)
+        return result
+
+    def postprocess(self, model_outputs, **kwargs):
+        return model_outputs
+
+    def _decode(
+        self, model_inputs, beam_size=3, max_length=50, repetition_penalty=1.2, repetition_window=None, **kwargs
+    ):
+        """
+        Args:
+        Beam search
+            model_inputs (dict): input ids. beam_size (int, optional, defaults to 3): beam size of beam search.
+            generate_length (int, optional, defaults to 100): maximum generation length. repetition_penalty (float,
+            optional, defaults to 1.0):
+                repetition penalty coefficient, 1.0 means no penalty.
+            repetition_window (int, optional, defaults to None):
+                window size of repetition penalty, None means that all output tokens are penalized.
+        """  # noqa: E501
+        # generate_length + 1 for EOS token
+        max_length += 1
+
+        # expand dimmension
+        batch_size = model_inputs["input"].size(0)
+        input = (
+            model_inputs["input"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+        length = (
+            model_inputs["length"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size)
+            .contiguous()
+            .view(
+                batch_size * beam_size,
             )
-
-        self.cpmant = CPMAntModel(config)
-        self.cls = CPMAntOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.cls.predictions.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.cpmant(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+        )
+        context = (
+            model_inputs["context"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+        position = (
+            model_inputs["position"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+        segment = (
+            model_inputs["segment"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+        span = (
+            model_inputs["span"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        done = [False for _ in range(batch_size)]
 
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+        beam_scores = torch.zeros((batch_size, beam_size), dtype=torch.float, device=input.device)
+        beam_scores[:, 1:] = -1e9
+        beam_scores = beam_scores.view(-1)
 
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+        # generated hypotheses
+        generated_hyps = [
+            BeamHypotheses(beam_size, max_length, length_penalty=1, early_stopping=False) for _ in range(batch_size)
+        ]
 
-        return MaskedLMOutput(
-            loss=masked_lm_loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        pred_start_index = input.size(-1)
+        past_key_values = None
+        for i in range(max_length + 1):
+            if i == 0:
+                logits, _, past_key_values = self.inference(
+                    input=input,
+                    length=length,
+                    context=context,
+                    position=position,
+                    segment=segment,
+                    span=span,
+                    past_key_values=past_key_values,
+                )
+            else:
+                logits, _, past_key_values = self.inference(
+                    input=input[:, -1:],
+                    length=length,
+                    context=context,
+                    position=position,
+                    segment=segment,
+                    span=span,
+                    past_key_values=past_key_values,
+                )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
+            # skip all steps when we are done with each sentence
+            if all(done):
+                break
 
-        #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
-        dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-        )
-        input_ids = torch.cat([input_ids, dummy_token], dim=1)
+            # (batch * beam, seqlen, model_dim)
+            logits = logits[:, -1, :]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
+            if i == 0:
+                logits[:, 7] = -float("inf")
+                logits[:, 4] = -float("inf")
 
-
-@add_start_docstrings(
-    """CPMAnt Model with a `language modeling` head on top for CLM fine-tuning.""", CPMANT_START_DOCSTRING
-)
-class CPMAntForCausalLM(CPMAntPreTrainedModel):
-
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `CPMAntForCausalLM` as a standalone, add `is_decoder=True.`")
-
-        self.cpmant = CPMAntModel(config)
-        self.cls = CPMAntOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.cls.predictions.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional tensors are
-            only required when the model is used as a decoder in a Sequence to Sequence model.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import CPMAntTokenizer, CPMAntForCausalLM, CPMAntConfig
-        >>> import torch
-
-        >>> tokenizer = CPMAntTokenizer.from_pretrained("cpm-ant-10b")
-        >>> config = CPMAntConfig.from_pretrained("cpm-ant-10b")
-        >>> config.is_decoder = True
-        >>> model = CPMAntForCausalLM.from_pretrained("cpm-ant-10b", config=config)
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.cpmant(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
-
-        lm_loss = None
-        if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
-
-        return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
-        )
-
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
-
-    def _reorder_cache(self, past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            apply_repetition_penalty(
+                logits,
+                batch_size,
+                beam_size,
+                input,
+                repetition_penalty,
+                pred_start_index,
+                input.size(-1) - 1,
+                repetition_window,
             )
-        return reordered_past
+            scores = F.log_softmax(logits, dim=-1)
 
+            next_scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * beam_size, vocab_size)
 
-class CPMAntClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
+            # re-organize to group the beam together (we are keeping top hypothesis accross beams)
+            next_scores = next_scores.view(batch_size, -1)  # (batch_size, beam_size * vocab_size)
+            next_scores, next_words = torch.topk(next_scores, 2 * beam_size, dim=1, largest=True, sorted=True)
 
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+            assert next_scores.size() == next_words.size() == (batch_size, 2 * beam_size)
+            next_batch_beam = []
 
-        self.config = config
+            for sent_id in range(batch_size):
+                # if we are done with this sentence
+                done[sent_id] = done[sent_id] or generated_hyps[sent_id].is_done(next_scores[sent_id].max().item(), i)
+                if done[sent_id]:
+                    next_batch_beam.extend([(0, 0, 0)] * beam_size)  # pad the batch
+                    continue
 
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = ACT2FN[self.config.hidden_act](x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
+                # next sentence beam content
+                next_sent_beam = []
 
+                # next words for this sentence
+                for idx, value in zip(next_words[sent_id], next_scores[sent_id]):
 
-@add_start_docstrings(
-    """CPMAnt Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks.""",
-    CPMANT_START_DOCSTRING,
-)
-class CPMAntForSequenceClassification(CPMAntPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.cpmant = CPMAntModel(config)
-        self.classifier = CPMAntClassificationHead(config)
+                    # get beam and word IDs
+                    beam_id = torch.div(idx, scores.size(-1), rounding_mode="floor")
+                    word_id = idx % scores.size(-1)
 
-        # Initialize weights and apply final processing
-        self.post_init()
+                    # end of sentence, or next word
+                    if word_id == 7 or i == max_length:
+                        generated_hyps[sent_id].add(
+                            input[sent_id * beam_size + beam_id, pred_start_index:].clone().cpu().tolist(),
+                            value.item(),
+                        )
+                    else:
+                        next_sent_beam.append((value, word_id, sent_id * beam_size + beam_id))
 
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+                    # the beam for next step is full
+                    if len(next_sent_beam) == beam_size:
+                        break
 
-        outputs = self.cpmant(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+                # update next beam content
+                assert len(next_sent_beam) == 0 if i == max_length else beam_size
+                if len(next_sent_beam) == 0:
+                    next_sent_beam = [(0, 0, 0)] * beam_size  # pad the batch
+                next_batch_beam.extend(next_sent_beam)
+                assert len(next_batch_beam) == beam_size * (sent_id + 1)
 
-        sequence_output = outputs[0]
-        logits = self.classifier(sequence_output)
+            # we have reached the last step
+            if i == max_length:
+                break
 
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+            # sanity check / prepare next batch
+            assert len(next_batch_beam) == batch_size * beam_size
+            beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
+            beam_words = input.new([x[1] for x in next_batch_beam])
+            beam_idx = length.new([x[2] for x in next_batch_beam]).long()
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+            # re-order batch and internal states
+            input = input[beam_idx, :]
 
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+            past_key_values = [list(each) if each is not None else each for each in past_key_values]  # type: ignore # noqa: E501
+            for key_value_layer in past_key_values:
+                if key_value_layer is not None:
+                    key_value_layer[0] = key_value_layer[0][beam_idx]
+                    key_value_layer[1] = key_value_layer[1][beam_idx]
 
+            # update input ids
+            input = torch.cat([input, beam_words.unsqueeze(1)], dim=-1)
+            length += 1
+            context = torch.cat(
+                [context, torch.ones((context.size(0), 1), dtype=torch.int, device=context.device)],
+                dim=-1,
+            )
+            position = torch.cat([position, position[:, -1:] + 1], dim=-1)
+            segment = torch.cat([segment, segment[:, -1:]], dim=-1)  # segment id always the same as the previous token
+            span = torch.cat([span, span[:, -1:]], dim=-1)
 
-@add_start_docstrings(
-    """CPMAnt Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
-    CPMANT_START_DOCSTRING,
-)
-class CPMAntForMultipleChoice(CPMAntPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+        # select the best hypotheses
+        results = []
+        for i, hypotheses in enumerate(generated_hyps):
+            best_hyp = max(hypotheses.hyp, key=lambda x: x[0])[1]
+            results.append(best_hyp)
 
-        self.cpmant = CPMAntModel(config)
-        self.sequence_summary = SequenceSummary(config)
-        self.classifier = nn.Linear(config.hidden_size, 1)
+        input_ids = model_inputs["input"].detach().tolist()
+        input_ids = [input_id[self.prompt_length + 1 :] for input_id in input_ids]
+        output_ids = [input_id + result for input_id, result in zip(input_ids, results)]
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
-        inputs_embeds = (
-            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
-            if inputs_embeds is not None
-            else None
-        )
-
-        outputs = self.cpmant(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        pooled_output = self.sequence_summary(sequence_output)
-        logits = self.classifier(pooled_output)
-        reshaped_logits = logits.view(-1, num_choices)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """CPMAnt Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
-    CPMANT_START_DOCSTRING,
-)
-class CPMAntForTokenClassification(CPMAntPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-
-        self.cpmant = CPMAntModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.cpmant(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """CPMAnt Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
-    CPMANT_START_DOCSTRING,
-)
-class CPMAntForQuestionAnswering(CPMAntPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        config.num_labels = 2
-        self.num_labels = config.num_labels
-
-        self.cpmant = CPMAntModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.cpmant(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        total_loss = None
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
-        return QuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return torch.tensor(output_ids)

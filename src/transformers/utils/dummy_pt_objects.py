@@ -1507,41 +1507,6 @@ class CPMAntForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class CPMAntForMaskedLM(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CPMAntForMultipleChoice(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CPMAntForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CPMAntForSequenceClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CPMAntForTokenClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class CPMAntLayer(metaclass=DummyObject):
     _backends = ["torch"]
 

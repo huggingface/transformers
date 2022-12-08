@@ -1189,15 +1189,10 @@ else:
     _import_structure["models.cpmant"].extend(
         [
             "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CPMAntForCausalLM",
-            "CPMAntForMaskedLM",
-            "CPMAntForMultipleChoice",
-            "CPMAntForQuestionAnswering",
-            "CPMAntForSequenceClassification",
-            "CPMAntForTokenClassification",
             "CPMAntLayer",
             "CPMAntModel",
             "CPMAntPreTrainedModel",
+            "CPMAntForCausalLM",
             "load_tf_weights_in_cpmant",
         ]
     )
@@ -4332,11 +4327,6 @@ if TYPE_CHECKING:
         from .models.cpmant import (
             CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CPMAntForCausalLM,
-            CPMAntForMaskedLM,
-            CPMAntForMultipleChoice,
-            CPMAntForQuestionAnswering,
-            CPMAntForSequenceClassification,
-            CPMAntForTokenClassification,
             CPMAntLayer,
             CPMAntModel,
             CPMAntPreTrainedModel,
