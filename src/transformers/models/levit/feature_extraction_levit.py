@@ -14,6 +14,8 @@
 # limitations under the License.
 """Feature extractor class for LeViT."""
 
+import warnings
+
 from ...utils import logging
 from .image_processing_levit import LevitImageProcessor
 
@@ -21,5 +23,11 @@ from .image_processing_levit import LevitImageProcessor
 logger = logging.get_logger(__name__)
 
 
-# Feature extractor for Levit is being replaced by image processor
-LevitFeatureExtractor = LevitImageProcessor
+class LevitFeatureExtractor(LevitImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class LevitFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
+            " use LevitImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)
