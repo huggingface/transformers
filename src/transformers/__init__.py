@@ -917,7 +917,7 @@ else:
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
             "AltCLIPPreTrainedModel",
             "AltRobertaModel",
-            "AltRobertaPreTrainedModel"
+            "AltRobertaPreTrainedModel",
             "AltCLIPModel",
             "AltCLIPTextModel",
             "AltCLIPVisionModel",
