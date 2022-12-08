@@ -15,7 +15,7 @@
 """ AltCLIP model configuration"""
 import copy
 import os
-from typing import TYPE_CHECKING, Union
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
