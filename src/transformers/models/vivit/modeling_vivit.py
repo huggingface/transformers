@@ -33,12 +33,12 @@ from .configuration_vivit import VivitConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "vivit-b-16x2-kinetics400"
+_CHECKPOINT_FOR_DOC = "jegormeister/vivit-b-16x2-kinetics400"
 _CONFIG_FOR_DOC = "VivitConfig"
 _TOKENIZER_FOR_DOC = "VivitTokenizer"
 
 VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "vivit-b-16x2-kinetics400",
+    "jegormeister/vivit-b-16x2-kinetics400",
     # See all Vivit models at https://huggingface.co/models?filter=vivit
 ]
 

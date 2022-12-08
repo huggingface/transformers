@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "vivit-b-16x2-kinetics400": (
+    "jegormeister/vivit-b-16x2-kinetics400": (
         "https://huggingface.co/jegormeister/vivit-b-16x2-kinetics400/resolve/main/config.json"
     ),
     # See all Vivit models at https://huggingface.co/models?filter=vivit
@@ -33,7 +33,7 @@ class VivitConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VivitModel`]. It is used to instantiate a Vivit
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Vivit
-    [vivit-b-16x2-kinetics400](https://huggingface.co/jegormeister/vivit-b-16x2-kinetics400) architecture.
+    [jegormeister/vivit-b-16x2-kinetics400](https://huggingface.co/jegormeister/vivit-b-16x2-kinetics400) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -73,10 +73,10 @@ class VivitConfig(PretrainedConfig):
     ```python
     >>> from transformers import VivitModel, VivitConfig
 
-    >>> # Initializing a Vivit vivit-b-16x2-kinetics400 style configuration
+    >>> # Initializing a Vivit jegormeister/vivit-b-16x2-kinetics400 style configuration
     >>> configuration = VivitConfig()
 
-    >>> # Initializing a model from the vivit-b-16x2-kinetics400 style configuration
+    >>> # Initializing a model from the jegormeister/vivit-b-16x2-kinetics400 style configuration
     >>> model = VivitModel(configuration)
 
     >>> # Accessing the model configuration
