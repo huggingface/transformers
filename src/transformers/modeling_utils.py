@@ -2260,6 +2260,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Time to load the checkpoint
                 state_dict = load_state_dict(resolved_archive_file)
 
+            # Check if `_keep_in_fp32_modules` is not None
+            # but not force users to have `accelerate`
+            if cls._keep_in_fp32_modules is not None:
+                if not is_accelerate_available():
+                    use_keep_in_fp32_modules = False
+                    logger.warning(
+                        " `_keep_in_fp32_modules` is not set to `None` and you don't have `accelerate` installed",
+                        " it is recommended to have `accelerate` installed in this case `pip install accelerate`.",
+                    )
+                else:
+                    use_keep_in_fp32_modules = True
+
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
             # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
@@ -2288,7 +2300,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = [k for k in state_dict.keys()]
-            if low_cpu_mem_usage or cls._keep_in_fp32_modules is not None:
+            if low_cpu_mem_usage or use_keep_in_fp32_modules:
                 state_dict = None
 
         config.name_or_path = pretrained_model_name_or_path
