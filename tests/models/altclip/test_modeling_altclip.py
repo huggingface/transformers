@@ -16,9 +16,10 @@
 
 
 import inspect
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
+
 import numpy as np
 
 from transformers import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
@@ -138,7 +139,9 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AltCLIPVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -189,7 +192,6 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="AltCLIPVisionModel use the same cv backbone with CLIP model.")
     def test_model_from_pretrained(self):
         pass
-        
 
 
 class AltCLIPTextModelTester:
