@@ -58,7 +58,7 @@ class VideoClassificationPipeline(Pipeline):
                 The pipeline handles three types of videos:
 
                 - A string containing a http link pointing to a video
-                - A string containing a local path to an video
+                - A string containing a local path to a video
 
                 The pipeline accepts either a single video or a batch of videos, which must then be passed as a string.
                 Videos in a batch must all be in the same format: all as http links or all as local paths.
