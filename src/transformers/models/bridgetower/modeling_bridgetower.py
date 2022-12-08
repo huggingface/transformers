@@ -370,7 +370,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         image_token_type_idx=1
         irtr_len=0
         text_ids = input_ids
-        img = pixel_values.resize_(1,3,288,288)
+        img = pixel_values
         text_masks = attention_mask
         input_shape = input_ids.size() 
         text_embeds = self.text_transformer.embeddings(input_ids=text_ids)
@@ -801,7 +801,22 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None) :
 
-#	outputs = self.bridgetower(#TODO)
+        outputs = self.bridgetower(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            image_embeds=image_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        mlm_logits = self.mlm_score(outputs["text_feats"])
+
         return MaskedLMOutput()	
 
         #return MaskedLMOutput(
