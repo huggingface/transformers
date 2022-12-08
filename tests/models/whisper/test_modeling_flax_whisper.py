@@ -400,7 +400,8 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
             raw_speech=input_speech, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="jax"
         ).input_features
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        prompt_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        model.config.forced_decoder_ids = [[i[0] - 1, i[1]] for i in prompt_ids[1:]]
 
         generated_ids = model.generate(input_features, num_beams=5, max_length=20).sequences
         transcript = processor.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
@@ -417,14 +418,16 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="np")
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
+        prompt_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
+        model.config.forced_decoder_ids = [[i[0] - 1, i[1]] for i in prompt_ids[1:]]
         generated_ids = model.generate(input_features, do_sample=False, max_length=20).sequences
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        prompt_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        model.config.forced_decoder_ids = [[i[0] - 1, i[1]] for i in prompt_ids[1:]]
         generated_ids = model.generate(
             input_features,
             do_sample=False,
@@ -435,7 +438,8 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPT = " Kimura-san called me."
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
+        prompt_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
+        model.config.forced_decoder_ids = [[i[0] - 1, i[1]] for i in prompt_ids[1:]]
         generated_ids = model.generate(input_features, do_sample=False, max_length=20).sequences
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
