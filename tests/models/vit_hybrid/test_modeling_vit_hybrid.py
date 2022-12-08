@@ -19,7 +19,7 @@ import inspect
 import unittest
 
 from transformers import ViTHybridConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device, require_accelerate
+from transformers.testing_utils import require_accelerate, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -191,7 +191,7 @@ class ViTHybridModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_name in VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ViTHybridModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)  
+            self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -232,12 +232,12 @@ class ViTModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-1.9090, -0.4993, -0.2389]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-    
+
     @slow
     @require_accelerate
     def test_accelerate_inference(self):
-        feature_extractor = ViTHybridImageProcessor.from_pretrained('google/vit-hybrid-base-bit-384')
-        model = ViTHybridForImageClassification.from_pretrained('google/vit-hybrid-base-bit-384', device_map="auto")
+        feature_extractor = ViTHybridImageProcessor.from_pretrained("google/vit-hybrid-base-bit-384")
+        model = ViTHybridForImageClassification.from_pretrained("google/vit-hybrid-base-bit-384", device_map="auto")
 
         image = prepare_img()
 
