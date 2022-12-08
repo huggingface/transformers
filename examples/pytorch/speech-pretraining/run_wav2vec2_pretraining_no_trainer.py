@@ -250,6 +250,7 @@ def parse_args():
     parser.add_argument(
         "--mask_time_prob",
         type=float,
+        default=None,
         help=(
             "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked in the"
             " contrastive task. If omitted, will pull value from model config."
