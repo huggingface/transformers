@@ -92,7 +92,7 @@ class OneFormerConfig(PretrainedConfig):
     ):
         cfgs = self._setup_cfg(general_config, backbone_config, text_encoder_config, decoder_config)
 
-        general_config, backbone_config, text_encoder_config, decoder_config = cfgs 
+        general_config, backbone_config, text_encoder_config, decoder_config = cfgs
 
         self.general_config = general_config
         self.backbone_config = backbone_config
@@ -136,20 +136,19 @@ class OneFormerConfig(PretrainedConfig):
             general_config["use_auxiliary_loss"] = True
             general_config["output_auxiliary_logits"] = True
             general_config["strides"] = [4, 8, 16, 32]
-        
 
         if backbone_config is None:
             backbone_config = MaskFormerSwinConfig(
-                                image_size=224,
-                                in_channels=3,
-                                patch_size=4,
-                                embed_dim=96,
-                                depths=[2, 2, 6, 2],
-                                num_heads=[3, 6, 12, 24],
-                                window_size=7,
-                                drop_path_rate=0.3,
-                                out_features=["stage1", "stage2", "stage3", "stage4"],
-                            )
+                image_size=224,
+                in_channels=3,
+                patch_size=4,
+                embed_dim=96,
+                depths=[2, 2, 6, 2],
+                num_heads=[3, 6, 12, 24],
+                window_size=7,
+                drop_path_rate=0.3,
+                out_features=["stage1", "stage2", "stage3", "stage4"],
+            )
         else:
             backbone_model_type = (
                 backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
@@ -193,7 +192,7 @@ class OneFormerConfig(PretrainedConfig):
             decoder_config["common_stride"] = 4
 
         return general_config, backbone_config, text_encoder_config, decoder_config
-    
+
     def to_dict(self) -> Dict[str, any]:
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].

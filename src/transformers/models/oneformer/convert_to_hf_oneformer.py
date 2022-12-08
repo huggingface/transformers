@@ -121,17 +121,17 @@ class OriginalOneFormerConfigToOursConverter:
         dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST_PANOPTIC[0])
         id2label = {idx: label for idx, label in enumerate(dataset_catalog.stuff_classes)}
         label2id = {label: idx for idx, label in id2label.items()}
-        
+
         if is_swin:
             if model.SWIN.EMBED_DIM == 96:
                 backbone_config = SwinConfig.from_pretrained(
                     "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
                 )
             elif model.SWIN.EMBED_DIM == 192:
-               backbone_config = SwinConfig.from_pretrained(
+                backbone_config = SwinConfig.from_pretrained(
                     "microsoft/swin-large-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
                 )
-            else: 
+            else:
                 raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
         else:
             # TODO replace this with DinatConfig once DinatBackBone is added
@@ -222,7 +222,7 @@ class OriginalOneFormerConfigToFeatureExtractorConverter:
         dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST_PANOPTIC[0])
 
         if "ade20k" in model_repo:
-            class_info_file = "ade20k_panoptic.json" 
+            class_info_file = "ade20k_panoptic.json"
         elif "coco" in model_repo:
             class_info_file = "coco_panoptic.json"
         elif "cityscapes" in model_repo:
