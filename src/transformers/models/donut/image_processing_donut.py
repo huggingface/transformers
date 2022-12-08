@@ -235,7 +235,7 @@ class DonutImageProcessor(BaseImageProcessor):
 
         if input_height > input_width:
             width = int(input_width * height / input_height)
-        else:
+        elif input_width > input_height:
             height = int(input_height * width / input_width)
 
         return resize(
@@ -267,7 +267,8 @@ class DonutImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         shortest_edge = min(size["height"], size["width"])
         output_size = get_resize_output_image_size(image, size=shortest_edge, default_to_square=False)
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        resized_image = resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return resized_image
 
     def rescale(
         self,

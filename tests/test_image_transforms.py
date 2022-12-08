@@ -184,6 +184,25 @@ class ImageTransformsTester(unittest.TestCase):
         image = np.random.randint(0, 256, (3, 50, 40))
         self.assertEqual(get_resize_output_image_size(image, 20, default_to_square=False, max_size=22), (22, 17))
 
+        # Test correct channel dimension is returned if output size if height == 3
+        # Defaults to input format - channels first
+        image = np.random.randint(0, 256, (3, 18, 97))
+        resized_image = resize(image, (3, 20))
+        self.assertEqual(resized_image.shape, (3, 3, 20))
+
+        # Defaults to input format - channels last
+        image = np.random.randint(0, 256, (18, 97, 3))
+        resized_image = resize(image, (3, 20))
+        self.assertEqual(resized_image.shape, (3, 20, 3))
+
+        image = np.random.randint(0, 256, (3, 18, 97))
+        resized_image = resize(image, (3, 20), data_format="channels_last")
+        self.assertEqual(resized_image.shape, (3, 20, 3))
+
+        image = np.random.randint(0, 256, (18, 97, 3))
+        resized_image = resize(image, (3, 20), data_format="channels_first")
+        self.assertEqual(resized_image.shape, (3, 3, 20))
+
     def test_resize(self):
         image = np.random.randint(0, 256, (3, 224, 224))
 

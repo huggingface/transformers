@@ -48,7 +48,11 @@ if is_flax_available():
     import jax.numpy as jnp
 
 
-def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDimension, str]) -> np.ndarray:
+def to_channel_dimension_format(
+    image: np.ndarray,
+    channel_dim: Union[ChannelDimension, str],
+    input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
+) -> np.ndarray:
     """
     Converts `image` to the channel dimension format specified by `channel_dim`.
 
@@ -64,9 +68,11 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
     if not isinstance(image, np.ndarray):
         raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
 
-    current_channel_dim = infer_channel_dimension_format(image)
+    if input_channel_dim is None:
+        input_channel_dim = infer_channel_dimension_format(image)
+
     target_channel_dim = ChannelDimension(channel_dim)
-    if current_channel_dim == target_channel_dim:
+    if input_channel_dim == target_channel_dim:
         return image
 
     if target_channel_dim == ChannelDimension.FIRST:
@@ -269,7 +275,11 @@ def resize(
         # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
         # so we need to add it back if necessary.
         resized_image = np.expand_dims(resized_image, axis=-1) if resized_image.ndim == 2 else resized_image
-        resized_image = to_channel_dimension_format(resized_image, data_format)
+        # The image is always in channels last format after converting from a PIL image
+        resized_image = to_channel_dimension_format(
+            resized_image, data_format, input_channel_dim=ChannelDimension.LAST
+        )
+        # resized_image = to_channel_dimension_format(resized_image, data_format)
     return resized_image
 
 
