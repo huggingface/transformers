@@ -81,7 +81,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
-    def pad(image: np.ndarray, size: int, data_format: Optional[Union[str, ChannelDimension]] = None):
+    def pad(self, image: np.ndarray, size: int, data_format: Optional[Union[str, ChannelDimension]] = None):
         """
         Pad an image to make the height and width divisible by `size`.
 
