@@ -40,11 +40,12 @@ def export_with_optimum(args):
         if parsed_optimum_version < version.parse(MIN_OPTIMUM_VERSION):
             raise RuntimeError(
                 f"transformers.onnx requires optimum >= {MIN_OPTIMUM_VERSION} but {optimum_version} is installed. You "
-                "can upgrade optimum by running: pip install -U optimum"
+                "can upgrade optimum by running: pip install -U optimum[exporters]"
             )
     else:
         raise RuntimeError(
-            "transformers.onnx requires optimum to run, you can install the library by running: pip install optimum"
+            "transformers.onnx requires optimum to run, you can install the library by running: pip install "
+            "optimum[exporters]"
         )
     cmd_line = [
         sys.executable,
@@ -59,8 +60,8 @@ def export_with_optimum(args):
     proc.wait()
 
     logger.info(
-        "The export was done by optimum.exporters.onnx, it is suggested to use this tool directly for the future, you "
-        "can find more information here: "
+        "The export was done by optimum.exporters.onnx. We recommend using to use this package directly in future, as "
+        "transformers.onnx is deprecated, you can find more information here: "
         "https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model."
     )
 
@@ -175,9 +176,9 @@ def export_with_transformers(args):
         validate_model_outputs(onnx_config, preprocessor, model, args.output, onnx_outputs, args.atol)
         logger.info(f"All good, model saved at: {args.output.as_posix()}")
         warnings.warn(
-            "The export was done by transformers.onnx which is deprecated and will be removed in v5, the recommended way is using "
-            "optimum.exporters.onnx, you can find more information here: "
-            "https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model.",
+            "The export was done by transformers.onnx which is deprecated and will be removed in v5, We recommend"
+            " using optimum.exporters.onnx in future. You can find more information here:"
+            " https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model.",
             FutureWarning,
         )
 
