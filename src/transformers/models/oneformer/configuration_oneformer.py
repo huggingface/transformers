@@ -16,7 +16,7 @@
 import copy
 from typing import Dict, Optional
 
-from transformers import AutoConfig, MaskFormerSwinConfig
+from transformers import MaskFormerSwinConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
