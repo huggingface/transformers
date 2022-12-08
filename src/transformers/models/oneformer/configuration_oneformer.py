@@ -16,7 +16,7 @@
 import copy
 from typing import Dict, Optional
 
-from transformers import MaskFormerSwinConfig
+from transformers import SwinConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -67,7 +67,7 @@ class OneFormerConfig(PretrainedConfig):
 
     Raises:
         `ValueError`:
-            Raised if the backbone model type selected is not in `["swin", "dinat", "maskformer-swin"]`
+            Raised if the backbone model type selected is not in `["swin", "dinat"]`
     Examples:
     ```python
     >>> from transformers import OneFormerConfig, OneFormerModel
@@ -81,7 +81,7 @@ class OneFormerConfig(PretrainedConfig):
     ```
     """
     model_type = "oneformer"
-    backbones_supported = ["swin", "dinat", "maskformer-swin"]
+    backbones_supported = ["swin", "dinat"]
 
     def __init__(
         self,
@@ -139,16 +139,8 @@ class OneFormerConfig(PretrainedConfig):
             general_config["strides"] = [4, 8, 16, 32]
 
         if backbone_config is None:
-            backbone_config = MaskFormerSwinConfig(
-                image_size=224,
-                in_channels=3,
-                patch_size=4,
-                embed_dim=96,
-                depths=[2, 2, 6, 2],
-                num_heads=[3, 6, 12, 24],
-                window_size=7,
-                drop_path_rate=0.3,
-                out_features=["stage1", "stage2", "stage3", "stage4"],
+            backbone_config = SwinConfig.from_pretrained(
+                "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
             )
         else:
             backbone_model_type = (
