@@ -86,8 +86,8 @@ class VivitConfig(PretrainedConfig):
 
     def __init__(
         self,
-        video_size=(32, 224, 224),
-        tubelet_size=(2, 16, 16),
+        video_size=[32, 224, 224],
+        tubelet_size=[2, 16, 16],
         num_channels=3,
         hidden_size=768,
         num_hidden_layers=12,
