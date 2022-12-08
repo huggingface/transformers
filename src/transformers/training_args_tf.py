@@ -220,16 +220,26 @@ class TFTrainingArguments(TrainingArguments):
                 tf.tpu.experimental.initialize_tpu_system(tpu)
 
                 strategy = tf.distribute.TPUStrategy(tpu)
-
-            elif len(gpus) == 0:
-                strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
-            elif len(gpus) == 1:
-                strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
-            elif len(gpus) > 1:
-                # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
-                strategy = tf.distribute.MirroredStrategy()
             else:
-                raise ValueError("Cannot find the proper strategy, please check your environment properties.")
+                cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
+                cluster_spec = cluster_resolver.cluster_spec()
+                if cluster_spec.jobs:
+                    # Training on Multiple Machines
+                    if "ps" not in cluster_spec.jobs:
+                        strategy = tf.distribute.MultiWorkerMirroredStrategy()
+                    else:
+                        raise ValueError("Cannot find the proper strategy, please check your environment properties.")
+                else:
+                    # Training on Single Machine
+                    if len(gpus) == 0:
+                        strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
+                    elif len(gpus) == 1:
+                        strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
+                    elif len(gpus) > 1:
+                        # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
+                        strategy = tf.distribute.MirroredStrategy()
+                    else:
+                        raise ValueError("Cannot find the proper strategy, please check your environment properties.")
 
         return strategy
 
