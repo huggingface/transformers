@@ -40,6 +40,12 @@ from ...utils import logging
 from collections import OrderedDict
 from typing import Tuple, Union
 
+import os
+import hashlib
+import urllib
+from tqdm import tqdm
+
+import warnings
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -723,11 +729,7 @@ _MODELS = {
     "ViT-B/16": "https://openaipublic.azureedge.net/clip/models/5806e77cd80f8b59890b7e101eabd078d9fb84e6937f9e85e4ecb61988df416f/ViT-B-16.pt",
     "ViT-L/14": "https://openaipublic.azureedge.net/clip/models/b8cca3fd41ae0c99ba7e8951adf17d267cdb84cd88be6f7c2e0eca1737a03836/ViT-L-14.pt",
 }
-import os
-import hashlib
-import urllib
-from tqdm import tqdm
-import warnings
+
 def _download(url: str, root: str = os.path.expanduser("~/.cache/clip")):
     os.makedirs(root, exist_ok=True)
     filename = os.path.basename(url)

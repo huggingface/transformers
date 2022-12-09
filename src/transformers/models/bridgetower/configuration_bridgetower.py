@@ -21,31 +21,125 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-        "BridgeTower/bridgetower-base": "https://huggingface.co/BridgeTower/bridgetower-base/blob/main/config.json",
+    "BridgeTower/bridgetower-base": "https://huggingface.co/BridgeTower/bridgetower-base/blob/main/config.json",
+    "BridgeTower/bridgetower-base-itm-mlm": "https://huggingface.co/BridgeTower/bridgetower-base-itm/blob/main/config.json",
  }
 
 
 class BridgeTowerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`bridgetowerModel`]. It is used to instantiate an
-    bridgetower model according to the specified arguments=, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the bridgetower
-    [](https://huggingface.co/) architecture.
+    This is the configuration class to store the configuration of a [`BridgeTowerModel`]. It is used to instantiate a
+    BridgeTower model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the bridgetower-base
+    [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    Args: TODO: TBD once config list is finalized
+    Args:
+        cache_dir (`str`, *optional*, defaults to `"/tmp"`):
+            Path to the cache directory.
+        classifier_drop_rate (`float`, *optional*, defaults to 0.1):
+            The drop out probability for classifier's Dropout layer.
+        cross_modal_transform_shared (`bool`, *optional*, defaults to `True`):
+            Whether cross modal transformer layers are shared.
+        downstream_fusion (`bool`, *optional*, defaults to `False`):
+            Whether to enable downstream fusion.
+        downstream_fusion_layers (`int`, *optional*, defaults to 1):
+            Number of fusion layers for downstream tasks.
+        downstream_fusion_method (`str`, *optional*, defaults to `"elmo"`):
+            Fusion method for downstream tasks.
+        drop_rate (`float`, *optional*, defaults to 0.1):
+            Drop out probability.
+        freeze_RoBERTa (`bool`, *optional*, defaults to `False`):
+            Whether to freeze RoBERTa.
+        freeze_ViT (`bool`, *optional*, defaults to `False`):
+            Whether to freeze ViT.
+        freeze_layer_count_roberta (`bool`, *optional*, defaults to `False`):
+            Whether to freeze layer count for RobERTa.
+        freeze_layer_count_vit (`bool`, *optional*, defaults to `False`):
+            Whether to freeze layer count for ViT.
+        head_hidden_scale (`int`, *optional*, defaults to 2):
+            Scale of hidden layers head.
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        image_size (`int`, *optional*, defaults to 288):
+            The size (resolution) of each image.
+        input_image_embed_size (`int`, *optional*, defaults to 768):
+            Embedding size of the input image.
+        input_text_embed_size (`int`, *optional*, defaults to 768):
+            Embedding size of the input text.
+        link_tower_shared (`bool`, *optional*, defaults to `False`):
+            Whether the bride/link tower layers are shared.
+        link_tower_type (`str`, *optional*, defaults to `"add"`):
+            Type of the bridge/link layer.
+        log_dir (`str`, *optional*, defaults to `"log_dir"`):
+            Path to the log directory.
+        loss_names (`Dict[str, int]`, *optional*):
+            Various loss options.
+        max_text_len (`int`, *optional*, defaults to 50):
+            Maximum text length.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            Ratio of MLP hidden dim to embedding dim.
+        model_type (`str`, *optional*, defaults to `"bridgetower"`):
+            Model type.
+        nlvr2_head_format (`str`, *optional*, defaults to `"pair"`):
+            Head format for nlvr2.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 6):
+            Number of hidden layers in the Transformer encoder.
+        num_nodes (`int`, *optional*, defaults to 1):
+            Number of nodes for multi-node training.
+        only_load_cross_modal_from_meter (`bool`, *optional*, defaults to `False`):
+            Whether to load cross modal transformer from meter.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        resolution_before (`int`, *optional*, defaults to 224):
+            Prior resolution.
+        stop_gradient (`bool`, *optional*, defaults to `False`):
+            Whether to stop gradient for training.
+        task_head_layers (`int`, *optional*, defaults to 2):
+            Number of task head layers.
+        test_only (`bool`, *optional*, defaults to `False`):
+            Whether model is used only for test.
+        tokenizer (`str`, *optional*, defaults to `"roberta-base"`):
+            Choice of the text tokenizer.
+        unfreeze_RoBERTa_attention (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze RoBERTa's LayerNorm.
+        unfreeze_RoBERTa_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze RoBERTa's embeddings.
+        unfreeze_RoBERTa_encoder (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze RoBERTa's encoder.
+        unfreeze_RoBERTa_layernorm (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze RoBERTa's LayerNorm.
+        unfreeze_ViT_attention (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze ViT's attention.
+        unfreeze_ViT_layernorm (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze ViT's LayerNorm.
+        vit (`str`, *optional*, defaults to `"ViT-B/16"`):
+            ViT model configuration.
+        vit_layernorm_init_from_vit (`bool`, *optional*, defaults to `False`):
+            Whether to init ViT LayerNorm from ViT.
+        vit_layernorm_shared (`bool`, *optional*, defaults to `True`):
+            Whether ViT's LayerNorm layers are shared.
+        vit_remove_last (`bool`, *optional*, defaults to `False`):
+            Whether to remove ViT's last layer.
+        vocab_size (`int`, *optional*, defaults to 50265):
+            Vocabulary size of the text part of the model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
+        vqav2_label_size (`int`, *optional*, defaults to 3129):
+            Label size for vqav2.
 
     Example:
 
     ```python
     >>> from transformers import BridgeTowerModel, BridgeTowerConfig
 
-    >>> # Initializing a bridgetower  style configuration
+    >>> # Initializing a BridgeTower BridgeTower/bridgetower-base style configuration
     >>> configuration = BridgeTowerConfig()
 
-    >>> # Initializing a model from the  style configuration
+    >>> # Initializing a model from the BridgeTower/bridgetower-base style configuration
     >>> model = BridgeTowerModel(configuration)
 
     >>> # Accessing the model configuration
@@ -84,7 +178,7 @@ class BridgeTowerConfig(PretrainedConfig):
                 'vcr': 0,
                 'vcr_qar': 0,
                 'vqa': 1},
-        max_text_len=50, #check 40 in configuration.py
+        max_text_len=50,
         mlp_ratio=4,
         model_type='bridgetower',
         nlvr2_head_format='pair',
