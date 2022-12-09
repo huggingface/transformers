@@ -102,7 +102,7 @@ class CPMAntConfig(PretrainedConfig):
         position_bias_num_buckets=512,
         position_bias_max_distance=2048,
         eps=1e-6,
-        half: bool = True,
+        half: bool = False,
         prompt_types: int = 32,
         prompt_length: int = 32,
         segment_types: int = 32,
@@ -122,9 +122,6 @@ class CPMAntConfig(PretrainedConfig):
         self.position_bias_max_distance = position_bias_max_distance
         self.dropout_p = dropout_p
         self.eps = eps
-        if not half or not torch.cuda.is_available():
-            self.torch_dtype = torch.float
-        else:
-            self.torch_dtype = torch.half
+        self.torch_dtype = torch.float
         self.vocab_size = vocab_size
         self.mask_modules = mask_modules
