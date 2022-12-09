@@ -18,21 +18,20 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_sentencepiece_available
 
 
 _import_structure = {
     "configuration_gpt_sw3": ["GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSw3Config"],
-    "tokenization_gpt_sw3": ["GPTSw3Tokenizer"],
 }
 
 try:
-    if not is_tokenizers_available():
+    if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    pass
+    _import_structure["tokenization_gpt_sw3"] = ["GPTSw3Tokenizer"]
 
 try:
     if not is_torch_available():
@@ -52,15 +51,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_gpt_sw3 import GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSw3Config
-    from .tokenization_gpt_sw3 import GPTSw3Tokenizer
 
     try:
-        if not is_tokenizers_available():
+        if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        pass
+        from .tokenization_gpt_sw3 import GPTSw3Tokenizer
 
     try:
         if not is_torch_available():
