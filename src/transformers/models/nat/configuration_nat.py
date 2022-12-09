@@ -71,7 +71,8 @@ class NatConfig(PretrainedConfig):
         layer_scale_init_value (`float`, *optional*, defaults to 0.0):
             The initial value for the layer scale. Disabled if <=0.
         out_features (`List[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stage1"`, `"stage2"`, etc.
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). Will default to the last stage if unset.
 
     Example:
 

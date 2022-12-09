@@ -26,7 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import BackboneMixin, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
@@ -879,7 +879,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
     "NAT backbone, to be used with frameworks like DETR and MaskFormer.",
     DINAT_START_DOCSTRING,
 )
-class DinatBackbone(DinatPreTrainedModel):
+class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
 
@@ -890,7 +890,7 @@ class DinatBackbone(DinatPreTrainedModel):
         self.embeddings = DinatEmbeddings(config)
         self.encoder = DinatEncoder(config, self.embeddings.patch_grid)
 
-        self.out_features = config.out_features
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
 
         num_features = [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
         self.out_feature_channels = {}
