@@ -466,6 +466,8 @@ class VivitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Parameter):
+            module.data.normal_(mean=0.0, std=self.config.initializer_range)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, VivitEncoder):
