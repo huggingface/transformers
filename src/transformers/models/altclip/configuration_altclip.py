@@ -99,25 +99,25 @@ class AltCLIPTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        vocab_size=250002,
+        hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        intermediate_size=4096,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
+        max_position_embeddings=514,
+        type_vocab_size=1,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layer_norm_eps=1e-05,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        project_dim=512,
+        project_dim=768,
         pooler_fn="cls",
         **kwargs
     ):
@@ -299,7 +299,7 @@ class AltCLIPConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+        self, text_config=None, vision_config=None, projection_dim=768, logit_scale_init_value=2.6592, **kwargs
     ):
         super().__init__(**kwargs)
 

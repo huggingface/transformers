@@ -1578,7 +1578,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         vision_config = config.vision_config
 
         self.projection_dim = config.projection_dim
-        self.text_embed_dim = text_config.hidden_size
+        self.text_embed_dim = text_config.project_dim
         self.vision_embed_dim = vision_config.hidden_size
 
         self.text_model = AltCLIPTextModel(text_config)
