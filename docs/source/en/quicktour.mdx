@@ -440,13 +440,16 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
    >>> dataset = load_dataset("rotten_tomatoes")  # doctest: +IGNORE_RESULT
    ```
 
-5. Create a function to tokenize the dataset, and apply it over the entire dataset with [`~datasets.Dataset.map`]:
+5. Create a function to tokenize the dataset:
 
    ```py
    >>> def tokenize_dataset(dataset):
    ...     return tokenizer(dataset["text"])
+   ```
 
+   Then apply it over the entire dataset with [`~datasets.Dataset.map`]:
 
+   ```py
    >>> dataset = dataset.map(tokenize_dataset, batched=True)
    ```
 
