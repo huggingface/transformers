@@ -18,8 +18,11 @@ import os
 from importlib.util import find_spec
 from typing import Optional, Tuple
 
-import torch
 
+if find_spec("torch") is not None:
+    import torch
+else:
+    print("missing torch!")
 
 if find_spec("jieba") is not None:
     import jieba

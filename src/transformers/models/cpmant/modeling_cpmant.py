@@ -17,12 +17,17 @@
 
 import math
 import os
+from importlib.util import find_spec
 from typing import List, Optional, Tuple
 
-import torch
-import torch.nn.functional as F
-import torch.utils.checkpoint
-from torch import nn
+
+if find_spec("torch") is not None:
+    import torch
+    import torch.nn.functional as F
+    import torch.utils.checkpoint
+    from torch import nn
+else:
+    print("missing torch!")
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions

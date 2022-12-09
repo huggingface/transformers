@@ -14,9 +14,14 @@
 # limitations under the License.
 """ CPMAnt model configuration"""
 
+from importlib.util import find_spec
 from typing import List, Optional, Tuple
 
-import torch
+
+if find_spec("torch") is not None:
+    import torch
+else:
+    print("missing torch")
 
 from transformers import PretrainedConfig
 
