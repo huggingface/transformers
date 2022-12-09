@@ -74,7 +74,7 @@ class BridgeTowerProcessor(ProcessorMixin):
             add_special_tokens=add_special_tokens,
             padding=padding,
             truncation=truncation,
-            max_length=max_length,
+            max_length=max_length if max_length is not None else self.current_processor.max_text_len,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
             return_token_type_ids=return_token_type_ids,
