@@ -181,9 +181,9 @@ flax_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
-        "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
+        "pip install .[flax,testing,sentencepiece,flax-speech]",
         "pip install jieba",
-        "pip install torch==1.12.0+cpu torchvision==0.13.0+cpu torchaudio==0.12.0 --extra-index-url https://download.pytorch.org/whl/cpu"
+        "pip install git+https://github.com/xadupre/tensorflow-onnx@foldb",
     ],
     pytest_options={"rA": None},
 )
