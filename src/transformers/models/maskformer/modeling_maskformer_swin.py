@@ -855,7 +855,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         self.stage_names = config.stage_names
         self.model = MaskFormerSwinModel(config)
 
-        self.out_features = config.out_features
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
         if "stem" in self.out_features:
             raise ValueError("This backbone does not support 'stem' in the `out_features`.")
 

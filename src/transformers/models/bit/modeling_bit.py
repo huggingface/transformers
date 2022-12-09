@@ -851,7 +851,7 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         self.stage_names = config.stage_names
         self.bit = BitModel(config)
 
-        self.out_features = config.out_features
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
 
         out_feature_channels = {}
         out_feature_channels["stem"] = config.embedding_size

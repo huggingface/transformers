@@ -69,7 +69,8 @@ class MaskFormerSwinConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         out_features (`List[str]`, *optional*):
-            If used as a backbone, list of feature names to output, e.g. `["stage1", "stage2"]`.
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). Will default to the last stage if unset.
 
     Example:
 
