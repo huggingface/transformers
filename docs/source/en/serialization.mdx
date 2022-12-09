@@ -17,15 +17,6 @@ exporting them to a serialized format that can be loaded and executed on special
 runtimes and hardware. In this guide, we'll show you how to export 🤗 Transformers
 models to [ONNX (Open Neural Network eXchange)](http://onnx.ai).
 
-<Tip>
-
-Once exported, a model can be optimized for inference via techniques such as
-quantization and pruning. If you are interested in optimizing your models to run with
-maximum efficiency, check out the [🤗 Optimum
-library](https://github.com/huggingface/optimum).
-
-</Tip>
-
 ONNX is an open standard that defines a common set of operators and a common file format
 to represent deep learning models in a wide variety of frameworks, including PyTorch and
 TensorFlow. When a model is exported to the ONNX format, these operators are used to
@@ -40,6 +31,23 @@ ONNX format and then imported in TensorFlow (and vice versa).
 you to convert model checkpoints to an ONNX graph by leveraging configuration objects.
 These configuration objects come ready made for a number of model architectures, and are
 designed to be easily extendable to other architectures.
+
+<Tip>
+
+You can also export 🤗 Transformers models with the [`optimum.exporters.onnx` package](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model)
+from 🤗 Optimum.
+
+Once exported, a model can be:
+
+- Optimized for inference via techniques such as quantization and graph optimization.
+- Run with ONNX Runtime via [`ORTModelForXXX` classes](https://huggingface.co/docs/optimum/onnxruntime/package_reference/modeling_ort),
+which follow the same `AutoModel` API as the one you are used to in 🤗 Transformers.
+- Run with [optimized inference pipelines](https://huggingface.co/docs/optimum/main/en/onnxruntime/usage_guides/pipelines),
+which has the same API as the [`pipeline`] function in 🤗 Transformers.
+
+To explore all these features,  check out the [🤗 Optimum library](https://github.com/huggingface/optimum).
+
+</Tip>
 
 Ready-made configurations include the following architectures:
 
@@ -116,6 +124,14 @@ In the next two sections, we'll show you how to:
 * Export a custom model for an unsupported architecture.
 
 ## Exporting a model to ONNX
+
+<Tip>
+
+The recommended way of exporting a model is now to use
+[`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/main/en/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli),
+do not worry it is very similar to `transformers.onnx`!
+
+</Tip>
 
 To export a 🤗 Transformers model to ONNX, you'll first need to install some extra
 dependencies:
@@ -245,6 +261,14 @@ python -m transformers.onnx --model=local-tf-checkpoint onnx/
 
 ## Selecting features for different model tasks
 
+<Tip>
+
+The recommended way of exporting a model is now to use `optimum.exporters.onnx`.
+You can check the [🤗 Optimum documentation](https://huggingface.co/docs/optimum/main/en/exporters/onnx/usage_guides/export_a_model#selecting-a-task)
+to learn how to select a task.
+
+</Tip>
+
 Each ready-made configuration comes with a set of _features_ that enable you to export
 models for different types of tasks. As shown in the table below, each feature is
 associated with a different `AutoClass`:
@@ -311,6 +335,15 @@ exported separately as two ONNX files named `encoder_model.onnx` and `decoder_mo
 
 
 ## Exporting a model for an unsupported architecture
+
+<Tip>
+
+If you wish to contribute by adding support for a model that cannot be currently exported, you should first check if it is
+supported in [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/main/en/exporters/onnx/package_reference/configuration#supported-architectures),
+and if it is not, [contribute to 🤗 Optimum](https://huggingface.co/docs/optimum/main/en/exporters/onnx/usage_guides/contribute)
+directly.
+
+</Tip>
 
 If you wish to export a model whose architecture is not natively supported by the
 library, there are three main steps to follow:
