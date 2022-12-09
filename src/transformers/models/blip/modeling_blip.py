@@ -179,16 +179,15 @@ class BlipVisionEmbeddings(nn.Module):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+        self.class_embedding = nn.Parameter(torch.randn(1, 1, self.embed_dim))
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=False
+            in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+        self.position_embedding = nn.Parameter(torch.zeros(1, self.num_positions, self.embed_dim))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -249,10 +248,9 @@ class BlipAttention(nn.Module):
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim)
+        
+        self.proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -336,7 +334,7 @@ class BlipAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class BLIPMLP(nn.Module):
+class BlipMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -357,7 +355,7 @@ class BlipEncoderLayer(nn.Module):
         self.embed_dim = config.hidden_size
         self.self_attn = BlipAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.mlp = BLIPMLP(config)
+        self.mlp = BlipMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -422,16 +420,12 @@ class BlipPreTrainedModel(PreTrainedModel):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, BlipAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, BLIPMLP):
+            nn.init.normal_(module.qkv.weight, std=in_proj_std)
+        elif isinstance(module, BlipMLP):
             factor = self.config.initializer_factor
             in_proj_std = (
                 (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
