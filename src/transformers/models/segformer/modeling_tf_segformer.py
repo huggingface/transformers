@@ -77,14 +77,14 @@ class TFSegformerDropPath(tf.keras.layers.Layer):
 class TFSegformerOverlapPatchEmbeddings(tf.keras.layers.Layer):
     """Construct the overlapping patch embeddings."""
 
-    def __init__(self, patch_size, stride, hidden_size, **kwargs):
+    def __init__(self, config, patch_size, stride, hidden_size, **kwargs):
         super().__init__(**kwargs)
         self.padding = tf.keras.layers.ZeroPadding2D(padding=patch_size // 2)
         self.proj = tf.keras.layers.Conv2D(
             filters=hidden_size, kernel_size=patch_size, strides=stride, padding="VALID", name="proj"
         )
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-05, name="layer_norm")
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
 
     def call(self, pixel_values: tf.Tensor) -> Tuple[tf.Tensor, int, int]:
         embeddings = self.proj(self.padding(pixel_values))
@@ -135,7 +135,7 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
             self.sr = tf.keras.layers.Conv2D(
                 filters=hidden_size, kernel_size=sequence_reduction_ratio, strides=sequence_reduction_ratio, name="sr"
             )
-            self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-05, name="layer_norm")
+            self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
 
     def transpose_for_scores(self, tensor: tf.Tensor) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size]
@@ -300,7 +300,7 @@ class TFSegformerLayer(tf.keras.layers.Layer):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.layer_norm_1 = tf.keras.layers.LayerNormalization(epsilon=1e-05, name="layer_norm_1")
+        self.layer_norm_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_1")
         self.attention = TFSegformerAttention(
             config,
             hidden_size=hidden_size,
@@ -309,7 +309,7 @@ class TFSegformerLayer(tf.keras.layers.Layer):
             name="attention",
         )
         self.drop_path = TFSegformerDropPath(drop_path) if drop_path > 0.0 else tf.keras.layers.Activation("linear")
-        self.layer_norm_2 = tf.keras.layers.LayerNormalization(epsilon=1e-05, name="layer_norm_2")
+        self.layer_norm_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_2")
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = TFSegformerMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size, name="mlp")
 
@@ -359,6 +359,7 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
         for i in range(config.num_encoder_blocks):
             embeddings.append(
                 TFSegformerOverlapPatchEmbeddings(
+                    config=config,
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
                     hidden_size=config.hidden_sizes[i],
@@ -393,7 +394,7 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
 
         # Layer norms
         self.layer_norms = [
-            tf.keras.layers.LayerNormalization(epsilon=1e-05, name=f"layer_norm.{i}")
+            tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm.{i}")
             for i in range(config.num_encoder_blocks)
         ]
 
