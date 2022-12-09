@@ -13,10 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers.models.cpmant.tokenization_cpmant import CPMAntTokenizer
-from transformers.testing_utils import custom_tokenizers
+
+from transformers.testing_utils import custom_tokenizers, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
+
+
+if is_torch_available():
+    from transformers.models.cpmant.tokenization_cpmant import CPMAntTokenizer
 
 
 @custom_tokenizers
