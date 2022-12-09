@@ -181,7 +181,7 @@ flax_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
-        "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
+        "pip install .[flax,torch,testing,sentencepiece,flax-speech,vision]",
         "pip install jieba",
     ],
     pytest_options={"rA": None},
