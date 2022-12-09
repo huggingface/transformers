@@ -78,7 +78,7 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
 def _find_timestamp_sequence(sequence,tokenizer):
     """
     Finds the index of the matching timestamps using the timing information.
-    Take the following sequences : 
+    Take the following sequences :
     [ 50257, Timestamp, 5018, 42198, 583, 193, O42 T, T 8913, 289, 3923, T, T, 8741, 9814, 9813, T]
     [ 193, O42 T, T 8913, 289, 3923, T, T, 8741, 9814, 9813, 526, 2721, 182, T, T, 192, T]
     Since at each token we have the approximate time (the conversion is linear), we can find in a range 

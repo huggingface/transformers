@@ -758,11 +758,11 @@ class TimeStampLogitsProcessor(LogitsProcessor):
     def __init__(
         self,
         begin_index,
-        timestamp_begin,
-        eos_token_id,
-        no_timestamps_token_id,
-        n_audio_ctx,
-        max_initial_timestamp=0,
+        timestamp_begin=50364,
+        eos_token_id=50257,
+        no_timestamps_token_id=50363,
+        n_audio_ctx=1500,
+        max_initial_timestamp=1,
         chunk_length=30,
     ):
         self.begin_index = begin_index
