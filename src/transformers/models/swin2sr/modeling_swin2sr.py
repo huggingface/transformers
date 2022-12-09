@@ -890,8 +890,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         self.mean = self.mean.type_as(pixel_values)
         pixel_values = (pixel_values - self.mean) * self.img_range
 
-        print("Shape of pixel values after padding:", pixel_values.shape)
-
         return pixel_values
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)

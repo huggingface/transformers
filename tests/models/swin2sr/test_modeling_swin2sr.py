@@ -314,7 +314,7 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size([1, 3, 960, 1280])
+        expected_shape = torch.Size([1, 3, 976, 1296])
         self.assertEqual(outputs.reconstruction.shape, expected_shape)
         expected_slice = torch.tensor(
             [[0.5458, 0.5546, 0.5638], [0.5526, 0.5565, 0.5651], [0.5396, 0.5426, 0.5621]]
