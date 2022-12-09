@@ -458,6 +458,7 @@ class ViTHybridEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ViTHybrid
 class ViTHybridPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
