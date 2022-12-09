@@ -183,6 +183,7 @@ flax_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
         "pip install jieba",
+        "pip install torch==1.12.0+cpu torchvision==0.13.0+cpu torchaudio==0.12.0 --extra-index-url https://download.pytorch.org/whl/cpu"
     ],
     pytest_options={"rA": None},
 )
@@ -195,6 +196,7 @@ pipelines_torch_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
         "pip install jieba",
+        "pip install torch==1.12.0+cpu torchvision==0.13.0+cpu torchaudio==0.12.0 --extra-index-url https://download.pytorch.org/whl/cpu"
     ],
     pytest_options={"rA": None},
     tests_to_run="tests/pipelines/"
