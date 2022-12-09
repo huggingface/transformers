@@ -161,10 +161,13 @@ class BridgeTowerConfig(PretrainedConfig):
         freeze_layer_count_roberta=False,
         freeze_layer_count_vit=False,
         head_hidden_scale=2,
+        hidden_act="gelu",
         hidden_size=768,
         image_size=288,
         input_image_embed_size=768,
         input_text_embed_size=768,
+        is_encoder_decoder=False,
+        layer_norm_eps=1e-05,
         link_tower_shared=False,
         link_tower_type='add',
         log_dir='log_dir',
@@ -191,6 +194,7 @@ class BridgeTowerConfig(PretrainedConfig):
         stop_gradient=False,
         task_head_layers=2,
         test_only=False,
+        tie_word_embeddings=False,
         tokenizer='roberta-base',
         unfreeze_RoBERTa_attention=False,
         unfreeze_RoBERTa_embeddings=False,
@@ -219,10 +223,13 @@ class BridgeTowerConfig(PretrainedConfig):
         self.freeze_layer_count_roberta = freeze_layer_count_roberta
         self.freeze_layer_count_vit = freeze_layer_count_vit
         self.head_hidden_scale = head_hidden_scale
+        self.hidden_act = hidden_act
         self.hidden_size = hidden_size
         self.image_size = image_size
         self.input_image_embed_size = input_image_embed_size
         self.input_text_embed_size = input_text_embed_size
+        self.is_encoder_decoder = is_encoder_decoder
+        self.layer_norm_eps = layer_norm_eps
         self.link_tower_shared = link_tower_shared
         self.link_tower_type = link_tower_type
         self.log_dir = log_dir
@@ -240,6 +247,7 @@ class BridgeTowerConfig(PretrainedConfig):
         self.stop_gradient = stop_gradient
         self.task_head_layers = task_head_layers
         self.test_only = test_only
+        self.tie_word_embeddings = tie_word_embeddings
         self.tokenizer = tokenizer
         self.unfreeze_RoBERTa_attention = unfreeze_RoBERTa_attention
         self.unfreeze_RoBERTa_embeddings = unfreeze_RoBERTa_embeddings

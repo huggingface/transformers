@@ -94,7 +94,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.is_clip= (not 'swin' in config.vit)
 
         if 'roberta' in config.tokenizer:
-            tokenizer_config = RobertaConfig(
+            self.tokenizer_config = RobertaConfig(
                 vocab_size=config.vocab_size,
                 hidden_size=config.hidden_size,
                 num_hidden_layers=config.num_hidden_layers,
@@ -156,9 +156,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 ln.weight.data = self.vit_model.visual.ln_post.weight.data
                 ln.bias.data = self.vit_model.visual.ln_post.bias.data
 
-        self.cross_modal_image_layers = nn.ModuleList([BertCrossLayer(tokenizer_config) for _ in range(config.num_hidden_layers)])
+        self.cross_modal_image_layers = nn.ModuleList([BertCrossLayer(self.tokenizer_config) for _ in range(config.num_hidden_layers)])
         self.cross_modal_image_layers.apply(self._init_weights)
-        self.cross_modal_text_layers = nn.ModuleList([BertCrossLayer(tokenizer_config) for _ in range(config.num_hidden_layers)])
+        self.cross_modal_text_layers = nn.ModuleList([BertCrossLayer(self.tokenizer_config) for _ in range(config.num_hidden_layers)])
         self.cross_modal_text_layers.apply(self._init_weights)
 
         # Class token => Linear => Tanh
@@ -169,7 +169,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         if config.loss_names["mlm"] > 0:
             # MLM Head weights don't tie with BERT Embedding weights. Train from scratch.
-            self.mlm_score = BridgeTowerMLMHead(tokenizer_config)
+            self.mlm_score = BridgeTowerMLMHead(self.tokenizer_config)
             self.mlm_score.apply(self._init_weights)
 
         hs = config.hidden_size
@@ -182,11 +182,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.cross_modal_image_layernorm.apply(self._init_weights)
 
         if config.link_tower_shared:
-            self.cross_modal_text_link_tower = LinkTower(config, tokenizer_config)
-            self.cross_modal_image_link_tower = LinkTower(config, tokenizer_config)
+            self.cross_modal_text_link_tower = LinkTower(config, self.tokenizer_config)
+            self.cross_modal_image_link_tower = LinkTower(config, self.tokenizer_config)
         else:
-            self.cross_modal_text_link_tower = nn.ModuleList([LinkTower(config, tokenizer_config) for _ in range(config.num_hidden_layers - 1)])
-            self.cross_modal_image_link_tower = nn.ModuleList([LinkTower(config, tokenizer_config) for _ in range(config.num_hidden_layers - 1)])
+            self.cross_modal_text_link_tower = nn.ModuleList([LinkTower(config, self.tokenizer_config) for _ in range(config.num_hidden_layers - 1)])
+            self.cross_modal_image_link_tower = nn.ModuleList([LinkTower(config, self.tokenizer_config) for _ in range(config.num_hidden_layers - 1)])
 
         self.cross_modal_text_link_tower.apply(self._init_weights)
         self.cross_modal_image_link_tower.apply(self._init_weights)
@@ -817,7 +817,9 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
 
         mlm_logits = self.mlm_score(outputs["text_feats"])
 
-        return MaskedLMOutput()	
+        return MaskedLMOutput(
+            logits=mlm_logits
+        )	
 
         #return MaskedLMOutput(
         #loss=masked_lm_loss,
