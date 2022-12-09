@@ -615,7 +615,7 @@ def _load_state_dict_into_meta_model(
             if (
                 keep_in_fp32_modules is not None
                 and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
-                and dtype != torch.bfloat16
+                and dtype == torch.float16
             ):
                 param = param.to(torch.float32)
             else:
