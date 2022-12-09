@@ -2292,8 +2292,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if not is_accelerate_available() and torch_dtype == torch.float16:
                     use_keep_in_fp32_modules = False
                     logger.warning(
-                        " `_keep_in_fp32_modules` is not set to `None` and you don't have `accelerate` installed"
-                        " it is recommended to have `accelerate` installed in this case `pip install accelerate`.",
+                        " For stability purposes, it is recommended to have accelerate installed when using this model"
+                        " in torch.flaot16, please install it with pip install accelerate.",
                     )
                 else:
                     use_keep_in_fp32_modules = True
