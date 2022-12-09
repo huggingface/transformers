@@ -269,11 +269,11 @@ class BioGptDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.hidden_act]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
         self.fc1 = nn.Linear(self.embed_dim, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -452,7 +452,7 @@ class BioGptModel(BioGptPreTrainedModel):
         self.embed_positions = BioGptLearnedPositionalEmbedding(config.max_position_embeddings, self.embed_dim)
 
         self.layers = nn.ModuleList([BioGptDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.layer_norm = nn.LayerNorm(self.embed_dim)
+        self.layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing

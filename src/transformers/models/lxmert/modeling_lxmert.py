@@ -281,7 +281,7 @@ class LxmertEmbeddings(nn.Module):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids, token_type_ids=None, inputs_embeds=None):
@@ -375,7 +375,7 @@ class LxmertAttentionOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -437,7 +437,7 @@ class LxmertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -563,11 +563,11 @@ class LxmertVisualFeatureEncoder(nn.Module):
 
         # Object feature encoding
         self.visn_fc = nn.Linear(feat_dim, config.hidden_size)
-        self.visn_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-12)
+        self.visn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Box position encoding
         self.box_fc = nn.Linear(pos_dim, config.hidden_size)
-        self.box_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-12)
+        self.box_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -684,7 +684,7 @@ class LxmertPredictionHeadTransform(nn.Module):
         super(LxmertPredictionHeadTransform, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.transform_act_fn = ACT2FN[config.hidden_act]
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=1e-12)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -721,7 +721,7 @@ class LxmertVisualAnswerHead(nn.Module):
         self.logit_fc = nn.Sequential(
             nn.Linear(hid_dim, hid_dim * 2),
             GeLU(),
-            nn.LayerNorm(hid_dim * 2, eps=1e-12),
+            nn.LayerNorm(hid_dim * 2, eps=config.layer_norm_eps),
             nn.Linear(hid_dim * 2, num_labels),
         )
 

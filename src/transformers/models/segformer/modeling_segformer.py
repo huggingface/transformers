@@ -124,7 +124,7 @@ class SegformerDropPath(nn.Module):
 class SegformerOverlapPatchEmbeddings(nn.Module):
     """Construct the overlapping patch embeddings."""
 
-    def __init__(self, patch_size, stride, num_channels, hidden_size):
+    def __init__(self, config, patch_size, stride, num_channels, hidden_size):
         super().__init__()
         self.proj = nn.Conv2d(
             num_channels,
@@ -134,7 +134,7 @@ class SegformerOverlapPatchEmbeddings(nn.Module):
             padding=patch_size // 2,
         )
 
-        self.layer_norm = nn.LayerNorm(hidden_size)
+        self.layer_norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, pixel_values):
         embeddings = self.proj(pixel_values)
@@ -175,7 +175,7 @@ class SegformerEfficientSelfAttention(nn.Module):
             self.sr = nn.Conv2d(
                 hidden_size, hidden_size, kernel_size=sequence_reduction_ratio, stride=sequence_reduction_ratio
             )
-            self.layer_norm = nn.LayerNorm(hidden_size)
+            self.layer_norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def transpose_for_scores(self, hidden_states):
         new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -319,7 +319,7 @@ class SegformerLayer(nn.Module):
 
     def __init__(self, config, hidden_size, num_attention_heads, drop_path, sequence_reduction_ratio, mlp_ratio):
         super().__init__()
-        self.layer_norm_1 = nn.LayerNorm(hidden_size)
+        self.layer_norm_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.attention = SegformerAttention(
             config,
             hidden_size=hidden_size,
@@ -327,7 +327,7 @@ class SegformerLayer(nn.Module):
             sequence_reduction_ratio=sequence_reduction_ratio,
         )
         self.drop_path = SegformerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.layer_norm_2 = nn.LayerNorm(hidden_size)
+        self.layer_norm_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = SegformerMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
 
@@ -403,7 +403,7 @@ class SegformerEncoder(nn.Module):
 
         # Layer norms
         self.layer_norm = nn.ModuleList(
-            [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
+            [nn.LayerNorm(config.hidden_sizes[i], eps=config.layer_norm_eps) for i in range(config.num_encoder_blocks)]
         )
 
     def forward(
