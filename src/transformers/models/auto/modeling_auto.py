@@ -37,6 +37,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdModel"),
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("biogpt", "BioGptModel"),
+        ("bit", "BitModel"),
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("bloom", "BloomModel"),
@@ -156,6 +157,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
+        ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
         ("wav2vec2", "Wav2Vec2Model"),
@@ -372,6 +374,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
         ("beit", "BeitForImageClassification"),
+        ("bit", "BitForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
         ("cvt", "CvtForImageClassification"),
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
@@ -399,6 +402,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2ForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
+        ("vit_hybrid", "ViTHybridForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
     ]
 )
@@ -854,6 +858,7 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
     [
         # Backbone mapping
+        ("bit", "BitBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("resnet", "ResNetBackbone"),
     ]

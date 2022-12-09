@@ -188,7 +188,7 @@ pipelines_torch_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
-        "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
+        "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     pytest_options={"rA": None},
     tests_to_run="tests/pipelines/"
