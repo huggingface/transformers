@@ -370,6 +370,7 @@ class SegformerEncoder(nn.Module):
         for i in range(config.num_encoder_blocks):
             embeddings.append(
                 SegformerOverlapPatchEmbeddings(
+                    config=config,
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
                     num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
