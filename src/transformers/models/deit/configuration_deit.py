@@ -65,7 +65,7 @@ class DeiTConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         cls_token_initializer_range (`float`, *optional*, defaults to 1e-6):
-            The standard deviation of the truncated_normal_initializer for initializing the `cls_token` parameter.
+            The standard deviation of the normal initializer for initializing the `cls_token` parameter.
         distillation_token_initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing the `distillation_token`
             parameter.

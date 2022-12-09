@@ -60,7 +60,7 @@ class ViTConfig(PretrainedConfig):
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         cls_token_initializer_range (`float`, *optional*, defaults to 1e-6):
-            The standard deviation of the truncated_normal_initializer for initializing the `cls_token` parameter.
+            The standard deviation of the normal initializer for initializing the `cls_token` parameter.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
