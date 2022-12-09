@@ -956,11 +956,10 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        embedding_output, input_dimensions = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values)
 
         outputs = self.encoder(
             embedding_output,
-            input_dimensions,
             head_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=True,
