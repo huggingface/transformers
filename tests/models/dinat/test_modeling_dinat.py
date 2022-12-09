@@ -64,7 +64,7 @@ class DinatModelTester:
         is_training=True,
         scope=None,
         use_labels=True,
-        type_sequence_label_size=10,
+        num_labels=10,
         encoder_stride=8,
         out_features=["stage1", "stage2"],
     ):
@@ -90,7 +90,7 @@ class DinatModelTester:
         self.is_training = is_training
         self.scope = scope
         self.use_labels = use_labels
-        self.type_sequence_label_size = type_sequence_label_size
+        self.num_labels = num_labels
         self.encoder_stride = encoder_stride
         self.out_features = out_features
 
@@ -99,7 +99,7 @@ class DinatModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
 
@@ -107,6 +107,7 @@ class DinatModelTester:
 
     def get_config(self):
         return DinatConfig(
+            num_labels=self.num_labels,
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -142,12 +143,11 @@ class DinatModelTester:
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
         model = DinatForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
         # test greyscale images
         config.num_channels = 1
@@ -157,7 +157,7 @@ class DinatModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_backbone(self, config, pixel_values, labels):
         model = DinatBackbone(config=config)
@@ -171,6 +171,21 @@ class DinatModelTester:
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = DinatBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
