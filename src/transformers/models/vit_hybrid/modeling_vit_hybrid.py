@@ -358,7 +358,6 @@ class ViTHybridOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->ViTHybrid
 class ViTHybridLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -387,7 +386,7 @@ class ViTHybridLayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = attention_output + hidden_states.to(attention_output.device)
 
         # in ViTHybrid, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
@@ -459,7 +458,6 @@ class ViTHybridEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ViTHybrid
 class ViTHybridPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
