@@ -1304,12 +1304,37 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             attentions=vision_outputs.attentions,
         )
 
-    def generate(self, input_ids: torch.LongTensor, pixel_values: torch.FloatTensor, **generate_kwargs):
+    @torch.no_grad()
+    def generate(
+        self, input_ids: torch.LongTensor, pixel_values: torch.FloatTensor, **generate_kwargs
+    ) -> torch.LongTensor:
         r"""
         Overrides `generate` function to be able to use the model as a conditional generator
 
-        Args:
-            `input_ids`
+        Parameters:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, image_width, image_height)`:
+                Input image to be processed
+
+
+        Examples:
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import BlipTokenizer, BlipForImageCaptioning
+
+        >>> model = BLIPForImageCaptioning.from_pretrained("ybelkada/blip-base")
+        >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> image_embeds = outputs.image_embeds
+        ```
         """
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
