@@ -189,7 +189,7 @@ class MultiHeadSelfAttention(nn.Module):
         """
         bs, q_length, dim = query.size()
         k_length = key.size(1)
-        
+
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
 
