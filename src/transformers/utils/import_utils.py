@@ -1063,6 +1063,18 @@ def tf_required(func):
     return wrapper
 
 
+def vision_required(func):
+    # Chose a different decorator name than in tests so it's clear they are not the same.
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if is_vision_available():
+            return func(*args, **kwargs)
+        else:
+            raise ImportError(f"Method `{func.__name__}` requires Pillow.")
+
+    return wrapper
+
+
 def is_torch_fx_proxy(x):
     if is_torch_fx_available():
         import torch.fx

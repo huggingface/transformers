@@ -18,25 +18,27 @@ from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import ExplicitEnum, TensorType
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from transformers.image_utils import (
+    ChannelDimension,
+    get_channel_dimension_axis,
+    get_image_size,
+    infer_channel_dimension_format,
+    to_numpy_array,
+)
+from transformers.utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
+from transformers.utils.import_utils import (
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+    vision_required,
+)
 
 
 if is_vision_available():
     import PIL
 
-    from .image_utils import (
-        ChannelDimension,
-        PILImageResampling,
-        get_channel_dimension_axis,
-        get_image_size,
-        infer_channel_dimension_format,
-        is_jax_tensor,
-        is_tf_tensor,
-        is_torch_tensor,
-        to_numpy_array,
-    )
-
+    from .image_utils import PILImageResampling
 
 if is_torch_available():
     import torch
@@ -115,10 +117,11 @@ def rescale(
     return rescaled_image
 
 
+@vision_required
 def to_pil_image(
-    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
+    image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
-) -> PIL.Image.Image:
+) -> "PIL.Image.Image":
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
     needed.
@@ -223,10 +226,11 @@ def get_resize_output_image_size(
     return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
+@vision_required
 def resize(
     image,
     size: Tuple[int, int],
-    resample=PILImageResampling.BILINEAR,
+    resample: "PILImageResampling" = None,
     reducing_gap: Optional[int] = None,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
@@ -253,6 +257,8 @@ def resize(
     Returns:
         `np.ndarray`: The resized image.
     """
+    resample = resample if resample is not None else PILImageResampling.BILINEAR
+
     if not len(size) == 2:
         raise ValueError("size must have 2 elements")
 
@@ -282,6 +288,7 @@ def resize(
     return resized_image
 
 
+@vision_required
 def normalize(
     image: np.ndarray,
     mean: Union[float, Iterable[float]],
@@ -343,6 +350,7 @@ def normalize(
     return image
 
 
+@vision_required
 def center_crop(
     image: np.ndarray,
     size: Tuple[int, int],
