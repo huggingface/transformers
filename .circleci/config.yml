@@ -81,8 +81,6 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install GitPython
             - run: pip install .
-            - run: pip install jieba
-            - run: pip install torch
             - run: |
                   mkdir test_preparation
                   echo -n "tests" > test_preparation/test_list.txt

@@ -168,7 +168,7 @@ tf_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
-        "pip install .[torch,sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
+        "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
         "pip install jieba",
     ],
@@ -181,7 +181,7 @@ flax_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
-        "pip install .[flax,torch,testing,sentencepiece,flax-speech,vision]",
+        "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
         "pip install jieba",
     ],
     pytest_options={"rA": None},
