@@ -565,7 +565,6 @@ BLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->BLIP
 class BlipEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
