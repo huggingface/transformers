@@ -26,7 +26,13 @@ import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss,TFModelInputType, TFPreTrainedModel, get_initializer, unpack_inputs
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFModelInputType,
+    TFPreTrainedModel,
+    get_initializer,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list
 from ...utils import (
     DUMMY_INPUTS,
@@ -516,7 +522,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[tf.tensor]]] =  None,
+        past_key_values: Optional[Tuple[Tuple[tf.tensor]]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -526,7 +532,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    )-> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
 
