@@ -2070,6 +2070,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Load model
         loading_info = None
 
+        # Keep in fp32 modules
+        keep_in_fp32_modules = None
+        use_keep_in_fp32_modules = False
+
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
@@ -2287,18 +2291,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
             # Check if `_keep_in_fp32_modules` is not None
-            # but not force users to have `accelerate`
-            if cls._keep_in_fp32_modules is not None:
-                if not is_accelerate_available() and torch_dtype == torch.float16:
-                    use_keep_in_fp32_modules = False
-                    logger.warning(
-                        " For stability purposes, it is recommended to have accelerate installed when using this model"
-                        " in torch.flaot16, please install it with pip install accelerate.",
-                    )
-                else:
-                    use_keep_in_fp32_modules = True
-            else:
-                use_keep_in_fp32_modules = False
+            use_keep_in_fp32_modules = cls._keep_in_fp32_modules is not None
 
             if is_sharded:
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
@@ -2324,9 +2317,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         # Check first if we are `from_pt`
-        if from_pt and use_keep_in_fp32_modules:
+        if use_keep_in_fp32_modules:
             low_cpu_mem_usage = True
-            keep_in_fp32_modules = model._keep_in_fp32_modules if use_keep_in_fp32_modules else []
+            keep_in_fp32_modules = model._keep_in_fp32_modules
+        else:
+            keep_in_fp32_modules = []
 
         if load_in_8bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
@@ -2585,10 +2580,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         set_module_8bit_tensor_to_device(
                             model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype)
                         )
-        elif keep_in_fp32_modules is not None and state_dict is not None:
-            for key in state_dict:
-                if any(module_to_keep_in_fp32 in key for module_to_keep_in_fp32 in keep_in_fp32_modules):
-                    state_dict[key] = state_dict[key].to(torch.float32)
 
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
@@ -2597,6 +2588,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             for module in uninitialized_modules:
                 model._init_weights(module)
+
+        # Set some modules to fp32 if any
+        if keep_in_fp32_modules is not None:
+            for name, param in model.named_parameters():
+                if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                    param = param.to(torch.float32)
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
