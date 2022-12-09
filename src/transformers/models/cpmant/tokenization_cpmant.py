@@ -15,15 +15,16 @@
 """Tokenization classes for CPMAnt."""
 import collections
 import os
+from importlib.util import find_spec
 from typing import Optional, Tuple
 
 import torch
 
 
-try:
+if find_spec("jieba") is not None:
     import jieba
-except ModuleNotFoundError as error:
-    raise error.__class__(
+else:
+    print(
         "You need to install jieba to use CPMAntTokenizer or CPMAntTokenizerFast. "
         "See https://pypi.org/project/jieba/ for installation."
     )
