@@ -167,6 +167,9 @@ class UperHead(nn.Module):
             padding=1,
         )
 
+    def init_weights(self):
+        pass
+
     def psp_forward(self, inputs):
         x = inputs[-1]
         psp_outs = [x]
@@ -256,6 +259,9 @@ class FCNHead(nn.Module):
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
+    def init_weights(self):
+        pass
+
     def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
         # just take the relevant feature maps
         hidden_states = encoder_hidden_states[self.in_index]
@@ -281,6 +287,10 @@ class UperNetPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         if isinstance(module, BackboneMixin):
             module.init_weights()
+        elif isinstance(module, UperHead):
+            module.init_weights()
+        elif isinstance(module, FCNHead):
+            module.init_weights()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BackboneMixin):
@@ -299,23 +309,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def compute_loss(self, logits, auxiliary_logits, labels):
-        # upsample logits to the images' original size
-        upsampled_logits = nn.functional.interpolate(
-            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-        )
-        if auxiliary_logits is not None:
-            upsampled_auxiliary_logits = nn.functional.interpolate(
-                auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-            )
-        # compute weighted loss
-        loss_fct = CrossEntropyLoss(ignore_index=self.config.loss_ignore_index)
-        main_loss = loss_fct(upsampled_logits, labels)
-        auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
-        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
-
-        return loss
 
     def forward(
         self,
@@ -337,17 +330,25 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         features = outputs.feature_maps
 
         logits = self.decode_head(features)
+        logits = nn.functional.interpolate(logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False)
 
         auxiliary_logits = None
         if self.auxiliary_head is not None:
             auxiliary_logits = self.auxiliary_head(features)
+            auxiliary_logits = nn.functional.interpolate(
+                auxiliary_logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False
+            )
 
         loss = None
         if labels is not None:
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
-                loss = self.compute_loss(logits, auxiliary_logits, labels)
+                # compute weighted loss
+                loss_fct = CrossEntropyLoss(ignore_index=self.config.loss_ignore_index)
+                main_loss = loss_fct(logits, labels)
+                auxiliary_loss = loss_fct(auxiliary_logits, labels)
+                loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
 
         if not return_dict:
             if output_hidden_states:

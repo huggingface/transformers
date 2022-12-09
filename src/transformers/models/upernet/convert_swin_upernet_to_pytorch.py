@@ -223,7 +223,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     print("First values of logits:", logits[0, 0, :3, :3])
     # assert values
     expected_slice = torch.tensor(
-        [[-7.5958, -6.2706, -6.4283], [-6.6670, -4.8781, -5.0119], [-6.7895, -5.1362, -5.2955]]
+        [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
     )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
