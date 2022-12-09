@@ -27,13 +27,13 @@ class DonutProcessor(ProcessorMixin):
     Constructs a Donut processor which wraps a Donut image processor and an XLMRoBERTa tokenizer into a single
     processor.
 
-    [`DonutProcessor`] offers all the functionalities of [`DonutFeatureExtractor`] and
+    [`DonutProcessor`] offers all the functionalities of [`DonutImageProcessor`] and
     [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. See the [`~DonutProcessor.__call__`] and
     [`~DonutProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`DonutFeatureExtractor`]):
-            An instance of [`DonutFeatureExtractor`]. The image processor is a required input.
+        image_processor ([`DonutImageProcessor`]):
+            An instance of [`DonutImageProcessor`]. The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
@@ -62,8 +62,8 @@ class DonutProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
-        [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
+        [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
         [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
         [`~DonutTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
         """

@@ -29,15 +29,15 @@ class FlavaProcessor(ProcessorMixin):
     r"""
     Constructs a FLAVA processor which wraps a FLAVA image processor and a FLAVA tokenizer into a single processor.
 
-    [`FlavaProcessor`] offers all the functionalities of [`FlavaFeatureExtractor`] and [`BertTokenizerFast`]. See the
+    [`FlavaProcessor`] offers all the functionalities of [`FlavaImageProcessor`] and [`BertTokenizerFast`]. See the
     [`~FlavaProcessor.__call__`] and [`~FlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`FlavaFeatureExtractor`]): The image processor is a required input.
+        image_processor ([`FlavaImageProcessor`]): The image processor is a required input.
         tokenizer ([`BertTokenizerFast`]): The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "FlavaFeatureExtractor"
+    image_processor_class = "FlavaImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
@@ -81,7 +81,7 @@ class FlavaProcessor(ProcessorMixin):
         **kwargs
     ):
         """
-        This method uses [`FLAVAFeatureExtractor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`FlavaImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.

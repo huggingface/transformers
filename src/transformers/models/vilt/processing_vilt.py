@@ -28,17 +28,17 @@ class ViltProcessor(ProcessorMixin):
     r"""
     Constructs a ViLT processor which wraps a BERT tokenizer and ViLT image processor into a single processor.
 
-    [`ViltProcessor`] offers all the functionalities of [`ViltFeatureExtractor`] and [`BertTokenizerFast`]. See the
+    [`ViltProcessor`] offers all the functionalities of [`ViltImageProcessor`] and [`BertTokenizerFast`]. See the
     docstring of [`~ViltProcessor.__call__`] and [`~ViltProcessor.decode`] for more information.
 
     Args:
-        image_processor (`ViltFeatureExtractor`):
-            An instance of [`ViltFeatureExtractor`]. The image processor is a required input.
+        image_processor (`ViltImageProcessor`):
+            An instance of [`ViltImageProcessor`]. The image processor is a required input.
         tokenizer (`BertTokenizerFast`):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "ViltFeatureExtractor"
+    image_processor_class = "ViltImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
@@ -80,7 +80,7 @@ class ViltProcessor(ProcessorMixin):
         **kwargs
     ) -> BatchEncoding:
         """
-        This method uses [`ViltFeatureExtractor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`ViltImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
