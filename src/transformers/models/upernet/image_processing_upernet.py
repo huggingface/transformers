@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for UperNet."""
 
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -43,7 +43,7 @@ def _scale_size(size: Tuple[int, int], scale: Union[float, int, tuple]) -> Tuple
     Args:
         size (tuple[int]): (w, h).
         scale (float | tuple(float)): Scaling factor.
-    
+
     Returns:
         tuple[int]: scaled size.
     """
@@ -53,9 +53,7 @@ def _scale_size(size: Tuple[int, int], scale: Union[float, int, tuple]) -> Tuple
     return int(w * float(scale[0]) + 0.5), int(h * float(scale[1]) + 0.5)
 
 
-def rescale_size(old_size: tuple,
-                 scale: Union[float, int, tuple],
-                 return_scale: bool = False) -> tuple:
+def rescale_size(old_size: tuple, scale: Union[float, int, tuple], return_scale: bool = False) -> tuple:
     """Calculate the new size to be rescaled to.
     Args:
         old_size (tuple[int]): The old size (w, h) of image.
@@ -70,16 +68,14 @@ def rescale_size(old_size: tuple,
     w, h = old_size
     if isinstance(scale, (float, int)):
         if scale <= 0:
-            raise ValueError(f'Invalid scale {scale}, must be positive.')
+            raise ValueError(f"Invalid scale {scale}, must be positive.")
         scale_factor = scale
     elif isinstance(scale, tuple):
         max_long_edge = max(scale)
         max_short_edge = min(scale)
-        scale_factor = min(max_long_edge / max(h, w),
-                           max_short_edge / min(h, w))
+        scale_factor = min(max_long_edge / max(h, w), max_short_edge / min(h, w))
     else:
-        raise TypeError(
-            f'Scale must be a number or tuple of int, but got {type(scale)}')
+        raise TypeError(f"Scale must be a number or tuple of int, but got {type(scale)}")
 
     new_size = _scale_size((w, h), scale_factor)
 
@@ -174,9 +170,7 @@ class UperNetImageProcessor(BaseImageProcessor):
         """
         height, width = image.shape[:2]
         new_width, new_height = rescale_size((width, height), scale)
-        return resize(
-            image, size=(new_height, new_width), resample=resample, data_format=data_format, **kwargs
-        )
+        return resize(image, size=(new_height, new_width), resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
         self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs

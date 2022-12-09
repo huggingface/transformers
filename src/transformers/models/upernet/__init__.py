@@ -18,13 +18,20 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
     "configuration_upernet": ["UperNetConfig"],
 }
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_upernet"] = ["UperNetImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -40,6 +47,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_upernet import UperNetConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_vit import UperNetImageProcessor
 
     try:
         if not is_torch_available():
