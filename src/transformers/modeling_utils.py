@@ -2323,9 +2323,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
 
-        if use_keep_in_fp32_modules:
+        # Check first if we are `from_pt`
+        if from_pt and use_keep_in_fp32_modules:
             low_cpu_mem_usage = True
-        keep_in_fp32_modules = model._keep_in_fp32_modules
+            keep_in_fp32_modules = model._keep_in_fp32_modules if use_keep_in_fp32_modules else []
 
         if load_in_8bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
@@ -2338,8 +2339,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 modules_to_not_convert = load_in_8bit_skip_modules
 
-            if keep_in_fp32_modules is not None and isinstance(keep_in_fp32_modules, list):
-                modules_to_not_convert.extend(keep_in_fp32_modules)
+            modules_to_not_convert.extend(keep_in_fp32_modules)
 
             model = replace_8bit_linear(
                 model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
