@@ -139,8 +139,16 @@ class OneFormerConfig(PretrainedConfig):
             general_config["strides"] = [4, 8, 16, 32]
 
         if backbone_config is None:
-            backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+            backbone_config = SwinConfig(
+                image_size=224,
+                in_channels=3,
+                patch_size=4,
+                embed_dim=96,
+                depths=[2, 2, 6, 2],
+                num_heads=[3, 6, 12, 24],
+                window_size=7,
+                drop_path_rate=0.3,
+                out_features=["stage1", "stage2", "stage3", "stage4"],
             )
         else:
             backbone_model_type = (

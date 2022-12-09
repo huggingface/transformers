@@ -1556,7 +1556,7 @@ class OneFormerPixelLevelModule(nn.Module):
             # for backwards compatibility
             backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
             backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
-        self.encoder = AutoBackbone.from_config(config.backbone_config)
+        self.encoder = AutoBackbone.from_config(backbone_config)
         self.decoder = OneFormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> OneFormerPixelLevelModuleOutput:
