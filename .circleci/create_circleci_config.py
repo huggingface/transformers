@@ -171,6 +171,7 @@ tf_job = CircleCIJob(
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
         "pip install jieba",
+        "pip install torch==1.12.0",
     ],
     pytest_options={"rA": None},
 )
@@ -183,6 +184,7 @@ flax_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
         "pip install jieba",
+        "pip install torch==1.12.0",
     ],
     pytest_options={"rA": None},
 )
@@ -205,7 +207,7 @@ pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[sklearn,tf-cpu,testing,sentencepiece]",
+        "pip install .[torch,sklearn,tf-cpu,testing,sentencepiece]",
         "pip install tensorflow_probability",
         "pip install jieba",
     ],
@@ -276,7 +278,7 @@ examples_flax_job = CircleCIJob(
     cache_name="flax_examples",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[flax,testing,sentencepiece,torch]",
+        "pip install .[flax,testing,sentencepiece]",
         "pip install -r examples/flax/_tests_requirements.txt",
         "pip install jieba",
     ],
