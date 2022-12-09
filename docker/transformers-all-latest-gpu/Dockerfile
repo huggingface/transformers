@@ -32,7 +32,7 @@ RUN echo torch=$VERSION
 # TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
 RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -U tensorflow==2.10.1
+RUN python3 -m pip install --no-cache-dir -U tensorflow==2.11
 RUN python3 -m pip install --no-cache-dir -U tensorflow_probability
 RUN python3 -m pip uninstall -y flax jax
 
@@ -54,7 +54,7 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 RUN python3 -m pip install --no-cache-dir decord
 
 # For `dinat` model
-RUN python3 -m pip install --no-cache-dir natten
+RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

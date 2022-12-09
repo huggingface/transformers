@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.25.0.dev0"
+__version__ = "4.26.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -160,6 +160,8 @@ _import_structure = {
         "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BigBirdPegasusConfig",
     ],
+    "models.biogpt": ["BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BioGptConfig", "BioGptTokenizer"],
+    "models.bit": ["BIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BitConfig"],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -380,6 +382,7 @@ _import_structure = {
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
     ],
+    "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.trajectory_transformer": [
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
@@ -416,6 +419,7 @@ _import_structure = {
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.wav2vec2": [
@@ -486,6 +490,7 @@ _import_structure = {
         "TextGenerationPipeline",
         "TokenClassificationPipeline",
         "TranslationPipeline",
+        "VideoClassificationPipeline",
         "VisualQuestionAnsweringPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
@@ -531,6 +536,7 @@ _import_structure = {
         "add_start_docstrings",
         "is_apex_available",
         "is_datasets_available",
+        "is_decord_available",
         "is_faiss_available",
         "is_flax_available",
         "is_keras_nlp_available",
@@ -745,6 +751,7 @@ else:
     _import_structure["image_transforms"] = ["rescale", "resize", "to_pil_image"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
+    _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
@@ -775,6 +782,7 @@ else:
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
+    _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
 # Timm-backed objects
@@ -1045,6 +1053,23 @@ else:
             "BigBirdPegasusForSequenceClassification",
             "BigBirdPegasusModel",
             "BigBirdPegasusPreTrainedModel",
+        ]
+    )
+    _import_structure["models.biogpt"].extend(
+        [
+            "BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BioGptForCausalLM",
+            "BioGptModel",
+            "BioGptPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bit"].extend(
+        [
+            "BIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BitBackbone",
+            "BitForImageClassification",
+            "BitModel",
+            "BitPreTrainedModel",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -2117,6 +2142,14 @@ else:
             "TimeSeriesTransformerPreTrainedModel",
         ]
     )
+    _import_structure["models.timesformer"].extend(
+        [
+            "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TimesformerForVideoClassification",
+            "TimesformerModel",
+            "TimesformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.trajectory_transformer"].extend(
         [
             "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2212,6 +2245,14 @@ else:
             "ViTForMaskedImageModeling",
             "ViTModel",
             "ViTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vit_hybrid"].extend(
+        [
+            "VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ViTHybridForImageClassification",
+            "ViTHybridModel",
+            "ViTHybridPreTrainedModel",
         ]
     )
     _import_structure["models.vit_mae"].extend(
@@ -2487,7 +2528,9 @@ else:
             "TFAutoModelWithLMHead",
         ]
     )
-    _import_structure["models.bart"].extend(["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"])
+    _import_structure["models.bart"].extend(
+        ["TFBartForConditionalGeneration", "TFBartForSequenceClassification", "TFBartModel", "TFBartPretrainedModel"]
+    )
     _import_structure["models.bert"].extend(
         [
             "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3396,6 +3439,8 @@ if TYPE_CHECKING:
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
     from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
+    from .models.biogpt import BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, BioGptConfig, BioGptTokenizer
+    from .models.bit import BIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BitConfig
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3602,6 +3647,7 @@ if TYPE_CHECKING:
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
     )
+    from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
@@ -3628,6 +3674,7 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.wav2vec2 import (
@@ -3693,6 +3740,7 @@ if TYPE_CHECKING:
         TextGenerationPipeline,
         TokenClassificationPipeline,
         TranslationPipeline,
+        VideoClassificationPipeline,
         VisualQuestionAnsweringPipeline,
         ZeroShotClassificationPipeline,
         ZeroShotImageClassificationPipeline,
@@ -3743,6 +3791,7 @@ if TYPE_CHECKING:
         add_start_docstrings,
         is_apex_available,
         is_datasets_available,
+        is_decord_available,
         is_faiss_available,
         is_flax_available,
         is_keras_nlp_available,
@@ -3913,6 +3962,7 @@ if TYPE_CHECKING:
         from .image_transforms import rescale, resize, to_pil_image
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
+        from .models.bit import BitImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
@@ -3939,6 +3989,7 @@ if TYPE_CHECKING:
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
+        from .models.vit_hybrid import ViTHybridImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
 
     # Modeling
@@ -4170,6 +4221,19 @@ if TYPE_CHECKING:
             BigBirdPegasusForSequenceClassification,
             BigBirdPegasusModel,
             BigBirdPegasusPreTrainedModel,
+        )
+        from .models.biogpt import (
+            BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BioGptForCausalLM,
+            BioGptModel,
+            BioGptPreTrainedModel,
+        )
+        from .models.bit import (
+            BIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BitBackbone,
+            BitForImageClassification,
+            BitModel,
+            BitPreTrainedModel,
         )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5039,6 +5103,12 @@ if TYPE_CHECKING:
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
         )
+        from .models.timesformer import (
+            TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TimesformerForVideoClassification,
+            TimesformerModel,
+            TimesformerPreTrainedModel,
+        )
         from .models.trajectory_transformer import (
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TrajectoryTransformerModel,
@@ -5115,6 +5185,12 @@ if TYPE_CHECKING:
             ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
+        )
+        from .models.vit_hybrid import (
+            VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTHybridForImageClassification,
+            ViTHybridModel,
+            ViTHybridPreTrainedModel,
         )
         from .models.vit_mae import (
             VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5356,7 +5432,12 @@ if TYPE_CHECKING:
             TFAutoModelForVision2Seq,
             TFAutoModelWithLMHead,
         )
-        from .models.bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
+        from .models.bart import (
+            TFBartForConditionalGeneration,
+            TFBartForSequenceClassification,
+            TFBartModel,
+            TFBartPretrainedModel,
+        )
         from .models.bert import (
             TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBertEmbeddings,
