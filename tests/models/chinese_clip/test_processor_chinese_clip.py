@@ -30,7 +30,7 @@ from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ChineseCLIPFeatureExtractor, ChineseCLIPProcessor
+    from transformers import ChineseCLIPImageProcessor, ChineseCLIPProcessor
 
 
 @require_vision
@@ -62,7 +62,7 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-        feature_extractor_map = {
+        image_processor_map = {
             "do_resize": True,
             "size": {"height": 224, "width": 224},
             "do_center_crop": True,
@@ -72,9 +72,9 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
             "image_std": [0.26862954, 0.26130258, 0.27577711],
             "do_convert_rgb": True,
         }
-        self.feature_extractor_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extractor_file, "w", encoding="utf-8") as fp:
-            json.dump(feature_extractor_map, fp)
+        self.image_processor_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+            json.dump(image_processor_map, fp)
 
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
@@ -82,8 +82,8 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs):
         return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return ChineseCLIPFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_image_processor(self, **kwargs):
+        return ChineseCLIPImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -102,13 +102,13 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
 
-        processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, feature_extractor=feature_extractor)
+        processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
         processor_slow.save_pretrained(self.tmpdirname)
         processor_slow = ChineseCLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, feature_extractor=feature_extractor)
+        processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
         processor_fast.save_pretrained(self.tmpdirname)
         processor_fast = ChineseCLIPProcessor.from_pretrained(self.tmpdirname)
 
@@ -118,19 +118,17 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor_slow.tokenizer, BertTokenizer)
         self.assertIsInstance(processor_fast.tokenizer, BertTokenizerFast)
 
-        self.assertEqual(processor_slow.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertEqual(processor_fast.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor_slow.feature_extractor, ChineseCLIPFeatureExtractor)
-        self.assertIsInstance(processor_fast.feature_extractor, ChineseCLIPFeatureExtractor)
+        self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertIsInstance(processor_slow.image_processor, ChineseCLIPImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, ChineseCLIPImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = ChineseCLIPProcessor(
-            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
-        )
+        processor = ChineseCLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False)
+        image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
 
         processor = ChineseCLIPProcessor.from_pretrained(
             self.tmpdirname, cls_token="(CLS)", sep_token="(SEP)", do_normalize=False
@@ -139,28 +137,28 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, ChineseCLIPFeatureExtractor)
+        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.image_processor, ChineseCLIPImageProcessor)
 
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
+    def test_image_processor(self):
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = feature_extractor(image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "Alexandra，T-shirt的价格是15便士。"
 
@@ -172,10 +170,10 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_processor(self):
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "Alexandra，T-shirt的价格是15便士。"
         image_input = self.prepare_image_inputs()
@@ -189,10 +187,10 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
             processor()
 
     def test_tokenizer_decode(self):
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -202,10 +200,10 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "Alexandra，T-shirt的价格是15便士。"
         image_input = self.prepare_image_inputs()

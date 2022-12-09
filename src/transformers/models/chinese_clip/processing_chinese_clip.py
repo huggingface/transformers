@@ -15,39 +15,56 @@
 """
 Image/Text processor class for Chinese-CLIP
 """
+
+import warnings
+
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
 class ChineseCLIPProcessor(ProcessorMixin):
     r"""
-    Constructs a Chinese-CLIP processor which wraps a Chinese-CLIP feature extractor and a Chinese-CLIP tokenizer into
-    a single processor.
+    Constructs a Chinese-CLIP processor which wraps a Chinese-CLIP image processor and a Chinese-CLIP tokenizer into a
+    single processor.
 
-    [`ChineseCLIPProcessor`] offers all the functionalities of [`ChineseCLIPFeatureExtractor`] and
-    [`BertTokenizerFast`]. See the [`~ChineseCLIPProcessor.__call__`] and [`~ChineseCLIPProcessor.decode`] for more
-    information.
+    [`ChineseCLIPProcessor`] offers all the functionalities of [`ChineseCLIPImageProcessor`] and [`BertTokenizerFast`].
+    See the [`~ChineseCLIPProcessor.__call__`] and [`~ChineseCLIPProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`ChineseCLIPFeatureExtractor`]):
-            The feature extractor is a required input.
+        image_processor ([`ChineseCLIPImageProcessor`]):
+            The image processor is a required input.
         tokenizer ([`BertTokenizerFast`]):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "ChineseCLIPFeatureExtractor"
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "ChineseCLIPImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
 
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -84,7 +101,7 @@ class ChineseCLIPProcessor(ProcessorMixin):
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
 
         if images is not None:
-            image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
@@ -111,5 +128,13 @@ class ChineseCLIPProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class

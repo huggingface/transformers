@@ -24,13 +24,13 @@ import pytest
 from transformers import CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
+from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPSegProcessor, ViTFeatureExtractor
+    from transformers import CLIPSegProcessor, ViTImageProcessor
 
 
 @require_vision
@@ -52,7 +52,7 @@ class CLIPSegProcessorTest(unittest.TestCase):
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-        feature_extractor_map = {
+        image_processor_map = {
             "do_resize": True,
             "size": 20,
             "do_center_crop": True,
@@ -61,9 +61,9 @@ class CLIPSegProcessorTest(unittest.TestCase):
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
         }
-        self.feature_extractor_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extractor_file, "w", encoding="utf-8") as fp:
-            json.dump(feature_extractor_map, fp)
+        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
+        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+            json.dump(image_processor_map, fp)
 
     def get_tokenizer(self, **kwargs):
         return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
@@ -71,8 +71,8 @@ class CLIPSegProcessorTest(unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs):
         return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return ViTFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_image_processor(self, **kwargs):
+        return ViTImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -90,13 +90,13 @@ class CLIPSegProcessorTest(unittest.TestCase):
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
 
-        processor_slow = CLIPSegProcessor(tokenizer=tokenizer_slow, feature_extractor=feature_extractor)
+        processor_slow = CLIPSegProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
         processor_slow.save_pretrained(self.tmpdirname)
         processor_slow = CLIPSegProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = CLIPSegProcessor(tokenizer=tokenizer_fast, feature_extractor=feature_extractor)
+        processor_fast = CLIPSegProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
         processor_fast.save_pretrained(self.tmpdirname)
         processor_fast = CLIPSegProcessor.from_pretrained(self.tmpdirname)
 
@@ -106,17 +106,17 @@ class CLIPSegProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor_slow.tokenizer, CLIPTokenizer)
         self.assertIsInstance(processor_fast.tokenizer, CLIPTokenizerFast)
 
-        self.assertEqual(processor_slow.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertEqual(processor_fast.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor_slow.feature_extractor, ViTFeatureExtractor)
-        self.assertIsInstance(processor_fast.feature_extractor, ViTFeatureExtractor)
+        self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertIsInstance(processor_slow.image_processor, ViTImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, ViTImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CLIPSegProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = CLIPSegProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
         processor = CLIPSegProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
@@ -125,28 +125,28 @@ class CLIPSegProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, ViTFeatureExtractor)
+        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.image_processor, ViTImageProcessor)
 
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
+    def test_image_processor(self):
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPSegProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = CLIPSegProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = feature_extractor(image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPSegProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = CLIPSegProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
 
@@ -158,10 +158,10 @@ class CLIPSegProcessorTest(unittest.TestCase):
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_processor(self):
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPSegProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = CLIPSegProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -175,10 +175,10 @@ class CLIPSegProcessorTest(unittest.TestCase):
             processor()
 
     def test_tokenizer_decode(self):
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPSegProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = CLIPSegProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
