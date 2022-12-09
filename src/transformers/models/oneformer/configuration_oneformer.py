@@ -111,7 +111,7 @@ class OneFormerConfig(PretrainedConfig):
     def _setup_cfg(
         self,
         general_config: Optional[Dict] = None,
-        backbone_config: Optional[MaskFormerSwinConfig] = None,
+        backbone_config: Optional[SwinConfig] = None,
         text_encoder_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
     ) -> Dict[str, any]:
