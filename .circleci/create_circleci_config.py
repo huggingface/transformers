@@ -128,6 +128,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install tensorflow_probability",
         "pip install git+https://github.com/huggingface/accelerate",
+        "pip install jieba",
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -142,6 +143,7 @@ torch_and_flax_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install git+https://github.com/huggingface/accelerate",
+        "pip install jieba",
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -155,6 +157,7 @@ torch_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install git+https://github.com/huggingface/accelerate",
+        "pip install jieba",
     ],
     pytest_num_workers=3,
 )
@@ -167,6 +170,7 @@ tf_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
+        "pip install jieba",
     ],
     pytest_options={"rA": None},
 )
@@ -177,7 +181,9 @@ flax_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
-        "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
+        "pip install .[flax,testing,sentencepiece,flax-speech]",
+        "pip install jieba",
+        "pip install git+https://github.com/xadupre/tensorflow-onnx@foldb",
     ],
     pytest_options={"rA": None},
 )
@@ -189,6 +195,8 @@ pipelines_torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
+        "pip install jieba",
+        "pip install torch==1.12.0+cpu torchvision==0.13.0+cpu torchaudio==0.12.0 --extra-index-url https://download.pytorch.org/whl/cpu"
     ],
     pytest_options={"rA": None},
     tests_to_run="tests/pipelines/"
@@ -201,6 +209,7 @@ pipelines_tf_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece]",
         "pip install tensorflow_probability",
+        "pip install jieba",
     ],
     pytest_options={"rA": None},
     tests_to_run="tests/pipelines/"
@@ -225,6 +234,7 @@ custom_tokenizers_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
         "python -m unidic download",
+        "pip install jieba",
     ],
     parallelism=None,
     resource_class=None,
@@ -244,6 +254,7 @@ examples_torch_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -r examples/pytorch/_tests_requirements.txt",
+        "pip install jieba",
     ],
     tests_to_run="./examples/pytorch/",
 )
@@ -256,6 +267,7 @@ examples_tensorflow_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -r examples/tensorflow/_tests_requirements.txt",
+        "pip install jieba",
     ],
     tests_to_run="./examples/tensorflow/",
 )
@@ -268,6 +280,7 @@ examples_flax_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[flax,testing,sentencepiece]",
         "pip install -r examples/flax/_tests_requirements.txt",
+        "pip install jieba",
     ],
     tests_to_run="./examples/flax/",
 )
@@ -281,6 +294,7 @@ hub_job = CircleCIJob(
         'git config --global user.name "ci"',
         "pip install --upgrade pip",
         "pip install .[torch,sentencepiece,testing]",
+        "pip install jieba",
     ],
     marker="is_staging_test",
     pytest_num_workers=1,
@@ -292,6 +306,7 @@ onnx_job = CircleCIJob(
     install_steps=[
         "pip install --upgrade pip",
         "pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "pip install jieba",
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
