@@ -168,7 +168,7 @@ tf_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
-        "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
+        "pip install .[torch,sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
         "pip install jieba",
     ],
