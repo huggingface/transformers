@@ -1,0 +1,13 @@
+python utils/check_copies.py
+python utils/check_table.py
+python utils/check_dummies.py
+python utils/check_repo.py
+Checking all models are included.
+Checking all models are public.
+Checking all models are properly tested.
+Checking all objects are properly documented.
+Checking all models are in at least one auto class.
+python utils/check_inits.py
+python utils/check_config_docstrings.py
+python utils/tests_fetcher.py --sanity_check
+python utils/update_metadata.py --check-only

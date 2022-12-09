@@ -261,6 +261,7 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
     submodule_search_locations=[PATH_TO_TRANSFORMERS],
 )
+
 transformers = spec.loader.load_module()
 
 

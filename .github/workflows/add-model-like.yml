@@ -35,7 +35,7 @@ jobs:
           python -m venv ~/venv && . ~/venv/bin/activate
           pip install --upgrade pip!=21.3
           pip install -e .[dev]
-
+          pip install jieba
       - name: Check transformers location
         # make `transformers` available as package (required since we use `-e` flag) and check it's indeed from the repo.
         run: |
