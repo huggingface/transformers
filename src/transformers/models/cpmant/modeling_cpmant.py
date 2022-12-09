@@ -417,7 +417,7 @@ class CPMAntAttention(nn.Module):
         # (b, n_h, len_q, d_h) @ (b, n_h, d_h, len_k) -> (b, n_h, len_q, len_k)
         score = torch.matmul(h_q, h_k.transpose(-1, -2)) / math.sqrt(self.dim_head)
         score = score + position_bias
-        
+
         score = torch.masked_fill(
             score,
             torch.all(attention_mask.view(batch_size, 1, len_q, len_k), False),
