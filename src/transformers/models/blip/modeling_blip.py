@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch BLIP model."""
-
+import math
 
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
@@ -196,7 +196,7 @@ class BlipVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        embeddings = embeddings + self.position_embedding[:, :embeddings.size(1), :]
         return embeddings
 
 
@@ -246,7 +246,7 @@ class BlipAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.dropout = nn.Dropout(config.attention_dropout)
 
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim)
         
@@ -254,84 +254,64 @@ class BlipAttention(nn.Module):
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    
+    def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
+        storage as `fused_qkv`
+
+        Args:
+            fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
+
+        Returns:
+            query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
+            value: [batch_size, seq_length, num_heads, head_dim]
+        """
+        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
+        return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        mixed_qkv = self.qkv(hidden_states)
+        # query_states, key_states, value_states = self._split_heads(mixed_qkv)
+        qkv = self.qkv(hidden_states).reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads).permute(2, 0, 3, 1, 4)
+        query_states, key_states, value_states = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        attention_scores = attention_scores * self.scale
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
 
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
+        new_context_layer_shape = context_layer.size()[:-2] + (self.embed_dim,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        output = self.proj(context_layer)
 
-        attn_output = torch.bmm(attn_probs, value_states)
+        outputs = (output, attention_probs) if output_attentions else (output, None)
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
+        return outputs
 
 
 class BlipMLP(nn.Module):
@@ -362,7 +342,6 @@ class BlipEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
@@ -380,16 +359,15 @@ class BlipEncoderLayer(nn.Module):
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
+            head_mask=attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = residual + hidden_states
-
+        hidden_states = hidden_states + residual
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+
+        hidden_states = hidden_states + residual
 
         outputs = (hidden_states,)
 
@@ -643,7 +621,6 @@ class BlipEncoder(nn.Module):
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    causal_attention_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -844,7 +821,6 @@ class BlipVisionTransformer(nn.Module):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -854,6 +830,8 @@ class BlipVisionTransformer(nn.Module):
         )
 
         last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+        
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
@@ -1261,6 +1239,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1295,9 +1274,17 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = vision_outputs[1]  # pooled_output
+        image_embeds = vision_outputs[1] 
 
-        image_embeds = self.visual_projection(pooled_output)
+        if input_ids is not None:
+            # Case 1: image captioning
+            decoder_targets = input_ids.masked_fill(input_ids == self.tokenizer.pad_token_id, -100) 
+
+            outputs = self.text_decoder(
+                input_ids,
+                encoder_hidden_states=image_embeds,
+                labels=decoder_targets,
+            )
 
         if not return_dict:
             outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]

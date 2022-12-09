@@ -55,9 +55,9 @@ class BlipTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 77):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*,
             defaults to 1e-5): The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -94,7 +94,7 @@ class BlipTextConfig(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=8,
         max_position_embeddings=512,
-        hidden_act="quick_gelu",
+        hidden_act="gelu",
         layer_norm_eps=0.00001,
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -171,9 +171,9 @@ class BlipVisionConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*,
             defaults to 1e-5): The epsilon used by the layer normalization layers.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
@@ -212,7 +212,7 @@ class BlipVisionConfig(PretrainedConfig):
         num_channels=3,
         image_size=384,
         patch_size=16,
-        hidden_act="quick_gelu",
+        hidden_act="gelu",
         layer_norm_eps=0.00001,
         dropout=0.0,
         attention_dropout=0.0,
