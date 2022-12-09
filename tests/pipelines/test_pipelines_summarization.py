@@ -17,8 +17,8 @@ import unittest
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TFPreTrainedModel,
     SummarizationPipeline,
+    TFPreTrainedModel,
     pipeline,
 )
 from transformers.testing_utils import get_gpu_count, require_tf, require_torch, slow, torch_device
