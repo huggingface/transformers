@@ -2288,7 +2288,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Check if `_keep_in_fp32_modules` is not None
             # but not force users to have `accelerate`
-            if cls._keep_in_fp32_modules is not None:
+            keep_in_fp32_modules = cls._keep_in_fp32_modules
+            if keep_in_fp32_modules is not None:
                 if not is_accelerate_available() and torch_dtype == torch.float16:
                     use_keep_in_fp32_modules = False
                     logger.warning(
@@ -2323,9 +2324,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
-
-        if use_keep_in_fp32_modules:
-            keep_in_fp32_modules = model._keep_in_fp32_modules
 
         if load_in_8bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
