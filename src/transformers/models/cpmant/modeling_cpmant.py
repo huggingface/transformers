@@ -417,29 +417,17 @@ class CPMAntAttention(nn.Module):
         # (b, n_h, len_q, d_h) @ (b, n_h, d_h, len_k) -> (b, n_h, len_q, len_k)
         score = torch.matmul(h_q, h_k.transpose(-1, -2)) / math.sqrt(self.dim_head)
         score = score + position_bias
-
-        # att_mask = attention_mask.view(batch_size, 1, len_q, len_k)
-        # if att_mask == False:
-        #     att_mask = True
-        # else:
-        #     att_mask = False
-
+        
         score = torch.masked_fill(
             score,
-            attention_mask.view(batch_size, 1, len_q, len_k) == False,
+            torch.all(attention_mask.view(batch_size, 1, len_q, len_k), False),
             torch.scalar_tensor(float("-inf"), device=score.device, dtype=score.dtype),
         )
         score = self.softmax(score)
 
-        # att_mask = attention_mask.view(batch_size, 1, len_q, len_k)
-        # if att_mask == False:
-        #     att_mask = True
-        # else:
-        #     att_mask = False
-
         score = torch.masked_fill(
             score,
-            attention_mask.view(batch_size, 1, len_q, len_k) == False,
+            torch.all(attention_mask.view(batch_size, 1, len_q, len_k), False),
             torch.scalar_tensor(0, device=score.device, dtype=score.dtype),
         )
 
