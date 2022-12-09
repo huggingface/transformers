@@ -22,6 +22,8 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
+from ..resnet import ResNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -168,6 +170,21 @@ class DetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs
     ):
+        if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+            backbone_config = {}
+
+        if isinstance(backbone_config, dict):
+
+            if "model_type" in backbone_config:
+                backbone_config_class = CONFIG_MAPPING[backbone_config["model_type"]]
+            else:
+                logger.info(
+                    "`model_type` is not found in `backbone_config`. Use `ResNet` as the backbone configuration class."
+                )
+                backbone_config_class = ResNetConfig
+            backbone_config = backbone_config_class(**backbone_config)
+
         self.num_channels = num_channels
         self.num_queries = num_queries
         self.d_model = d_model

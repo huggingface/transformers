@@ -23,6 +23,8 @@ from typing import Dict, List, Optional, Tuple
 import torch
 from torch import Tensor, nn
 
+from transformers import AutoBackbone
+
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -320,38 +322,40 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DetrTimmConvEncoder(nn.Module):
+class DetrConvolutionalBackbone(nn.Module):
     """
-    Convolutional encoder (backbone) from the timm library.
+    Convolutional backbone. Either uses the default backbone or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
 
     """
 
-    def __init__(self, name: str, dilation: bool, use_pretrained_backbone: bool, num_channels: int = 3):
+    def __init__(self, config):
         super().__init__()
 
-        kwargs = {}
-        if dilation:
-            kwargs["output_stride"] = 16
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(1, 2, 3, 4),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = AutoBackbone.from_config(config.backbone_config)
 
-        requires_backends(self, ["timm"])
-
-        backbone = create_model(
-            name,
-            pretrained=use_pretrained_backbone,
-            features_only=True,
-            out_indices=(1, 2, 3, 4),
-            in_chans=num_channels,
-            **kwargs,
-        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
         self.intermediate_channel_sizes = self.model.feature_info.channels()
 
-        if "resnet" in name:
+        if "resnet" in config.backbone:
             for name, parameter in self.model.named_parameters():
                 if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                     parameter.requires_grad_(False)
@@ -1191,9 +1195,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrTimmConvEncoder(
-            config.backbone, config.dilation, config.use_pretrained_backbone, config.num_channels
-        )
+        backbone = DetrConvolutionalBackbone(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
