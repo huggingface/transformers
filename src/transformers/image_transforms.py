@@ -31,7 +31,7 @@ from transformers.utils.import_utils import (
     is_tf_available,
     is_torch_available,
     is_vision_available,
-    vision_required,
+    requires_backends,
 )
 
 
@@ -117,7 +117,6 @@ def rescale(
     return rescaled_image
 
 
-@vision_required
 def to_pil_image(
     image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
@@ -136,6 +135,8 @@ def to_pil_image(
     Returns:
         `PIL.Image.Image`: The converted image.
     """
+    requires_backends(to_pil_image, ["vision"])
+
     if isinstance(image, PIL.Image.Image):
         return image
 
@@ -226,7 +227,6 @@ def get_resize_output_image_size(
     return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
-@vision_required
 def resize(
     image,
     size: Tuple[int, int],
@@ -257,6 +257,8 @@ def resize(
     Returns:
         `np.ndarray`: The resized image.
     """
+    requires_backends(resize, ["vision"])
+
     resample = resample if resample is not None else PILImageResampling.BILINEAR
 
     if not len(size) == 2:
@@ -288,7 +290,6 @@ def resize(
     return resized_image
 
 
-@vision_required
 def normalize(
     image: np.ndarray,
     mean: Union[float, Iterable[float]],
@@ -310,6 +311,8 @@ def normalize(
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If unset, will use the inferred format from the input.
     """
+    requires_backends(normalize, ["vision"])
+
     if isinstance(image, PIL.Image.Image):
         warnings.warn(
             "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
@@ -350,7 +353,6 @@ def normalize(
     return image
 
 
-@vision_required
 def center_crop(
     image: np.ndarray,
     size: Tuple[int, int],
@@ -380,6 +382,8 @@ def center_crop(
     Returns:
         `np.ndarray`: The cropped image.
     """
+    requires_backends(center_crop, ["vision"])
+
     if isinstance(image, PIL.Image.Image):
         warnings.warn(
             "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
