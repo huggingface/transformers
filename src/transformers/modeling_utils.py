@@ -2289,10 +2289,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Check if `_keep_in_fp32_modules` is not None
             # but not force users to have `accelerate`
             if cls._keep_in_fp32_modules is not None:
-                if not is_accelerate_available() or torch_dtype == torch.bfloat16:
+                if not is_accelerate_available() and torch_dtype == torch.float16:
                     use_keep_in_fp32_modules = False
                     logger.warning(
-                        " `_keep_in_fp32_modules` is not set to `None` and you don't have `accelerate` installed",
+                        " `_keep_in_fp32_modules` is not set to `None` and you don't have `accelerate` installed"
                         " it is recommended to have `accelerate` installed in this case `pip install accelerate`.",
                     )
                 else:
@@ -2571,8 +2571,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 # upcast in fp32 if any
                 target_dtype = dtype
-                if keep_in_fp32_modules is not None and any(
-                    module_to_keep_in_fp32 in key for module_to_keep_in_fp32 in keep_in_fp32_modules
+                if (
+                    keep_in_fp32_modules is not None
+                    and dtype == torch.float16
+                    and any(module_to_keep_in_fp32 in key for module_to_keep_in_fp32 in keep_in_fp32_modules)
                 ):
                     target_dtype = torch.float32
 
