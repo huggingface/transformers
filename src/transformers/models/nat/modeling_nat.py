@@ -866,7 +866,7 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
         self.stage_names = config.stage_names
 
         self.embeddings = NatEmbeddings(config)
-        self.encoder = NatEncoder(config, self.embeddings.patch_grid)
+        self.encoder = NatEncoder(config)
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
 

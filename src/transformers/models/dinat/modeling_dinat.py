@@ -888,7 +888,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         self.stage_names = config.stage_names
 
         self.embeddings = DinatEmbeddings(config)
-        self.encoder = DinatEncoder(config, self.embeddings.patch_grid)
+        self.encoder = DinatEncoder(config)
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
 
