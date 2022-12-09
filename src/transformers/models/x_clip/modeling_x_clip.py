@@ -1214,8 +1214,8 @@ class PromptGeneratorLayer(nn.Module):
 
         embed_dim = config.projection_dim
         self.cross_attn = XCLIPCrossAttention(config)
-        self.norm1 = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.norm3 = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.norm1 = nn.LayerNorm(embed_dim, eps=config.vision_config.layer_norm_eps)
+        self.norm3 = nn.LayerNorm(embed_dim, eps=config.vision_config.layer_norm_eps)
         self.mlp = nn.Sequential(
             nn.Linear(embed_dim, embed_dim * 4),
             ACT2FN[config.prompt_hidden_act],
@@ -1235,7 +1235,7 @@ class XCLIPPromptGenerator(nn.Module):
     def __init__(self, config):
         super().__init__()
         embed_dim = config.projection_dim
-        self.layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(embed_dim, eps=config.vision_config.layer_norm_eps)
         self.decoder = nn.ModuleList([PromptGeneratorLayer(config) for _ in range(config.prompt_layers)])
         self.alpha = nn.Parameter(torch.ones(embed_dim) * config.prompt_alpha)
 
@@ -1280,7 +1280,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
 
-        self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim, eps=config.layer_norm_eps)
+        self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim, eps=config.vision_config.layer_norm_eps)
         self.prompts_visual_projection = nn.Parameter(torch.randn(self.vision_embed_dim, self.projection_dim))
 
         mit_config = copy(vision_config)

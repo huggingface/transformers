@@ -1318,7 +1318,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.class_head = OwlViTClassPredictionHead(config)
         self.box_head = OwlViTBoxPredictionHead(config)
 
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
