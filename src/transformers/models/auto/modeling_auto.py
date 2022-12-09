@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("cpmant", "CPMAntModel"),
         ("albert", "AlbertModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
         ("bart", "BartModel"),
@@ -50,7 +51,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
-        ("cpmant", "CPMAntModel"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
@@ -246,7 +246,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertForMaskedLM"),
         ("codegen", "CodeGenForCausalLM"),
         ("convbert", "ConvBertForMaskedLM"),
-        ("cpmant", "CPMAntForMaskedLM"),
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("deberta", "DebertaForMaskedLM"),
@@ -308,6 +307,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("cpmant", "CPMAntForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
@@ -319,7 +319,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForCausalLM"),
         ("codegen", "CodeGenForCausalLM"),
-        ("cpmant", "CPMAntForCausalLM"),
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("electra", "ElectraForCausalLM"),
@@ -459,7 +458,6 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForMaskedLM"),
         ("camembert", "CamembertForMaskedLM"),
         ("convbert", "ConvBertForMaskedLM"),
-        ("cpmant", "CPMAntForMaskedLM"),
         ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("deberta", "DebertaForMaskedLM"),
         ("deberta-v2", "DebertaV2ForMaskedLM"),
@@ -570,7 +568,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertForSequenceClassification"),
         ("canine", "CanineForSequenceClassification"),
         ("convbert", "ConvBertForSequenceClassification"),
-        ("cpmant", "CPMAntForSequenceClassification"),
         ("ctrl", "CTRLForSequenceClassification"),
         ("data2vec-text", "Data2VecTextForSequenceClassification"),
         ("deberta", "DebertaForSequenceClassification"),
@@ -634,7 +631,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertForQuestionAnswering"),
         ("canine", "CanineForQuestionAnswering"),
         ("convbert", "ConvBertForQuestionAnswering"),
-        ("cpmant", "CPMAntForQuestionAnswering"),
         ("data2vec-text", "Data2VecTextForQuestionAnswering"),
         ("deberta", "DebertaForQuestionAnswering"),
         ("deberta-v2", "DebertaV2ForQuestionAnswering"),
@@ -709,7 +705,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertForTokenClassification"),
         ("canine", "CanineForTokenClassification"),
         ("convbert", "ConvBertForTokenClassification"),
-        ("cpmant", "CPMAntForTokenClassification"),
         ("data2vec-text", "Data2VecTextForTokenClassification"),
         ("deberta", "DebertaForTokenClassification"),
         ("deberta-v2", "DebertaV2ForTokenClassification"),
@@ -757,7 +752,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertForMultipleChoice"),
         ("canine", "CanineForMultipleChoice"),
         ("convbert", "ConvBertForMultipleChoice"),
-        ("cpmant", "CPMAntForMultipleChoice"),
         ("data2vec-text", "Data2VecTextForMultipleChoice"),
         ("deberta-v2", "DebertaV2ForMultipleChoice"),
         ("distilbert", "DistilBertForMultipleChoice"),
