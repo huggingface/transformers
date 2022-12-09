@@ -253,7 +253,7 @@ _import_structure = {
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
-    "models.gpt_sw3": ["GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSw3Config"],
+    "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1466,17 +1466,6 @@ else:
             "GPTNeoXJapaneseLayer",
             "GPTNeoXJapaneseModel",
             "GPTNeoXJapanesePreTrainedModel",
-        ]
-    )
-    _import_structure["models.gpt_sw3"].extend(
-        [
-            "GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTSw3DoubleHeadsModel",
-            "GPTSw3ForSequenceClassification",
-            "GPTSw3ForTokenClassification",
-            "GPTSw3LMHeadModel",
-            "GPTSw3Model",
-            "GPTSw3PreTrainedModel",
         ]
     )
     _import_structure["models.gptj"].extend(
@@ -3528,7 +3517,6 @@ if TYPE_CHECKING:
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
-    from .models.gpt_sw3 import GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSw3Config
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4556,15 +4544,6 @@ if TYPE_CHECKING:
             GPTNeoXJapaneseLayer,
             GPTNeoXJapaneseModel,
             GPTNeoXJapanesePreTrainedModel,
-        )
-        from .models.gpt_sw3 import (
-            GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTSw3DoubleHeadsModel,
-            GPTSw3ForSequenceClassification,
-            GPTSw3ForTokenClassification,
-            GPTSw3LMHeadModel,
-            GPTSw3Model,
-            GPTSw3PreTrainedModel,
         )
         from .models.gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -4,7 +4,7 @@ from os.path import isfile
 
 import torch
 
-from transformers import GPT2Config, GPTSw3Config
+from transformers import GPT2Config
 
 
 def recursive_print(name, val, spaces=0):
@@ -43,7 +43,7 @@ def fix_query_key_value_ordering(param, num_splits, num_heads, hidden_size):
     return param
 
 
-def convert_megatron_checkpoint(sd_megatron, config, gpt2=False):
+def convert_megatron_checkpoint(sd_megatron, config):
     """
     Converts a Megatron checkpoint to a HuggingFace GPT-SW3 checkpoint.
     """
@@ -63,55 +63,36 @@ def convert_megatron_checkpoint(sd_megatron, config, gpt2=False):
 
     pf = "model.language_model.encoder.layers."
     for i in range(layers):
-        if gpt2:
-            causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.uint8))
-            causal_mask = causal_mask.view(1, 1, n_positions, n_positions)
-            sd_hf[f"transformer.h.{i}.attn.bias"] = causal_mask
-            sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(-1e4, dtype=torch.bfloat16)
+        causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.uint8))
+        causal_mask = causal_mask.view(1, 1, n_positions, n_positions)
+        sd_hf[f"transformer.h.{i}.attn.bias"] = causal_mask
+        sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(-1e4, dtype=torch.bfloat16)
 
-            sd_hf[f"transformer.h.{i}.ln_1.weight"] = sd_megatron[f"{pf}{i}.input_layernorm.weight"]
-            sd_hf[f"transformer.h.{i}.ln_1.bias"] = sd_megatron[f"{pf}{i}.input_layernorm.bias"]
+        sd_hf[f"transformer.h.{i}.ln_1.weight"] = sd_megatron[f"{pf}{i}.input_layernorm.weight"]
+        sd_hf[f"transformer.h.{i}.ln_1.bias"] = sd_megatron[f"{pf}{i}.input_layernorm.bias"]
 
-            val1 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.weight"]
-            val1 = fix_query_key_value_ordering(val1, 3, heads, hidden_size_per_head)
-            sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val1.transpose(0, 1).contiguous()
+        val1 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.weight"]
+        val1 = fix_query_key_value_ordering(val1, 3, heads, hidden_size_per_head)
+        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val1.transpose(0, 1).contiguous()
 
-            val2 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.bias"]
-            val2 = fix_query_key_value_ordering(val2, 3, heads, hidden_size_per_head)
-            sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2
+        val2 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.bias"]
+        val2 = fix_query_key_value_ordering(val2, 3, heads, hidden_size_per_head)
+        sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2
 
-            sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[
-                f"{pf}{i}.self_attention.dense.weight"
-            ].transpose(0, 1)
-            sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
-            sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
-            sd_hf[f"transformer.h.{i}.ln_2.bias"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.bias"]
-            sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.weight"].transpose(
-                0, 1
-            )
-            sd_hf[f"transformer.h.{i}.mlp.c_fc.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.bias"]
-            sd_hf[f"transformer.h.{i}.mlp.c_proj.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.weight"].transpose(
-                0, 1
-            )
-            sd_hf[f"transformer.h.{i}.mlp.c_proj.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.bias"]
-        else:
-            sd_hf[f"transformer.h.{i}.ln_1.weight"] = sd_megatron[f"{pf}{i}.input_layernorm.weight"]
-            sd_hf[f"transformer.h.{i}.ln_1.bias"] = sd_megatron[f"{pf}{i}.input_layernorm.bias"]
-
-            val1 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.weight"]
-            sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val1
-
-            val2 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.bias"]
-            sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2
-
-            sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[f"{pf}{i}.self_attention.dense.weight"]
-            sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
-            sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
-            sd_hf[f"transformer.h.{i}.ln_2.bias"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.bias"]
-            sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.weight"]
-            sd_hf[f"transformer.h.{i}.mlp.c_fc.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.bias"]
-            sd_hf[f"transformer.h.{i}.mlp.c_proj.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.weight"]
-            sd_hf[f"transformer.h.{i}.mlp.c_proj.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.bias"]
+        sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[
+            f"{pf}{i}.self_attention.dense.weight"
+        ].transpose(0, 1)
+        sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
+        sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
+        sd_hf[f"transformer.h.{i}.ln_2.bias"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.bias"]
+        sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.weight"].transpose(
+            0, 1
+        )
+        sd_hf[f"transformer.h.{i}.mlp.c_fc.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.bias"]
+        sd_hf[f"transformer.h.{i}.mlp.c_proj.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.weight"].transpose(
+            0, 1
+        )
+        sd_hf[f"transformer.h.{i}.mlp.c_proj.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.bias"]
 
     # For LM head, transformers' wants the matrix to weight embeddings.
     sd_hf["lm_head.weight"] = word_embeddings
@@ -119,7 +100,7 @@ def convert_megatron_checkpoint(sd_megatron, config, gpt2=False):
     return sd_hf
 
 
-def copy_config(config_hf, config_megatron, gpt2=False):
+def copy_config(config_hf, config_megatron):
     """Copy the config from Megatron to hf."""
     config_hf.vocab_size = 64000
     config_hf.n_positions = config_megatron["encoder_seq_length"]
@@ -136,14 +117,6 @@ def copy_config(config_hf, config_megatron, gpt2=False):
     config_hf.apply_query_key_layer_scaling = config_megatron["apply_query_key_layer_scaling"]  # True
     config_hf.normalize_attention_scores = True
     config_hf.use_cache = True
-
-    if gpt2:
-        config_hf.summary_type = "cls_index"
-        config_hf.summary_use_proj = True
-        config_hf.summary_activation = None
-        config_hf.summary_proj_to_labels = True
-        config_hf.summary_first_dropout = 0.1
-        config_hf.scale_attn_weights = True
 
     # This identifies the 6.7B (7B) model which uses a different tokenizer
     if config_megatron["hidden_size"] == 4096:
@@ -171,18 +144,15 @@ def main(args):
 
     # Load the config.
     config_megatron = checkpoint["hyper_parameters"]["cfg"]
-    if args.gpt2:
-        config_hf = GPT2Config()
-    else:
-        config_hf = GPTSw3Config()
-    config_hf = copy_config(config_hf=config_hf, config_megatron=config_megatron, gpt2=args.gpt2)
-    config_hf.architectures = ["GPTSw3LMHeadModel"]
+    config_hf = GPT2Config()
+    config_hf = copy_config(config_hf=config_hf, config_megatron=config_megatron)
+    config_hf.architectures = ["GPT2LMHeadModel"]
 
     sd_megatron = checkpoint["state_dict"]
 
     # Convert.
     print("Converting")
-    sd_hf = convert_megatron_checkpoint(sd_megatron, config_hf, gpt2=True)
+    sd_hf = convert_megatron_checkpoint(sd_megatron, config_hf)
 
     # Print the structure of converted state dict.
     if args.print_checkpoint_structure:
@@ -210,6 +180,5 @@ if __name__ == "__main__":
     )
     parser.add_argument("--save_path", type=str, required=True, help="e.g. /home/user/gpt-sw3/hf")
     parser.add_argument("--print-checkpoint-structure", action="store_true")
-    parser.add_argument("--gpt2", action="store_true")
     _args = parser.parse_args()
     main(_args)
