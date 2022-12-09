@@ -16,16 +16,9 @@
 
 import copy
 import os
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -36,8 +29,7 @@ BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
-class BLIPTextConfig(PretrainedConfig):
+class BlipTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BLIPModel`]. It is used to instantiate an BLIP
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -80,10 +72,10 @@ class BLIPTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BLIPTextConfig, BLIPTextModel
+    >>> from transformers import BlipTextConfig, BLIPTextModel
 
-    >>> # Initializing a BLIPTextConfig with ybelkada/blip-base style configuration
-    >>> configuration = BLIPTextConfig()
+    >>> # Initializing a BlipTextConfig with ybelkada/blip-base style configuration
+    >>> configuration = BlipTextConfig()
 
     >>> # Initializing a BLIPTextModel (with random weights) from the ybelkada/blip-base style configuration
     >>> model = BLIPTextModel(configuration)
@@ -95,31 +87,36 @@ class BLIPTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=49408,
-        hidden_size=512,
-        intermediate_size=2048,
-        projection_dim=512,
+        vocab_size=30524,
+        hidden_size=768,
+        intermediate_size=3072,
+        projection_dim=768,
         num_hidden_layers=12,
         num_attention_heads=8,
-        max_position_embeddings=77,
+        max_position_embeddings=512,
         hidden_act="quick_gelu",
         layer_norm_eps=0.00001,
-        dropout=0.0,
-        attention_dropout=0.0,
+        hidden_dropout_prob=0.0,
+        attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        type_vocab_size=3072,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        is_decoder=True,
+        add_cross_attention=True,
+        use_token_type_embed=False,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
+        self.type_vocab_size = type_vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
-        self.dropout = dropout
+        self.hidden_dropout_prob = hidden_dropout_prob
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.max_position_embeddings = max_position_embeddings
@@ -127,14 +124,17 @@ class BLIPTextConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.add_cross_attention = add_cross_attention
+        self.is_decoder = is_decoder
+        self.use_token_type_embed = use_token_type_embed
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the text config dict if we are loading from BLIPConfig
+        # get the text config dict if we are loading from BlipConfig
         if config_dict.get("model_type") == "blip":
             config_dict = config_dict["text_config"]
 
@@ -147,7 +147,7 @@ class BLIPTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class BLIPVisionConfig(PretrainedConfig):
+class BlipVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BLIPModel`]. It is used to instantiate an BLIP
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -188,10 +188,10 @@ class BLIPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BLIPVisionConfig, BLIPVisionModel
+    >>> from transformers import BlipVisionConfig, BLIPVisionModel
 
-    >>> # Initializing a BLIPVisionConfig with ybelkada/blip-base style configuration
-    >>> configuration = BLIPVisionConfig()
+    >>> # Initializing a BlipVisionConfig with ybelkada/blip-base style configuration
+    >>> configuration = BlipVisionConfig()
 
     >>> # Initializing a BLIPVisionModel (with random weights) from the ybelkada/blip-base style configuration
     >>> model = BLIPVisionModel(configuration)
@@ -210,8 +210,8 @@ class BLIPVisionConfig(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=12,
         num_channels=3,
-        image_size=224,
-        patch_size=32,
+        image_size=384,
+        patch_size=16,
         hidden_act="quick_gelu",
         layer_norm_eps=0.00001,
         dropout=0.0,
@@ -242,7 +242,7 @@ class BLIPVisionConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from BLIPConfig
+        # get the vision config dict if we are loading from BlipConfig
         if config_dict.get("model_type") == "blip":
             config_dict = config_dict["vision_config"]
 
@@ -255,9 +255,9 @@ class BLIPVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class BLIPConfig(PretrainedConfig):
+class BlipConfig(PretrainedConfig):
     r"""
-    [`BLIPConfig`] is the configuration class to store the configuration of a [`BLIPModel`]. It is used to instantiate
+    [`BlipConfig`] is the configuration class to store the configuration of a [`BLIPModel`]. It is used to instantiate
     BLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the BLIP
     [ybelkada/blip-base](https://huggingface.co/ybelkada/blip-base) architecture.
@@ -267,9 +267,9 @@ class BLIPConfig(PretrainedConfig):
 
     Args:
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`BLIPTextConfig`].
+            Dictionary of configuration options used to initialize [`BlipTextConfig`].
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`BLIPVisionConfig`].
+            Dictionary of configuration options used to initialize [`BlipVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
@@ -280,10 +280,10 @@ class BLIPConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BLIPConfig, BLIPModel
+    >>> from transformers import BlipConfig, BLIPModel
 
-    >>> # Initializing a BLIPConfig with ybelkada/blip-base style configuration
-    >>> configuration = BLIPConfig()
+    >>> # Initializing a BlipConfig with ybelkada/blip-base style configuration
+    >>> configuration = BlipConfig()
 
     >>> # Initializing a BLIPModel (with random weights) from the ybelkada/blip-base style configuration
     >>> model = BLIPModel(configuration)
@@ -291,13 +291,13 @@ class BLIPConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a BLIPConfig from a BLIPTextConfig and a BLIPVisionConfig
+    >>> # We can also initialize a BlipConfig from a BlipTextConfig and a BlipVisionConfig
 
     >>> # Initializing a BLIPText and BLIPVision configuration
-    >>> config_text = BLIPTextConfig()
-    >>> config_vision = BLIPVisionConfig()
+    >>> config_text = BlipTextConfig()
+    >>> config_vision = BlipVisionConfig()
 
-    >>> config = BLIPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = BlipConfig.from_text_vision_configs(config_text, config_vision)
     ```"""
 
     model_type = "blip"
@@ -318,27 +318,27 @@ class BLIPConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the BLIPTextConfig with default values.")
+            logger.info("text_config is None. Initializing the BlipTextConfig with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the BLIPVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the BlipVisionConfig with default values.")
 
-        self.text_config = BLIPTextConfig(**text_config)
-        self.vision_config = BLIPVisionConfig(**vision_config)
+        self.text_config = BlipTextConfig(**text_config)
+        self.vision_config = BlipVisionConfig(**vision_config)
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: BLIPTextConfig, vision_config: BLIPVisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs):
         r"""
-        Instantiate a [`BLIPConfig`] (or a derived class) from blip text model configuration and blip vision model
+        Instantiate a [`BlipConfig`] (or a derived class) from blip text model configuration and blip vision model
         configuration.
 
         Returns:
-            [`BLIPConfig`]: An instance of a configuration object
+            [`BlipConfig`]: An instance of a configuration object
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
@@ -355,50 +355,3 @@ class BLIPConfig(PretrainedConfig):
         output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
-
-
-class BLIPOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
-    ) -> Mapping[str, Any]:
-
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.feature_extractor, batch_size=batch_size, framework=framework
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14

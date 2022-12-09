@@ -168,6 +168,12 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
+    "models.blip": [
+        "BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BlipConfig",
+        "BlipTextConfig",
+        "BlipVisionConfig",
+    ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
     "models.byt5": ["ByT5Tokenizer"],
@@ -187,14 +193,6 @@ _import_structure = {
         "CLIPTextConfig",
         "CLIPTokenizer",
         "CLIPVisionConfig",
-    ],
-    "models.blip": [
-        "BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BLIPConfig",
-       
-        "BLIPTextConfig",
-       
-        "BLIPVisionConfig",
     ],
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1094,6 +1092,14 @@ else:
             "BlenderbotSmallPreTrainedModel",
         ]
     )
+    _import_structure["models.blip"].extend(
+        [
+            "BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BlipForConditionalGeneration",
+            "BlipModel",
+            "BlipPreTrainedModel",
+        ]
+    )
     _import_structure["models.bloom"].extend(
         [
             "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1149,17 +1155,6 @@ else:
             "CLIPTextModelWithProjection",
             "CLIPVisionModel",
             "CLIPVisionModelWithProjection",
-        ]
-    )
-    _import_structure["models.blip"].extend(
-        [
-            "BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BLIPModel",
-            "BLIPPreTrainedModel",
-            "BLIPTextModel",
-            "BLIPTextModelWithProjection",
-            "BLIPVisionModel",
-            "BLIPVisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -3451,6 +3446,7 @@ if TYPE_CHECKING:
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
+    from .models.blip import BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, BlipConfig, BlipTextConfig, BlipVisionConfig
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
@@ -3469,14 +3465,6 @@ if TYPE_CHECKING:
         CLIPTextConfig,
         CLIPTokenizer,
         CLIPVisionConfig,
-    )
-    from .models.blip import (
-        BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BLIPConfig,
-       
-        BLIPTextConfig,
-       
-        BLIPVisionConfig,
     )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4257,6 +4245,12 @@ if TYPE_CHECKING:
             BlenderbotSmallModel,
             BlenderbotSmallPreTrainedModel,
         )
+        from .models.blip import (
+            BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BlipForConditionalGeneration,
+            BlipModel,
+            BlipPreTrainedModel,
+        )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
             BloomForCausalLM,
@@ -4303,15 +4297,6 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
-        )
-        from .models.blip import (
-            BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BLIPModel,
-            BLIPPreTrainedModel,
-            BLIPTextModel,
-            BLIPTextModelWithProjection,
-            BLIPVisionModel,
-            BLIPVisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,

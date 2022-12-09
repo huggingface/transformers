@@ -17,20 +17,15 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
     "configuration_blip": [
         "BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BLIPConfig",
-        "BLIPOnnxConfig",
-        "BLIPTextConfig",
-        "BLIPVisionConfig",
+        "BlipConfig",
+        "BlipTextConfig",
+        "BlipVisionConfig",
     ],
 }
 
@@ -42,22 +37,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_blip"] = [
         "BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BLIPModel",
-        "BLIPPreTrainedModel",
-        "BLIPTextModel",
-        "BLIPTextModelWithProjection",
-        "BLIPVisionModel",
-        "BLIPVisionModelWithProjection",
+        "BlipPModel",
+        "BlipPreTrainedModel",
+        "BlipForConditionalGeneration",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_blip import (
-        BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BLIPConfig,
-        BLIPOnnxConfig,
-        BLIPTextConfig,
-        BLIPVisionConfig,
-    )
+    from .configuration_blip import BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, BlipConfig, BlipTextConfig, BlipVisionConfig
 
     try:
         if not is_torch_available():
@@ -67,12 +53,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_blip import (
             BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BLIPModel,
-            BLIPPreTrainedModel,
-            BLIPTextModel,
-            BLIPTextModelWithProjection,
-            BLIPVisionModel,
-            BLIPVisionModelWithProjection,
+            BlipForConditionalGeneration,
+            BlipModel,
+            BlipPreTrainedModel,
         )
 
 else:

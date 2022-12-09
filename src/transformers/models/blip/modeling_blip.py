@@ -22,6 +22,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from transformers import BertLMHeadModel
+
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -32,7 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_blip import BLIPConfig, BLIPTextConfig, BLIPVisionConfig
+from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -43,7 +45,6 @@ BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ybelkada/blip-base",
     # See all BLIP models at https://huggingface.co/models?filter=blip
 ]
-
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -76,7 +77,7 @@ def blip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->BLIP
-class BLIPVisionModelOutput(ModelOutput):
+class BlipVisionModelOutput(ModelOutput):
     """
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
@@ -105,8 +106,7 @@ class BLIPVisionModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->BLIP
-class BLIPTextModelOutput(ModelOutput):
+class BlipTextModelOutput(ModelOutput):
     """
     Base class for text model's outputs that also contains a pooling of the last hidden states.
 
@@ -135,8 +135,7 @@ class BLIPTextModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->BLIP
-class BLIPOutput(ModelOutput):
+class BlipOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -172,9 +171,8 @@ class BLIPOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->BLIP
-class BLIPVisionEmbeddings(nn.Module):
-    def __init__(self, config: BLIPVisionConfig):
+class BlipVisionEmbeddings(nn.Module):
+    def __init__(self, config: BlipVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -203,9 +201,8 @@ class BLIPVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->BLIP
-class BLIPTextEmbeddings(nn.Module):
-    def __init__(self, config: BLIPTextConfig):
+class BlipTextEmbeddings(nn.Module):
+    def __init__(self, config: BlipTextConfig):
         super().__init__()
         embed_dim = config.hidden_size
 
@@ -235,8 +232,7 @@ class BLIPTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->BLIP
-class BLIPAttention(nn.Module):
+class BlipAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -340,7 +336,6 @@ class BLIPAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->BLIP
 class BLIPMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -356,12 +351,11 @@ class BLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->BLIP
-class BLIPEncoderLayer(nn.Module):
-    def __init__(self, config: BLIPConfig):
+class BlipEncoderLayer(nn.Module):
+    def __init__(self, config: BlipConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = BLIPAttention(config)
+        self.self_attn = BlipAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
         self.mlp = BLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
@@ -407,14 +401,13 @@ class BLIPEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->BLIP,clip->blip
-class BLIPPreTrainedModel(PreTrainedModel):
+class BlipPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = BLIPConfig
+    config_class = BlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -422,15 +415,15 @@ class BLIPPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, BLIPTextEmbeddings):
+        if isinstance(module, BlipTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, BLIPVisionEmbeddings):
+        elif isinstance(module, BlipVisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, BLIPAttention):
+        elif isinstance(module, BlipAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -446,7 +439,7 @@ class BLIPPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, BLIPModel):
+        elif isinstance(module, BlipModel):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
@@ -454,11 +447,6 @@ class BLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, BLIPVisionModelWithProjection):
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
         elif isinstance(module, BLIPTextModelWithProjection):
             nn.init.normal_(
@@ -473,7 +461,7 @@ class BLIPPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BLIPEncoder):
+        if isinstance(module, BlipEncoder):
             module.gradient_checkpointing = value
 
 
@@ -487,7 +475,7 @@ BLIP_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`BLIPConfig`]): Model configuration class with all the parameters of the model.
+        config ([`BlipConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -578,19 +566,19 @@ BLIP_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->BLIP
-class BLIPEncoder(nn.Module):
+class BlipEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`BLIPEncoderLayer`].
+    [`BlipEncoderLayer`].
 
     Args:
-        config: BLIPConfig
+        config: BlipConfig
     """
 
-    def __init__(self, config: BLIPConfig):
+    def __init__(self, config: BlipConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([BLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([BlipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -682,16 +670,16 @@ class BLIPEncoder(nn.Module):
 
 
 class BLIPTextTransformer(nn.Module):
-    def __init__(self, config: BLIPTextConfig):
+    def __init__(self, config: BlipTextConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-        self.embeddings = BLIPTextEmbeddings(config)
-        self.encoder = BLIPEncoder(config)
+        self.embeddings = BlipTextEmbeddings(config)
+        self.encoder = BlipEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BLIPTextConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BlipTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -773,12 +761,12 @@ class BLIPTextTransformer(nn.Module):
     """The text model from BLIP without any head or projection on top.""",
     BLIP_START_DOCSTRING,
 )
-class BLIPTextModel(BLIPPreTrainedModel):
-    config_class = BLIPTextConfig
+class BLIPTextModel(BlipPreTrainedModel):
+    config_class = BlipTextConfig
 
-    _no_split_modules = ["BLIPEncoderLayer"]
+    _no_split_modules = ["BlipEncoderLayer"]
 
-    def __init__(self, config: BLIPTextConfig):
+    def __init__(self, config: BlipTextConfig):
         super().__init__(config)
         self.text_model = BLIPTextTransformer(config)
         # Initialize weights and apply final processing
@@ -791,7 +779,7 @@ class BLIPTextModel(BLIPPreTrainedModel):
         self.text_model.embeddings.token_embedding = value
 
     @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BLIPTextConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BlipTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -830,19 +818,18 @@ class BLIPTextModel(BLIPPreTrainedModel):
         )
 
 
-class BLIPVisionTransformer(nn.Module):
-    def __init__(self, config: BLIPVisionConfig):
+class BlipVisionTransformer(nn.Module):
+    def __init__(self, config: BlipVisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = BLIPVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
-        self.encoder = BLIPEncoder(config)
+        self.embeddings = BlipVisionEmbeddings(config)
+        self.encoder = BlipEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BLIPVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BlipVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -892,13 +879,13 @@ class BLIPVisionTransformer(nn.Module):
     """The vision model from BLIP without any head or projection on top.""",
     BLIP_START_DOCSTRING,
 )
-class BLIPVisionModel(BLIPPreTrainedModel):
-    config_class = BLIPVisionConfig
+class BLIPVisionModel(BlipPreTrainedModel):
+    config_class = BlipVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: BLIPVisionConfig):
+    def __init__(self, config: BlipVisionConfig):
         super().__init__(config)
-        self.vision_model = BLIPVisionTransformer(config)
+        self.vision_model = BlipVisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -906,7 +893,7 @@ class BLIPVisionModel(BLIPPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BLIPVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BlipVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -947,21 +934,21 @@ class BLIPVisionModel(BLIPPreTrainedModel):
 
 
 @add_start_docstrings(BLIP_START_DOCSTRING)
-class BLIPModel(BLIPPreTrainedModel):
-    config_class = BLIPConfig
+class BlipModel(BlipPreTrainedModel):
+    config_class = BlipConfig
 
-    def __init__(self, config: BLIPConfig):
+    def __init__(self, config: BlipConfig):
         super().__init__(config)
 
-        if not isinstance(config.text_config, BLIPTextConfig):
+        if not isinstance(config.text_config, BlipTextConfig):
             raise ValueError(
-                "config.text_config is expected to be of type BLIPTextConfig but is of type"
+                "config.text_config is expected to be of type BlipTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, BLIPVisionConfig):
+        if not isinstance(config.vision_config, BlipVisionConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type BLIPVisionConfig but is of type"
+                "config.vision_config is expected to be of type BlipVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
@@ -973,7 +960,7 @@ class BLIPModel(BLIPPreTrainedModel):
         self.vision_embed_dim = vision_config.hidden_size
 
         self.text_model = BLIPTextTransformer(text_config)
-        self.vision_model = BLIPVisionTransformer(vision_config)
+        self.vision_model = BlipVisionTransformer(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -1000,9 +987,9 @@ class BLIPModel(BLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, BLIPModel
+        >>> from transformers import CLIPTokenizer, BlipModel
 
-        >>> model = BLIPModel.from_pretrained("ybelkada/blip-base")
+        >>> model = BlipModel.from_pretrained("ybelkada/blip-base")
         >>> tokenizer = CLIPTokenizer.from_pretrained("ybelkada/blip-base")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -1047,9 +1034,9 @@ class BLIPModel(BLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, BLIPModel
+        >>> from transformers import CLIPProcessor, BlipModel
 
-        >>> model = BLIPModel.from_pretrained("ybelkada/blip-base")
+        >>> model = BlipModel.from_pretrained("ybelkada/blip-base")
         >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1079,7 +1066,7 @@ class BLIPModel(BLIPPreTrainedModel):
         return image_features
 
     @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BLIPOutput, config_class=BLIPConfig)
+    @replace_return_docstrings(output_type=BlipOutput, config_class=BlipConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1090,7 +1077,7 @@ class BLIPModel(BLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BLIPOutput]:
+    ) -> Union[Tuple, BlipOutput]:
         r"""
         Returns:
 
@@ -1099,9 +1086,9 @@ class BLIPModel(BLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, BLIPModel
+        >>> from transformers import CLIPProcessor, BlipModel
 
-        >>> model = BLIPModel.from_pretrained("ybelkada/blip-base")
+        >>> model = BlipModel.from_pretrained("ybelkada/blip-base")
         >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1161,7 +1148,7 @@ class BLIPModel(BLIPPreTrainedModel):
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return BLIPOutput(
+        return BlipOutput(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
@@ -1178,12 +1165,12 @@ class BLIPModel(BLIPPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
-class BLIPTextModelWithProjection(BLIPPreTrainedModel):
-    config_class = BLIPTextConfig
+class BLIPTextModelWithProjection(BlipPreTrainedModel):
+    config_class = BlipTextConfig
 
-    _no_split_modules = ["BLIPEncoderLayer"]
+    _no_split_modules = ["BlipEncoderLayer"]
 
-    def __init__(self, config: BLIPTextConfig):
+    def __init__(self, config: BlipTextConfig):
         super().__init__(config)
 
         self.text_model = BLIPTextTransformer(config)
@@ -1200,7 +1187,7 @@ class BLIPTextModelWithProjection(BLIPPreTrainedModel):
         self.text_model.embeddings.token_embedding = value
 
     @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BLIPTextModelOutput, config_class=BLIPTextConfig)
+    @replace_return_docstrings(output_type=BlipTextModelOutput, config_class=BlipTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1209,7 +1196,7 @@ class BLIPTextModelWithProjection(BLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BLIPTextModelOutput]:
+    ) -> Union[Tuple, BlipTextModelOutput]:
         r"""
         Returns:
 
@@ -1245,7 +1232,7 @@ class BLIPTextModelWithProjection(BLIPPreTrainedModel):
             outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        return BLIPTextModelOutput(
+        return BlipTextModelOutput(
             text_embeds=text_embeds,
             last_hidden_state=text_outputs.last_hidden_state,
             hidden_states=text_outputs.hidden_states,
@@ -1259,16 +1246,16 @@ class BLIPTextModelWithProjection(BLIPPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
-class BLIPVisionModelWithProjection(BLIPPreTrainedModel):
-    config_class = BLIPVisionConfig
+class BlipForConditionalGeneration(BlipPreTrainedModel):
+    config_class = BlipVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: BLIPVisionConfig):
+    def __init__(self, config: BlipConfig):
         super().__init__(config)
 
-        self.vision_model = BLIPVisionTransformer(config)
+        self.vision_model = BlipVisionTransformer(config.vision_config)
 
-        self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+        self.text_decoder = BertLMHeadModel(config.text_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1277,14 +1264,14 @@ class BLIPVisionModelWithProjection(BLIPPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BLIPVisionModelOutput, config_class=BLIPVisionConfig)
+    @replace_return_docstrings(output_type=BlipVisionModelOutput, config_class=BlipVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BLIPVisionModelOutput]:
+    ) -> Union[Tuple, BlipVisionModelOutput]:
         r"""
         Returns:
 
@@ -1293,9 +1280,9 @@ class BLIPVisionModelWithProjection(BLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, BLIPVisionModelWithProjection
+        >>> from transformers import CLIPProcessor, BLIPForImageCaptioning
 
-        >>> model = BLIPVisionModelWithProjection.from_pretrained("ybelkada/blip-base")
+        >>> model = BLIPForImageCaptioning.from_pretrained("ybelkada/blip-base")
         >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1323,7 +1310,7 @@ class BLIPVisionModelWithProjection(BLIPPreTrainedModel):
             outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        return BLIPVisionModelOutput(
+        return BlipVisionModelOutput(
             image_embeds=image_embeds,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
