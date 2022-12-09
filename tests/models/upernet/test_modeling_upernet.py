@@ -27,6 +27,8 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
+    import torch
+
     from transformers import UperNetForSemanticSegmentation
     from transformers.models.upernet.modeling_upernet import UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -71,6 +73,7 @@ class UperNetModelTester:
         self.out_features = out_features
         self.num_labels = num_labels
         self.scope = scope
+        self.num_hidden_layers = num_stages
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -141,13 +144,39 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = UperNetModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UperNetConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    def create_and_test_config_common_properties(self):
+        return
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_for_semantic_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     @unittest.skip(reason="UperNet does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -165,21 +194,45 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+    # @unittest.skip(reason="UperNet wiht ConvNext backbone does not output attentions")
+    # def test_attention_outputs(self):
+    #     pass
+
+    # @unittest.skip(reason="UperNet wiht ConvNext backbone does not output attentions")
+    # def test_retrain_grd_hidden_states_attentions(self):
+    #     pass
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_stages = self.model_tester.num_stages
+            self.assertEqual(len(hidden_states), expected_num_stages + 1)
+
+            # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
 
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
 
-    def test_for_semantic_segmentation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     @slow
     def test_model_from_pretrained(self):

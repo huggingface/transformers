@@ -331,7 +331,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        outputs = self.backbone(
+        outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
         )
         features = outputs.feature_maps
