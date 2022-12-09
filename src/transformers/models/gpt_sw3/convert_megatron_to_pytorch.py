@@ -79,15 +79,13 @@ def convert_megatron_checkpoint(sd_megatron, config):
         val2 = fix_query_key_value_ordering(val2, 3, heads, hidden_size_per_head)
         sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2
 
-        sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[
-            f"{pf}{i}.self_attention.dense.weight"
-        ].transpose(0, 1)
+        sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[f"{pf}{i}.self_attention.dense.weight"].transpose(
+            0, 1
+        )
         sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
         sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
         sd_hf[f"transformer.h.{i}.ln_2.bias"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.bias"]
-        sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.weight"].transpose(
-            0, 1
-        )
+        sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.weight"].transpose(0, 1)
         sd_hf[f"transformer.h.{i}.mlp.c_fc.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.bias"]
         sd_hf[f"transformer.h.{i}.mlp.c_proj.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.weight"].transpose(
             0, 1
