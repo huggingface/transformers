@@ -56,15 +56,15 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
         keep_accents (`bool`, *optional*, defaults to `False`):
             Whether or not to keep accents when tokenizing.
-        bos_token (`str`, *optional*, defaults to `None`):
+        bos_token (`str`, *optional*):
             The beginning of sequence token that can be used for downstream task, was not seen during pretraining. If
             not provided, will default to '<s>' or '<|endoftext|>', depending on model size.
-        eos_token (`str`, *optional*, defaults to `None`):
+        eos_token (`str`, *optional*):
             The end of sequence token seen during pretraining. If not provided, will default to '<|endoftext|>'
-        unk_token (`str`, *optional*, defaults to `None`):
+        unk_token (`str`, *optional*):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead. If not provided, will default to '<unk>'.
-        pad_token (`str`, *optional*, defaults to `None`):
+        pad_token (`str`, *optional*):
             The token used for padding, for example when batching sequences of different lengths. If not provided, will
             default to '<pad>' or '<unk>' depending on model size.
         sp_model_kwargs (`dict`, *optional*):
