@@ -22,7 +22,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers import BertLMHeadModel
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -35,6 +34,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
+from .modeling_blip_text import BlipTextLMHeadModel
 
 
 logger = logging.get_logger(__name__)
@@ -831,7 +831,7 @@ class BlipVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
-        
+
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
@@ -1226,7 +1226,9 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         self.vision_model = BlipVisionTransformer(config.vision_config)
 
-        self.text_decoder = BertLMHeadModel(config.text_config)
+        self.text_decoder = BlipTextLMHeadModel(config.text_config)
+
+        self.decoder_input_ids = config.text_config.bos_token_id
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1238,10 +1240,11 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
     @replace_return_docstrings(output_type=BlipVisionModelOutput, config_class=BlipVisionConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        decoder_input_ids: Optional[int] = 0,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BlipVisionModelOutput]:
         r"""
@@ -1274,11 +1277,11 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[1] 
+        image_embeds = vision_outputs[0] 
 
         if input_ids is not None:
             # Case 1: image captioning
-            decoder_targets = input_ids.masked_fill(input_ids == self.tokenizer.pad_token_id, -100) 
+            decoder_targets = input_ids.masked_fill(input_ids == self.decoder_input_ids, -100)
 
             outputs = self.text_decoder(
                 input_ids,
@@ -1296,3 +1299,39 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
+
+    def generate(self, 
+        input_ids: torch.LongTensor, 
+        pixel_values: torch.FloatTensor, 
+        **generate_kwargs
+    ):
+        r"""
+            Overrides `generate` function to be able to use the model as a conditional generator
+
+            Args:
+                `input_ids`
+        """
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+        )
+
+        image_embeds = vision_outputs[0] 
+
+        image_atts = torch.ones(image_embeds.size()[:-1],dtype=torch.long).to(image_embeds.device)
+        model_kwargs = {"encoder_hidden_states": image_embeds, "encoder_attention_mask":image_atts}
+
+        if isinstance(input_ids, list):
+            input_ids = torch.LongTensor(input_ids)
+
+        input_ids[:, 0] = self.config.text_config.bos_token_id
+
+        outputs = self.text_decoder.generate(
+            input_ids=input_ids[:, :-1],
+            eos_token_id=self.config.text_config.sep_token_id,
+            pad_token_id=self.config.text_config.pad_token_id, 
+            **generate_kwargs,                                          
+            **model_kwargs,
+        )
+
+        return outputs
+

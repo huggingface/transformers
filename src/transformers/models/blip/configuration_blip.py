@@ -95,21 +95,23 @@ class BlipTextConfig(PretrainedConfig):
         num_attention_heads=8,
         max_position_embeddings=512,
         hidden_act="gelu",
-        layer_norm_eps=0.00001,
+        layer_norm_eps=1e-12,
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         type_vocab_size=3072,
-        pad_token_id=1,
-        bos_token_id=0,
+        pad_token_id=0,
+        bos_token_id=30522,
         eos_token_id=2,
         is_decoder=True,
         add_cross_attention=True,
         use_token_type_embed=False,
+        sep_token_id=102,
+        use_cache=True,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, sep_token_id=sep_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
@@ -128,6 +130,7 @@ class BlipTextConfig(PretrainedConfig):
         self.add_cross_attention = add_cross_attention
         self.is_decoder = is_decoder
         self.use_token_type_embed = use_token_type_embed
+        self.use_cache = use_cache
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
