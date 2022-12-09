@@ -13,15 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch BLIP model."""
-import math
-
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -196,7 +193,7 @@ class BlipVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding[:, :embeddings.size(1), :]
+        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :]
         return embeddings
 
 
@@ -249,12 +246,12 @@ class BlipAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_dropout)
 
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim)
-        
+
         self.proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-    
+
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
@@ -283,8 +280,16 @@ class BlipAttention(nn.Module):
 
         mixed_qkv = self.qkv(hidden_states)
         # query_states, key_states, value_states = self._split_heads(mixed_qkv)
-        qkv = self.qkv(hidden_states).reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads).permute(2, 0, 3, 1, 4)
-        query_states, key_states, value_states = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
+        mixed_qkv = (
+            self.qkv(hidden_states)
+            .reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
+        query_states, key_states, value_states = (
+            mixed_qkv[0],
+            mixed_qkv[1],
+            mixed_qkv[2],
+        )  # make torchscript happy (cannot use tensor as tuple)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
@@ -401,7 +406,6 @@ class BlipPreTrainedModel(PreTrainedModel):
         elif isinstance(module, BlipAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
             nn.init.normal_(module.qkv.weight, std=in_proj_std)
         elif isinstance(module, BlipMLP):
             factor = self.config.initializer_factor
@@ -1277,7 +1281,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[0] 
+        image_embeds = vision_outputs[0]
 
         if input_ids is not None:
             # Case 1: image captioning
@@ -1300,25 +1304,21 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             attentions=vision_outputs.attentions,
         )
 
-    def generate(self, 
-        input_ids: torch.LongTensor, 
-        pixel_values: torch.FloatTensor, 
-        **generate_kwargs
-    ):
+    def generate(self, input_ids: torch.LongTensor, pixel_values: torch.FloatTensor, **generate_kwargs):
         r"""
-            Overrides `generate` function to be able to use the model as a conditional generator
+        Overrides `generate` function to be able to use the model as a conditional generator
 
-            Args:
-                `input_ids`
+        Args:
+            `input_ids`
         """
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
         )
 
-        image_embeds = vision_outputs[0] 
+        image_embeds = vision_outputs[0]
 
-        image_atts = torch.ones(image_embeds.size()[:-1],dtype=torch.long).to(image_embeds.device)
-        model_kwargs = {"encoder_hidden_states": image_embeds, "encoder_attention_mask":image_atts}
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
+        model_kwargs = {"encoder_hidden_states": image_embeds, "encoder_attention_mask": image_atts}
 
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
@@ -1328,10 +1328,9 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         outputs = self.text_decoder.generate(
             input_ids=input_ids[:, :-1],
             eos_token_id=self.config.text_config.sep_token_id,
-            pad_token_id=self.config.text_config.pad_token_id, 
-            **generate_kwargs,                                          
+            pad_token_id=self.config.text_config.pad_token_id,
+            **generate_kwargs,
             **model_kwargs,
         )
 
         return outputs
-

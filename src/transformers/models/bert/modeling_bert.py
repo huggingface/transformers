@@ -185,9 +185,7 @@ class BertEmbeddings(nn.Module):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = (
-            nn.Embedding(config.type_vocab_size, config.hidden_size) if config.use_token_type_embed else None
-        )
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -231,13 +229,9 @@ class BertEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        if self.token_type_embeddings is not None:
-            token_type_embeddings = self.token_type_embeddings(token_type_ids)
-            embeddings = inputs_embeds + token_type_embeddings
-        else:
-            embeddings = inputs_embeds
-
+        embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
