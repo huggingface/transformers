@@ -21,7 +21,7 @@ import numpy as np
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import rescale, to_channel_dimension_format
+from ...image_transforms import get_image_size, pad, rescale, to_channel_dimension_format
 from ...image_utils import ChannelDimension, ImageInput, is_batched, to_numpy_array, valid_images
 from ...utils import logging
 
@@ -97,20 +97,13 @@ class Swin2SRImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
 
         Returns:
-            `np.ndarray`: The rescaled image.
+            `np.ndarray`: The padded image.
         """
-        image = to_channel_dimension_format(image, ChannelDimension.LAST)
-        old_height, old_width = image.shape[0], image.shape[1]
-
+        old_height, old_width = get_image_size(image)
         pad_height = (old_height // size + 1) * size - old_height
         pad_width = (old_width // size + 1) * size - old_width
-        image = np.concatenate([image, np.flip(image, [0])], 0)[: old_height + pad_height, :, :]
-        image = np.concatenate([image, np.flip(image, [1])], 1)[:, : old_width + pad_width, :]
 
-        if data_format is not None:
-            image = to_channel_dimension_format(image, data_format)
-
-        return image
+        return pad(image, ((0, pad_height), (0, pad_width)), mode="symmetric", data_format=data_format)
 
     def preprocess(
         self,
