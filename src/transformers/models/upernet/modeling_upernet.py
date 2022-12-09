@@ -23,7 +23,7 @@ from torch.nn import CrossEntropyLoss
 from transformers import AutoBackbone
 
 from ...modeling_outputs import SemanticSegmenterOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import BackboneMixin, PreTrainedModel
 from .configuration_upernet import UperNetConfig
 
 
@@ -279,11 +279,11 @@ class UperNetPreTrainedModel(PreTrainedModel):
     # TODO look into weights initialization
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, AutoBackbone):
-            module._init_weights
+        if isinstance(module, BackboneMixin):
+            module.init_weights()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, AutoBackbone):
+        if isinstance(module, BackboneMixin):
             module.gradient_checkpointing = value
 
 

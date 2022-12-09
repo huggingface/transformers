@@ -194,14 +194,6 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    # @unittest.skip(reason="UperNet wiht ConvNext backbone does not output attentions")
-    # def test_attention_outputs(self):
-    #     pass
-
-    # @unittest.skip(reason="UperNet wiht ConvNext backbone does not output attentions")
-    # def test_retrain_grd_hidden_states_attentions(self):
-    #     pass
-
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
