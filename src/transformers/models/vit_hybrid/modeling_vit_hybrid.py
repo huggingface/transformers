@@ -386,6 +386,7 @@ class ViTHybridLayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
+        # We assign to correct device for `accelerate`, check: https://github.com/huggingface/transformers/pull/20705/
         hidden_states = attention_output + hidden_states.to(attention_output.device)
 
         # in ViTHybrid, layernorm is also applied after self-attention
