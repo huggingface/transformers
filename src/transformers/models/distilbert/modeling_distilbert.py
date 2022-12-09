@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """
  PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
  part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
@@ -109,7 +110,6 @@ class Embeddings(nn.Module):
         """
         Parameters:
             input_ids: torch.tensor(bs, max_seq_length) The token ids to embed.
-
         Returns: torch.tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type
         embeddings)
         """
@@ -141,7 +141,10 @@ class MultiHeadSelfAttention(nn.Module):
         self.dim = config.dim
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
-        assert self.dim % self.n_heads == 0
+        # Have an even number of multi heads that divide the dimensions
+        if self.dim % self.n_heads != 0:
+            # Raise value errors for even multi-head attention nodes
+            raise ValueError(f"self.n_heads: {self.n_heads} must divide self.dim: {self.dim} evenly")
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -180,7 +183,6 @@ class MultiHeadSelfAttention(nn.Module):
             key: torch.tensor(bs, seq_length, dim)
             value: torch.tensor(bs, seq_length, dim)
             mask: torch.tensor(bs, seq_length)
-
         Returns:
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
@@ -255,7 +257,9 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        assert config.dim % config.n_heads == 0
+        # Have an even number of Configure multi-heads
+        if config.dim % config.n_heads != 0:
+            raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
@@ -274,7 +278,6 @@ class TransformerBlock(nn.Module):
         Parameters:
             x: torch.tensor(bs, seq_length, dim)
             attn_mask: torch.tensor(bs, seq_length)
-
         Returns:
             sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
             torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
@@ -291,7 +294,9 @@ class TransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
-            assert type(sa_output) == tuple
+            if type(sa_output) != tuple:
+                raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
+
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
 
@@ -320,11 +325,11 @@ class Transformer(nn.Module):
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
+
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
             attn_mask: torch.tensor(bs, seq_length) Attention mask on the sequence.
-
         Returns:
             hidden_state: torch.tensor(bs, seq_length, dim) Sequence of hidden states in the last (top)
             layer all_hidden_states: Tuple[torch.tensor(bs, seq_length, dim)]
@@ -348,11 +353,14 @@ class Transformer(nn.Module):
             hidden_state = layer_outputs[-1]
 
             if output_attentions:
-                assert len(layer_outputs) == 2
+                if len(layer_outputs) != 2:
+                    raise ValueError(f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}")
+
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                assert len(layer_outputs) == 1
+                if len(layer_outputs) != 1:
+                    raise ValueError(f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}")
 
         # Add last layer
         if output_hidden_states:
@@ -394,15 +402,12 @@ class DistilBertPreTrainedModel(PreTrainedModel):
 
 
 DISTILBERT_START_DOCSTRING = r"""
-
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
-
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
     and behavior.
-
     Parameters:
         config ([`DistilBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -413,24 +418,18 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
-
             Indices can be obtained using [`DistilBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-
             [What are attention masks?](../glossary#attention-mask)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -469,7 +468,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
-
         Arguments:
             new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
@@ -605,7 +603,6 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
-
         Arguments:
             new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
@@ -709,7 +706,6 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
-
         Arguments:
             new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
@@ -810,7 +806,9 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
-        assert config.num_labels == 2
+        if config.num_labels != 2:
+            raise ValueError(f"config.num_labels should be 2, but it is {config.num_labels}")
+
         self.dropout = nn.Dropout(config.qa_dropout)
 
         # Initialize weights and apply final processing
@@ -825,7 +823,6 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
-
         Arguments:
             new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
@@ -942,7 +939,6 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
-
         Arguments:
             new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
@@ -1037,7 +1033,6 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
-
         Arguments:
             new_num_position_embeddings (`int`)
                 The number of new position embeddings. If position embeddings are learned, increasing the size will add
@@ -1068,26 +1063,19 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
-
         Returns:
-
         Examples:
-
         ```python
         >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
         >>> import torch
-
         >>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
         >>> model = DistilBertForMultipleChoice.from_pretrained("distilbert-base-cased")
-
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> choice0 = "It is eaten with a fork and a knife."
         >>> choice1 = "It is eaten while held in the hand."
         >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
-
         >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors="pt", padding=True)
         >>> outputs = model(**{k: v.unsqueeze(0) for k, v in encoding.items()}, labels=labels)  # batch size is 1
-
         >>> # the linear classifier still needs to be trained
         >>> loss = outputs.loss
         >>> logits = outputs.logits
