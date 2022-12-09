@@ -21,8 +21,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-from .english_normalizer import EnglishTextNormalizer
-
+from .english_normalizer import EnglishTextNormalizer, BasicTextNormalizer
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -300,8 +299,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if normalizer_file is not None:
             with open(normalizer_file, encoding="utf-8") as vocab_handle:
                 self.english_spelling_normalizer = json.load(vocab_handle)
+            self.normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         else:
             self.english_spelling_normalizer = None
+            self.normalizer = BasicTextNormalizer()
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
@@ -482,11 +483,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def _normalize(self, text):
         """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
-        english text.
+        Normalize a given string using either the `EnglishTextNormalizer` or `BasicTextNormalizer` class, removing
+        casing, punctuation and text enclosed in parentheses. The `EnglishTextNormalizer` further normalizes English
+        spellings and removes diacritics.
         """
-        normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
-        return normalizer(text)
+        return self.normalizer(text)
 
     def _decode(
         self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs

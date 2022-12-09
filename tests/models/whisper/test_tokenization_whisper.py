@@ -15,6 +15,7 @@
 import unittest
 
 from transformers.models.whisper import WhisperTokenizer
+from transformers.models.whisper.english_normalizer import EnglishTextNormalizer, BasicTextNormalizer
 from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -227,3 +228,25 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         batch_encoding = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
         transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
         self.assertListEqual(batch, transcription)
+
+    def test_load_english_normalizer(self):
+        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
+        self.assertIsInstance(tokenizer.normalizer, EnglishTextNormalizer)
+
+    def test_load_multilingual_normalizer(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        self.assertIsInstance(multilingual_tokenizer.normalizer, BasicTextNormalizer)
+
+    def test_english_normalizer(self):
+        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
+        text = "How's it going? Sky is grey (British spelling)"
+        norm_text = tokenizer._normalize(text)
+        expected_text = "how is it going sky is gray"
+        self.assertEqual(norm_text, expected_text)
+
+    def test_multilingual_normalizer(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        text = "Hola güey! Ça va?"
+        norm_text = multilingual_tokenizer._normalize(text)
+        expected_text = "hola güey ça va"
+        self.assertEqual(norm_text, expected_text)
