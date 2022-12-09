@@ -446,7 +446,6 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
    >>> def tokenize_dataset(dataset):
    ...     return tokenizer(dataset["text"])
 
-
    >>> dataset = dataset.map(tokenize_dataset, batched=True)
    ```
 
