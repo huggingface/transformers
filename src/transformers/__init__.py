@@ -915,12 +915,12 @@ else:
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AltCLIPPreTrainedModel",
-            "AltRobertaModel",
-            "AltRobertaPreTrainedModel",
             "AltCLIPModel",
+            "AltCLIPPreTrainedModel",
             "AltCLIPTextModel",
             "AltCLIPVisionModel",
+            "AltRobertaModel",
+            "AltRobertaPreTrainedModel",
         ]
     )
 
@@ -4099,12 +4099,12 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AltCLIPPreTrainedModel,
-            AltRobertaModel,
-            AltRobertaPreTrainedModel,
             AltCLIPModel,
+            AltCLIPPreTrainedModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
+            AltRobertaModel,
+            AltRobertaPreTrainedModel,
         )
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
