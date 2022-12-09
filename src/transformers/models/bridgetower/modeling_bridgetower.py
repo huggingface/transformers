@@ -28,12 +28,9 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPooling,
     MaskedLMOutput,
-    ModelOutput,
     SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
 from .image_processing_bridgetower import build_model, adapt_position_encoding, swin_adapt_position_encoding
 from ...modeling_utils import PreTrainedModel
@@ -42,12 +39,10 @@ from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_bridgetower import BridgeTowerConfig
 from transformers import RobertaConfig, RobertaModel
 from transformers import BertConfig, BertModel
-from transformers.models.bert.modeling_bert import BertOutput, BertIntermediate, BertSelfOutput, BertSelfAttention, BertAttention
+from transformers.models.bert.modeling_bert import BertOutput, BertIntermediate, BertAttention
 from transformers.modeling_utils import (
     PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
+    apply_chunking_to_forward
 )
 
 logger = logging.get_logger(__name__)
@@ -63,6 +58,7 @@ _CHECKPOINT_FOR_DOC = "BridgeTower/bridgetower-base"
 
 BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "BridgeTower/bridgetower-base",
+    "BridgeTower/bridgetower-base-itm-mlm"
     # See all bridgetower models at https://huggingface.co/BridgeTower
 ]
 
@@ -821,11 +817,6 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             logits=mlm_logits
         )	
 
-        #return MaskedLMOutput(
-        #loss=masked_lm_loss,
-        #logits=mlm_logits,
-        #hidden_states=outputs.hidden_states,
-        #attentions=outputs.attentions)
 
 
 class BridgeTowerPredictionHeadTransform(nn.Module):

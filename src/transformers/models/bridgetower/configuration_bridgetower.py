@@ -61,6 +61,8 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether to freeze layer count for ViT.
         head_hidden_scale (`int`, *optional*, defaults to 2):
             Scale of hidden layers head.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         image_size (`int`, *optional*, defaults to 288):
@@ -69,6 +71,10 @@ class BridgeTowerConfig(PretrainedConfig):
             Embedding size of the input image.
         input_text_embed_size (`int`, *optional*, defaults to 768):
             Embedding size of the input text.
+        is_encoder_decoder (`bool`, *optional*, defaults to `False`):
+            Whether this is an encoder/decoder model
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
         link_tower_shared (`bool`, *optional*, defaults to `False`):
             Whether the bride/link tower layers are shared.
         link_tower_type (`str`, *optional*, defaults to `"add"`):
@@ -103,6 +109,8 @@ class BridgeTowerConfig(PretrainedConfig):
             Number of task head layers.
         test_only (`bool`, *optional*, defaults to `False`):
             Whether model is used only for test.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether embedding weights are tied with the decoder
         tokenizer (`str`, *optional*, defaults to `"roberta-base"`):
             Choice of the text tokenizer.
         unfreeze_RoBERTa_attention (`bool`, *optional*, defaults to `False`):

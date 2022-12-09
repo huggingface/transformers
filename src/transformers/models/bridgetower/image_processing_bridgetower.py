@@ -189,15 +189,16 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             overridden by the `rescale_factor` parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
+            method.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to center crop the image. Can be overridden by the `do_center_crop` parameter in the `preprocess`
+            method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
@@ -457,6 +458,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
                 created and returned.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
+                is padded with 0's and then center cropped.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -510,7 +514,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             images = [self.center_crop(image=image, size=size) for image in images]
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
-
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
