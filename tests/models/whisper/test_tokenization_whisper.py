@@ -15,7 +15,7 @@
 import unittest
 
 from transformers.models.whisper import WhisperTokenizer
-from transformers.models.whisper.english_normalizer import EnglishTextNormalizer, BasicTextNormalizer
+from transformers.models.whisper.english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
