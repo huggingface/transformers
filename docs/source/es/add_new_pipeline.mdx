@@ -14,7 +14,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 En esta guía, veremos cómo crear un pipeline personalizado y cómo compartirlo en el [Hub](hf.co/models) o añadirlo
 a la librería 🤗 Transformers.
 
-En primer lugar, debes decidir las entradas crudas que tu pipeline podrá recibir. Pueden ser cadenas, bytes crudos,
+En primer lugar, debes decidir las entradas que tu pipeline podrá recibir. Pueden ser strings, bytes,
 diccionarios o lo que te parezca que vaya a ser la entrada más apropiada.  Intenta mantener estas entradas en un
 formato que sea tan Python puro como sea posible, puesto que esto facilita la compatibilidad (incluso con otros
 lenguajes de programación por medio de JSON). Estos serán los `inputs` (entradas) del pipeline (`preprocess`).
