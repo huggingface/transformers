@@ -1,12 +1,12 @@
 import enum
-from typing import List
 import warnings
+from typing import List
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
+from ..generation.stopping_criteria import StoppingCriteriaList, StopTokenIdStoppingCriteria
 from ..utils import add_end_docstrings, is_tf_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
-from ..generation.stopping_criteria import StoppingCriteriaList, StopTokenIdStoppingCriteria
 
 
 if is_tf_available():
@@ -160,10 +160,10 @@ class TextGenerationPipeline(Pipeline):
                     )
                 stop_token_id = _stop_token_ids[0]
                 stop_token_ids.append(stop_token_id)
-            if 'stop_token_ids' not in generate_kwargs:
-                generate_kwargs['stop_token_ids'] = stop_token_ids
+            if "stop_token_ids" not in generate_kwargs:
+                generate_kwargs["stop_token_ids"] = stop_token_ids
             else:
-                generate_kwargs['stop_token_ids'].extend(stop_token_ids)
+                generate_kwargs["stop_token_ids"].extend(stop_token_ids)
 
         return preprocess_params, forward_params, postprocess_params
 

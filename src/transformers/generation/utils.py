@@ -60,9 +60,9 @@ from .logits_process import (
 from .stopping_criteria import (
     MaxLengthCriteria,
     MaxTimeCriteria,
-    StopTokenIdStoppingCriteria,
     StoppingCriteria,
     StoppingCriteriaList,
+    StopTokenIdStoppingCriteria,
     validate_stopping_criteria,
 )
 
@@ -1516,7 +1516,10 @@ class GenerationMixin:
 
         # 8. prepare stopping criteria
         stopping_criteria = self._get_stopping_criteria(
-            max_length=max_length, max_time=max_time, stop_token_ids=stop_token_ids, stopping_criteria=stopping_criteria
+            max_length=max_length,
+            max_time=max_time,
+            stop_token_ids=stop_token_ids,
+            stopping_criteria=stopping_criteria,
         )
         # 9. go into different generation modes
         if is_greedy_gen_mode:

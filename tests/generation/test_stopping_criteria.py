@@ -30,8 +30,8 @@ if is_torch_available():
         MaxLengthCriteria,
         MaxNewTokensCriteria,
         MaxTimeCriteria,
-        StopTokenIdStoppingCriteria,
         StoppingCriteriaList,
+        StopTokenIdStoppingCriteria,
         validate_stopping_criteria,
     )
 

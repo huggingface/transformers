@@ -173,7 +173,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
     def test_stop_tokens_stopping_criteria(self):
         prompt = """Hello I believe in"""
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", stop_tokens=[' fe'])
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", stop_tokens=[" fe"])
         output = text_generator(prompt)
         self.assertEqual(
             output,
@@ -181,7 +181,9 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         )
 
         prompt = """Hello I believe in"""
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", stopping_criteria=[], stop_tokens=[' fe'])
+        text_generator = pipeline(
+            "text-generation", model="hf-internal-testing/tiny-random-gpt2", stopping_criteria=[], stop_tokens=[" fe"]
+        )
         output = text_generator(prompt)
         self.assertEqual(
             output,
