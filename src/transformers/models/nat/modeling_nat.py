@@ -538,14 +538,11 @@ class NatStage(nn.Module):
             layer_outputs = layer_module(hidden_states, output_attentions)
             hidden_states = layer_outputs[0]
 
+        hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
-            height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
-            output_dimensions = (height, width, height_downsampled, width_downsampled)
-            hidden_states = self.downsample(layer_outputs[0])
-        else:
-            output_dimensions = (height, width, height, width)
+            hidden_states = self.downsample(hidden_states_before_downsampling)
 
-        stage_outputs = (hidden_states, output_dimensions)
+        stage_outputs = (hidden_states, hidden_states_before_downsampling)
 
         if output_attentions:
             stage_outputs += layer_outputs[1:]
@@ -577,6 +574,7 @@ class NatEncoder(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
+        output_hidden_states_before_downsampling: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, NatEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -593,8 +591,14 @@ class NatEncoder(nn.Module):
             layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
+            hidden_states_before_downsampling = layer_outputs[1]
 
-            if output_hidden_states:
+            if output_hidden_states and output_hidden_states_before_downsampling:
+                # rearrange b h w c -> b c h w
+                reshaped_hidden_state = hidden_states_before_downsampling.permute(0, 3, 1, 2)
+                all_hidden_states += (hidden_states_before_downsampling,)
+                all_reshaped_hidden_states += (reshaped_hidden_state,)
+            else:
                 # rearrange b h w c -> b c h w
                 reshaped_hidden_state = hidden_states.permute(0, 3, 1, 2)
                 all_hidden_states += (hidden_states,)
@@ -938,7 +942,6 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
 
         outputs = self.encoder(
             embedding_output,
-            head_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=True,
             output_hidden_states_before_downsampling=True,
