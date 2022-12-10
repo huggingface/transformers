@@ -1,4 +1,5 @@
 import enum
+from typing import List
 import warnings
 
 from ..tokenization_utils import TruncationStrategy
@@ -78,6 +79,7 @@ class Text2TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         truncation=None,
         stop_sequence=None,
+        stop_tokens: List[str] = None,
         **generate_kwargs
     ):
         preprocess_params = {}
@@ -103,6 +105,21 @@ class Text2TextGenerationPipeline(Pipeline):
                     " the stop sequence will be used as the stop sequence string in the interim."
                 )
             generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+
+        if stop_tokens is not None:
+            stop_token_ids = []
+            for stop_token in stop_tokens:
+                _stop_token_ids = self.tokenizer.encode(stop_token, add_special_tokens=False)
+                if len(_stop_token_ids) > 1:
+                    raise ValueError(
+                        f"The stop_token {stop_token} has more than one associated token id: {_stop_token_ids}."
+                    )
+                stop_token_id = _stop_token_ids[0]
+                stop_token_ids.append(stop_token_id)
+            if 'stop_token_ids' not in generate_kwargs:
+                generate_kwargs['stop_token_ids'] = stop_token_ids
+            else:
+                generate_kwargs['stop_token_ids'].extend(stop_token_ids)
 
         return preprocess_params, forward_params, postprocess_params
 
