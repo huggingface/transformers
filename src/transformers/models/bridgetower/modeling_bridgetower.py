@@ -12,19 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TODO"""
+"""PyTorch BridgeTower Model"""
 
-import os
-import pickle
-import collections.abc
-import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -32,13 +27,12 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     SequenceClassifierOutput,
 )
-from .image_processing_bridgetower import build_model, adapt_position_encoding, swin_adapt_position_encoding
+from .image_processing_bridgetower import build_model
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
+from ...pytorch_utils import is_torch_greater_or_equal_than_1_10
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig
 from transformers import RobertaConfig, RobertaModel
-from transformers import BertConfig, BertModel
 from transformers.models.bert.modeling_bert import BertOutput, BertIntermediate, BertAttention
 from transformers.modeling_utils import (
     PreTrainedModel,
@@ -84,6 +78,76 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
+BRIDGETOWER_START_DOCSTRING = r"""
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`BridgeTowerConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+BRIDGETOWER_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+            [What are token type IDs?](../glossary#token-type-ids)
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`BridgeTowerFeatureExtractor`]. See
+            [`BridgeTowerFeatureExtractor.__call__`] for details.
+
+        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
+
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
+            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+@add_start_docstrings(
+    "The bare BridgeTower Model transformer outputting raw hidden-states without any specific head on top.",
+    BRIDGETOWER_START_DOCSTRING,
+)
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -122,10 +186,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             if torch.distributed.get_rank() == 0:
                 if self.is_clip:
                     build_model(config.vit, resolution_after=resolution_after, model_type=config.model_type, stop_gradient=config.stop_gradient, vit_layernorm_shared=config.vit_layernorm_shared, vit_remove_last=config.vit_remove_last)
-                else:
-                    getattr(swin, config.vit)(
-                        pretrained=True, config=config,
-                    )
 
                 if 'roberta' in config.tokenizer:
                     RobertaModel.from_pretrained(config.tokenizer, cache_dir=f"{config.cache_dir}/{config.tokenizer}")
@@ -135,11 +195,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         if self.is_clip:
             self.vit_model = build_model(config.vit, resolution_after=resolution_after, model_type=config.model_type, stop_gradient=config.stop_gradient, vit_layernorm_shared=config.vit_layernorm_shared, vit_remove_last=config.vit_remove_last)
-        else:
-            self.vit_model = getattr(swin, config.vit)(
-                pretrained=True, config=config,
-            )
-            self.avgpool = nn.AdaptiveAvgPool1d(1)
 
         if 'roberta' in config.tokenizer:
             roberta_config = RobertaConfig.from_pretrained(config.tokenizer)
@@ -360,8 +415,31 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         image_token_type_idx: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutputWithPooling, Tuple[torch.FloatTensor]]:
+        return_dict: Optional[bool] = None
+    ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import BridgeTowerProcessor, BridgeTowerModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> # prepare image and text
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "hello world"
+        >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base")
+        >>> model = BridgeTowerModel.from_pretrained("BridgeTower/bridgetower-base")
+
+        >>> inputs = processor(image, text, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> outputs.keys()
+        dict_keys(['text_feats', 'image_feats', 'cls_feats', 'text_ids', 'text_masks'])
+        ```
+        """
         
         image_token_type_idx=1
         irtr_len=0
@@ -380,7 +458,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         image_embeds = self.vit_model.visual.forward_pre(img.type(self.vit_model.dtype))
         for block in self.vit_model.visual.transformer.resblocks[:split_index]:
             image_embeds = block(image_embeds)
-        # image_embeds = checkpoint_sequential(self.vit_model.visual.transformer.resblocks[:split_index], 2, image_embeds)
         image_embeds_ = self.vit_model.visual.forward_post(image_embeds.type(self.vit_model.dtype))
         
         # first layer
@@ -400,7 +477,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         
         x1 = self.cross_modal_text_layers[0](x, y, extend_text_masks, extend_image_masks)[0]
         y1 = self.cross_modal_image_layers[0](y, x, extend_image_masks, extend_text_masks)[0]
-        # assert batch['text_ids'].sum() * 0 == 0 
+
         link_layer_index = 0
 
         # link tower fusion
@@ -768,15 +845,18 @@ class BertLinkLayer(nn.Module):
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
-
+@add_start_docstrings(
+    """
+    BridgeTower Model with a language modeling head on top as done during pretraining.
+    """,
+    BRIDGETOWER_START_DOCSTRING,
+)
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.bridgetower = BridgeTowerModel(config)
         self.mlm_score = BridgeTowerMLMHead(config)
-        
-        #TODO: self.post_init()
 
     def get_output_embeddings(self):
         return self.mlm_score.decoder
@@ -784,6 +864,8 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.mlm_score.decoder = new_embeddings
 
+    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self,input_ids: Optional[torch.LongTensor] = None,
             attention_mask: Optional[torch.FloatTensor] = None,
             token_type_ids: Optional[torch.LongTensor] = None,
@@ -792,10 +874,37 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             head_mask: Optional[torch.FloatTensor] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
             image_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None) :
+            return_dict: Optional[bool] = None,
+    ) -> MaskedLMOutput:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
+        >>> from PIL import Image
+
+        >>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> text = "a <mask> looking out of the window"
+
+        >>> processor = BridgeTowerProcessor.from_pretrained(("BridgeTower/bridgetower-base-itm-mlm"))
+        >>> model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+
+        >>> # prepare inputs
+        >>> encoding = processor(image, text, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**encoding)
+
+        >>> results = processor.decode(outputs.logits.argmax(dim=-1).squeeze(0).tolist())
+
+        >>> print(results)
+        a cat looking out of the window.
+        ```"""
 
         outputs = self.bridgetower(
             input_ids,
@@ -870,9 +979,13 @@ class BridgeTowerITMHead(nn.Module):
 class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+
         self.bridgetower = BridgeTowerModel(config)
+
         self.itm_score = BridgeTowerITMHead(config.hidden_size * 2)
-        
+
+    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -883,11 +996,36 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> SequenceClassifierOutput:
+        r"""
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
+        >>> import requests
+        >>> from PIL import Image
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
+
+        >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+        >>> model = BridgeTowerForImageAndTextRetrieval.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+
+        >>> # forward pass
+        >>> scores = dict()
+        >>> for text in texts:
+        ...     # prepare inputs
+        ...     encoding = processor(image, text, return_tensors="pt")
+        ...     outputs = model(**encoding)
+        ...     scores[text] = outputs.logits[0, :].item()
+        ```"""
         outputs = self.bridgetower(
             input_ids,
             attention_mask=attention_mask,

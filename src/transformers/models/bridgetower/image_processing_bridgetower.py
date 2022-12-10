@@ -850,29 +850,3 @@ def build_model(name, resolution_after=224, model_type="bridgetower", stop_gradi
     model.load_state_dict(model_dict)
     return model
 
-def swin_adapt_position_encoding(model, before=384, patch_size=32, after=384,
-                            suffix='relative_position_bias_table'):
-    if after == before:
-        return model
-    grid_before = int(before/32) 
-    grid_after = int(after/32) #after // patch_size
-    before = (2*grid_before-1)
-    import math
-    after = (2*grid_after-1)
-    keys = [k for k in model if k.endswith(suffix)]
-    assert len(keys) > 0
-    for key in keys:
-        pos_embed = model[key]
-        pos_embed = pos_embed.transpose(0, 1).view(-1, before, before)
-        pos_embed = torch.nn.functional.interpolate(pos_embed.unsqueeze(0), size=(after, after), mode='bicubic')
-        pos_embed = pos_embed.squeeze(0).permute((1, 2, 0))
-        pos_embed = pos_embed.contiguous().view(-1, pos_embed.size(-1))
-        model[key] = pos_embed
-    keys = [k for k in model if k.endswith('attn_mask')]
-    for key in keys:
-        model.pop(key)
-    keys = [k for k in model if k.endswith('relative_position_index')]
-    for key in keys:
-        model.pop(key)
-        
-    return model
