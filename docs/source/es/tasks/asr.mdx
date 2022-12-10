@@ -104,7 +104,7 @@ El siguiente paso es cargar un procesador Wav2Vec2 para procesar la señal de au
 
 >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base")
 ```
-El conjunto de datos MInDS-14 tiene una tasa de muestreo de 8000kHz (puedes encontrar esta información en su [tarjeta de dataset](https://huggingface.co/datasets/PolyAI/minds14)), lo que significa que tendrás que re-muestrear el dataset a 16000kHz para poder usar el modelo Wav2Vec2 pre-entrenado:
+El dataset MInDS-14 tiene una tasa de muestreo de 8000kHz (puedes encontrar esta información en su [tarjeta de dataset](https://huggingface.co/datasets/PolyAI/minds14)), lo que significa que tendrás que re-muestrear el dataset a 16000kHz para poder usar el modelo Wav2Vec2 pre-entrenado:
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
