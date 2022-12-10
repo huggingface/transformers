@@ -66,12 +66,10 @@ def sparse_max_cuda(sparse_C, indices, A_num_block, B_num_block):
     assert sparse_C.size(3) == 32
     
     index_vals = sparse_C.max(dim = -2).values.transpose(-1, -2)
-    if not index_vals.is_contiguous():
-        index_vals = index_vals.contiguous()
+    index_vals = index_vals.contiguous()
         
     indices = indices.int()
-    if not indices.is_contiguous():
-        indices = indices.contiguous()
+    indices = indices.contiguous()
 
     max_vals, max_vals_scatter = cuda_kernel.index_max(index_vals, indices, A_num_block, B_num_block)
     max_vals_scatter = max_vals_scatter.transpose(-1, -2)[:, :, None, :]
@@ -391,7 +389,7 @@ def get_block_idxes(low_resolution_logit, num_blocks, approx_mode, initial_prior
     elif approx_mode == "sparse":
         high_resolution_mask = None
     else:
-        raise Exception()
+        raise ValueError(f"{approx_mode} is not a valid approx_model value.")
 
     return indices, high_resolution_mask
 
