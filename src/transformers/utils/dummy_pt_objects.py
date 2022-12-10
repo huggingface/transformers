@@ -234,7 +234,7 @@ class RepetitionPenaltyLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class StopIdStoppingCriteria(metaclass=DummyObject):
+class StopTokenIdStoppingCriteria(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

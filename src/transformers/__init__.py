@@ -4013,7 +4013,7 @@ if TYPE_CHECKING:
             PhrasalConstraint,
             PrefixConstrainedLogitsProcessor,
             RepetitionPenaltyLogitsProcessor,
-            StopIdStoppingCriteria,
+            StopTokenIdStoppingCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
             TemperatureLogitsWarper,

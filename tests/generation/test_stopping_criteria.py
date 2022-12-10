@@ -30,7 +30,7 @@ if is_torch_available():
         MaxLengthCriteria,
         MaxNewTokensCriteria,
         MaxTimeCriteria,
-        StopIdStoppingCriteria,
+        StopTokenIdStoppingCriteria,
         StoppingCriteriaList,
         validate_stopping_criteria,
     )
@@ -100,16 +100,16 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         criteria = MaxTimeCriteria(max_time=0.1, initial_timestamp=time.time() - 0.2)
         self.assertTrue(criteria(input_ids, scores))
 
-    def test_stop_id_criteria(self):
+    def test_stop_token_id_criteria(self):
         input_ids, scores = self._get_tensors(5, rng=random.Random(42))
 
-        criteria = StopIdStoppingCriteria(stop_id=5)
+        criteria = StopTokenIdStoppingCriteria(stop_token_id=5)
         self.assertFalse(criteria(input_ids, scores))
 
-        criteria = StopIdStoppingCriteria(stop_id=22, early_stopping=False)
+        criteria = StopTokenIdStoppingCriteria(stop_token_id=22, early_stopping=False)
         self.assertFalse(criteria(input_ids, scores))
 
-        criteria = StopIdStoppingCriteria(stop_id=22, early_stopping=True)
+        criteria = StopTokenIdStoppingCriteria(stop_token_id=22, early_stopping=True)
         self.assertTrue(criteria(input_ids, scores))
 
     def test_validate_stopping_criteria(self):
