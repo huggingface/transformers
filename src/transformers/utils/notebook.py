@@ -339,6 +339,7 @@ class NotebookProgressCallback(TrainerCallback):
             _ = metrics.pop(f"{metric_key_prefix}_runtime", None)
             _ = metrics.pop(f"{metric_key_prefix}_samples_per_second", None)
             _ = metrics.pop(f"{metric_key_prefix}_steps_per_second", None)
+            _ = metrics.pop(f"{metric_key_prefix}_jit_compilation_time", None)
             for k, v in metrics.items():
                 if k == f"{metric_key_prefix}_loss":
                     values["Validation Loss"] = v

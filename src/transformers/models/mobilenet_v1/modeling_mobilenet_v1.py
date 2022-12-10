@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "MobileNetV1Config"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV1FeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV1ImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "google/mobilenet_v1_1.0_224"
@@ -285,8 +285,8 @@ MOBILENET_V1_START_DOCSTRING = r"""
 MOBILENET_V1_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileNetV1FeatureExtractor`]. See
-            [`MobileNetV1FeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`MobileNetV1ImageProcessor`]. See
+            [`MobileNetV1ImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.

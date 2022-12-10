@@ -14,6 +14,8 @@
 # limitations under the License.
 """Feature extractor class for CLIP."""
 
+import warnings
+
 from ...utils import logging
 from .image_processing_clip import CLIPImageProcessor
 
@@ -21,4 +23,11 @@ from .image_processing_clip import CLIPImageProcessor
 logger = logging.get_logger(__name__)
 
 
-CLIPFeatureExtractor = CLIPImageProcessor
+class CLIPFeatureExtractor(CLIPImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class CLIPFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
+            " use CLIPImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)
