@@ -58,12 +58,12 @@ if TYPE_CHECKING:
         from .modeling_blip import (
             BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             BlipForConditionalGeneration,
+            BlipForImageTextRetrieval,
             BlipForVisualQuestionAnswering,
             BlipModel,
-            BlipVisionModel,
-            BlipTextModel,
-            BlipForImageTextRetrieval,
             BlipPreTrainedModel,
+            BlipTextModel,
+            BlipVisionModel,
         )
 
 else:

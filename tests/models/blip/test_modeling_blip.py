@@ -24,12 +24,7 @@ import numpy as np
 
 import requests
 from transformers import BlipConfig, BlipTextConfig, BlipVisionConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -47,12 +42,12 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
+        BlipForConditionalGeneration,
+        BlipForImageTextRetrieval,
+        BlipForVisualQuestionAnswering,
         BlipModel,
         BlipTextModel,
         BlipVisionModel,
-        BlipForConditionalGeneration,
-        BlipForVisualQuestionAnswering,
-        BlipForImageTextRetrieval,
     )
     from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -61,6 +56,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import CLIPProcessor
+
 
 class BlipVisionModelTester:
     def __init__(
@@ -283,7 +279,7 @@ class BlipTextModelTester:
             attention_dropout=self.attention_dropout,
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
-            bos_token_id=self.bos_token_id
+            bos_token_id=self.bos_token_id,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
@@ -347,7 +343,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-
 class BlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
 
@@ -393,7 +388,6 @@ class BlipModelTester:
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
             "return_loss": True,
-
         }
         return config, inputs_dict
 
@@ -520,13 +514,11 @@ class BlipModelTest(ModelTesterMixin, unittest.TestCase):
             text_config = BlipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BlipModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
 
 
 class BlipTextImageModelsModelTester:
@@ -573,14 +565,21 @@ class BlipTextImageModelsModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-
         }
         return config, inputs_dict
 
 
 @require_torch
 class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (BlipForConditionalGeneration, BlipForVisualQuestionAnswering, BlipForImageTextRetrieval,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            BlipForConditionalGeneration,
+            BlipForVisualQuestionAnswering,
+            BlipForImageTextRetrieval,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -624,11 +623,11 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-    
+
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
             return
-    
+
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.use_cache = False
@@ -731,7 +730,6 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = BlipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
 
     @slow
     def test_model_from_pretrained(self):
