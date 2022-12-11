@@ -22,19 +22,13 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        BlipTextModel,
-    )
+    from transformers import BlipTextModel
     from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
