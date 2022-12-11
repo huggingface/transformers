@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import BackboneMixin, PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -431,7 +431,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     """,
     RESNET_START_DOCSTRING,
 )
-class ResNetBackbone(ResNetPreTrainedModel):
+class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
 

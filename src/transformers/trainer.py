@@ -144,8 +144,8 @@ from .utils import (
     is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_torch_compile_available,
     is_torch_tpu_available,
-    is_torchdynamo_available,
     logging,
 )
 from .utils.generic import ContextManagers
@@ -642,9 +642,9 @@ class Trainer:
         # very last
         self._memory_tracker.stop_and_update_metrics()
 
-        # torchdynamo
-        if args.torchdynamo is not None and not is_torchdynamo_available():
-            raise RuntimeError("Using torchdynamo requires a nighly install of PyTorch.")
+        # torch.compile
+        if args.torch_compile and not is_torch_compile_available():
+            raise RuntimeError("Using torch.compile requires a nighly install of PyTorch.")
 
     def add_callback(self, callback):
         """
@@ -1321,10 +1321,9 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True, dataloader=None):
-        if self.args.torchdynamo is not None:
-            import torch._dynamo as dynamo
+        if self.args.torch_compile:
+            model = torch.compile(model, backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode)
 
-            model = dynamo.optimize(self.args.torchdynamo)(model)
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
