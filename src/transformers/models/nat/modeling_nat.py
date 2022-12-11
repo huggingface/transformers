@@ -598,7 +598,7 @@ class NatEncoder(nn.Module):
                 reshaped_hidden_state = hidden_states_before_downsampling.permute(0, 3, 1, 2)
                 all_hidden_states += (hidden_states_before_downsampling,)
                 all_reshaped_hidden_states += (reshaped_hidden_state,)
-            else:
+            elif output_hidden_states and not output_hidden_states_before_downsampling:
                 # rearrange b h w c -> b c h w
                 reshaped_hidden_state = hidden_states.permute(0, 3, 1, 2)
                 all_hidden_states += (hidden_states,)

@@ -178,11 +178,10 @@ class NatModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], 4, 4])
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
-        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -239,8 +238,12 @@ class NatModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
 
+    @unittest.skip(reason="Nat does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Nat does not use inputs_embeds
+        pass
+
+    @unittest.skip(reason="Nat does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
         pass
 
     def test_model_common_attributes(self):
@@ -297,17 +300,18 @@ class NatModelTest(ModelTesterMixin, unittest.TestCase):
             [height, width, self.model_tester.embed_dim],
         )
 
-        reshaped_hidden_states = outputs.reshaped_hidden_states
-        self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
+        if model_class.__name__ != "NatBackbone":
+            reshaped_hidden_states = outputs.reshaped_hidden_states
+            self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
-        batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-        reshaped_hidden_states = (
-            reshaped_hidden_states[0].view(batch_size, num_channels, height, width).permute(0, 2, 3, 1)
-        )
-        self.assertListEqual(
-            list(reshaped_hidden_states.shape[-3:]),
-            [height, width, self.model_tester.embed_dim],
-        )
+            batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
+            reshaped_hidden_states = (
+                reshaped_hidden_states[0].view(batch_size, num_channels, height, width).permute(0, 2, 3, 1)
+            )
+            self.assertListEqual(
+                list(reshaped_hidden_states.shape[-3:]),
+                [height, width, self.model_tester.embed_dim],
+            )
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
