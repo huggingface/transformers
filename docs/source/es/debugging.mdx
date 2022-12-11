@@ -261,7 +261,7 @@ class T5LayerFF(nn.Module):
 Puedes ver que hemos añadido 2 de estos y ahora se trackea si `inf` o `nan` para `forwarded_states` fue detectado
 en algún punto intermedio.
 
-De hecho, el detector ya informa de esto porque cada una de las calls en el ejemplo anterior es un `nn.Module`, pero
+De hecho, el detector ya informa de esto porque cada una de las llamadas en el ejemplo anterior es un `nn.Module`, pero
 digamos que si tuvieras algunos cálculos directos locales, así es como lo harías.
 
 Además, si estás instanciando el debugger en tu propio código, puedes ajustar el número de frames impresos de
