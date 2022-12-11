@@ -1098,6 +1098,10 @@ else:
             "BlipForConditionalGeneration",
             "BlipModel",
             "BlipPreTrainedModel",
+            "BlipForVisualQuestionAnswering",
+            "BlipTextModel",
+            "BlipVisionModel",
+            "BlipForImageTextRetrieval",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -4248,8 +4252,12 @@ if TYPE_CHECKING:
         from .models.blip import (
             BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             BlipForConditionalGeneration,
+            BlipForVisualQuestionAnswering,
             BlipModel,
+            BlipTextModel,
+            BlipVisionModel,
             BlipPreTrainedModel,
+            BlipForImageTextRetrieval,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,

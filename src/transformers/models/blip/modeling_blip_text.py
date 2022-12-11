@@ -67,6 +67,7 @@ class BlipTextEmbeddings(nn.Module):
             position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if inputs_embeds is None:
+            input_ids = input_ids.to(self.word_embeddings.weight.device)
             inputs_embeds = self.word_embeddings(input_ids)
 
         embeddings = inputs_embeds
@@ -181,7 +182,7 @@ class BlipTextSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BlipTextModel forward() function)
-            attention_scores = attention_scores + attention_mask
+            attention_scores = attention_scores + attention_mask.to(attention_scores.device)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -340,10 +341,7 @@ class BlipTextLayer(nn.Module):
         outputs = self_attention_outputs[1:-1]
         present_key_value = self_attention_outputs[-1]
 
-        if mode == "multimodal":
-            if encoder_hidden_states is None:
-                raise ValueError("encoder_hidden_states must be given for cross-attention layers")
-
+        if encoder_hidden_states is not None:
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -573,7 +571,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
         self.pooler = BlipTextPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -725,7 +723,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)))
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -808,8 +806,6 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
 
         self.bert = BlipTextModel(config, add_pooling_layer=False)
         self.cls = BlipTextOnlyMLMHead(config)
-
-        self.init_weights()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -900,7 +896,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
+            labels = labels[:, 1:].contiguous().to(shifted_prediction_scores.device)
             loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=0.1)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             if reduction == "none":

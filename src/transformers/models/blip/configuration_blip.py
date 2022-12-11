@@ -313,7 +313,7 @@ class BlipConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, image_text_hidden_size=256,**kwargs
     ):
         super().__init__(**kwargs)
 
@@ -339,6 +339,7 @@ class BlipConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+        self.image_text_hidden_size = image_text_hidden_size
 
     @classmethod
     def from_text_vision_configs(cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs):
