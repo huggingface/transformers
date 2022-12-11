@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -28,6 +28,16 @@ _import_structure = {
         "BlipVisionConfig",
     ],
 }
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_vilt"] = ["BlipFeatureExtractor"]
+    _import_structure["processing_vilt"] = ["BlipProcessor"]
+
 
 try:
     if not is_torch_available():
@@ -48,6 +58,15 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_blip import BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, BlipConfig, BlipTextConfig, BlipVisionConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_blip import BlipFeatureExtractor
+        from .processing_blip import BlipProcessor
 
     try:
         if not is_torch_available():
