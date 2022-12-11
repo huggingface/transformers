@@ -181,7 +181,7 @@ que ocurrió durante la primera capa, del segundo block, durante el primer batch
 elementos de input fue `6.27e+04` y el mismo para el output fue `inf`.
 
 Puedes ver aquí, que `T5DenseGatedGeluDense.forward` resultó en output activations, cuyo valor máximo absoluto fue
-alrededor de 62.7K, que está muy cerca del límite máximo de fp16 de 64K. En el siguiente frame tenemos `Dropout` que renormaliza
+alrededor de 62.7K, que está muy cerca del límite máximo de fp16 de 64K. En el siguiente frame tenemos `Dropout`, el cual renormaliza
 los weights, después de poner a cero algunos de los elementos, lo que empuja el valor máximo absoluto a más de 64K, y obtenemos un
 overflow (`inf`).
 
