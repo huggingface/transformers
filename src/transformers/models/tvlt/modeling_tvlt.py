@@ -858,7 +858,7 @@ class TVLTDecoder(nn.Module):
 
         Examples:
         ```python
-        >>> from transformers import TVLTFeatureExtractor, TVLTForPreTraining
+        >>> from transformers import TVLTProcessor, TVLTForPreTraining
         >>> import numpy as np
         >>> import torch
 
@@ -866,7 +866,7 @@ class TVLTDecoder(nn.Module):
         >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> feature_extractor = TVLTFeatureExtractor.from_pretrained("TVLT/tvlt-base")
+        >>> feature_extractor = TVLTProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TVLTForPreTraining.from_pretrained("TVLT/tvlt-base")
 
         >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
@@ -1038,7 +1038,7 @@ class TVLTForPreTraining(TVLTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import TVLTFeatureExtractor, TVLTForPreTraining
+        >>> from transformers import TVLTProcessor, TVLTForPreTraining
         >>> import numpy as np
         >>> import torch
 
@@ -1046,7 +1046,7 @@ class TVLTForPreTraining(TVLTPreTrainedModel):
         >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> feature_extractor = TVLTFeatureExtractor.from_pretrained("TVLT/tvlt-base")
+        >>> feature_extractor = TVLTProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TVLTForPreTraining.from_pretrained("TVLT/tvlt-base")
 
         >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
@@ -1214,7 +1214,7 @@ class TVLTForVisionAndAudioRetrieval(TVLTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import TVLTFeatureExtractor, TVLTForVisionAndAudioRetrieval
+        >>> from transformers import TVLTProcessor, TVLTForVisionAndAudioRetrieval
         >>> import numpy as np
         >>> import torch
 
@@ -1222,7 +1222,7 @@ class TVLTForVisionAndAudioRetrieval(TVLTPreTrainedModel):
         >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> feature_extractor = TVLTFeatureExtractor.from_pretrained("TVLT/tvlt-base")
+        >>> feature_extractor = TVLTProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TVLTForVisionAndAudioRetrieval.from_pretrained("TVLT/tvlt-base")
 
         >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
@@ -1305,7 +1305,7 @@ class TVLTForSequenceClassification(TVLTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import TVLTFeatureExtractor, TVLTForSequenceClassification
+        >>> from transformers import TVLTProcessor, TVLTForSequenceClassification
         >>> import numpy as np
         >>> import torch
 
@@ -1313,7 +1313,7 @@ class TVLTForSequenceClassification(TVLTPreTrainedModel):
         >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> feature_extractor = TVLTFeatureExtractor.from_pretrained("TVLT/tvlt-base")
+        >>> feature_extractor = TVLTProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TVLTForSequenceClassification.from_pretrained("TVLT/tvlt-base")
 
         >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
