@@ -445,7 +445,23 @@ def is_torch_tpu_available(check_device=True):
 
 
 def is_torchdynamo_available():
-    return importlib.util.find_spec("torchdynamo") is not None
+    if not is_torch_available():
+        return False
+    try:
+        import torch._dynamo as dynamo  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+def is_torch_compile_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    return hasattr(torch, "compile")
 
 
 def is_torch_tensorrt_fx_available():
@@ -570,6 +586,10 @@ def is_spacy_available():
 
 def is_tensorflow_text_available():
     return importlib.util.find_spec("tensorflow_text") is not None
+
+
+def is_keras_nlp_available():
+    return importlib.util.find_spec("keras_nlp") is not None
 
 
 def is_in_notebook():
@@ -993,7 +1013,7 @@ class DummyObject(type):
     """
 
     def __getattribute__(cls, key):
-        if key.startswith("_"):
+        if key.startswith("_") and key != "_from_config":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
 

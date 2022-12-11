@@ -981,9 +981,9 @@ class GenerationMixin:
 
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
-        # `kwargs` if often used to handle optional forward pass inputs like `attention_mask`. If
-        # `prepare_inputs_for_generation` doesn't accept `kwargs`, then a stricter check can be made ;)
-        if "kwargs" in model_args:
+        # `kwargs`/`model_kwargs` is often used to handle optional forward pass inputs like `attention_mask`. If
+        # `prepare_inputs_for_generation` doesn't accept them, then a stricter check can be made ;)
+        if "kwargs" in model_args or "model_kwargs" in model_args:
             model_args |= set(inspect.signature(self.forward).parameters)
         for key, value in model_kwargs.items():
             if value is not None and key not in model_args:
