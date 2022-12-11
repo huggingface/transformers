@@ -46,6 +46,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.max_across_indices
 def max_across_indices(values: Iterable[Any]) -> List[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
@@ -53,6 +54,7 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.pad
 def pad(
     image: np.ndarray,
     output_size: Tuple[int, int],
@@ -93,6 +95,7 @@ def pad(
     return padded_image
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.make_pixel_mask
 def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -109,6 +112,7 @@ def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarr
     return mask
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.get_max_dimensions
 def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -124,6 +128,7 @@ def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
     return (max_height, max_width)
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: np.ndarray, shorter: int = 800, longer: int = 1333, size_divisor: int = 32
 ) -> Tuple[int, int]:
@@ -151,6 +156,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor with ViltImageProcessor->BlipFeatureExtractor and ViLT->Blip
 class BlipFeatureExtractor(BaseImageProcessor):
     r"""
     Constructs a ViLT image processor.
