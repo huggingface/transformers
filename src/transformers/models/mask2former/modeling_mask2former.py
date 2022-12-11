@@ -3290,7 +3290,13 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         pixel_level_module_output = self.pixel_level_module(pixel_values, output_hidden_states)
 
         multi_scale_features = pixel_level_module_output.decoder_hidden_states
-
+        """
+        print("our implementation")
+        print(len(multi_scale_features))
+        for i in multi_scale_features:
+            print(i.shape)
+            print(i)
+        """
         pixel_embeddings = pixel_level_module_output.decoder_last_hidden_state
 
         # pass multi-scale features from pixel decoder to transformer module
