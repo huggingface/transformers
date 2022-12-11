@@ -311,8 +311,8 @@ class BlipTextLayer(nn.Module):
         self.seq_len_dim = 1
         self.attention = BlipTextAttention(config)
         self.layer_num = layer_num
-        if self.config.add_cross_attention:
-            self.crossattention = BlipTextAttention(config, is_cross_attention=self.config.add_cross_attention)
+        if self.config.is_decoder:
+            self.crossattention = BlipTextAttention(config, is_cross_attention=self.config.is_decoder)
         self.intermediate = BlipTextIntermediate(config)
         self.output = BlipTextOutput(config)
 
@@ -390,7 +390,7 @@ class BlipTextEncoder(nn.Module):
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = () if output_attentions and self.config.is_decoder else None
 
         next_decoder_cache = () if use_cache else None
 
@@ -557,8 +557,8 @@ class BlipTextModel(BlipTextPreTrainedModel):
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin. argument and `add_cross_attention` set to `True`;
-    an `encoder_hidden_states` is then expected as an input to the forward pass.
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin. argument and `is_decoder` set to `True`; an
+    `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
     def __init__(self, config, add_pooling_layer=True):

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BLIP model configuration"""
+""" Blip model configuration"""
 
 import copy
 import os
@@ -25,28 +25,49 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ybelkada/blip-base": "https://huggingface.co/ybelkada/blip-base/resolve/main/config.json",
+    "Salesforce/blip-vqa-base": "https://huggingface.co/Salesforce/blip-vqa-base/resolve/main/config.json",
+    "Salesforce/blip-vqa-base-capfit": (
+        "https://huggingface.co/Salesforce/blip-vqa-base-capfit/resolve/main/config.json"
+    ),
+    "Salesforce/blip-image-captioning-base": (
+        "https://huggingface.co/Salesforce/blip-image-captioning-base/resolve/main/config.json"
+    ),
+    "Salesforce/blip-image-captioning-large": (
+        "https://huggingface.co/Salesforce/blip-image-captioning-large/resolve/main/config.json"
+    ),
+    "Salesforce/blip-retrieval-coco-base": (
+        "https://huggingface.co/Salesforce/blip-retrieval-coco-base/resolve/main/config.json"
+    ),
+    "Salesforce/blip-retrieval-coco-large": (
+        "https://huggingface.co/Salesforce/blip-retrieval-coco-large/resolve/main/config.json"
+    ),
+    "Salesforce/blip-retrieval-flikr-base": (
+        "https://huggingface.co/Salesforce/blip-retrieval-flikr-base/resolve/main/config.json"
+    ),
+    "Salesforce/blip-retrieval-flikr-large": (
+        "https://huggingface.co/Salesforce/blip-retrieval-flikr-large/resolve/main/config.json"
+    ),
 }
 
 
 class BlipTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BLIPModel`]. It is used to instantiate an BLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the BLIP
-    [ybelkada/blip-base](https://huggingface.co/ybelkada/blip-base) architecture.
+    This is the configuration class to store the configuration of a [`BlipTextModel`]. It is used to instantiate an
+    `BlipText` model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the `BlipText` used by the [base
+    architectures](https://huggingface.co/Salesforce/blip-vqa-base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the BLIP text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`BLIPModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
+        vocab_size (`int`, *optional*, defaults to 30522):
+            Vocabulary size of the `Blip` text model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`BlipModel`].
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
+        intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
@@ -68,17 +89,29 @@ class BlipTextConfig(PretrainedConfig):
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        bos_token_id (`int`, *optional*, defaults to 30522):
+            The id of the `beginning-of-sequence` token.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the `end-of-sequence` token.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The id of the `padding` token.
+        sep_token_id (`int`, *optional*, defaults to 102):
+            The id of the `separator` token.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
 
     Example:
 
     ```python
-    >>> from transformers import BlipTextConfig, BLIPTextModel
+    >>> from transformers import BlipTextConfig, BlipTextModel
 
-    >>> # Initializing a BlipTextConfig with ybelkada/blip-base style configuration
+    >>> # Initializing a BlipTextConfig with Salesforce/blip-vqa-base style configuration
     >>> configuration = BlipTextConfig()
 
-    >>> # Initializing a BLIPTextModel (with random weights) from the ybelkada/blip-base style configuration
-    >>> model = BLIPTextModel(configuration)
+    >>> # Initializing a BlipTextModel (with random weights) from the Salesforce/blip-vqa-base style configuration
+    >>> model = BlipTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -100,14 +133,11 @@ class BlipTextConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        type_vocab_size=3072,
         pad_token_id=0,
         bos_token_id=30522,
         eos_token_id=2,
-        is_decoder=True,
-        add_cross_attention=True,
-        use_token_type_embed=False,
         sep_token_id=102,
+        is_decoder=True,
         use_cache=True,
         **kwargs
     ):
@@ -120,7 +150,6 @@ class BlipTextConfig(PretrainedConfig):
         )
 
         self.vocab_size = vocab_size
-        self.type_vocab_size = type_vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
@@ -133,9 +162,7 @@ class BlipTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.add_cross_attention = add_cross_attention
         self.is_decoder = is_decoder
-        self.use_token_type_embed = use_token_type_embed
         self.use_cache = use_cache
 
     @classmethod
@@ -158,10 +185,10 @@ class BlipTextConfig(PretrainedConfig):
 
 class BlipVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BLIPModel`]. It is used to instantiate an BLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the BLIP
-    [ybelkada/blip-base](https://huggingface.co/ybelkada/blip-base) architecture.
+    This is the configuration class to store the configuration of a [`BlipVisionModel`]. It is used to instantiate a
+    Blip vision model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration defaults will yield a similar configuration to that of the Blip-base
+    [Salesforce/blip-vqa-base](https://huggingface.co/Salesforce/blip-vqa-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -197,13 +224,13 @@ class BlipVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BlipVisionConfig, BLIPVisionModel
+    >>> from transformers import BlipVisionConfig, BlipVisionModel
 
-    >>> # Initializing a BlipVisionConfig with ybelkada/blip-base style configuration
+    >>> # Initializing a BlipVisionConfig with Salesforce/blip-vqa-base style configuration
     >>> configuration = BlipVisionConfig()
 
-    >>> # Initializing a BLIPVisionModel (with random weights) from the ybelkada/blip-base style configuration
-    >>> model = BLIPVisionModel(configuration)
+    >>> # Initializing a BlipVisionModel (with random weights) from the Salesforce/blip-vqa-base style configuration
+    >>> model = BlipVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -266,10 +293,10 @@ class BlipVisionConfig(PretrainedConfig):
 
 class BlipConfig(PretrainedConfig):
     r"""
-    [`BlipConfig`] is the configuration class to store the configuration of a [`BLIPModel`]. It is used to instantiate
-    BLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the BLIP
-    [ybelkada/blip-base](https://huggingface.co/ybelkada/blip-base) architecture.
+    [`BlipConfig`] is the configuration class to store the configuration of a [`BlipModel`]. It is used to instantiate
+    Blip model according to the specified arguments, defining the text model and vision model configs. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Blip-base
+    [Salesforce/blip-vqa-base](https://huggingface.co/Salesforce/blip-vqa-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -283,19 +310,21 @@ class BlipConfig(PretrainedConfig):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original BLIP implementation.
+        image_text_hidden_size (`int`, *optional*, defaults to 768):
+            Dimentionality of the hidden state of the image-text fusion layer.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
     Example:
 
     ```python
-    >>> from transformers import BlipConfig, BLIPModel
+    >>> from transformers import BlipConfig, BlipModel
 
-    >>> # Initializing a BlipConfig with ybelkada/blip-base style configuration
+    >>> # Initializing a BlipConfig with Salesforce/blip-vqa-base style configuration
     >>> configuration = BlipConfig()
 
-    >>> # Initializing a BLIPModel (with random weights) from the ybelkada/blip-base style configuration
-    >>> model = BLIPModel(configuration)
+    >>> # Initializing a BlipPModel (with random weights) from the Salesforce/blip-vqa-base style configuration
+    >>> model = BlipModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
