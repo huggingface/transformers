@@ -1,12 +1,18 @@
-"""
- * Copyright (c) 2022, salesforce.com, inc.
- * All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause
- * For full license text, see LICENSE.txt file in the repo root or https://opensource.org/licenses/BSD-3-Clause
- * By Junnan Li
- * Based on huggingface code base
- * https://github.com/huggingface/transformers/blob/v4.15.0/src/transformers/models/bert
-"""
+# coding=utf-8
+# Copyright 2022 The Salesforce Team Authors and The HuggingFace Team. All rights reserved.
+#
+# Licensed under the BSD-3-clause license (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://opensource.org/licenses/BSD-3-Clause
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 import math
 from typing import Tuple
@@ -36,6 +42,7 @@ from .configuration_blip import BlipTextConfig
 logger = logging.get_logger(__name__)
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#L52
 class BlipTextEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
 
@@ -80,6 +87,7 @@ class BlipTextEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#L97
 class BlipTextSelfAttention(nn.Module):
     def __init__(self, config, is_cross_attention):
         super().__init__()
@@ -211,6 +219,7 @@ class BlipTextSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#228
 class BlipTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -225,6 +234,7 @@ class BlipTextSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#242
 class BlipTextAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False):
         super().__init__()
@@ -274,6 +284,7 @@ class BlipTextAttention(nn.Module):
         return outputs
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#L291
 class BlipTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -289,6 +300,7 @@ class BlipTextIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#L306
 class BlipTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -367,6 +379,7 @@ class BlipTextLayer(nn.Module):
         return layer_output
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#L386
 class BlipTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -467,6 +480,7 @@ class BlipTextEncoder(nn.Module):
         )
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L486
 class BlipTextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -482,6 +496,7 @@ class BlipTextPooler(nn.Module):
         return pooled_output
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L501
 class BlipTextPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -499,6 +514,7 @@ class BlipTextPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L518
 class BlipTextLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -519,6 +535,7 @@ class BlipTextLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#L538
 class BlipTextOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -529,6 +546,7 @@ class BlipTextOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#L548
 class BlipTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -552,6 +570,7 @@ class BlipTextPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
 class BlipTextModel(BlipTextPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -796,6 +815,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
         )
 
 
+# Copied from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
 class BlipTextLMHeadModel(BlipTextPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]

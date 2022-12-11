@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2022 The Salesforce Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,10 +37,17 @@ from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ybelkada/blip-base"
+_CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
 
 BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ybelkada/blip-base",
+    "Salesforce/blip-vqa-base",
+    "Salesforce/blip-vqa-base-capfit",
+    "Salesforce/blip-image-captioning-base",
+    "Salesforce/blip-image-captioning-large",
+    "Salesforce/blip-retrieval-coco-base",
+    "Salesforce/blip-retrieval-coco-large",
+    "Salesforce/blip-retrieval-flikr-base",
+    "Salesforce/blip-retrieval-flikr-large",
     # See all BLIP models at https://huggingface.co/models?filter=blip
 ]
 
@@ -90,7 +97,7 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
 
 
 @dataclass
-class BlipVisionModelOutput(ModelOutput):
+class BlipTextVisionModelOutput(ModelOutput):
     """
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
@@ -114,35 +121,6 @@ class BlipVisionModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class BlipTextModelOutput(ModelOutput):
-    """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    text_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -581,7 +559,6 @@ class BlipEncoder(nn.Module):
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -594,13 +571,6 @@ class BlipEncoder(nn.Module):
                 than the model's internal embedding lookup matrix.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
@@ -980,7 +950,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BlipVisionModelOutput, config_class=BlipVisionConfig)
+    @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -989,7 +959,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BlipVisionModelOutput]:
+    ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
         Returns:
 
@@ -1131,7 +1101,7 @@ class BlipForVisualQuestionAnswering(BlipPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BlipVisionModelOutput, config_class=BlipVisionConfig)
+    @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1142,7 +1112,7 @@ class BlipForVisualQuestionAnswering(BlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BlipVisionModelOutput]:
+    ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
         Returns:
 
@@ -1207,7 +1177,7 @@ class BlipForVisualQuestionAnswering(BlipPreTrainedModel):
             outputs = (decoder_loss, image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        return BlipVisionModelOutput(
+        return BlipTextVisionModelOutput(
             loss=decoder_loss,
             image_embeds=image_embeds,
             last_hidden_state=vision_outputs.last_hidden_state,
@@ -1323,7 +1293,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BlipVisionModelOutput, config_class=BlipVisionConfig)
+    @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1333,7 +1303,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BlipVisionModelOutput]:
+    ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
         Returns:
 
@@ -1397,7 +1367,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
             outputs = (output, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        return BlipVisionModelOutput(
+        return BlipTextVisionModelOutput(
             image_embeds=output,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
