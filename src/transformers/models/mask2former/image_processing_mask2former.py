@@ -889,12 +889,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             `torch.Tensor`:
                 A tensor of shape (`batch_size, num_class_labels, height, width`).
         """
-        logger.warning(
-            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_instance_segmentation`",
-            FutureWarning,
-        )
-
         # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
         # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]

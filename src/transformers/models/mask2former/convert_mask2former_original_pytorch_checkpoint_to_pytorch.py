@@ -197,12 +197,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
     def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
         for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
-            """
-            print(src_key)
-            print(dst_key) 
-            print(dst_state_dict[dst_key]) 
-            print()
-            """
 
     def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig):
         dst_prefix: str = "pixel_level_module.encoder"
@@ -782,29 +776,11 @@ def test(
     original_model, our_model: Mask2FormerForInstanceSegmentation, feature_extractor: Mask2FormerFeatureExtractor
 ):
     with torch.no_grad():
-
         original_model = original_model.eval()
         our_model = our_model.eval()
-        """
-        state_dict = our_model.state_dict() for key, value in state_dict.items():
-            if key.startswith("model.pixel_level_module.encoder"):
-                print(key) print(value) print()
-        """
 
         im = prepare_img()
-
-        tr = T.Compose(
-            [
-                T.Resize((384, 384)),
-                T.ToTensor(),
-                T.Normalize(
-                    mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
-                    std=torch.tensor([58.395, 57.120, 57.375]) / 255.0,
-                ),
-            ],
-        )
-
-        x = tr(im).unsqueeze(0)
+        x = feature_extractor(images=im, return_tensors="pt")["pixel_values"]
 
         original_model_backbone_features = original_model.backbone(x.clone())
 
@@ -827,17 +803,12 @@ def test(
 
         # let's test the full model
         original_model_out = original_model([{"image": x.squeeze(0)}])
-        print(original_model_out[0]["instances"])
-        print(original_model_out[0]["instances"].pred_masks.shape)
-        print(original_model_out[0]["instances"].scores.shape)
-
-        original_segmentation = original_model_out[0]["instances"]
-
+        original_model_out = original_model_out[0]["instances"].pred_masks.unsqueeze(0)
 
         our_model_out: Mask2FormerForInstanceSegmentationOutput = our_model(x)
+        our_segmentation = feature_extractor.post_process_segmentation(our_model_out)
 
-        our_segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
-
+        assert original_model_out.shape == our_segmentation.shape, "Output masks shapes are not matching."
         assert torch.allclose(
             original_segmentation, our_segmentation, atol=1e-3
         ), "The segmentation image is not the same."
@@ -929,6 +900,7 @@ if __name__ == "__main__":
         feature_extractor = OriginalMask2FormerConfigToFeatureExtractorConverter()(
             setup_cfg(Args(config_file=config_file))
         )
+        feature_extractor.size = {"height": 384, "width": 384}
 
         original_config = setup_cfg(Args(config_file=config_file))
         mask2former_kwargs = OriginalMask2Former.from_config(original_config)
