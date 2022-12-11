@@ -379,6 +379,20 @@ class SegformerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class TVLTPixelFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+        
+class TVLTProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+        
 class VideoMAEFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
