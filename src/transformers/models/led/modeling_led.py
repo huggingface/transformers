@@ -425,7 +425,7 @@ class LEDEncoderSelfAttention(nn.Module):
             hidden_states.size(2),
         ]
 
-        overlapping_chunks = torch.empty(chunk_size)
+        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
         for chunk in range(chunk_size[1]):
             overlapping_chunks[:, chunk, :, :] = hidden_states[
                 :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
@@ -2608,7 +2608,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         )
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = input_ids.eq(self.config.eos_token_id)
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")

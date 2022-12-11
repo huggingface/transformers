@@ -61,6 +61,8 @@ class ImageTransformsTester(unittest.TestCase):
         [
             ("numpy_float_channels_first", (3, 4, 5), np.float32),
             ("numpy_float_channels_last", (4, 5, 3), np.float32),
+            ("numpy_float_channels_first", (3, 4, 5), np.float64),
+            ("numpy_float_channels_last", (4, 5, 3), np.float64),
             ("numpy_int_channels_first", (3, 4, 5), np.int32),
             ("numpy_uint_channels_first", (3, 4, 5), np.uint8),
         ]
@@ -71,6 +73,27 @@ class ImageTransformsTester(unittest.TestCase):
         pil_image = to_pil_image(image)
         self.assertIsInstance(pil_image, PIL.Image.Image)
         self.assertEqual(pil_image.size, (5, 4))
+
+        # make sure image is correctly rescaled
+        self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
+
+    @parameterized.expand(
+        [
+            ("numpy_float_channels_first", (3, 4, 5), np.float32),
+            ("numpy_float_channels_first", (3, 4, 5), np.float64),
+            ("numpy_float_channels_last", (4, 5, 3), np.float32),
+            ("numpy_float_channels_last", (4, 5, 3), np.float64),
+        ]
+    )
+    @require_vision
+    def test_to_pil_image_from_float(self, name, image_shape, dtype):
+        image = np.random.rand(*image_shape).astype(dtype)
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        # make sure image is correctly rescaled
+        self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
 
     @require_tf
     def test_to_pil_image_from_tensorflow(self):
@@ -160,6 +183,25 @@ class ImageTransformsTester(unittest.TestCase):
         # Test size is resized if longer size > max_size
         image = np.random.randint(0, 256, (3, 50, 40))
         self.assertEqual(get_resize_output_image_size(image, 20, default_to_square=False, max_size=22), (22, 17))
+
+        # Test correct channel dimension is returned if output size if height == 3
+        # Defaults to input format - channels first
+        image = np.random.randint(0, 256, (3, 18, 97))
+        resized_image = resize(image, (3, 20))
+        self.assertEqual(resized_image.shape, (3, 3, 20))
+
+        # Defaults to input format - channels last
+        image = np.random.randint(0, 256, (18, 97, 3))
+        resized_image = resize(image, (3, 20))
+        self.assertEqual(resized_image.shape, (3, 20, 3))
+
+        image = np.random.randint(0, 256, (3, 18, 97))
+        resized_image = resize(image, (3, 20), data_format="channels_last")
+        self.assertEqual(resized_image.shape, (3, 20, 3))
+
+        image = np.random.randint(0, 256, (18, 97, 3))
+        resized_image = resize(image, (3, 20), data_format="channels_first")
+        self.assertEqual(resized_image.shape, (3, 3, 20))
 
     def test_resize(self):
         image = np.random.randint(0, 256, (3, 224, 224))
