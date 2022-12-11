@@ -158,6 +158,7 @@ from . import (
     trajectory_transformer,
     transfo_xl,
     trocr,
+    tvlt,
     unispeech,
     unispeech_sat,
     van,
