@@ -14,8 +14,6 @@
 # limitations under the License.
 """Feature extractor class for ViLT."""
 
-from ...utils import logging
-
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
