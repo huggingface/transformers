@@ -30,8 +30,8 @@ from ...modeling_tf_outputs import (
     TFSeq2SeqModelOutput,
 )
 from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,
     TFModelInputType,
+    TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     keras_serializable,
     unpack_inputs,
@@ -1124,7 +1124,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
         return self.model.encoder
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
     def call(
         self,
@@ -1143,7 +1143,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqLMOutput]:
+    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqModelOutput]:
         r"""
         Returns:
 
