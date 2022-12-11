@@ -30,8 +30,8 @@ from ...modeling_tf_outputs import (
     TFSeq2SeqModelOutput,
 )
 from ...modeling_tf_utils import (
-    TFModelInputType,
     TFCausalLanguageModelingLoss,
+    TFModelInputType,
     TFPreTrainedModel,
     keras_serializable,
     unpack_inputs,
