@@ -14,91 +14,68 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The ViLT model was proposed in [ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://arxiv.org/abs/2102.03334)
-by Wonjae Kim, Bokyung Son, Ildoo Kim. ViLT incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design
-for Vision-and-Language Pre-training (VLP).
+The TVLT model was proposed in [TVLT: Textless Vision-Language Transformer](https://arxiv.org/abs/2209.14156)
+by Zineng Tang*, Jaemin Cho*, Yixin Nie*, Mohit Bansal. The Textless Vision-Language Transformer (TVLT) is a model that uses raw visual and audio inputs for vision-and-language representation learning, without using text-specific modules such as tokenization or automatic speech recognition (ASR).
 
 The abstract from the paper is the following:
 
-*Vision-and-Language Pre-training (VLP) has improved performance on various joint vision-and-language downstream tasks.
-Current approaches to VLP heavily rely on image feature extraction processes, most of which involve region supervision
-(e.g., object detection) and the convolutional architecture (e.g., ResNet). Although disregarded in the literature, we
-find it problematic in terms of both (1) efficiency/speed, that simply extracting input features requires much more
-computation than the multimodal interaction steps; and (2) expressive power, as it is upper bounded to the expressive
-power of the visual embedder and its predefined visual vocabulary. In this paper, we present a minimal VLP model,
-Vision-and-Language Transformer (ViLT), monolithic in the sense that the processing of visual inputs is drastically
-simplified to just the same convolution-free manner that we process textual inputs. We show that ViLT is up to tens of
-times faster than previous VLP models, yet with competitive or better downstream task performance.*
+*In this work, we present the Textless Vision-Language Transformer (TVLT), where homogeneous transformer blocks take raw visual and audio inputs for vision-and-language representation learning with minimal modality-specific design, and do not use text-specific modules such as tokenization or automatic speech recognition (ASR). TVLT is trained by reconstructing masked patches of continuous video frames and audio spectrograms (masked autoencoding) and contrastive modeling to align video and audio. TVLT attains performance comparable to its text-based counterpart on various multimodal tasks, such as visual question answering, image retrieval, video retrieval, and multimodal sentiment analysis, with 28x faster inference speed and only 1/3 of the parameters. Our findings suggest the possibility of learning compact and efficient visual-linguistic representations from low-level visual and audio signals without assuming the prior existence of text.*
 
 Tips:
 
-- The quickest way to get started with ViLT is by checking the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ViLT)
-  (which showcase both inference and fine-tuning on custom data).
-- ViLT is a model that takes both `pixel_values` and `input_ids` as input. One can use [`ViltProcessor`] to prepare data for the model.
+- The quickest way to get started with TVLT is by checking the [example notebooks](https://github.com/zinengtang/TVLT)
+  (which showcase MAE and 2 downstream tasks in the original github).
+- TVLT is a model that takes both `pixel_values` and `audio_values` as input. One can use [`TVLTFeatureExtractor`] to prepare data for the model.
   This processor wraps a feature extractor (for the image modality) and a tokenizer (for the language modality) into one.
-- ViLT is trained with images of various sizes: the authors resize the shorter edge of input images to 384 and limit the longer edge to
-  under 640 while preserving the aspect ratio. To make batching of images possible, the authors use a `pixel_mask` that indicates
-  which pixel values are real and which are padding. [`ViltProcessor`] automatically creates this for you.
-- The design of ViLT is very similar to that of a standard Vision Transformer (ViT). The only difference is that the model includes
-  additional embedding layers for the language modality.
+- TVLT is trained with images/videos and audios of various sizes: the authors resize and crop the input images/videos to 224 and limit the length of audio spectrogram to 2048. To make batching of videos and audios possible, the authors use a `pixel_mask` that indicates
+  which pixel values are real and which are padding and `audio_masks` that indicates
+  which audio values are real and which are padding. [`TVLTFeatureExtractor`] automatically creates this for you.
+- The design of TVLT is very similar to that of a standard Vision Transformer (ViT) and masked autoencoder (MAE). The difference is that the model includes embedding layers for the audio modality.
 
+<p align="center">
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vilt_architecture.jpg"
 alt="drawing" width="600"/>
+</p>
 
-<small> ViLT architecture. Taken from the <a href="https://arxiv.org/abs/2102.03334">original paper</a>. </small>
+<small> TVLT architecture. Taken from the <a href="[https://arxiv.org/abs/2102.03334](https://arxiv.org/abs/2209.14156)">original paper</a>. </small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/dandelin/ViLT).
+The original code can be found [here](https://github.com/zinengtang/TVLT).
 
 
 Tips:
 
-- The PyTorch version of this model is only available in torch 1.10 and higher.
+- The PyTorch version of this model is only available in torch 1.8 and higher.
 
-## ViltConfig
+## TVLTConfig
 
-[[autodoc]] ViltConfig
+[[autodoc]] TVLTConfig
 
-## ViltFeatureExtractor
+## TVLTPixelFeatureExtractor
 
-[[autodoc]] ViltFeatureExtractor
+[[autodoc]] TVLTPixelFeatureExtractor
     - __call__
 
-## ViltImageProcessor
+## TVLTAudioFeatureExtractor
 
-[[autodoc]] ViltImageProcessor
-    - preprocess
-
-## ViltProcessor
-
-[[autodoc]] ViltProcessor
+[[autodoc]] TVLTAudioFeatureExtractor
     - __call__
+    
+## TVLTModel
 
-## ViltModel
-
-[[autodoc]] ViltModel
+[[autodoc]] TVLTModel
     - forward
 
-## ViltForMaskedLM
+## TVLTForPreTraining
 
-[[autodoc]] ViltForMaskedLM
+[[autodoc]] TVLTForPreTraining
     - forward
 
-## ViltForQuestionAnswering
+## TVLTForVisionAndAudioRetrieval
 
-[[autodoc]] ViltForQuestionAnswering
+[[autodoc]] TVLTForVideoAndAudioRetrieval
     - forward
 
-## ViltForImagesAndTextClassification
+## TVLTForSequenceClassification
 
-[[autodoc]] ViltForImagesAndTextClassification
-    - forward
-
-## ViltForImageAndTextRetrieval
-
-[[autodoc]] ViltForImageAndTextRetrieval
-    - forward
-
-## ViltForTokenClassification
-
-[[autodoc]] ViltForTokenClassification
+[[autodoc]] TVLTForSequenceClassification
     - forward
