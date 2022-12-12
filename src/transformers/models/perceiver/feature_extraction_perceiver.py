@@ -14,6 +14,8 @@
 # limitations under the License.
 """Feature extractor class for Perceiver."""
 
+import warnings
+
 from ...utils import logging
 from .image_processing_perceiver import PerceiverImageProcessor
 
@@ -21,4 +23,11 @@ from .image_processing_perceiver import PerceiverImageProcessor
 logger = logging.get_logger(__name__)
 
 
-PerceiverFeatureExtractor = PerceiverImageProcessor
+class PerceiverFeatureExtractor(PerceiverImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class PerceiverFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
+            " Please use PerceiverImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)
