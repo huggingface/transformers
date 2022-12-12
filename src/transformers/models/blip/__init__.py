@@ -35,7 +35,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_blip"] = ["BlipImageProcessor"]
+    _import_structure["image_processing_blip"] = ["BlipImageProcessor"]
     _import_structure["processing_blip"] = ["BlipProcessor"]
 
 
