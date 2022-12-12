@@ -2291,7 +2291,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
             # Check if `_keep_in_fp32_modules` is not None
-            use_keep_in_fp32_modules = cls._keep_in_fp32_modules is not None and is_accelerate_available()
+            use_keep_in_fp32_modules = (
+                (cls._keep_in_fp32_modules is not None) and is_accelerate_available() and torch_dtype == torch.float16
+            )
+            if (
+                (cls._keep_in_fp32_modules is not None)
+                and not is_accelerate_available()
+                and torch_dtype == torch.float16
+            ):
+                logger.warning(
+                    "For stability purposes, it is recommended to have accelerate installed when using this model in"
+                    " torch.flaot16, please install it with `pip install accelerate`"
+                )
 
             if is_sharded:
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
