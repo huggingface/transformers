@@ -56,6 +56,10 @@
       title: Clasificación de imágenes
     title: Visión Artificial
   - sections:
+    - local: debugging
+      title: Debugging
+    title: Rendimiento y escalabilidad  
+  - sections:
     - local: pr_checks
       title: Verificaciones en un Pull Request
     title: Contribuir
