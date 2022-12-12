@@ -20,6 +20,7 @@ from typing import Callable, List, Optional, Union
 
 import tensorflow as tf
 
+
 if hasattr(tf.keras, "optimizer") and hasattr(tf.keras.optimizer, "legacy"):
     Adam = tf.keras.optimizer.legacy.Adam
 else:
