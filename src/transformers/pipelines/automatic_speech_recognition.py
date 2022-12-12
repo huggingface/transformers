@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
-
+    from transformers.generation.logits_process import TimeStampLogitsProcessor
 
 def rescale_stride(stride, ratio):
     """
@@ -80,40 +80,43 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
     """ """
     max_source_positions = 1500
     begin_idx = 3
-    results = []
+    items = []
+    offsets = []
     # index of the first timestamp token
     timestamp_begin = tokenizer.all_special_ids[-1] + 1
     time_precision = feature_extractor.chunk_length / max_source_positions
     last_timestamp_position = 0
     for idx, item in enumerate(sequences):
         sequence, stride = item
-        chunk_len, stride_left, stride_right = [
-            (val * feature_extractor.hop_length) / feature_extractor.sampling_rate for val in stride
-        ]
+        chunk_len = ( feature_extractor.chunk_length * feature_extractor.hop_length) / feature_extractor.sampling_rate
         timestamp_offset = last_timestamp_position * time_precision  # in seconds
         sequence = sequence.squeeze(0)
         # patch the matching sequence with the last sequence of the previous chunk
+        sequence = sequence[begin_idx:]
         if last_timestamp_position != 0:
-            timestamp_tokens = np.where(sequence[0] >= timestamp_begin)[0]
-            time = (sequence[timestamp_tokens] - timestamp_begin) * time_precision + timestamp_offset
-            match = np.where(time >= last_end_time)[0][0]
+            timestamp_tokens = np.where(sequence >= timestamp_begin)[0]
+            consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
+
+            time = (sequence[timestamp_tokens[consecutive]] - timestamp_begin) * time_precision + timestamp_offset
+            merge_point = consecutive[np.where(time >= timestamp_offset)[0][0]]
             # get the corresponding sliced_sequence
-            sliced_sequence = sequence[timestamp_tokens[match] : timestamp_tokens[match + 1]]
-            patch = _find_longest_common_sequence([prev_sequences, sliced_sequence], tokenizer)
+            sliced_sequence = sequence[ timestamp_tokens[merge_point] : timestamp_tokens[merge_point + 1]]
+            patch = _find_longest_common_sequence([prev_sequences[None,:], sliced_sequence[None,:]], tokenizer)
             # should clean the patch to make sure both sets are merged
-            patch = set(prev_sequences, patch)
-            start_timestamp_position = last_begin_time
-            end_timestamp_position = time[match + 1]
-            results.append(
+
+            end_timestamp_position = sliced_sequence[-1] - timestamp_begin
+            items.pop()
+            items.append(patch)
+            offsets.pop()
+            offsets.append(
                 {
-                    "sequence": patch,
-                    "start_time": start_timestamp_position * time_precision,
-                    "end_time": end_timestamp_position * time_precision,
+                    "start_time": last_begin_time,
+                    "end_time": end_timestamp_position * time_precision + last_begin_time,
                 }
             )
-            sequence = sequence[timestamp_tokens[match + 1] :]
-        else:
-            sequence = sequence[begin_idx:]
+            sequence = sequence[timestamp_tokens[merge_point + 1] :]
+
+
 
         timestamp_tokens = sequence >= timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
@@ -123,9 +126,9 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
                 sliced_tokens = sequence[last_slice:current_slice]
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
-                results.append(
+                items.append(sliced_tokens)
+                offsets.append(
                     {
-                        "sequence": sliced_tokens,
                         "start_time": timestamp_offset + start_timestamp_position * time_precision,
                         "end_time": timestamp_offset + end_timestamp_position * time_precision,
                     }
@@ -140,19 +143,20 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
                 # single timestamp at the end means no speech after the last timestamp.
                 last_timestamp_position = timestamps[-1].item() - timestamp_begin
                 duration = last_timestamp_position * time_precision
-            results.append(
-                {
-                    "sequence": patch,
+                items.append(sliced_tokens)
+                offsets.append(
+                    {
                     "start_time": timestamp_offset,
                     "end_time": timestamp_offset + duration,
-                }
-            )
+                    }
+                )
 
-        last_end_time = end_timestamp_position
-        last_begin_time = start_timestamp_position
-        prev_sequences = patch
 
-    return results
+        last_end_time = timestamp_offset + end_timestamp_position * time_precision
+        last_begin_time = timestamp_offset + start_timestamp_position * time_precision
+        prev_sequences = sliced_tokens
+
+    return items, offsets
 
 
 def _find_longest_common_sequence(sequences, tokenizer):
@@ -445,10 +449,19 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # `generate` magic to create the mask automatically won't work, we basically need to help
             # it here.
             attention_mask = model_inputs.pop("attention_mask", None)
-            tokens = self.model.generate(
+            if "Whisper" in self.model.__class__.__name__:
+                # logits_processor = self.model._get_logits_processor()
+                logits_processor = []
+                logits_processor.append(TimeStampLogitsProcessor(5))
+                tokens = self.model.generate(
                 encoder_outputs=encoder(inputs, attention_mask=attention_mask),
-                attention_mask=attention_mask,
+                attention_mask=attention_mask,logits_processor=logits_processor
             )
+            else:
+                tokens = self.model.generate(
+                    encoder_outputs=encoder(inputs, attention_mask=attention_mask),
+                    attention_mask=attention_mask,
+                )
 
             out = {"tokens": tokens}
 
@@ -499,13 +512,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # This won't work with left padding (which doesn't exist right now)
                 right_n = total_n - right
                 items = items[:, left:right_n]
-            if "Whisper" in self.model.__class__.__name__:
-                items = (items, stride)
             final_items.append(items)
         if stride and self.type == "seq2seq" and not return_timestamps:
             items = _find_longest_common_sequence(final_items, self.tokenizer)
         elif stride and self.type == "seq2seq" and return_timestamps:
-            items = _find_timestamp_sequence(final_items, self.tokenizer, self.feature_extractor)
+            items, offsets = _find_timestamp_sequence(final_items, self.tokenizer, self.feature_extractor)
         else:
             items = np.concatenate(final_items, axis=1)
             items = items.squeeze(0)
