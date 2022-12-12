@@ -953,8 +953,8 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
     @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
     def forward(
         self,
-        input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -981,6 +981,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> image_embeds = outputs.image_embeds
         ```"""
+        batch_size, _ = pixel_values.shape[:2]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
@@ -991,6 +992,9 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         )
 
         image_embeds = vision_outputs[0]
+
+        if input_ids is None:
+            input_ids = torch.LongTensor([[self.decoder_input_ids] * batch_size]).to(image_embeds.device)
 
         decoder_targets = input_ids.masked_fill(input_ids == self.decoder_input_ids, -100)
 
@@ -1017,7 +1021,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
     @torch.no_grad()
     def generate(
-        self, input_ids: torch.LongTensor, pixel_values: torch.FloatTensor, **generate_kwargs
+        self, pixel_values: torch.FloatTensor, input_ids: Optional[torch.LongTensor] = None, **generate_kwargs
     ) -> torch.LongTensor:
         r"""
         Overrides `generate` function to be able to use the model as a conditional generator
@@ -1047,6 +1051,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> image_embeds = outputs.image_embeds
         ```
         """
+        batch_size, _ = pixel_values.shape[:2]
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
         )
@@ -1058,6 +1063,10 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
+        elif input_ids is None:
+            input_ids = torch.LongTensor(
+                [[self.decoder_input_ids, self.config.text_config.eos_token_id] * batch_size]
+            ).to(image_embeds.device)
 
         input_ids[:, 0] = self.config.text_config.bos_token_id
 
@@ -1354,7 +1363,6 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 return_dict=return_dict,
-                mode="text",
             )
             question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
 
