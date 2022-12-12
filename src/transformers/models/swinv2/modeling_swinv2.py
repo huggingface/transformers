@@ -308,9 +308,6 @@ class Swinv2Embeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        # print("Shape of embeddings before encoder:", embeddings.shape)
-        # print("First values of embeddings before encoder:", embeddings[0, :3, :3])
-
         return embeddings, output_dimensions
 
 
@@ -811,16 +808,13 @@ class Swinv2Stage(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-        print_values=False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            layer_outputs = layer_module(
-                hidden_states, input_dimensions, layer_head_mask, output_attentions, print_values=print_values
-            )
+            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -830,8 +824,6 @@ class Swinv2Stage(nn.Module):
             output_dimensions = (height, width, height_downsampled, width_downsampled)
             hidden_states = self.downsample(hidden_states_before_downsampling, input_dimensions)
         else:
-            if print_values:
-                print("we are here")
             output_dimensions = (height, width, height, width)
 
         stage_outputs = (hidden_states, hidden_states_before_downsampling, output_dimensions)
@@ -905,9 +897,7 @@ class Swinv2Encoder(nn.Module):
                     create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states, input_dimensions, layer_head_mask, output_attentions, print_values=i == 3
-                )
+                layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]

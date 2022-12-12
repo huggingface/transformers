@@ -55,13 +55,17 @@ def _scale_size(size: Tuple[int, int], scale: Union[float, int, tuple]) -> Tuple
 
 def rescale_size(old_size: tuple, scale: Union[float, int, tuple], return_scale: bool = False) -> tuple:
     """Calculate the new size to be rescaled to.
+
     Args:
-        old_size (tuple[int]): The old size (w, h) of image.
-        scale (float | tuple[int]): The scaling factor or maximum size.
+        old_size (tuple[int]):
+            The old size (w, h) of image.
+        scale (float | tuple[int]):
+            The scaling factor or maximum size.
+
             If it is a float number, then the image will be rescaled by this factor, else if it is a tuple of 2
             integers, then the image will be rescaled as large as possible within the scale.
-        return_scale (bool): Whether to return the scaling factor besides the
-            rescaled image size.
+        return_scale (bool):
+            Whether to return the scaling factor besides the rescaled image size.
     Returns:
         tuple[int]: The new rescaled image size.
     """

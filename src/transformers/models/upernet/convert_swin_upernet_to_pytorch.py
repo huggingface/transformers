@@ -30,7 +30,7 @@ from PIL import Image
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation, UperNetImageProcessor
+from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
 from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
@@ -212,9 +212,6 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     pixel_values = image_transforms(image).unsqueeze(0)
 
-    print("Sum of pixel values:", pixel_values.sum().item())
-    print("Mean of pixel values:", pixel_values.mean().item())
-
     # processor = UperNetImageProcessor()
     # pixel_values = processor(image, return_tensors="pt").pixel_values
 
@@ -235,13 +232,13 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        # print(f"Saving processor to {pytorch_dump_folder_path}")
+        # processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and feature extractor for {model_name} to hub")
+        print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"nielsr/{model_name}")
-        # feature_extractor.push_to_hub(f"nielsr/{model_name}")
+        # processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
