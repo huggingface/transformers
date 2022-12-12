@@ -150,7 +150,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
-        # Used to for whitespace normalization in input texts
+        # Used for whitespace normalization in input texts
         # fmt : off
         self.whitespaces = {" ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""}
         # fmt : on
