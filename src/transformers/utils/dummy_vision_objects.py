@@ -50,7 +50,7 @@ class BitImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class BlipFeatureExtractor(metaclass=DummyObject):
+class BlipImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

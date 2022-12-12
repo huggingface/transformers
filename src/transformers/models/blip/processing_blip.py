@@ -23,21 +23,20 @@ from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokeni
 from ...utils import TensorType
 
 
-# Copied from transformers.models.vilt.processing_vilt.ViltProcessor with Vilt->Blip and ViLT->Blip
 class BlipProcessor(ProcessorMixin):
     r"""
     Constructs a BLIP processor which wraps a BERT tokenizer and BLIP image processor into a single processor.
 
-    [`BlipProcessor`] offers all the functionalities of [`BlipFeatureExtractor`] and [`BertTokenizerFast`]. See the
+    [`BlipProcessor`] offers all the functionalities of [`BlipImageProcessor`] and [`BertTokenizerFast`]. See the
     docstring of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (`BlipFeatureExtractor`):
-            An instance of [`BlipFeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor (`BlipImageProcessor`):
+            An instance of [`BlipImageProcessor`]. The feature extractor is a required input.
         tokenizer (`BertTokenizerFast`):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "BlipFeatureExtractor"
+    feature_extractor_class = "BlipImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
@@ -65,7 +64,7 @@ class BlipProcessor(ProcessorMixin):
         **kwargs
     ) -> BatchEncoding:
         """
-        This method uses [`BlipFeatureExtractor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.

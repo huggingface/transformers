@@ -156,8 +156,8 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor with ViltImageProcessor->BlipFeatureExtractor and ViLT->Blip
-class BlipFeatureExtractor(BaseImageProcessor):
+# Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor with Vilt->Blip and ViLT->Blip
+class BlipImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViLT image processor.
 
