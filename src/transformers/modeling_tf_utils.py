@@ -1154,21 +1154,21 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return cls(config, **kwargs)
 
-    def build_with_dummies(self, dummies=None):
-        if dummies is None:
-            dummies = {key: tf.keras.Input(type_spec=spec) for key, spec in self.serving.input_signature[0].items()}
-        elif isinstance(dummies, dict):
-            for key in list(dummies.keys()):
-                if isinstance(dummies[key], tf.TypeSpec):
-                    dummies[key] = tf.keras.Input(type_spec=dummies[key])
-        elif isinstance(dummies, list) or isinstance(dummies, tuple):
-            dummies = [
+    def build_with_dummies(self, dummy_spec=None):
+        if dummy_spec is None:
+            dummy_spec = {key: tf.keras.Input(type_spec=spec) for key, spec in self.serving.input_signature[0].items()}
+        elif isinstance(dummy_spec, dict):
+            for key in list(dummy_spec.keys()):
+                if isinstance(dummy_spec[key], tf.TypeSpec):
+                    dummy_spec[key] = tf.keras.Input(type_spec=dummy_spec[key])
+        elif isinstance(dummy_spec, list) or isinstance(dummy_spec, tuple):
+            dummy_spec = [
                 tf.keras.Input(type_spec=element) if isinstance(element, tf.TypeSpec) else element
-                for element in dummies
+                for element in dummy_spec
             ]
-        elif isinstance(dummies, tf.TypeSpec):
-            dummies = tf.keras.Input(type_spec=dummies)
-        self(dummies)  # Build the model using these placeholder inputs
+        elif isinstance(dummy_spec, tf.TypeSpec):
+            dummy_spec = tf.keras.Input(type_spec=dummy_spec)
+        self(dummy_spec)  # Build the model using these placeholder inputs
 
     def eager_serving(self, inputs):
         """
@@ -2500,6 +2500,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         from_auto_class = kwargs.pop("_from_auto", False)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
+        dummy_spec = kwargs.pop("dummy_spec", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -2745,9 +2746,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # we might need to extend the variable scope for composite models
         if load_weight_prefix is not None:
             with tf.compat.v1.variable_scope(load_weight_prefix):
-                model.build_with_dummies()  # build the network with dummy inputs
+                model.build_with_dummies(dummy_spec)  # build the network with dummy inputs
         else:
-            model.build_with_dummies()  # build the network with dummy inputs
+            model.build_with_dummies(dummy_spec)  # build the network with dummy inputs
 
         if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
@@ -2794,7 +2795,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
                 )
 
-        model.build_with_dummies()  # Make sure restore ops are run
+        model.build_with_dummies(dummy_spec)  # Make sure restore ops are run
 
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:
