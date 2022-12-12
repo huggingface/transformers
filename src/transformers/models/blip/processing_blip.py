@@ -69,6 +69,34 @@ class BlipProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        # Get only text
+        if images is None:
+            if text is None:
+                raise ValueError("You have to specify either images or text.")
+
+            self.current_processor = self.tokenizer
+            return self.tokenizer(
+                text=text,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=return_tensors,
+                **kwargs,
+            )
+
+        # add pixel_values + pixel_mask
+        encoding_feature_extractor = self.feature_extractor(images, return_tensors=return_tensors)
+
         if text is not None:
             text_encoding = self.tokenizer(
                 text=text,
@@ -90,8 +118,7 @@ class BlipProcessor(ProcessorMixin):
             )
         else:
             text_encoding = None
-        # add pixel_values + pixel_mask
-        encoding_feature_extractor = self.feature_extractor(images, return_tensors=return_tensors)
+
         if text_encoding is not None:
             encoding_feature_extractor.update(text_encoding)
 

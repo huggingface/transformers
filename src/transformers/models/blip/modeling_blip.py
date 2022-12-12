@@ -52,8 +52,7 @@ BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/BLIP.html
+# Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
@@ -68,21 +67,24 @@ def blip_loss(similarity: torch.Tensor) -> torch.Tensor:
 @dataclass
 class BlipForConditionalGenerationModelOutput(ModelOutput):
     """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder.
 
     Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        loss (*optional*, *optional* returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            Languge modeling loss from the text decoder.
+        image_embeds (*torch.FloatTensor* of shape *(batch_size, output_dim)* *optional* returned when model is initialized with *with_projection=True*):
             The image embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (*torch.FloatTensor* of shape *(batch_size, sequence_length, hidden_size)*):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        hidden_states (*tuple(torch.FloatTensor)*, *optional*, returned when *output_hidden_states=True* is passed or when *config.output_hidden_states=True*):
+            Tuple of *torch.FloatTensor* (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape *(batch_size, sequence_length, hidden_size)*.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        attentions (*tuple(torch.FloatTensor)*, *optional*, returned when *output_attentions=True* is passed or when *config.output_attentions=True*):
+            Tuple of *torch.FloatTensor* (one for each layer) of shape *(batch_size, num_heads, sequence_length,
+            sequence_length)*.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -99,9 +101,12 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
 @dataclass
 class BlipTextVisionModelOutput(ModelOutput):
     """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder.
 
     Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Languge modeling loss from the text decoder.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -124,6 +129,49 @@ class BlipTextVisionModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class BlipITMModelOutput(ModelOutput):
+    """
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
+    scores.
+
+    Args:
+        itm_score (`torch.FloatTensor`):
+            The image-text similarity scores.
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Languge modeling loss from the text decoder.
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        vision_pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+            Last layer hidden-state of the vision of the vision-only branch of the model.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        question_embeds (`torch.FloatTensor`):
+            The question embeddings obtained by the text projection layer.
+    """
+
+    itm_score: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.FloatTensor] = None
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    vision_pooler_output: Optional[torch.FloatTensor] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_embeds: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -243,26 +291,10 @@ class BlipAttention(nn.Module):
 
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim)
 
-        self.proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.projection = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
-        storage as `fused_qkv`
-
-        Args:
-            fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
-
-        Returns:
-            query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
-            value: [batch_size, seq_length, num_heads, head_dim]
-        """
-        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
-        return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
 
     def forward(
         self,
@@ -275,7 +307,6 @@ class BlipAttention(nn.Module):
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         mixed_qkv = self.qkv(hidden_states)
-        # query_states, key_states, value_states = self._split_heads(mixed_qkv)
         mixed_qkv = (
             self.qkv(hidden_states)
             .reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads)
@@ -285,7 +316,7 @@ class BlipAttention(nn.Module):
             mixed_qkv[0],
             mixed_qkv[1],
             mixed_qkv[2],
-        )  # make torchscript happy (cannot use tensor as tuple)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
@@ -308,7 +339,7 @@ class BlipAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.embed_dim,)
         context_layer = context_layer.reshape(new_context_layer_shape)
 
-        output = self.proj(context_layer)
+        output = self.projection(context_layer)
 
         outputs = (output, attention_probs) if output_attentions else (output, None)
 
@@ -406,9 +437,9 @@ class BlipPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.qkv.weight, std=in_proj_std)
             if module.qkv.bias is not None:
                 nn.init.normal_(module.qkv.bias, std=in_proj_std)
-            nn.init.normal_(module.proj.weight, std=in_proj_std)
-            if module.proj.bias is not None:
-                nn.init.normal_(module.proj.bias, std=in_proj_std)
+            nn.init.normal_(module.projection.weight, std=in_proj_std)
+            if module.projection.bias is not None:
+                nn.init.normal_(module.projection.bias, std=in_proj_std)
         elif isinstance(module, BlipMLP):
             factor = self.config.initializer_factor
             in_proj_std = (
@@ -463,8 +494,7 @@ BLIP_TEXT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`BlipProcessor`]. See [`BlipProcessor.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -493,7 +523,7 @@ BLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`BlipImageProcessor`]. See [`BlipImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -510,8 +540,7 @@ BLIP_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`BlipProcessor`]. See [`BlipProcessor.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -528,7 +557,7 @@ BLIP_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`BlipImageProcessor`]. See [`BlipImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -754,12 +783,12 @@ class BlipModel(BlipPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, BlipModel
+        >>> from transformers import BlipProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = processor(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         # Use BLIP model's config for some fields (if specified) instead of those of vision & text components.
@@ -801,10 +830,10 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, BlipModel
+        >>> from transformers import BlipProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -853,10 +882,10 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, BlipModel
+        >>> from transformers import BlipProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -928,7 +957,9 @@ class BlipModel(BlipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
+    BLIP Model trained to generate captions on images. The model can also take as input a text input. The text decoder
+    will start generating the caption from the text input. If no text input is provided, the decoder will start with
+    the [BOS] token only.
     """,
     BLIP_START_DOCSTRING,
 )
@@ -971,10 +1002,10 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, BLIPForImageCaptioning
+        >>> from transformers import BlipProcessor, BlipForConditionalGeneration
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1033,23 +1064,30 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         **generate_kwargs
     ) -> torch.LongTensor:
         r"""
-        Overrides `generate` function to be able to use the model as a conditional generator
+        Overrides *generate* function to be able to use the model as a conditional generator
 
         Parameters:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                The sequence used as a prompt for the generation.
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, image_width, image_height)`:
+            pixel_values (*torch.FloatTensor* of shape *(batch_size, image_width, image_height)*:
                 Input image to be processed
+            input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+                The sequence used as a prompt for the generation.
+            pixel_mask (*torch.LongTensor* of shape *(batch_size, image_width, image_height)*, *optional*):
+                Mask to be used for the image - not used but kept for compatibility with the *BlipProcessor*
+            token_type_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+                Segment token indices to indicate first and second portions of the inputs. Not used but kept for
+                compatibility with the *BlipProcessor*
+            attention_mask (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
 
         Examples:
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipTokenizer, BlipForImageCaptioning
+        >>> from transformers import BlipProcessor, BlipForImageCaptioning
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1060,6 +1098,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> image_embeds = outputs.image_embeds
         ```
         """
+
         batch_size, _ = pixel_values.shape[:2]
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -1094,7 +1133,9 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
+    BLIP Model fine-tuned for question answering. The model consists of a vision encoder, a text encoder as well as a
+    text decoder. The vision encoder will encode the input image, the text encoder will encode the input question
+    together with the encoding of the image, and the text decoder will output the answer to the question.
     """,
     BLIP_START_DOCSTRING,
 )
@@ -1141,18 +1182,17 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BLIPProcessor, BLIPForImageCaptioning
+        >>> from transformers import BlipProcessor, BlipForQuestionAnswering
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
-        >>> image_embeds = outputs.image_embeds
+        >>> outputs = model.generate(**inputs)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         batch_size, _ = input_ids.shape
@@ -1215,13 +1255,21 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         **generate_kwargs
     ) -> torch.LongTensor:
         r"""
-        Overrides `generate` function to be able to use the model as a conditional generator
+        Overrides *generate* function to be able to use the model as a conditional generator
 
         Parameters:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*):
                 The sequence used as a prompt for the generation.
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, image_width, image_height)`:
+            pixel_values (*torch.FloatTensor* of shape *(batch_size, image_width, image_height)*:
                 Input image to be processed
+            attention_mask (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`. `1` for
+                tokens that are NOT MASKED, `0` for MASKED tokens.
+            use_rank_mode (*bool*, *optional*, defaults to *False*):
+                Whether to use rank mode or not. Rank mode is the decoding mode proposed in the paper. Please refer to
+                this line: https://github.com/salesforce/BLIP/blob/main/models/blip_vqa.py#L114 for more details.
+            **generate_kwargs:
+                Additional arguments passed to the *generate* function of the decoder
 
 
         Examples:
@@ -1284,7 +1332,9 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
+    BLIP Model with a vision and text projector, and a classification head on top. The model is used in the context of
+    image-text retrieval. Given an image and a text, the model returns the probability of the text being relevant to
+    the image.
     """,
     BLIP_START_DOCSTRING,
 )
@@ -1332,21 +1382,21 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, BLIPForImageCaptioning
+        >>> from transformers import BlipProcessor, BlipForImageTextRetrieval
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "an image of a cat"
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
         >>> outputs = model(**inputs)
-        >>> image_embeds = outputs.image_embeds
+        >>> print(outputs[0])  # similarity score
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        batch_size, _ = input_ids.shape
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -1383,12 +1433,13 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
             output = image_feat @ text_feat.t()
 
         if not return_dict:
-            outputs = (output, vision_outputs[0]) + vision_outputs[2:]
+            outputs = (output, vision_outputs[0]) + vision_outputs[2:] + (question_embeds,)
             return tuple(output for output in outputs if output is not None)
 
-        return BlipTextVisionModelOutput(
-            image_embeds=output,
+        return BlipITMModelOutput(
+            itm_score=output,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
+            question_embeds=question_embeds,
         )
