@@ -1,11 +1,12 @@
-FROM nvcr.io/nvidia/pytorch:21.03-py3
+# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel_22-04.html#rel_22-04
+FROM nvcr.io/nvidia/pytorch:22.04-py3
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG PYTORCH='1.12.1'
+ARG PYTORCH='1.13.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu113'
+ARG CUDA='cu116'
 
 RUN apt -y update
 RUN apt install -y libaio-dev
@@ -32,4 +33,6 @@ RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 py
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
 
+# The base image ships with `pydantic==1.8.2` which is not working - i.e. the next command fails
+RUN python3 -m pip install -U --no-cache-dir pydantic
 RUN python3 -c "from deepspeed.launcher.runner import main"
