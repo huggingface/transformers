@@ -587,6 +587,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
