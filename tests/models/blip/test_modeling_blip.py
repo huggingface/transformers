@@ -781,7 +781,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
 
         # image only
-        inputs = processor(image=image).to(torch_device)
+        inputs = processor(images=image).to(torch_device)
 
         predictions = model.generate(**inputs)
 
@@ -801,7 +801,29 @@ class BlipModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_vqa(self):
-        pass
+        model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+
+        image = prepare_img()
+        text = "how many dogs are in the picture?"
+
+        inputs = processor(image, text=text, return_tensors="pt").to(torch_device)
+        out = model.generate(**inputs)
+
+        # Test output
+        self.assertEqual(out[0].tolist(), [30522, 1015, 102])
 
     def test_inference_itm(self):
-        pass
+        model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base")
+
+        image = prepare_img()
+        text = "A woman and her dog sitting in a beach"
+
+        inputs = processor(image, text, return_tensors="pt").to(torch_device)
+
+        out_itm = model(**inputs)
+        out = model(**inputs, use_itm_head=False)
+
+        self.assertTrue(torch.allclose(out_itm[0].cpu(), torch.Tensor([[1.9452, -1.9378]]), atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5053]]), atol=1e-3, rtol=1e-3))
