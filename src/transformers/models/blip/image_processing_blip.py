@@ -156,7 +156,6 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor with Vilt->Blip and ViLT->Blip
 class BlipImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViLT image processor.
@@ -217,8 +216,8 @@ class BlipImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 384}
-        size = get_size_dict(size, default_to_square=False)
+        size = size if size is not None else 384
+        size = get_size_dict(size, default_to_square=True)
 
         self.do_resize = do_resize
         self.size = size
@@ -235,7 +234,6 @@ class BlipImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
@@ -259,12 +257,8 @@ class BlipImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        size = get_size_dict(size, default_to_square=False)
-        if "shortest_edge" not in size:
-            raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
-        shorter = size["shortest_edge"]
-        longer = int(1333 / 800 * shorter)
-        output_size = get_resize_output_image_size(image, shorter=shorter, longer=longer, size_divisor=size_divisor)
+        size = get_size_dict(size, default_to_square=True)
+        output_size = (size["width"], size["height"])
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
@@ -474,9 +468,7 @@ class BlipImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_resize:
-            images = [
-                self.resize(image=image, size=size, size_divisor=size_divisor, resample=resample) for image in images
-            ]
+            images = [self.resize(image=image, size=size, resample=resample) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]

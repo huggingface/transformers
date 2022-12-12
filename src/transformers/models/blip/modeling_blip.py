@@ -192,6 +192,7 @@ class BlipVisionEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->Blip
 class BlipTextEmbeddings(nn.Module):
     def __init__(self, config: BlipTextConfig):
         super().__init__()
@@ -314,6 +315,7 @@ class BlipAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Blip
 class BlipMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -754,8 +756,8 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, BlipModel
 
-        >>> model = BlipModel.from_pretrained("ybelkada/blip-base")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("ybelkada/blip-base")
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -801,8 +803,8 @@ class BlipModel(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPProcessor, BlipModel
 
-        >>> model = BlipModel.from_pretrained("ybelkada/blip-base")
-        >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -853,8 +855,8 @@ class BlipModel(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPProcessor, BlipModel
 
-        >>> model = BlipModel.from_pretrained("ybelkada/blip-base")
-        >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -933,6 +935,7 @@ class BlipModel(BlipPreTrainedModel):
 class BlipForConditionalGeneration(BlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
+    main_input_name = "pixel_values"
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
@@ -970,8 +973,8 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPProcessor, BLIPForImageCaptioning
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("ybelkada/blip-base")
-        >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
+        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1021,7 +1024,13 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
     @torch.no_grad()
     def generate(
-        self, pixel_values: torch.FloatTensor, input_ids: Optional[torch.LongTensor] = None, **generate_kwargs
+        self,
+        pixel_values: torch.FloatTensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        **generate_kwargs
     ) -> torch.LongTensor:
         r"""
         Overrides `generate` function to be able to use the model as a conditional generator
@@ -1039,8 +1048,8 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import BlipTokenizer, BlipForImageCaptioning
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("ybelkada/blip-base")
-        >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
+        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1059,7 +1068,6 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         image_embeds = vision_outputs[0]
 
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
-        model_kwargs = {"encoder_hidden_states": image_embeds, "encoder_attention_mask": image_atts}
 
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
@@ -1069,13 +1077,16 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             ).to(image_embeds.device)
 
         input_ids[:, 0] = self.config.text_config.bos_token_id
+        attention_mask = attention_mask[:, :-1] if attention_mask is not None else None
 
         outputs = self.text_decoder.generate(
             input_ids=input_ids[:, :-1],
             eos_token_id=self.config.text_config.sep_token_id,
             pad_token_id=self.config.text_config.pad_token_id,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_atts,
             **generate_kwargs,
-            **model_kwargs,
         )
 
         return outputs
@@ -1132,8 +1143,8 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import BLIPProcessor, BLIPForImageCaptioning
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("ybelkada/blip-base")
-        >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
+        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1219,8 +1230,8 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import BlipTokenizer, BlipForImageCaptioning
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("ybelkada/blip-base")
-        >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
+        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1323,8 +1334,8 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPProcessor, BLIPForImageCaptioning
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("ybelkada/blip-base")
-        >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
+        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

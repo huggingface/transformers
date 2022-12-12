@@ -69,29 +69,33 @@ class BlipProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        encoding = self.tokenizer(
-            text=text,
-            add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
-            verbose=verbose,
-            return_tensors=return_tensors,
-            **kwargs,
-        )
+        if text is not None:
+            text_encoding = self.tokenizer(
+                text=text,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=return_tensors,
+                **kwargs,
+            )
+        else:
+            text_encoding = None
         # add pixel_values + pixel_mask
         encoding_feature_extractor = self.feature_extractor(images, return_tensors=return_tensors)
-        encoding.update(encoding_feature_extractor)
+        if text_encoding is not None:
+            encoding_feature_extractor.update(text_encoding)
 
-        return encoding
+        return encoding_feature_extractor
 
     def batch_decode(self, *args, **kwargs):
         """

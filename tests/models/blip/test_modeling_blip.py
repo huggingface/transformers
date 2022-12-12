@@ -55,7 +55,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPProcessor
+    from transformers import BlipProcessor
 
 
 class BlipVisionModelTester:
@@ -609,6 +609,32 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "input_ids",
+                    "attention_mask",
+                    "decoder_input_ids",
+                    "decoder_attention_mask",
+                ]
+                expected_arg_names.extend(
+                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                    else ["encoder_outputs"]
+                )
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            else:
+                expected_arg_names = ["input_ids"] if model_class != BlipForConditionalGeneration else ["pixel_values"]
+                self.assertListEqual(arg_names[:1], expected_arg_names)
+
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -740,39 +766,42 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
 
 @require_vision
 @require_torch
+@slow
 class BlipModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference(self):
-        model_name = "ybelkada/blip-base"
-        model = BlipModel.from_pretrained(model_name).to(torch_device)
-        processor = CLIPProcessor.from_pretrained(model_name)
-
+    def test_inference_image_captioning(self):
+        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         image = prepare_img()
-        inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
-        ).to(torch_device)
 
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
+        # image only
+        inputs = processor(image=image).to(torch_device)
 
-        # verify the logits
+        predictions = model.generate(**inputs)
+
+        # Test output
+        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
+
+        # image and context
+        context = ["a picture of"]
+        inputs = processor(image=image, text=context).to(torch_device)
+
+        predictions = model.generate(**inputs)
+
+        # Test output
         self.assertEqual(
-            outputs.logits_per_image.shape,
-            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
-        )
-        self.assertEqual(
-            outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+            predictions[0].tolist(),
+            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
         )
 
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+    def test_inference_vqa(self):
+        pass
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+    def test_inference_itm(self):
+        pass
