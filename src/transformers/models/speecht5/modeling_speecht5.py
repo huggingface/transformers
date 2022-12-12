@@ -2645,6 +2645,9 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         self.speech_decoder_postnet = SpeechT5SpeechDecoderPostnet(config)
 
+        hifigan_config = HiFiGANConfig()
+        self.vocoder = HiFiGANGenerator(hifigan_config)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2746,9 +2749,10 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         threshold: float = 0.5,
         minlenratio: float = 0.0,
         maxlenratio: float = 20.0,
+        output_spectrogram: bool = False,
     ) -> torch.FloatTensor:
         r"""
-        Converts a sequence of input tokens into a sequence of mel spectrograms, which can subsequently be turned into
+        Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into
         a speech waveform using a vocoder.
 
         Args:
@@ -2767,6 +2771,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 Used to calculate the minimum required length for the output sequence.
             maxlenratio (`float`, *optional*, defaults to 20.0):
                 Used to calculate the maximum allowed length for the output sequence.
+            output_spectrogram (`bool`, *optional*, defaults to False):
+                If True, outputs a mel spectrogram instead of a speech waveform.
 
         Returns:
             `torch.FloatTensor` of shape `(output_sequence_length, config.num_mel_bins)` containing the predicted mel
@@ -2828,7 +2834,37 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 spectrogram = torch.cat(spectrogram, dim=0).unsqueeze(0)
                 spectrogram = self.speech_decoder_postnet.postnet(spectrogram)
                 spectrogram = spectrogram.squeeze(0)
-                return spectrogram
+                break
+
+        if output_spectrogram:
+            return spectrogram
+
+        # TODO: add as parameters to the model!
+        mean = torch.tensor([-1.6831, -1.5471, -1.4146, -1.4586, -1.5487, -1.5937, -1.5867, -1.5899,
+        -1.5867, -1.5780, -1.6170, -1.6587, -1.7000, -1.7458, -1.8358, -1.8951,
+        -1.9310, -1.9801, -2.0248, -2.0528, -2.0602, -2.1114, -2.1315, -2.1420,
+        -2.1613, -2.1911, -2.1897, -2.2217, -2.2127, -2.2410, -2.2447, -2.2490,
+        -2.2512, -2.2488, -2.2419, -2.2191, -2.2215, -2.2127, -2.2133, -2.2208,
+        -2.2319, -2.2401, -2.2648, -2.2746, -2.2972, -2.3148, -2.3246, -2.3313,
+        -2.3298, -2.3310, -2.3298, -2.3387, -2.3513, -2.3688, -2.3785, -2.3893,
+        -2.4146, -2.4396, -2.4646, -2.4849, -2.5056, -2.5224, -2.5425, -2.5760,
+        -2.6151, -2.6537, -2.6927, -2.7333, -2.7739, -2.8153, -2.8475, -2.8716,
+        -2.8937, -2.9092, -2.9154, -2.9202, -2.9342, -2.9567, -2.9807, -3.0541])
+        scale = torch.tensor([0.8563, 0.8759, 0.8994, 0.9070, 0.8881, 0.8690, 0.8732, 0.8858, 0.8921,
+        0.8896, 0.8857, 0.8798, 0.8735, 0.8707, 0.8645, 0.8562, 0.8491, 0.8397,
+        0.8289, 0.8189, 0.8099, 0.8023, 0.7948, 0.7922, 0.7875, 0.7825, 0.7859,
+        0.7867, 0.7850, 0.7848, 0.7830, 0.7813, 0.7801, 0.7787, 0.7784, 0.7788,
+        0.7777, 0.7760, 0.7731, 0.7696, 0.7656, 0.7624, 0.7596, 0.7547, 0.7504,
+        0.7496, 0.7486, 0.7507, 0.7558, 0.7624, 0.7659, 0.7668, 0.7663, 0.7647,
+        0.7632, 0.7613, 0.7617, 0.7585, 0.7586, 0.7610, 0.7620, 0.7623, 0.7629,
+        0.7665, 0.7721, 0.7752, 0.7773, 0.7812, 0.7855, 0.7893, 0.7952, 0.7993,
+        0.7995, 0.7958, 0.7920, 0.7897, 0.7862, 0.7857, 0.7833, 0.7860])
+
+        spectrogram = (spectrogram - mean) / scale
+        spectrogram = spectrogram.transpose(1, 0).unsqueeze(0)
+        speech = self.vocoder(spectrogram)
+        speech = speech.squeeze(0).transpose(1, 0).view(-1)
+        return speech
 
 
 @add_start_docstrings("""SpeechT5 Model with a TODO on top.""", SPEECHT5_START_DOCSTRING)
