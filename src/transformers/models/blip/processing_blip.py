@@ -26,7 +26,7 @@ from ...utils import TensorType
 # Copied from transformers.models.vilt.processing_vilt.ViltProcessor with Vilt->Blip and ViLT->Blip
 class BlipProcessor(ProcessorMixin):
     r"""
-    Constructs a ViLT processor which wraps a BERT tokenizer and ViLT feature extractor into a single processor.
+    Constructs a BLIP processor which wraps a BERT tokenizer and BLIP image processor into a single processor.
 
     [`BlipProcessor`] offers all the functionalities of [`BlipFeatureExtractor`] and [`BertTokenizerFast`]. See the
     docstring of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
