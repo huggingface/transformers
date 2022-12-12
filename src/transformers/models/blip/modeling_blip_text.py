@@ -282,7 +282,7 @@ class BlipTextAttention(nn.Module):
         return outputs
 
 
-# Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L291
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert -> BlipText
 class BlipTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -292,13 +292,13 @@ class BlipTextIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-# Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L306
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert -> BlipText
 class BlipTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -306,7 +306,7 @@ class BlipTextOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -335,7 +335,6 @@ class BlipTextLayer(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
-        mode=None,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -397,7 +396,6 @@ class BlipTextEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-        mode="multimodal",
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -434,7 +432,6 @@ class BlipTextEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    mode=mode,
                 )
             else:
                 layer_outputs = layer_module(
@@ -445,7 +442,6 @@ class BlipTextEncoder(nn.Module):
                     encoder_attention_mask,
                     past_key_value,
                     output_attentions,
-                    mode=mode,
                 )
 
             hidden_states = layer_outputs[0]
@@ -685,7 +681,6 @@ class BlipTextModel(BlipTextPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         is_decoder=False,
-        mode="multimodal",
     ):
         r"""
         encoder_hidden_states  (:
@@ -795,7 +790,6 @@ class BlipTextModel(BlipTextPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            mode=mode,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -849,7 +843,6 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
         return_logits=False,
         is_decoder=True,
         reduction="mean",
-        mode="multimodal",
     ):
         r"""
         encoder_hidden_states  (:
@@ -897,7 +890,6 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             is_decoder=is_decoder,
-            mode=mode,
         )
 
         sequence_output = outputs[0]
