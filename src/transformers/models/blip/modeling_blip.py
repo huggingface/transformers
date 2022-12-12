@@ -1281,7 +1281,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import BlipTokenizer, BlipForImageCaptioning
 
-        >>> model = BLIPForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
