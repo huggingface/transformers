@@ -64,7 +64,6 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 2_000)
 
-    # TODO: these tests will differ with our 2 tokenizers, might be able to hard-code it for one
     def test_full_tokenizer(self):
         tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
 
