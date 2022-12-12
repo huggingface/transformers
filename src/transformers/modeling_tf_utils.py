@@ -1137,8 +1137,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
-        self._set_save_spec(self.serving.input_signature[0])
 
     def get_config(self):
         return self.config.to_dict()
@@ -1155,6 +1153,21 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         All context managers that the model should be initialized under go here.
         """
         return cls(config, **kwargs)
+
+    def build_with_dummies(self, dummies=None):
+        if dummies is None:
+            dummies = {key: tf.keras.Input(type_spec=spec) for key, spec in self.serving.input_signature[0].items()}
+        elif isinstance(dummies, dict):
+            for key in list(dummies.keys()):
+                if isinstance(dummies[key], tf.TypeSpec):
+                    dummies[key] = tf.keras.Input(type_spec=dummies[key])
+        elif isinstance(dummies, list) or isinstance(dummies, tuple):
+            dummies = [tf.keras.Input(type_spec=element) if isinstance(element, tf.TypeSpec) else element
+                       for element in dummies]
+        elif isinstance(dummies, tf.TypeSpec):
+            dummies = tf.keras.Input(type_spec=dummies)
+        self(dummies)  # Build the model using these placeholder inputs
+
 
     def eager_serving(self, inputs):
         """
@@ -1748,7 +1761,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             main_layer.set_input_embeddings(value)
         except AttributeError:
             logger.info("Building the model")
-            self(self.dummy_inputs)
+            self.build_with_dummies()
             main_layer.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> Union[None, tf.keras.layers.Layer]:
@@ -1765,7 +1778,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return lm_head.get_output_embeddings()
             except AttributeError:
                 logger.info("Building the model")
-                self(self.dummy_inputs)
+                self.build_with_dummies()
 
                 return lm_head().get_output_embeddings()
 
@@ -1785,7 +1798,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 lm_head.set_output_embeddings(value)
             except AttributeError:
                 logger.info("Building the model")
-                self(self.dummy_inputs)
+                self.build_with_dummies()
                 lm_head.set_output_embeddings(value)
 
     def get_output_layer_with_bias(self) -> Union[None, tf.keras.layers.Layer]:
@@ -1823,7 +1836,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             try:
                 return lm_head.get_bias()
             except AttributeError:
-                self(self.dummy_inputs)
+                self.build_with_dummies()
 
                 return lm_head.get_bias()
         return None
@@ -1841,7 +1854,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             try:
                 lm_head.set_bias(value)
             except AttributeError:
-                self(self.dummy_inputs)
+                self.build_with_dummies()
                 lm_head.set_bias(value)
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
@@ -1928,7 +1941,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # The reason why the attributes don't exist might be
         # because the model is not built, so retry getting
         # the argument after building the model
-        model(model.dummy_inputs)
+        model.build_with_dummies()
 
         embeds = getattr(embedding_layer, "weight", None)
         if embeds is not None:
@@ -2731,9 +2744,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # we might need to extend the variable scope for composite models
         if load_weight_prefix is not None:
             with tf.compat.v1.variable_scope(load_weight_prefix):
-                model(model.dummy_inputs)  # build the network with dummy inputs
+                model.build_with_dummies()  # build the network with dummy inputs
         else:
-            model(model.dummy_inputs)  # build the network with dummy inputs
+            model.build_with_dummies()  # build the network with dummy inputs
 
         if safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
@@ -2780,7 +2793,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
                 )
 
-        model(model.dummy_inputs)  # Make sure restore ops are run
+        model.build_with_dummies()  # Make sure restore ops are run
 
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:
