@@ -60,6 +60,10 @@
       title: Clasificación de imágenes
     title: Visión Artificial
   - sections:
+    - local: debugging
+      title: Debugging
+    title: Rendimiento y escalabilidad  
+  - sections:
     - local: add_new_pipeline
       title: ¿Cómo puedo añadir un pipeline a 🤗 Transformers?
     - local: pr_checks
