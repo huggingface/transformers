@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -28,6 +28,7 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
+    requires_backends,
     to_numpy,
 )
 from .utils.constants import (  # noqa: F401
@@ -64,7 +65,8 @@ class ChannelDimension(ExplicitEnum):
 
 def is_valid_image(img):
     return (
-        isinstance(img, (PIL.Image.Image, np.ndarray))
+        (is_vision_available() and isinstance(img, PIL.Image.Image))
+        or isinstance(img, np.ndarray)
         or is_torch_tensor(img)
         or is_tf_tensor(img)
         or is_jax_tensor(img)
@@ -90,7 +92,10 @@ def is_batched(img):
 
 
 def to_numpy_array(img) -> np.ndarray:
-    if isinstance(img, PIL.Image.Image):
+    if not is_valid_image(img):
+        raise ValueError(f"Invalid image type: {type(img)}")
+
+    if is_vision_available() and isinstance(img, PIL.Image.Image):
         return np.array(img)
     return to_numpy(img)
 
@@ -163,6 +168,47 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
         raise ValueError(f"Unsupported data format: {channel_dim}")
 
 
+def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]) -> bool:
+    if (
+        isinstance(annotation, dict)
+        and "image_id" in annotation
+        and "annotations" in annotation
+        and isinstance(annotation["annotations"], (list, tuple))
+        and (
+            # an image can have no annotations
+            len(annotation["annotations"]) == 0
+            or isinstance(annotation["annotations"][0], dict)
+        )
+    ):
+        return True
+    return False
+
+
+def is_valid_annotation_coco_panoptic(annotation: Dict[str, Union[List, Tuple]]) -> bool:
+    if (
+        isinstance(annotation, dict)
+        and "image_id" in annotation
+        and "segments_info" in annotation
+        and "file_name" in annotation
+        and isinstance(annotation["segments_info"], (list, tuple))
+        and (
+            # an image can have no segments
+            len(annotation["segments_info"]) == 0
+            or isinstance(annotation["segments_info"][0], dict)
+        )
+    ):
+        return True
+    return False
+
+
+def valid_coco_detection_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
+    return all(is_valid_annotation_coco_detection(ann) for ann in annotations)
+
+
+def valid_coco_panoptic_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
+    return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
+
+
 def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
     """
     Loads `image` to a PIL Image.
@@ -174,6 +220,7 @@ def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
     Returns:
         `PIL.Image.Image`: A PIL Image.
     """
+    requires_backends(load_image, ["vision"])
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file

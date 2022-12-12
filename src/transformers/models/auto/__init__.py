@@ -45,6 +45,7 @@ else:
     _import_structure["modeling_auto"] = [
         "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
         "MODEL_FOR_AUDIO_XVECTOR_MAPPING",
+        "MODEL_FOR_BACKBONE_MAPPING",
         "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
         "MODEL_FOR_CAUSAL_LM_MAPPING",
         "MODEL_FOR_CTC_MAPPING",
@@ -73,6 +74,7 @@ else:
         "MODEL_WITH_LM_HEAD_MAPPING",
         "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
         "AutoModel",
+        "AutoBackbone",
         "AutoModelForAudioClassification",
         "AutoModelForAudioFrameClassification",
         "AutoModelForAudioXVector",
@@ -198,6 +200,7 @@ if TYPE_CHECKING:
         from .modeling_auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_AUDIO_XVECTOR_MAPPING,
+            MODEL_FOR_BACKBONE_MAPPING,
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
@@ -225,6 +228,7 @@ if TYPE_CHECKING:
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
+            AutoBackbone,
             AutoModel,
             AutoModelForAudioClassification,
             AutoModelForAudioFrameClassification,

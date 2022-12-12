@@ -14,10 +14,20 @@
 # limitations under the License.
 """Feature extractor class for BEiT."""
 
+import warnings
+
 from ...utils import logging
 from .image_processing_beit import BeitImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
-BeitFeatureExtractor = BeitImageProcessor
+
+class BeitFeatureExtractor(BeitImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class BeitFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
+            " use BeitImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)

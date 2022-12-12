@@ -61,7 +61,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     >>> from transformers import pipeline
 
     >>> oracle = pipeline(model="facebook/bart-large-mnli")
-    >>> answers = oracle(
+    >>> oracle(
     ...     "I have a problem with my iphone that needs to be resolved asap!!",
     ...     candidate_labels=["urgent", "not urgent", "phone", "tablet", "computer"],
     ... )
@@ -74,7 +74,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     {'sequence': 'I have a problem with my iphone that needs to be resolved asap!!', 'labels': ['english', 'german'], 'scores': [0.814, 0.186]}
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This NLI pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"zero-shot-classification"`.

@@ -63,7 +63,7 @@ class TextClassificationPipeline(Pipeline):
     [{'label': 'NEGATIVE', 'score': 0.996}]
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This text classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"sentiment-analysis"` (for classifying sequences according to positive or negative sentiments).

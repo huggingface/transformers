@@ -41,6 +41,8 @@ PRIVATE_MODELS = [
     "T5Stack",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
+    "MaskFormerSwinModel",
+    "MaskFormerSwinPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -176,6 +178,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PLBartDecoder",
     "PLBartDecoderWrapper",
     "BeitForMaskedImageModeling",
+    "ChineseCLIPTextModel",
+    "ChineseCLIPVisionModel",
     "CLIPTextModel",
     "CLIPTextModelWithProjection",
     "CLIPVisionModel",
@@ -198,6 +202,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaImageModel",
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
+    "GPTSw3DoubleHeadsModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
@@ -668,6 +673,12 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "PyTorchBenchmarkArguments",
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
+    "BitBackbone",
+    "MaskFormerSwinBackbone",
+    "ResNetBackbone",
+    "AutoBackbone",
+    "MaskFormerSwinConfig",
+    "MaskFormerSwinModel",
 ]
 
 
