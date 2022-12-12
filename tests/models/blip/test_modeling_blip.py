@@ -44,7 +44,7 @@ if is_torch_available():
     from transformers import (
         BlipForConditionalGeneration,
         BlipForImageTextRetrieval,
-        BlipForVisualQuestionAnswering,
+        BlipForQuestionAnswering,
         BlipModel,
         BlipTextModel,
         BlipVisionModel,
@@ -574,7 +574,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BlipForConditionalGeneration,
-            BlipForVisualQuestionAnswering,
+            BlipForQuestionAnswering,
             BlipForImageTextRetrieval,
         )
         if is_torch_available()

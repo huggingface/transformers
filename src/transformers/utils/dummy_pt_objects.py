@@ -1129,7 +1129,7 @@ class BlipForImageTextRetrieval(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class BlipForVisualQuestionAnswering(metaclass=DummyObject):
+class BlipForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

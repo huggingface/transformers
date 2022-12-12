@@ -149,7 +149,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
     "BlipForConditionalGeneration",
     "BlipForImageTextRetrieval",
-    "BlipForVisualQuestionAnswering",
+    "BlipForQuestionAnswering",
     "BlipVisionModel",
     "BlipTextLMHeadModel",
     "BlipTextModel",
