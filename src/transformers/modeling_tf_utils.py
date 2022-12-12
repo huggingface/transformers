@@ -1162,12 +1162,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 if isinstance(dummies[key], tf.TypeSpec):
                     dummies[key] = tf.keras.Input(type_spec=dummies[key])
         elif isinstance(dummies, list) or isinstance(dummies, tuple):
-            dummies = [tf.keras.Input(type_spec=element) if isinstance(element, tf.TypeSpec) else element
-                       for element in dummies]
+            dummies = [
+                tf.keras.Input(type_spec=element) if isinstance(element, tf.TypeSpec) else element
+                for element in dummies
+            ]
         elif isinstance(dummies, tf.TypeSpec):
             dummies = tf.keras.Input(type_spec=dummies)
         self(dummies)  # Build the model using these placeholder inputs
-
 
     def eager_serving(self, inputs):
         """
