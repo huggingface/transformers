@@ -65,7 +65,6 @@ class DinatModelTester:
         scope=None,
         use_labels=True,
         num_labels=10,
-        encoder_stride=8,
         out_features=["stage1", "stage2"],
     ):
         self.parent = parent
@@ -91,7 +90,6 @@ class DinatModelTester:
         self.scope = scope
         self.use_labels = use_labels
         self.num_labels = num_labels
-        self.encoder_stride = encoder_stride
         self.out_features = out_features
 
     def prepare_config_and_inputs(self):
@@ -125,7 +123,6 @@ class DinatModelTester:
             patch_norm=self.patch_norm,
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
             out_features=self.out_features,
         )
 

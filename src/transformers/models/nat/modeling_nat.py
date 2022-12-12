@@ -21,7 +21,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from torch import Tensor, nn
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -900,7 +900,7 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Tensor,
+        pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
