@@ -27,6 +27,7 @@ _import_structure = {
         "BlipTextConfig",
         "BlipVisionConfig",
     ],
+    "processing_blip": ["BlipProcessor"],
 }
 
 try:
@@ -36,7 +37,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_blip"] = ["BlipImageProcessor"]
-    _import_structure["processing_blip"] = ["BlipProcessor"]
 
 
 try:
@@ -58,6 +58,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_blip import BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, BlipConfig, BlipTextConfig, BlipVisionConfig
+    from .processing_blip import BlipProcessor
 
     try:
         if not is_vision_available():
@@ -66,7 +67,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_blip import BlipImageProcessor
-        from .processing_blip import BlipProcessor
 
     try:
         if not is_torch_available():
