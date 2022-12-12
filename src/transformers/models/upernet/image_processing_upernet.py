@@ -87,15 +87,20 @@ def rescale_size(old_size: tuple, scale: Union[float, int, tuple], return_scale:
 
 class UperNetImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a UperNet image processor.
+    Constructs an UperNet image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
-            size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
+            Whether to rescale (= resize while keeping the aspect ratio) the image's (height, width) dimensions as
+            large as possible within the specified `scale`. Can be overridden by the `do_resize` parameter in the
+            `preprocess` method.
+        scale (`float` or `Tuple[int]`, *optional*, defaults to `(2048, 512)`):
+            Scale of the output image when resizing.
+
+            If it is a float number, then the image will be rescaled by this factor, else if it is a tuple of 2
+            integers, then the image will be rescaled as large as possible within the scale.
+
+            Can be overridden by the `scale` parameter in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
