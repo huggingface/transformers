@@ -75,16 +75,61 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
         if chunk.shape[0] > _stride_left:
             yield {"is_last": is_last, "stride": stride, **processed}
 
-def _find_timestamp_sequence(sequence,tokenizer):
+def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
     """
-    Finds the index of the matching timestamps using the timing information.
-    Take the following sequences :
-    [ 50257, Timestamp, 5018, 42198, 583, 193, O42 T, T 8913, 289, 3923, T, T, 8741, 9814, 9813, T]
-    [ 193, O42 T, T 8913, 289, 3923, T, T, 8741, 9814, 9813, 526, 2721, 182, T, T, 192, T]
-    Since at each token we have the approximate time (the conversion is linear), we can find in a range 
-    the two TT tokens that indicate the start and end of the sentence.
     """
-    return
+    max_source_positions = 1500
+    results = {}
+    offset = 0
+    last_time = 0
+
+
+    time_precision = feature_extractor.chunk_length / max_source_positions
+    current_time = 0
+
+    for item in sequences:
+        sequence, stride = item
+        chunk_len, stride_left, stride_right = [ (val*feature_extractor.hop_length) /  feature_extractor.sampling_rate for val in stride]
+
+        idx = np.where(sequence[0,4:]>=50363)[0] + 4
+        offset = last_time - (last_time - time[0])/2 if current_time!=0 else 0
+
+        time = (idx*time_precision) + (offset)
+        time = np.round(time,decimals = 2) * 10
+        results = tokenizer.batch_decode(sequence, skip_special_tokens=True)
+        full_transcription +=("\n"+results[0] + f"{len(sequence[0,4:])}")
+
+        if current_time != 0:
+            match = np.where(time>=last_time)[0][0]
+            # We can patch in the middle of a sentence if we use the token wise time stamps! Or we can match to the closest sequence using
+            # the previous algorithm! SHould give optimal results if the approximation of the time stamps is good enough!
+            current_sequence = sequence[:,idx[match+1]:idx[match+2]]
+            patch_seq = _find_longest_common_sequence([prev_sequences,current_sequence],tokenizer)
+
+            patch = tokenizer.decode(patch_seq, skip_special_tokens=True)
+            t0 = last_begin_time
+            t1 = time[match+1]
+            patched_transcript += patch
+        else:
+            patched_transcript = results[0]
+        last_time = time[-1]
+        last_begin_time = time[-3]
+        prev_sequences = sequence[:,idx[-3]:idx[-2]]
+
+        if current_time == 0:
+            t0 = offset/2
+            t1 = time[0].item()
+            patch = tokenizer.batch_decode(sequence[:,4:idx[0]])
+        for time_idx in range(1,len(idx)-3,2):
+            t0 = time[time_idx].item()
+            t1 = time[time_idx+1].item()
+            sequence = sequence[:,idx[time_idx]:idx[time_idx+1]]
+            if current_time == 0:
+                path = tokenizer.batch_decode(sequence)
+            elif current_time != 0 and time_idx != 1:
+                patch = tokenizer.batch_decode(sequence)
+
+    return results
 
 def _find_longest_common_sequence(sequences, tokenizer):
     # TODO  Use a faster algorithm this can probably be done in O(n)
@@ -411,8 +456,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # Optional return types
         optional = {}
 
-        if return_timestamps and self.type == "seq2seq":
-            raise ValueError("We cannot return_timestamps yet on non-ctc models !")
+        if return_timestamps and self.type == "seq2seq" and "Whisper" not in self.model.__class__.__name__:
+            raise ValueError("We cannot return_timestamps yet on non-ctc models apart from Whisper !")
         if return_timestamps == "char" and self.type == "ctc_with_lm":
             raise ValueError("CTC with LM cannot return `char` timestamps, only `words`")
 
@@ -430,9 +475,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # This won't work with left padding (which doesn't exist right now)
                 right_n = total_n - right
                 items = items[:, left:right_n]
+            if "Whisper" in self.model.__class__.__name__:
+                items = (items,stride)
             final_items.append(items)
-        if stride and self.type == "seq2seq":
+        if stride and self.type == "seq2seq" and not return_timestamps:
             items = _find_longest_common_sequence(final_items, self.tokenizer)
+        elif stride and self.type == "seq2seq" and return_timestamps:
+            items = _find_timestamp_sequence(final_items, self.tokenizer, self.feature_extractor)
         else:
             items = np.concatenate(final_items, axis=1)
             items = items.squeeze(0)
