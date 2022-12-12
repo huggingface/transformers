@@ -83,51 +83,85 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
     offset = 0
     last_time = 0
 
+    # index of the first timestamp token
+    timestamp_begin = tokenizer.all_special_ids[-1] + 1
+
 
     time_precision = feature_extractor.chunk_length / max_source_positions
     current_time = 0
 
-    for item in sequences:
+    for idx, item in enumerate(sequences):
         sequence, stride = item
         chunk_len, stride_left, stride_right = [ (val*feature_extractor.hop_length) /  feature_extractor.sampling_rate for val in stride]
+        timestamp_tokens = np.where(sequence[0]>=timestamp_begin)[0]
 
-        idx = np.where(sequence[0,4:]>=50363)[0] + 4
-        offset = last_time - (last_time - time[0])/2 if current_time!=0 else 0
+        timestamp_offset = (idx * ( chunk_len - stride_left)) * time_precision # in seconds
 
-        time = (idx*time_precision) + (offset)
-        time = np.round(time,decimals = 2) * 10
-        results = tokenizer.batch_decode(sequence, skip_special_tokens=True)
-        full_transcription +=("\n"+results[0] + f"{len(sequence[0,4:])}")
+        time = (sequence[0][timestamp_tokens] - timestamp_begin)*time_precision + timestamp_offset
 
+        # patch the matching sequence with the last sequence of the previous chunk
         if current_time != 0:
-            match = np.where(time>=last_time)[0][0]
-            # We can patch in the middle of a sentence if we use the token wise time stamps! Or we can match to the closest sequence using
-            # the previous algorithm! SHould give optimal results if the approximation of the time stamps is good enough!
-            current_sequence = sequence[:,idx[match+1]:idx[match+2]]
-            patch_seq = _find_longest_common_sequence([prev_sequences,current_sequence],tokenizer)
-
-            patch = tokenizer.decode(patch_seq, skip_special_tokens=True)
-            t0 = last_begin_time
-            t1 = time[match+1]
-            patched_transcript += patch
+            match = np.where(time>=last_end_time)[0][0]
+            # get the corresponding sliced_sequence
+            sliced_sequence = sequence[:,timestamp_tokens[match+1]:timestamp_tokens[match+2]]
+            patch = _find_longest_common_sequence([prev_sequences,sliced_sequence],tokenizer)
+            start_timestamp_position = last_begin_time
+            end_timestamp_position = time[match+1]
         else:
-            patched_transcript = results[0]
-        last_time = time[-1]
-        last_begin_time = time[-3]
-        prev_sequences = sequence[:,idx[-3]:idx[-2]]
+            patch = sequence
+            start_timestamp_position = 0
+            end_timestamp_position = time[0]
 
-        if current_time == 0:
-            t0 = offset/2
-            t1 = time[0].item()
-            patch = tokenizer.batch_decode(sequence[:,4:idx[0]])
-        for time_idx in range(1,len(idx)-3,2):
-            t0 = time[time_idx].item()
-            t1 = time[time_idx+1].item()
-            sequence = sequence[:,idx[time_idx]:idx[time_idx+1]]
-            if current_time == 0:
-                path = tokenizer.batch_decode(sequence)
-            elif current_time != 0 and time_idx != 1:
-                patch = tokenizer.batch_decode(sequence)
+        results.append({
+            "sequence": patch,
+            "start_time": start_timestamp_position,
+            "end_time": end_timestamp_position,
+        })
+
+        consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+        if len(consecutive) > 0:  # if the output contains two consecutive timestamp tokens
+            last_slice = 0
+            for slice_idx,current_slice in enumerate(consecutive):
+                sliced_tokens = sequence[last_slice:current_slice]
+                start_timestamp_position = (
+                    sliced_tokens[0].item() - tokenizer.timestamp_begin
+                )
+                end_timestamp_position = (
+                        sliced_tokens[-1].item() - tokenizer.timestamp_begin
+                )
+                if current_time == 0:
+                    results.append({
+                        "sequence": sliced_tokens,
+                        "start_time": start_timestamp_position,
+                        "end_time": end_timestamp_position,
+                    })
+                elif current_time != 0 and slice_idx > 1:
+                    results.append({
+                        "sequence": sliced_tokens,
+                        "start_time": start_timestamp_position,
+                        "end_time": end_timestamp_position,
+                    })
+                last_slice = current_slice
+            last_timestamp_position = (
+                sequence[last_slice - 1].item() - tokenizer.timestamp_begin
+            )
+        else:
+            duration = chunk_len - stride_left - stride_right
+            timestamps = sequence[timestamp_tokens.nonzero().flatten()]
+            if len(timestamps) > 0 and timestamps[-1].item() != tokenizer.timestamp_begin:
+                # no consecutive timestamps but it has a timestamp; use the last one.
+                # single timestamp at the end means no speech after the last timestamp.
+                last_timestamp_position = timestamps[-1].item() - tokenizer.timestamp_begin
+                duration = last_timestamp_position * time_precision
+            results.append({
+                "sequence": patch,
+                "start_time": offset,
+                "end_time": offset + duration,
+            })
+
+        last_end_time = end_timestamp_position
+        last_begin_time = start_timestamp_position
+        prev_sequences = patch
 
     return results
 
