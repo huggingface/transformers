@@ -190,8 +190,6 @@ pipelines_torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
-        "pip install jieba",
-        "pip install torch==1.12.0+cpu torchvision==0.13.0+cpu torchaudio==0.12.0 --extra-index-url https://download.pytorch.org/whl/cpu"
     ],
     pytest_options={"rA": None},
     tests_to_run="tests/pipelines/"
@@ -247,7 +245,6 @@ examples_torch_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -r examples/pytorch/_tests_requirements.txt",
-        "pip install jieba",
     ],
     tests_to_run="./examples/pytorch/",
 )
