@@ -18,11 +18,13 @@ import os
 from importlib.util import find_spec
 from typing import Optional, Tuple
 
+from transformers import is_torch_available
 
-if find_spec("torch") is not None:
+
+if is_torch_available():
     import torch
 else:
-    print("missing torch!")
+    raise RuntimeError("missing torch!")
 
 if find_spec("jieba") is not None:
     import jieba
@@ -56,12 +58,14 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 def pad(orig_items, key, padding_value=0, padding_side="left"):
     items = []
     if isinstance(orig_items[0][key], list):
-        assert isinstance(orig_items[0][key][0], torch.Tensor)
+        if not isinstance(orig_items[0][key][0], torch.Tensor):
+            raise TypeError("The type of orig_items[0][key][0] should be tensor!")
         for it in orig_items:
             for tr in it[key]:
                 items.append({key: tr})
     else:
-        assert isinstance(orig_items[0][key], torch.Tensor)
+        if not isinstance(orig_items[0][key][0], torch.Tensor):
+            raise TypeError("The type of orig_items[0][key][0] should be tensor!")
         items = orig_items
 
     batch_size = len(items)

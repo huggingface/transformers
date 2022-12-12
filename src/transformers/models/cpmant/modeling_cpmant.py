@@ -17,22 +17,16 @@
 
 import math
 import os
-from importlib.util import find_spec
 from typing import List, Optional, Tuple
 
-
-if find_spec("torch") is not None:
-    import torch
-    import torch.nn.functional as F
-    import torch.utils.checkpoint
-    from torch import nn
-else:
-    print("missing torch!")
+import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
+from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_cpmant import CPMAntConfig
 
@@ -112,9 +106,11 @@ def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            # assert (
+            #     pointer.shape == array.shape
+            # ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            if pointer.shape != array.shape:
+                raise AssertionError("Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -150,41 +146,6 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float("inf")
         logits = logits.view(batch_size, -1).contiguous()
 
     return logits
-
-
-def apply_repetition_penalty(
-    logits,
-    batch_size,
-    num_beams,
-    prev_output_tokens,
-    repetition_penalty,
-    start_idx=None,
-    end_idx=None,
-    window_size=None,
-):
-    # only conduct repetition penalty for the output
-    assert repetition_penalty >= 1, "repetition penalty coefficient should >= 1"
-    # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
-    for i in range(batch_size * num_beams):
-        if start_idx is None or end_idx is None:
-            output_tokens = prev_output_tokens[i].tolist()
-        else:
-            if end_idx >= start_idx:
-                if window_size:
-                    output_tokens = prev_output_tokens[i][
-                        max(start_idx, end_idx + 1 - window_size) : end_idx + 1
-                    ].tolist()
-                else:
-                    output_tokens = prev_output_tokens[i][start_idx : end_idx + 1].tolist()
-            else:
-                output_tokens = []
-        for previous_token in set(output_tokens):
-            # if score < 0 then repetition penalty has to
-            # multiplied to reduce the previous token probability
-            if logits[i, previous_token] < 0:
-                logits[i, previous_token] *= repetition_penalty
-            else:
-                logits[i, previous_token] /= repetition_penalty
 
 
 class BeamHypotheses:
@@ -233,49 +194,6 @@ class BeamHypotheses:
             return self.worst_score >= best_sum_logprobs / cur_len**self.length_penalty
 
 
-def pad(orig_items, key, padding_value=0, padding_side="left"):
-    items = []
-    if isinstance(orig_items[0][key], list):
-        assert isinstance(orig_items[0][key][0], torch.Tensor)
-        for it in orig_items:
-            for tr in it[key]:
-                items.append({key: tr})
-    else:
-        assert isinstance(orig_items[0][key], torch.Tensor)
-        items = orig_items
-
-    batch_size = len(items)
-    shape = items[0][key].shape
-    dim = len(shape)
-    assert dim <= 3
-    max_length = max(item[key].shape[-1] for item in items)
-    min_length = min(item[key].shape[-1] for item in items)
-    dtype = items[0][key].dtype
-
-    if dim == 1:
-        return torch.cat([item[key] for item in items], dim=0)
-    elif dim == 2:
-        if max_length == min_length:
-            return torch.cat([item[key] for item in items], dim=0)
-        tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
-    else:
-        tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
-
-    for i, item in enumerate(items):
-        if dim == 2:
-            if padding_side == "left":
-                tensor[i, -len(item[key][0]) :] = item[key][0].clone()
-            else:
-                tensor[i, : len(item[key][0])] = item[key][0].clone()
-        elif dim == 3:
-            if padding_side == "left":
-                tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
-            else:
-                tensor[i, : len(item[key][0]), :] = item[key][0].clone()
-
-    return tensor
-
-
 @torch.jit.script  # type: ignore
 def rms_layernorm(hidden: torch.Tensor, weight: torch.Tensor, eps: float):
     old_dtype = hidden.dtype
@@ -310,7 +228,9 @@ class CPMAntLayerNorm(nn.Module):
         Return:
             `torch.Tensor` of shape `(batch_size, seq_len, dim_norm)`: The layernorm output.
         """  # noqa: E501
-        assert x.size(-1) == self.dim_norm
+        # assert x.size(-1) == self.dim_norm
+        if x.size(-1) != self.dim_norm:
+            raise AssertionError("x.size(-1) != self.dim_norm")
         return rms_layernorm(x, self.weight, self.eps)
 
 
@@ -832,9 +752,13 @@ class CPMAntEncoder(nn.Module):
         self.num_layers = num_layers
 
         if mask_modules is not None:
-            assert len(mask_modules) == num_layers, "The total number of masks should equal to num_layers"
+            # assert len(mask_modules) == num_layers, "The total number of masks should equal to num_layers"
+            if len(mask_modules) == num_layers:
+                raise ValueError("The total number of masks should equal to num_layers")
             for mask_module in mask_modules:
-                assert len(mask_module) == 2, "For encoder, each mask should be (mask_att, mask_ffn)"
+                # assert len(mask_module) == 2, "For encoder, each mask should be (mask_att, mask_ffn)"
+                if len(mask_module) != 2:
+                    raise ValueError("For encoder, each mask should be (mask_att, mask_ffn)")
         else:
             mask_modules = [(False, False)] * num_layers
 
@@ -999,8 +923,12 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             keylen = key_pos.size(1)
             querylen = query_pos.size(1)
 
-            assert key_pos.size(0) == query_pos.size(0)
-            assert keylen == key_segment.size(1) and querylen == query_segment.size(1)
+            # assert key_pos.size(0) == query_pos.size(0)
+            # assert keylen == key_segment.size(1) and querylen == query_segment.size(1)
+            if key_pos.size(0) != query_pos.size(0):
+                raise AssertionError("key_pos.size(0) != query_pos.size(0)")
+            if keylen != key_segment.size(1) or querylen != query_segment.size(1):
+                raise AssertionError("keylen != key_segment.size(1) or querylen != query_segment.size(1)")
 
             key_pos = key_pos.view(batch, -1, keylen)
             query_pos = query_pos.view(batch, querylen, -1)
@@ -1069,90 +997,6 @@ class CPMAntOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
-
-
-class CPMAntLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = CPMAntAttention(config)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
-        if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = CPMAntAttention(config, position_embedding_type="absolute")
-        self.intermediate = CPMAntIntermediate(config)
-        self.output = CPMAntOutput(config)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
-        )
-        attention_output = self_attention_outputs[0]
-
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        cross_attn_present_key_value = None
-        if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(self, "crossattention"), (
-                f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by"
-                " setting `config.add_cross_attention=True`"
-            )
-
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                output_attentions,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
-
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
-        outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
-
-        return outputs
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
 
 
 class CPMAntPreTrainedModel(PreTrainedModel):
@@ -1348,7 +1192,15 @@ class CPMAntModel(CPMAntPreTrainedModel):
         segment: torch.Tensor,  # (batch, seqlen)
         span: torch.Tensor,  # (batch, seqlen)
     ):
-
+        """
+        Args:
+            input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
+            length (`torch.Tensor`): length of input, shape = `(batch)`
+            context (`torch.Tensor`): context of input, shape = `(batch, seq_len)`
+            position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
+            segment (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
+            span (`torch.Tensor`): span of input, shape = `(batch, seq_len)`
+        """
         batch = input.size(0)
         seqlen = input.size(1)
         input_prompt = input[:, : self.prompt_length].contiguous()
@@ -1393,7 +1245,16 @@ class CPMAntForCausalLM(CPMAntModel):
         span: torch.Tensor,  # (batch, seqlen)
         past_key_values=None,  # num_layers * 2 * (batch, num_heads, seqlen, dim_head)
     ):
-
+        """
+        Args:
+            input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
+            length (`torch.Tensor`): length of input, shape = `(batch)`
+            context (`torch.Tensor`): context of input, shape = `(batch, seq_len)`
+            position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
+            segment (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
+            span (`torch.Tensor`): span of input, shape = `(batch, seq_len)`
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+        """
         batch = input.size(0)
 
         if past_key_values is None:
@@ -1457,23 +1318,66 @@ class CPMAntForCausalLM(CPMAntModel):
 
         return model_inputs
 
+    def pad(self, orig_items, key, padding_value=0, padding_side="left"):
+        items = []
+        if isinstance(orig_items[0][key], list):
+            if not isinstance(orig_items[0][key][0], torch.Tensor):
+                raise TypeError("The type of orig_items[0][key][0] should be tensor!")
+            for it in orig_items:
+                for tr in it[key]:
+                    items.append({key: tr})
+        else:
+            if not isinstance(orig_items[0][key][0], torch.Tensor):
+                raise TypeError("The type of orig_items[0][key][0] should be tensor!")
+            items = orig_items
+
+        batch_size = len(items)
+        shape = items[0][key].shape
+        dim = len(shape)
+        if dim > 3:
+            raise ValueError(f"input should have at most 3 dimensions, got {dim}")
+        max_length = max(item[key].shape[-1] for item in items)
+        min_length = min(item[key].shape[-1] for item in items)
+        dtype = items[0][key].dtype
+
+        if dim == 1:
+            return torch.cat([item[key] for item in items], dim=0)
+        elif dim == 2:
+            if max_length == min_length:
+                return torch.cat([item[key] for item in items], dim=0)
+            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+        else:
+            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
+
+        for i, item in enumerate(items):
+            if dim == 2:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0])] = item[key][0].clone()
+            elif dim == 3:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0]), :] = item[key][0].clone()
+
+        return tensor
+
     def _process_texts(self, input_ids):
         input_tensors = list(map(self._convert_to_tensors, input_ids))
         keys = set(input_tensors[0].keys())
         padded = {}
         for key in keys:
-            padded[key] = pad(input_tensors, key, padding_side="left")
+            padded[key] = self.pad(input_tensors, key, padding_side="left")
         return padded
 
     def generate(self, input_ids, **kwargs):
         input_ids = input_ids.detach().tolist()
         model_inputs = self._process_texts(input_ids)
+
         with torch.inference_mode():
             result = self._decode(model_inputs, **kwargs)
         return result
-
-    def postprocess(self, model_outputs, **kwargs):
-        return model_outputs
 
     def _decode(
         self, model_inputs, beam_size=3, max_length=50, repetition_penalty=1.2, repetition_window=None, **kwargs
@@ -1584,7 +1488,7 @@ class CPMAntForCausalLM(CPMAntModel):
                 logits[:, 7] = -float("inf")
                 logits[:, 4] = -float("inf")
 
-            apply_repetition_penalty(
+            self.apply_repetition_penalty(
                 logits,
                 batch_size,
                 beam_size,
@@ -1602,7 +1506,10 @@ class CPMAntForCausalLM(CPMAntModel):
             next_scores = next_scores.view(batch_size, -1)  # (batch_size, beam_size * vocab_size)
             next_scores, next_words = torch.topk(next_scores, 2 * beam_size, dim=1, largest=True, sorted=True)
 
-            assert next_scores.size() == next_words.size() == (batch_size, 2 * beam_size)
+            if not (next_scores.size() == next_words.size() == (batch_size, 2 * beam_size)):
+                raise AssertionError(
+                    "next_scores.size(), next_words.size(), (batch_size, 2 * beam_size) are not equal. "
+                )
             next_batch_beam = []
 
             for sent_id in range(batch_size):
@@ -1636,18 +1543,26 @@ class CPMAntForCausalLM(CPMAntModel):
                         break
 
                 # update next beam content
-                assert len(next_sent_beam) == 0 if i == max_length else beam_size
+                # assert len(next_sent_beam) == 0 if i == max_length else beam_size
+                if i == max_length and len(next_sent_beam) != 0:
+                    raise AssertionError("i == max_length and len(next_sent_beam) != 0")
+                if i != max_length and len(next_sent_beam) != beam_size:
+                    raise AssertionError("i != beam_size and len(next_sent_beam) != beam_size")
                 if len(next_sent_beam) == 0:
                     next_sent_beam = [(0, 0, 0)] * beam_size  # pad the batch
                 next_batch_beam.extend(next_sent_beam)
-                assert len(next_batch_beam) == beam_size * (sent_id + 1)
+                # assert len(next_batch_beam) == beam_size * (sent_id + 1)
+                if len(next_batch_beam) != beam_size * (sent_id + 1):
+                    raise AssertionError("len(next_batch_beam) != beam_size * (sent_id + 1)")
 
             # we have reached the last step
             if i == max_length:
                 break
 
             # sanity check / prepare next batch
-            assert len(next_batch_beam) == batch_size * beam_size
+            # assert len(next_batch_beam) == batch_size * beam_size
+            if len(next_batch_beam) != batch_size * beam_size:
+                raise AssertionError("len(next_batch_beam) != batch_size * beam_size")
             beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
             beam_words = input.new([x[1] for x in next_batch_beam])
             beam_idx = length.new([x[2] for x in next_batch_beam]).long()
@@ -1683,3 +1598,40 @@ class CPMAntForCausalLM(CPMAntModel):
         output_ids = [input_id + result for input_id, result in zip(input_ids, results)]
 
         return torch.tensor(output_ids)
+
+    def apply_repetition_penalty(
+        self,
+        logits,
+        batch_size,
+        num_beams,
+        prev_output_tokens,
+        repetition_penalty,
+        start_idx=None,
+        end_idx=None,
+        window_size=None,
+    ):
+        # only conduct repetition penalty for the output
+        # assert repetition_penalty >= 1, "repetition penalty coefficient should >= 1"
+        if repetition_penalty < 1:
+            raise ValueError("repetition penalty coefficient should >= 1")
+        # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
+        for i in range(batch_size * num_beams):
+            if start_idx is None or end_idx is None:
+                output_tokens = prev_output_tokens[i].tolist()
+            else:
+                if end_idx >= start_idx:
+                    if window_size:
+                        output_tokens = prev_output_tokens[i][
+                            max(start_idx, end_idx + 1 - window_size) : end_idx + 1
+                        ].tolist()
+                    else:
+                        output_tokens = prev_output_tokens[i][start_idx : end_idx + 1].tolist()
+                else:
+                    output_tokens = []
+            for previous_token in set(output_tokens):
+                # if score < 0 then repetition penalty has to
+                # multiplied to reduce the previous token probability
+                if logits[i, previous_token] < 0:
+                    logits[i, previous_token] *= repetition_penalty
+                else:
+                    logits[i, previous_token] /= repetition_penalty

@@ -24,7 +24,7 @@ if is_torch_available():
 
 
 @custom_tokenizers
-class CpmTokenizationTest(TokenizerTesterMixin):
+class CPMAntTokenizationTest(TokenizerTesterMixin):
     def test_pre_tokenization(self):
         tokenizer = CPMAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
         texts = "今天天气真好！"
