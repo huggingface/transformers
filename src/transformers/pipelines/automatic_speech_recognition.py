@@ -79,49 +79,43 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
     """
     """
     max_source_positions = 1500
-    results = {}
-    offset = 0
-    last_time = 0
-
+    begin_idx = 4
+    results = []
     # index of the first timestamp token
     timestamp_begin = tokenizer.all_special_ids[-1] + 1
-
-
     time_precision = feature_extractor.chunk_length / max_source_positions
-    current_time = 0
-
+    last_timestamp_position = 0
     for idx, item in enumerate(sequences):
         sequence, stride = item
         chunk_len, stride_left, stride_right = [ (val*feature_extractor.hop_length) /  feature_extractor.sampling_rate for val in stride]
-        timestamp_tokens = np.where(sequence[0]>=timestamp_begin)[0]
-
-        timestamp_offset = (idx * ( chunk_len - stride_left)) * time_precision # in seconds
-
-        time = (sequence[0][timestamp_tokens] - timestamp_begin)*time_precision + timestamp_offset
-
+        timestamp_offset = last_timestamp_position * time_precision # in seconds
+        sequence = sequence.squeeze(0)
         # patch the matching sequence with the last sequence of the previous chunk
-        if current_time != 0:
+        if last_timestamp_position != 0:
+            timestamp_tokens = np.where(sequence[0]>=timestamp_begin)[0]
+            time = (sequence[timestamp_tokens] - timestamp_begin)*time_precision + timestamp_offset
             match = np.where(time>=last_end_time)[0][0]
             # get the corresponding sliced_sequence
-            sliced_sequence = sequence[:,timestamp_tokens[match+1]:timestamp_tokens[match+2]]
+            sliced_sequence = sequence[timestamp_tokens[match]:timestamp_tokens[match+1]]
             patch = _find_longest_common_sequence([prev_sequences,sliced_sequence],tokenizer)
+            # should clean the patch to make sure both sets are merged
+            patch = set(prev_sequences,patch)
             start_timestamp_position = last_begin_time
             end_timestamp_position = time[match+1]
+            results.append({
+                "sequence": patch,
+                "start_time": start_timestamp_position * time_precision,
+                "end_time": end_timestamp_position * time_precision,
+            })
+            sequence = sequence[timestamp_tokens[match+1]:]
         else:
-            patch = sequence
-            start_timestamp_position = 0
-            end_timestamp_position = time[0]
+            sequence = sequence[begin_idx:]
 
-        results.append({
-            "sequence": patch,
-            "start_time": start_timestamp_position,
-            "end_time": end_timestamp_position,
-        })
-
+        timestamp_tokens = sequence>=timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
         if len(consecutive) > 0:  # if the output contains two consecutive timestamp tokens
             last_slice = 0
-            for slice_idx,current_slice in enumerate(consecutive):
+            for current_slice in consecutive:
                 sliced_tokens = sequence[last_slice:current_slice]
                 start_timestamp_position = (
                     sliced_tokens[0].item() - tokenizer.timestamp_begin
@@ -129,24 +123,17 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
                 end_timestamp_position = (
                         sliced_tokens[-1].item() - tokenizer.timestamp_begin
                 )
-                if current_time == 0:
-                    results.append({
-                        "sequence": sliced_tokens,
-                        "start_time": start_timestamp_position,
-                        "end_time": end_timestamp_position,
-                    })
-                elif current_time != 0 and slice_idx > 1:
-                    results.append({
-                        "sequence": sliced_tokens,
-                        "start_time": start_timestamp_position,
-                        "end_time": end_timestamp_position,
-                    })
+                results.append({
+                    "sequence": sliced_tokens,
+                    "start_time": start_timestamp_position * time_precision,
+                    "end_time": end_timestamp_position * time_precision,
+                })
                 last_slice = current_slice
             last_timestamp_position = (
                 sequence[last_slice - 1].item() - tokenizer.timestamp_begin
             )
         else:
-            duration = chunk_len - stride_left - stride_right
+            duration = (chunk_len * idx) / feature_extractor.sampling_rate
             timestamps = sequence[timestamp_tokens.nonzero().flatten()]
             if len(timestamps) > 0 and timestamps[-1].item() != tokenizer.timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
@@ -155,8 +142,8 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
                 duration = last_timestamp_position * time_precision
             results.append({
                 "sequence": patch,
-                "start_time": offset,
-                "end_time": offset + duration,
+                "start_time": timestamp_offset,
+                "end_time": timestamp_offset + duration,
             })
 
         last_end_time = end_timestamp_position
