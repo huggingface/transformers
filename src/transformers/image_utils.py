@@ -28,6 +28,7 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
+    requires_backends,
     to_numpy,
 )
 from .utils.constants import (  # noqa: F401
@@ -64,7 +65,8 @@ class ChannelDimension(ExplicitEnum):
 
 def is_valid_image(img):
     return (
-        isinstance(img, (PIL.Image.Image, np.ndarray))
+        (is_vision_available() and isinstance(img, PIL.Image.Image))
+        or isinstance(img, np.ndarray)
         or is_torch_tensor(img)
         or is_tf_tensor(img)
         or is_jax_tensor(img)
@@ -90,7 +92,10 @@ def is_batched(img):
 
 
 def to_numpy_array(img) -> np.ndarray:
-    if isinstance(img, PIL.Image.Image):
+    if not is_valid_image(img):
+        raise ValueError(f"Invalid image type: {type(img)}")
+
+    if is_vision_available() and isinstance(img, PIL.Image.Image):
         return np.array(img)
     return to_numpy(img)
 
@@ -215,6 +220,7 @@ def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
     Returns:
         `PIL.Image.Image`: A PIL Image.
     """
+    requires_backends(load_image, ["vision"])
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
