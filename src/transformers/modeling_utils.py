@@ -2301,7 +2301,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ):
                 logger.warning(
                     "For stability purposes, it is recommended to have accelerate installed when using this model in"
-                    " torch.flaot16, please install it with `pip install accelerate`"
+                    " torch.float16, please install it with `pip install accelerate`"
                 )
 
             if is_sharded:
