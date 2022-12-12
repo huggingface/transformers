@@ -46,6 +46,14 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
 
+    Example usage:
+    ```
+    >>> from transformers import GPTSw3Tokenizer
+    >>> tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
+    >>> tokenizer("Svenska är kul!")['input_ids']
+    [1814, 377, 3617, 63504]
+    ```
+
     Args:
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
