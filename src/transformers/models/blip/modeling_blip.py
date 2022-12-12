@@ -1078,7 +1078,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
-class BlipForVisualQuestionAnswering(BlipPreTrainedModel):
+class BlipForQuestionAnswering(BlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
 
@@ -1121,7 +1121,7 @@ class BlipForVisualQuestionAnswering(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, BLIPForImageCaptioning
+        >>> from transformers import BLIPProcessor, BLIPForImageCaptioning
 
         >>> model = BLIPForImageCaptioning.from_pretrained("ybelkada/blip-base")
         >>> processor = CLIPProcessor.from_pretrained("ybelkada/blip-base")
