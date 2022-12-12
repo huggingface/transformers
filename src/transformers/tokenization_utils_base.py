@@ -2940,7 +2940,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         required_input = encoded_inputs[self.model_input_names[0]]
 
-        if not required_input:
+        if required_input is None:
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
