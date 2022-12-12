@@ -298,8 +298,8 @@ onnx_job = CircleCIJob(
 )
 
 
-layoutlm_job = CircleCIJob(
-    "layoutlmv2_and_v3",
+exotic_models_job = CircleCIJob(
+    "exotic_models",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev",
         "pip install --upgrade pip",
@@ -340,7 +340,7 @@ REGULAR_TESTS = [
     custom_tokenizers_job,
     hub_job,
     onnx_job,
-    layoutlm_job,
+    exotic_models_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
