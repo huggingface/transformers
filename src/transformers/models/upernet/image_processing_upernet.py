@@ -20,7 +20,7 @@ import numpy as np
 
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -232,7 +232,7 @@ class UperNetImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        scale: Optional[Union[float, Tuple[int]]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -250,10 +250,13 @@ class UperNetImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
-                resizing.
+                Whether to rescale (= resize while keeping the aspect ratio) the image's (height, width) dimensions as
+                large as possible within the specified `scale`.
+            scale (`float` or `Tuple[int]`, *optional*, defaults to `self.scale`):
+                Scale of the output image when resizing.
+
+                If it is a float number, then the image will be rescaled by this factor, else if it is a tuple of 2
+                integers, then the image will be rescaled as large as possible within the scale.
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
                 `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
                 an effect if `do_resize` is set to `True`.
@@ -283,13 +286,11 @@ class UperNetImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        scale = scale if scale is not None else self.scale
         resample = resample if resample is not None else self.resample
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-
-        size = size if size is not None else self.size
-        size_dict = get_size_dict(size)
 
         if not is_batched(images):
             images = [images]
@@ -300,8 +301,8 @@ class UperNetImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
+        if do_resize and scale is None:
+            raise ValueError("Scale must be specified if do_resize is True.")
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
@@ -310,7 +311,7 @@ class UperNetImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_resize:
-            images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]
+            images = [self.resize(image=image, scale=scale, resample=resample) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]

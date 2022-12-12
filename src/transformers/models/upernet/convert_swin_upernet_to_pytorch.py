@@ -30,7 +30,7 @@ from PIL import Image
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
+from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation, UperNetImageProcessor
 from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
@@ -214,6 +214,9 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     print("Sum of pixel values:", pixel_values.sum().item())
     print("Mean of pixel values:", pixel_values.mean().item())
+
+    # processor = UperNetImageProcessor()
+    # pixel_values = processor(image, return_tensors="pt").pixel_values
 
     with torch.no_grad():
         outputs = model(pixel_values)
