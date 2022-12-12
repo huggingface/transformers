@@ -210,7 +210,8 @@ class DonutImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize the image to the specified size using thumbnail method.
+        Resize the image to make a thumbnail. The image is resized so that no dimension is larger than any
+        corresponding dimension of the specified size.
 
         Args:
             image (`np.ndarray`):
@@ -222,8 +223,24 @@ class DonutImageProcessor(BaseImageProcessor):
             data_format (`Optional[Union[str, ChannelDimension]]`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
         """
-        output_size = (size["height"], size["width"])
-        return resize(image, size=output_size, resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs)
+        input_height, input_width = get_image_size(image)
+        output_height, output_width = size["height"], size["width"]
+
+        # We always resize to the smallest of either the input or output size.
+        height = min(input_height, output_height)
+        width = min(input_width, output_width)
+
+        if height == input_height and width == input_width:
+            return image
+
+        if input_height > input_width:
+            width = int(input_width * height / input_height)
+        elif input_width > input_height:
+            height = int(input_height * width / input_width)
+
+        return resize(
+            image, size=(height, width), resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs
+        )
 
     def resize(
         self,
@@ -250,7 +267,8 @@ class DonutImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         shortest_edge = min(size["height"], size["width"])
         output_size = get_resize_output_image_size(image, size=shortest_edge, default_to_square=False)
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        resized_image = resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return resized_image
 
     def rescale(
         self,
@@ -403,7 +421,7 @@ class DonutImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_align_long_axis:
-            images = [self.align_long_axis(image) for image in images]
+            images = [self.align_long_axis(image, size=size) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]

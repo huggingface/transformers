@@ -27,7 +27,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
 from ...modeling_outputs import BackboneOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import BackboneMixin, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
@@ -837,7 +837,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         )
 
 
-class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
+class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
     """
     MaskFormerSwin backbone, designed especially for the MaskFormer framework.
 
@@ -855,7 +855,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
         self.stage_names = config.stage_names
         self.model = MaskFormerSwinModel(config)
 
-        self.out_features = config.out_features
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
         if "stem" in self.out_features:
             raise ValueError("This backbone does not support 'stem' in the `out_features`.")
 
