@@ -77,6 +77,7 @@ from . import (
     gpt_neo,
     gpt_neox,
     gpt_neox_japanese,
+    gpt_sw3,
     gptj,
     groupvit,
     herbert,
