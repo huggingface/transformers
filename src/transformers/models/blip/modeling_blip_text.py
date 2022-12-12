@@ -15,14 +15,12 @@
 
 
 import math
-from typing import Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
-
-from typing import List, Optional, Tuple, Union
 
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import (
@@ -216,7 +214,6 @@ class BlipTextSelfAttention(nn.Module):
         return outputs
 
 
-# Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#228
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert -> BlipText
 class BlipTextSelfOutput(nn.Module):
     def __init__(self, config):
@@ -474,14 +471,14 @@ class BlipTextEncoder(nn.Module):
         )
 
 
-# Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L486
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->BlipText
 class BlipTextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -490,7 +487,7 @@ class BlipTextPooler(nn.Module):
         return pooled_output
 
 
-# Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L501
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->BlipText
 class BlipTextPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -501,14 +498,14 @@ class BlipTextPredictionHeadTransform(nn.Module):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
 
 
-# Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L518
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->BlipText
 class BlipTextLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -529,13 +526,13 @@ class BlipTextLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L538
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->BlipText
 class BlipTextOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.predictions = BlipTextLMPredictionHead(config)
 
-    def forward(self, sequence_output):
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
