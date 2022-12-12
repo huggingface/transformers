@@ -14,134 +14,180 @@
 # limitations under the License.
 
 import argparse
+import re
 
 import torch
+from PIL import Image
+from torchvision import transforms
+from torchvision.transforms.functional import InterpolationMode
 
-from blip import load
-from transformers import BLIPConfig, BLIPModel
+import requests
 
-
-def copy_attn_layer(hf_attn_layer, pt_attn_layer):
-    q_proj, k_proj, v_proj = pt_attn_layer.in_proj_weight.chunk(3, dim=0)
-    q_proj_bias, k_proj_bias, v_proj_bias = pt_attn_layer.in_proj_bias.chunk(3, dim=0)
-
-    out_proj_weights = pt_attn_layer.out_proj.weight
-    out_proj_bias = pt_attn_layer.out_proj.bias
-
-    hf_attn_layer.q_proj.weight.data = q_proj
-    hf_attn_layer.q_proj.bias.data = q_proj_bias
-
-    hf_attn_layer.k_proj.weight.data = k_proj
-    hf_attn_layer.k_proj.bias.data = k_proj_bias
-
-    hf_attn_layer.v_proj.weight.data = v_proj
-    hf_attn_layer.v_proj.bias.data = v_proj_bias
-
-    hf_attn_layer.out_proj.weight = out_proj_weights
-    hf_attn_layer.out_proj.bias = out_proj_bias
+# git clone https://github.com/salesforce/BLIP.git
+from models.blip import blip_decoder
+from models.blip_itm import blip_itm
+from models.blip_vqa import blip_vqa
+from transformers import (
+    BertTokenizer,
+    BlipConfig,
+    BlipForConditionalGeneration,
+    BlipForImageTextRetrieval,
+    BlipForQuestionAnswering,
+)
 
 
-def copy_mlp(hf_mlp, pt_mlp):
-    copy_linear(hf_mlp.fc1, pt_mlp.c_fc)
-    copy_linear(hf_mlp.fc2, pt_mlp.c_proj)
+def load_demo_image(image_size, device):
+    img_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
+    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+
+    w, h = raw_image.size
+    # display(raw_image.resize((w//5,h//5)))
+
+    transform = transforms.Compose(
+        [
+            transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+        ]
+    )
+    image = transform(raw_image).unsqueeze(0).to(device)
+    return image
 
 
-def copy_linear(hf_linear, pt_linear):
-    hf_linear.weight = pt_linear.weight
-    hf_linear.bias = pt_linear.bias
+def rename_key(key):
+    if "visual_encoder" in key:
+        key = re.sub("visual_encoder*", "vision_model.encoder", key)
+    if "blocks" in key:
+        key = re.sub(r"blocks", "layers", key)
+    if "attn" in key:
+        key = re.sub(r"attn", "self_attn", key)
+    if "norm1" in key:
+        key = re.sub(r"norm1", "layer_norm1", key)
+    if "norm2" in key:
+        key = re.sub(r"norm2", "layer_norm2", key)
+    if "encoder.norm" in key:
+        key = re.sub(r"encoder.norm", "post_layernorm", key)
+    if "encoder.patch_embed.proj" in key:
+        key = re.sub(r"encoder.patch_embed.proj", "embeddings.patch_embedding", key)
 
+    if "encoder.pos_embed" in key:
+        key = re.sub(r"encoder.pos_embed", "embeddings.position_embedding", key)
+    if "encoder.cls_token" in key:
+        key = re.sub(r"encoder.cls_token", "embeddings.class_embedding", key)
 
-def copy_layer(hf_layer, pt_layer):
-    # copy layer norms
-    copy_linear(hf_layer.layer_norm1, pt_layer.ln_1)
-    copy_linear(hf_layer.layer_norm2, pt_layer.ln_2)
+    if "self_attn" in key:
+        key = re.sub(r"self_attn.proj", "self_attn.projection", key)
 
-    # copy MLP
-    copy_mlp(hf_layer.mlp, pt_layer.mlp)
-
-    # copy attn
-    copy_attn_layer(hf_layer.self_attn, pt_layer.attn)
-
-
-def copy_layers(hf_layers, pt_layers):
-    for hf_layer, pt_layer in zip(hf_layers, pt_layers):
-        copy_layer(hf_layer, pt_layer)
-
-
-def copy_encoder(hf_encoder, pt_model):
-    # copy  embeds
-    hf_encoder.embeddings.token_embedding.weight = pt_model.token_embedding.weight
-    hf_encoder.embeddings.position_embedding.weight.data = pt_model.positional_embedding
-
-    # copy layer norm
-    copy_linear(hf_encoder.final_layer_norm, pt_model.ln_final)
-
-    # copy hidden layers
-    copy_layers(hf_encoder.encoder.layers, pt_model.transformer.resblocks)
-
-
-def copy_text_model_and_projection(hf_model, pt_model):
-    # copy projection
-    hf_model.text_projection.weight.data = pt_model.text_projection.data.T
-
-    # copy text encoder
-    copy_encoder(hf_model.text_model, pt_model)
-
-
-def copy_vison_model_and_projection(hf_model, pt_model):
-    # copy projection
-    hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T
-
-    # copy layer norms
-    copy_linear(hf_model.vision_model.pre_layrnorm, pt_model.visual.ln_pre)
-    copy_linear(hf_model.vision_model.post_layernorm, pt_model.visual.ln_post)
-
-    # copy embeds
-    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_model.visual.conv1.weight.data
-    hf_model.vision_model.embeddings.class_embedding = pt_model.visual.class_embedding
-    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_model.visual.positional_embedding.data
-
-    # copy encoder
-    copy_layers(hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks)
+    return key
 
 
 @torch.no_grad()
-def convert_blip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
+def convert_blip_checkpoint(pytorch_dump_folder_path, config_path=None):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = BLIPConfig.from_pretrained(config_path)
+        config = BlipConfig.from_pretrained(config_path)
     else:
-        config = BLIPConfig(projection_dim=512, text_config={}, vision_config={})
+        config = BlipConfig(projection_dim=512, text_config={}, vision_config={})
 
-    hf_model = BLIPModel(config).eval()
+    hf_model = BlipForConditionalGeneration(config).eval()
 
-    pt_model, _ = load(checkpoint_path, device="cpu", jit=False)
+    model_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_capfilt_large.pth"
+
+    pt_model = blip_decoder(pretrained=model_url, image_size=384, vit="base")
     pt_model = pt_model.eval()
 
-    copy_text_model_and_projection(hf_model, pt_model)
-    copy_vison_model_and_projection(hf_model, pt_model)
-    hf_model.logit_scale = pt_model.logit_scale
+    modified_state_dict = pt_model.state_dict()
+    for key in modified_state_dict.copy():
+        value = modified_state_dict.pop(key)
+        renamed_key = rename_key(key)
+        modified_state_dict[renamed_key] = value
 
-    input_ids = torch.arange(0, 77).unsqueeze(0)
-    pixel_values = torch.randn(1, 3, 224, 224)
+    hf_model.load_state_dict(modified_state_dict)
 
-    hf_logits_per_image, hf_logits_per_text = hf_model(
-        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
-    )[1:3]
-    pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
+    image_size = 384
+    image = load_demo_image(image_size=image_size, device="cpu")
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    input_ids = tokenizer(["a picture of"]).input_ids
 
-    assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)
-    assert torch.allclose(hf_logits_per_text, pt_logits_per_text, atol=1e-3)
+    out = hf_model.generate(image, input_ids)
 
-    hf_model.save_pretrained(pytorch_dump_folder_path)
+    assert out[0].tolist() == [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
+
+    out = hf_model.generate(image)
+
+    assert out[0].tolist() == [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
+
+    if pytorch_dump_folder_path is not None:
+        hf_model.save_pretrained(pytorch_dump_folder_path)
+
+    # model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_vqa.pth'
+    model_url = (
+        "https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_vqa_capfilt_large.pth"
+    )
+
+    vqa_model = blip_vqa(pretrained=model_url, image_size=image_size, vit="base")
+    vqa_model.eval()
+
+    modified_state_dict = vqa_model.state_dict()
+    for key in modified_state_dict.copy():
+        value = modified_state_dict.pop(key)
+        renamed_key = rename_key(key)
+        modified_state_dict[renamed_key] = value
+
+    hf_vqa_model = BlipForQuestionAnswering(config)
+
+    hf_vqa_model.load_state_dict(modified_state_dict)
+
+    question = ["How many dogs are in this image?"]
+    question_input_ids = tokenizer(question, return_tensors="pt").input_ids
+
+    answer = hf_vqa_model.generate(question_input_ids, image)
+    print(tokenizer.decode(answer[0]))
+
+    assert tokenizer.decode(answer[0]) == "[UNK] 1 [SEP]"
+    if pytorch_dump_folder_path is not None:
+        hf_vqa_model.save_pretrained(pytorch_dump_folder_path + "_vqa")
+
+    model_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_retrieval_coco.pth"
+
+    itm_model = blip_itm(pretrained=model_url, image_size=image_size, vit="base")
+    itm_model.eval()
+
+    modified_state_dict = itm_model.state_dict()
+    for key in modified_state_dict.copy():
+        value = modified_state_dict.pop(key)
+        renamed_key = rename_key(key)
+        modified_state_dict[renamed_key] = value
+
+    hf_itm_model = BlipForImageTextRetrieval(config)
+
+    question = ["A picture of a woman with a dog sitting in a beach"]
+    question_input_ids = tokenizer(
+        question,
+        return_tensors="pt",
+        padding="max_length",
+        truncation=True,
+        max_length=35,
+    ).input_ids
+
+    hf_itm_model.load_state_dict(modified_state_dict)
+    hf_itm_model.eval()
+
+    out_itm = hf_itm_model(question_input_ids, image, use_itm_head=True)
+    out = hf_itm_model(question_input_ids, image, use_itm_head=False)
+
+    assert out[0].item() == 0.2110687494277954
+    assert torch.nn.functional.softmax(out_itm[0], dim=1)[:, 1].item() == 0.45698845386505127
+
+    if pytorch_dump_folder_path is not None:
+        hf_itm_model.save_pretrained(pytorch_dump_folder_path + "_itm")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
 
