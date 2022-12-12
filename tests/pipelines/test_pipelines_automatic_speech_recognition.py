@@ -277,7 +277,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         audio = processor(filename).input_values
         output = model.generate(audio)
 
-
         # output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         # self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
