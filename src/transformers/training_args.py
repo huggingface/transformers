@@ -1387,7 +1387,6 @@ class TrainingArguments:
     @cached_property
     def _setup_devices(self) -> "torch.device":
         requires_backends(self, ["torch"])
-
         logger.info("PyTorch: setting up devices")
         if torch.distributed.is_available() and torch.distributed.is_initialized() and self.local_rank == -1:
             logger.warning(
@@ -1570,7 +1569,6 @@ class TrainingArguments:
         - `ParallelMode.TPU`: several TPU cores.
         """
         requires_backends(self, ["torch"])
-
         if is_torch_tpu_available():
             return ParallelMode.TPU
         elif is_sagemaker_mp_enabled():
@@ -1607,7 +1605,6 @@ class TrainingArguments:
         The index of the current process used.
         """
         requires_backends(self, ["torch"])
-
         if is_torch_tpu_available():
             return xm.get_ordinal()
         elif is_sagemaker_mp_enabled():
@@ -1624,7 +1621,6 @@ class TrainingArguments:
         The index of the local process used.
         """
         requires_backends(self, ["torch"])
-
         if is_torch_tpu_available():
             return xm.get_local_ordinal()
         elif is_sagemaker_mp_enabled():

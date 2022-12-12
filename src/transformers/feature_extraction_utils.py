@@ -190,7 +190,6 @@ class BatchFeature(UserDict):
             [`BatchFeature`]: The same instance after modification.
         """
         requires_backends(self, ["torch"])
-
         import torch  # noqa
 
         new_data = {}

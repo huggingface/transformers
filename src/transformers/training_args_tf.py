@@ -187,7 +187,6 @@ class TFTrainingArguments(TrainingArguments):
     @cached_property
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         requires_backends(self, ["tf"])
-
         logger.info("Tensorflow: setting up strategy")
 
         gpus = tf.config.list_physical_devices("GPU")
@@ -247,7 +246,7 @@ class TFTrainingArguments(TrainingArguments):
         """
         The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
-
+        requires_backends(self, ["tf"])
         return self._setup_strategy.num_replicas_in_sync
 
     @property

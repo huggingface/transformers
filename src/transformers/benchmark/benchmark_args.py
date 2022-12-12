@@ -78,7 +78,6 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
     @cached_property
     def _setup_devices(self) -> Tuple["torch.device", int]:
         requires_backends(self, ["torch"])
-
         logger.info("PyTorch: setting up devices")
         if not self.cuda:
             device = torch.device("cpu")
