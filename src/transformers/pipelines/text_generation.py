@@ -130,6 +130,8 @@ class TextGenerationPipeline(Pipeline):
 
         postprocess_params = {}
         if return_full_text is not None and return_type is None:
+            if return_text is not None:
+                raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
             return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
         if return_tensors is not None and return_type is None:
             return_type = ReturnType.TENSORS
