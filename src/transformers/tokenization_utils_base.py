@@ -24,7 +24,7 @@ import os
 import re
 import warnings
 from collections import OrderedDict, UserDict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
@@ -2940,7 +2940,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         required_input = encoded_inputs[self.model_input_names[0]]
 
-        if not required_input:
+        if required_input is None or (isinstance(required_input, Sized) and len(required_input) == 0):
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
