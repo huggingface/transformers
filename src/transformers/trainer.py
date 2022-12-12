@@ -1424,9 +1424,8 @@ class Trainer:
                     cpu_offload=cpu_offload,
                     auto_wrap_policy=auto_wrap_policy,
                     mixed_precision=mixed_precision_policy,
+                    device_id=self.args.device,
                 )
-                if FSDPOption.OFFLOAD not in self.args.fsdp:
-                    model.to(self.args.device)
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
