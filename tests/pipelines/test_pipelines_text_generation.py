@@ -201,6 +201,9 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 ],
             )
 
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_full_text=True, return_text=True)
+
         # Empty prompt is slighly special
         # it requires BOS token to exist.
         # Special case for Pegasus which will always append EOS so will
