@@ -46,6 +46,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_speecht5 import SpeechT5Config
+from .configuration_hifigan import HiFiGANConfig
 
 
 logger = logging.get_logger(__name__)
@@ -246,6 +247,135 @@ def _compute_mask_indices(
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
 
     return spec_aug_mask
+
+
+class HiFiGANResidualBlock(nn.Module):
+    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
+        super().__init__()
+        self.leaky_relu_slope = leaky_relu_slope
+
+        self.convs1 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=dilation[i],
+                    padding=self.get_padding(kernel_size, dilation[i]),
+                )
+                for i in range(len(dilation))
+            ]
+        )
+        self.convs2 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=1,
+                    padding=self.get_padding(kernel_size, 1),
+                )
+                for _ in range(len(dilation))
+            ]
+        )
+
+        for layer in self.convs1:
+            nn.utils.weight_norm(layer)
+        for layer in self.convs2:
+            nn.utils.weight_norm(layer)
+
+    def get_padding(self, kernel_size, dilation=1):
+        return (kernel_size * dilation - dilation) // 2
+
+    def forward(self, hidden_states):
+        for conv1, conv2 in zip(self.convs1, self.convs2):
+            residual = hidden_states
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = conv1(hidden_states)
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = conv2(hidden_states)
+            hidden_states = hidden_states + residual
+        return hidden_states
+
+    def remove_weight_norm(self):
+        for layer in self.convs1:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.convs2:
+            nn.utils.remove_weight_norm(layer)
+
+
+class HiFiGANGenerator(PreTrainedModel):
+    config_class = HiFiGANConfig
+
+    def __init__(self, config: HiFiGANConfig):
+        super().__init__(config)
+        self.num_kernels = len(config.resblock_kernel_sizes)
+        self.num_upsamples = len(config.upsample_rates)
+        self.conv_pre = nn.Conv1d(
+            config.model_in_dim,
+            config.upsample_initial_channel,
+            kernel_size=7,
+            stride=1,
+            padding=3,
+        )
+
+        self.upsampler = nn.ModuleList()
+        for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
+            self.upsampler.append(
+                nn.ConvTranspose1d(
+                    config.upsample_initial_channel // (2**i),
+                    config.upsample_initial_channel // (2 ** (i + 1)),
+                    kernel_size=kernel_size,
+                    stride=upsample_rate,
+                    padding=(kernel_size - upsample_rate) // 2,
+                )
+            )
+
+        self.resblocks = nn.ModuleList()
+        for i in range(len(self.upsampler)):
+            channels = config.upsample_initial_channel // (2 ** (i + 1))
+            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
+                self.resblocks.append(HiFiGANResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
+
+        self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
+
+        nn.utils.weight_norm(self.conv_pre)
+        for layer in self.upsampler:
+            nn.utils.weight_norm(layer)
+        nn.utils.weight_norm(self.conv_post)
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv_pre(hidden_states)
+        for i in range(self.num_upsamples):
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.config.leaky_relu_slope)
+            hidden_states = self.upsampler[i](hidden_states)
+
+            res_state = self.resblocks[i * self.num_kernels](hidden_states)
+            for j in range(1, self.num_kernels):
+                res_state += self.resblocks[i * self.num_kernels + j](hidden_states)
+            hidden_states = res_state / self.num_kernels
+
+        hidden_states = nn.functional.leaky_relu(hidden_states)
+        hidden_states = self.conv_post(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+        return hidden_states
+
+    def remove_weight_norm(self):
+        nn.utils.remove_weight_norm(self.conv_pre)
+        for layer in self.upsampler:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.resblocks:
+            layer.remove_weight_norm()
+        nn.utils.remove_weight_norm(self.conv_post)
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
