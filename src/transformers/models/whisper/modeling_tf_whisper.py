@@ -485,7 +485,7 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
         }
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
             "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),

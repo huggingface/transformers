@@ -16,7 +16,7 @@
 """ TensorFlow DPR model for Open Domain Question Answering."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -374,7 +374,7 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
     base_model_prefix = "reader"
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),

@@ -18,7 +18,7 @@
 
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -77,7 +77,7 @@ class TFMPNetPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "mpnet"
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
@@ -1058,7 +1058,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         )
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),

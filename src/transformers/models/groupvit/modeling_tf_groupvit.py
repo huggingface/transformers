@@ -1638,7 +1638,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
         }
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
@@ -1722,7 +1722,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         return {"pixel_values": VISION_DUMMY_INPUTS}
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
         }
@@ -1808,7 +1808,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         }
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "pixel_values": tf.TensorSpec((None, None, None, None), tf.float64, name="pixel_values"),

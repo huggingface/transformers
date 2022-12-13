@@ -16,7 +16,7 @@
 
 
 import random
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -476,7 +476,7 @@ class TFBlenderbotSmallPreTrainedModel(TFPreTrainedModel):
         return dummy_inputs
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),

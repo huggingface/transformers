@@ -717,7 +717,7 @@ class TFCvtPreTrainedModel(TFPreTrainedModel):
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
         }

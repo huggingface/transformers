@@ -1627,7 +1627,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         )
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),

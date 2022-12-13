@@ -863,7 +863,7 @@ class TFTapasPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "tapas"
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),

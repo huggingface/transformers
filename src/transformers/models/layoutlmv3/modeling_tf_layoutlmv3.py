@@ -996,7 +996,7 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
         }
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),

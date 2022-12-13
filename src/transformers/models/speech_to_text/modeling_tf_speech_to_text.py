@@ -592,7 +592,7 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
         return input_lengths
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),

@@ -14,7 +14,7 @@
 # limitations under the License.
 """ TF 2.0 GPT-J model."""
 
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -535,7 +535,7 @@ class TFGPTJPreTrainedModel(TFPreTrainedModel):
         return dummy
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),

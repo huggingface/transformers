@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch ESM model."""
 
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -1054,7 +1054,7 @@ class TFEsmModel(TFEsmPreTrainedModel):
         return outputs
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
@@ -1183,7 +1183,7 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
@@ -1314,7 +1314,7 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
@@ -1405,7 +1405,7 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),

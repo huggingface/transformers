@@ -18,7 +18,7 @@
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -685,7 +685,7 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "transformer"
 
     @property
-    def serving_signature(self):
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
         }
