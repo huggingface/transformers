@@ -359,7 +359,7 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
-            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            "pixel_values": tf.TensorSpec((None, self.config.num_channels, 224, 224), tf.float32, name="pixel_values"),
         }
 
 

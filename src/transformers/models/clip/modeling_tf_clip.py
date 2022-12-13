@@ -1148,7 +1148,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
     @property
     def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
-            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            "pixel_values": tf.TensorSpec((None, 3, self.config.image_size, self.config.image_size), tf.float32, name="pixel_values"),
         }
 
     @unpack_inputs
@@ -1237,7 +1237,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
     def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            "pixel_values": tf.TensorSpec((None, 3, self.config.image_size, self.config.image_size), tf.float32, name="pixel_values"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
         }
 

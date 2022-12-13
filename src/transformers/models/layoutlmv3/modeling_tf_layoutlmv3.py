@@ -1000,7 +1000,7 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
-            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            "pixel_values": tf.TensorSpec((None, self.config.input_size, self.config.input_size, self.config.input_size), tf.float32, name="pixel_values"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
         }
 

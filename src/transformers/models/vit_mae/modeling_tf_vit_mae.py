@@ -710,7 +710,7 @@ class TFViTMAEPreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
-            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            "pixel_values": tf.TensorSpec((None, self.config.num_channels, self.config.image_size, self.config.image_size), tf.float32, name="pixel_values"),
         }
 
 
