@@ -1474,7 +1474,7 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
         qa_target_start_index=_QA_TARGET_START_INDEX,
         qa_target_end_index=_QA_TARGET_END_INDEX,
     )
-    # Copied from transformers.models.deberta.modeling_deberta.DebertaForQuestionAnswering with Deberta->DebertaV2
+    # Copied from transformers.models.deberta.modeling_deberta.DebertaForQuestionAnswering.forward with Deberta->DebertaV2
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
