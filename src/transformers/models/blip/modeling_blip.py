@@ -1061,7 +1061,6 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         **generate_kwargs
@@ -1074,8 +1073,6 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
                 Input image to be processed
             input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
                 The sequence used as a prompt for the generation.
-            pixel_mask (*torch.LongTensor* of shape *(batch_size, image_width, image_height)*, *optional*):
-                Mask to be used for the image - not used but kept for compatibility with the *BlipProcessor*
             token_type_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
                 Segment token indices to indicate first and second portions of the inputs. Not used but kept for
                 compatibility with the *BlipProcessor*
@@ -1254,7 +1251,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.LongTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         **generate_kwargs
     ) -> torch.LongTensor:
@@ -1269,8 +1265,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             attention_mask (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`. `1` for
                 tokens that are NOT MASKED, `0` for MASKED tokens.
-            pixel_mask (*torch.LongTensor* of shape *(batch_size, image_width, image_height)*, *optional*):
-                Mask to be used for the image - not used but kept for compatibility with the *BlipProcessor*
             token_type_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
                 Segment token indices to indicate first and second portions of the inputs. Not used but kept for
                 compatibility with the *BlipProcessor*
@@ -1376,7 +1370,6 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         pixel_values: torch.FloatTensor,
         use_itm_head: Optional[bool] = True,
         attention_mask: Optional[torch.LongTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
