@@ -52,9 +52,9 @@ BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BlipTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BlipTextModel`]. It is used to instantiate a
-    BLIP text model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the `BlipText` used by the [base
+    This is the configuration class to store the configuration of a [`BlipTextModel`]. It is used to instantiate a BLIP
+    text model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the `BlipText` used by the [base
     architectures](https://huggingface.co/Salesforce/blip-vqa-base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -294,8 +294,8 @@ class BlipVisionConfig(PretrainedConfig):
 class BlipConfig(PretrainedConfig):
     r"""
     [`BlipConfig`] is the configuration class to store the configuration of a [`BlipModel`]. It is used to instantiate
-    a BLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the BLIP-base
+    a BLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the BLIP-base
     [Salesforce/blip-vqa-base](https://huggingface.co/Salesforce/blip-vqa-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
