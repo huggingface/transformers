@@ -980,6 +980,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BlipForConditionalGenerationModelOutput]:
         r"""
@@ -1018,13 +1019,14 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         if input_ids is None:
             input_ids = torch.LongTensor([[self.decoder_input_ids] * batch_size]).to(image_embeds.device)
 
-        decoder_targets = input_ids.masked_fill(input_ids == self.decoder_pad_token_id, -100)
+        if labels is None:
+            labels = input_ids.masked_fill(input_ids == self.decoder_pad_token_id, -100)
 
         outputs = self.text_decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=image_embeds,
-            labels=decoder_targets,
+            labels=labels,
             return_dict=return_dict,
         )
 
