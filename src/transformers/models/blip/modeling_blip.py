@@ -1193,7 +1193,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         >>> outputs = model.generate(**inputs)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        batch_size, _ = input_ids.shape
+        batch_size = input_ids.shape[0]
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
