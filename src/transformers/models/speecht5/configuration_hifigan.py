@@ -1,7 +1,12 @@
 from transformers import PretrainedConfig
 
 
-class HiFiGANConfig(PretrainedConfig):
+SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
+    "TODO": "https://huggingface.co/TODO/resolve/main/config.json",
+}
+
+
+class SpeechT5HiFiGANConfig(PretrainedConfig):
     model_type = "hifigan"
 
     def __init__(
@@ -15,6 +20,7 @@ class HiFiGANConfig(PretrainedConfig):
         sampling_rate=16000,
         initializer_range=0.01,
         leaky_relu_slope=0.1,
+        normalize_before=True,
         **kwargs,
     ):
         self.resblock_kernel_sizes = resblock_kernel_sizes
@@ -26,4 +32,5 @@ class HiFiGANConfig(PretrainedConfig):
         self.sampling_rate = sampling_rate
         self.initializer_range = initializer_range
         self.leaky_relu_slope = leaky_relu_slope
+        self.normalize_before = normalize_before
         super().__init__(**kwargs)

@@ -405,6 +405,7 @@ _import_structure = {
     "models.speecht5": [
         "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SpeechT5Config",
+        "SpeechT5HiFiGANConfig",
         "SpeechT5CTCTokenizer",
         "SpeechT5Processor",
     ],
@@ -2207,6 +2208,7 @@ else:
             "SpeechT5ForPreTraining",
             "SpeechT5Model",
             "SpeechT5PreTrainedModel",
+            "SpeechT5HiFiGAN",
         ]
     )
     _import_structure["models.whisper"].extend(
@@ -3870,6 +3872,7 @@ if TYPE_CHECKING:
     from .models.speecht5 import (
         SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SpeechT5Config,
+        SpeechT5HiFiGANConfig,
         SpeechT5CTCTokenizer,
         SpeechT5Processor,
     )
@@ -5365,6 +5368,7 @@ if TYPE_CHECKING:
             SpeechT5ForTextToSpeech,
             SpeechT5Model,
             SpeechT5PreTrainedModel,
+            SpeechT5HiFiGAN,
         )
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,

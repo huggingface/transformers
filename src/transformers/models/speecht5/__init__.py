@@ -21,6 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
+    "configuration_hifigan": ["SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP", "SpeechT5HiFiGANConfig"],
     "configuration_speecht5": ["SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "SpeechT5Config"],
     "processing_speecht5": ["SpeechT5Processor"],
     "tokenization_speecht5": ["SpeechT5CTCTokenizer"],
@@ -41,9 +42,11 @@ else:
         "SpeechT5ForPreTraining",
         "SpeechT5Model",
         "SpeechT5PreTrainedModel",
+        "SpeechT5HiFiGAN",
     ]
 
 if TYPE_CHECKING:
+    from .configuration_hifigan import SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP, SpeechT5HiFiGANConfig
     from .configuration_speecht5 import SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP, SpeechT5Config
     from .processing_speecht5 import SpeechT5Processor
     from .tokenization_speecht5 import SpeechT5CTCTokenizer
@@ -62,6 +65,7 @@ if TYPE_CHECKING:
             SpeechT5ForTextToSpeech,
             SpeechT5Model,
             SpeechT5PreTrainedModel,
+            SpeechT5HiFiGAN,
         )
 
 else:

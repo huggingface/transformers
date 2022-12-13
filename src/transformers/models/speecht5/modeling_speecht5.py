@@ -46,7 +46,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_speecht5 import SpeechT5Config
-from .configuration_hifigan import HiFiGANConfig
+from .configuration_hifigan import SpeechT5HiFiGANConfig
 
 
 logger = logging.get_logger(__name__)
@@ -247,135 +247,6 @@ def _compute_mask_indices(
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
 
     return spec_aug_mask
-
-
-class HiFiGANResidualBlock(nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
-        super().__init__()
-        self.leaky_relu_slope = leaky_relu_slope
-
-        self.convs1 = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    channels,
-                    channels,
-                    kernel_size,
-                    stride=1,
-                    dilation=dilation[i],
-                    padding=self.get_padding(kernel_size, dilation[i]),
-                )
-                for i in range(len(dilation))
-            ]
-        )
-        self.convs2 = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    channels,
-                    channels,
-                    kernel_size,
-                    stride=1,
-                    dilation=1,
-                    padding=self.get_padding(kernel_size, 1),
-                )
-                for _ in range(len(dilation))
-            ]
-        )
-
-        for layer in self.convs1:
-            nn.utils.weight_norm(layer)
-        for layer in self.convs2:
-            nn.utils.weight_norm(layer)
-
-    def get_padding(self, kernel_size, dilation=1):
-        return (kernel_size * dilation - dilation) // 2
-
-    def forward(self, hidden_states):
-        for conv1, conv2 in zip(self.convs1, self.convs2):
-            residual = hidden_states
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
-            hidden_states = conv1(hidden_states)
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
-            hidden_states = conv2(hidden_states)
-            hidden_states = hidden_states + residual
-        return hidden_states
-
-    def remove_weight_norm(self):
-        for layer in self.convs1:
-            nn.utils.remove_weight_norm(layer)
-        for layer in self.convs2:
-            nn.utils.remove_weight_norm(layer)
-
-
-class HiFiGANGenerator(PreTrainedModel):
-    config_class = HiFiGANConfig
-
-    def __init__(self, config: HiFiGANConfig):
-        super().__init__(config)
-        self.num_kernels = len(config.resblock_kernel_sizes)
-        self.num_upsamples = len(config.upsample_rates)
-        self.conv_pre = nn.Conv1d(
-            config.model_in_dim,
-            config.upsample_initial_channel,
-            kernel_size=7,
-            stride=1,
-            padding=3,
-        )
-
-        self.upsampler = nn.ModuleList()
-        for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
-            self.upsampler.append(
-                nn.ConvTranspose1d(
-                    config.upsample_initial_channel // (2**i),
-                    config.upsample_initial_channel // (2 ** (i + 1)),
-                    kernel_size=kernel_size,
-                    stride=upsample_rate,
-                    padding=(kernel_size - upsample_rate) // 2,
-                )
-            )
-
-        self.resblocks = nn.ModuleList()
-        for i in range(len(self.upsampler)):
-            channels = config.upsample_initial_channel // (2 ** (i + 1))
-            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
-                self.resblocks.append(HiFiGANResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
-
-        self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
-
-        nn.utils.weight_norm(self.conv_pre)
-        for layer in self.upsampler:
-            nn.utils.weight_norm(layer)
-        nn.utils.weight_norm(self.conv_post)
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv_pre(hidden_states)
-        for i in range(self.num_upsamples):
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.config.leaky_relu_slope)
-            hidden_states = self.upsampler[i](hidden_states)
-
-            res_state = self.resblocks[i * self.num_kernels](hidden_states)
-            for j in range(1, self.num_kernels):
-                res_state += self.resblocks[i * self.num_kernels + j](hidden_states)
-            hidden_states = res_state / self.num_kernels
-
-        hidden_states = nn.functional.leaky_relu(hidden_states)
-        hidden_states = self.conv_post(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        return hidden_states
-
-    def remove_weight_norm(self):
-        nn.utils.remove_weight_norm(self.conv_pre)
-        for layer in self.upsampler:
-            nn.utils.remove_weight_norm(layer)
-        for layer in self.resblocks:
-            layer.remove_weight_norm()
-        nn.utils.remove_weight_norm(self.conv_post)
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
@@ -2645,9 +2516,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         self.speech_decoder_postnet = SpeechT5SpeechDecoderPostnet(config)
 
-        hifigan_config = HiFiGANConfig()
-        self.vocoder = HiFiGANGenerator(hifigan_config)
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2749,7 +2617,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         threshold: float = 0.5,
         minlenratio: float = 0.0,
         maxlenratio: float = 20.0,
-        output_spectrogram: bool = False,
+        vocoder: Optional[nn.Module] = None,
     ) -> torch.FloatTensor:
         r"""
         Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into
@@ -2771,12 +2639,13 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 Used to calculate the minimum required length for the output sequence.
             maxlenratio (`float`, *optional*, defaults to 20.0):
                 Used to calculate the maximum allowed length for the output sequence.
-            output_spectrogram (`bool`, *optional*, defaults to False):
-                If True, outputs a mel spectrogram instead of a speech waveform.
+            vocoder (`nn.Module`, *optional*, defaults to `None`):
+                The vocoder that converts the mel spectrogram into a speech waveform.
+                If `None`, the output is the mel spectrogram.
 
         Returns:
             `torch.FloatTensor` of shape `(output_sequence_length, config.num_mel_bins)` containing the predicted mel
-            spectrogram.
+            spectrogram, or a tensor with shape `(num_frames,)` containing the speech waveform.
         """
         encoder_attention_mask = torch.ones_like(input_ids)
 
@@ -2836,35 +2705,10 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 spectrogram = spectrogram.squeeze(0)
                 break
 
-        if output_spectrogram:
+        if vocoder is not None:
+            return vocoder(spectrogram)
+        else:
             return spectrogram
-
-        # TODO: add as parameters to the model!
-        mean = torch.tensor([-1.6831, -1.5471, -1.4146, -1.4586, -1.5487, -1.5937, -1.5867, -1.5899,
-        -1.5867, -1.5780, -1.6170, -1.6587, -1.7000, -1.7458, -1.8358, -1.8951,
-        -1.9310, -1.9801, -2.0248, -2.0528, -2.0602, -2.1114, -2.1315, -2.1420,
-        -2.1613, -2.1911, -2.1897, -2.2217, -2.2127, -2.2410, -2.2447, -2.2490,
-        -2.2512, -2.2488, -2.2419, -2.2191, -2.2215, -2.2127, -2.2133, -2.2208,
-        -2.2319, -2.2401, -2.2648, -2.2746, -2.2972, -2.3148, -2.3246, -2.3313,
-        -2.3298, -2.3310, -2.3298, -2.3387, -2.3513, -2.3688, -2.3785, -2.3893,
-        -2.4146, -2.4396, -2.4646, -2.4849, -2.5056, -2.5224, -2.5425, -2.5760,
-        -2.6151, -2.6537, -2.6927, -2.7333, -2.7739, -2.8153, -2.8475, -2.8716,
-        -2.8937, -2.9092, -2.9154, -2.9202, -2.9342, -2.9567, -2.9807, -3.0541])
-        scale = torch.tensor([0.8563, 0.8759, 0.8994, 0.9070, 0.8881, 0.8690, 0.8732, 0.8858, 0.8921,
-        0.8896, 0.8857, 0.8798, 0.8735, 0.8707, 0.8645, 0.8562, 0.8491, 0.8397,
-        0.8289, 0.8189, 0.8099, 0.8023, 0.7948, 0.7922, 0.7875, 0.7825, 0.7859,
-        0.7867, 0.7850, 0.7848, 0.7830, 0.7813, 0.7801, 0.7787, 0.7784, 0.7788,
-        0.7777, 0.7760, 0.7731, 0.7696, 0.7656, 0.7624, 0.7596, 0.7547, 0.7504,
-        0.7496, 0.7486, 0.7507, 0.7558, 0.7624, 0.7659, 0.7668, 0.7663, 0.7647,
-        0.7632, 0.7613, 0.7617, 0.7585, 0.7586, 0.7610, 0.7620, 0.7623, 0.7629,
-        0.7665, 0.7721, 0.7752, 0.7773, 0.7812, 0.7855, 0.7893, 0.7952, 0.7993,
-        0.7995, 0.7958, 0.7920, 0.7897, 0.7862, 0.7857, 0.7833, 0.7860])
-
-        spectrogram = (spectrogram - mean) / scale
-        spectrogram = spectrogram.transpose(1, 0).unsqueeze(0)
-        speech = self.vocoder(spectrogram)
-        speech = speech.squeeze(0).transpose(1, 0).view(-1)
-        return speech
 
 
 @add_start_docstrings("""SpeechT5 Model with a TODO on top.""", SPEECHT5_START_DOCSTRING)
@@ -2915,3 +2759,146 @@ class SpeechT5ForPreTraining(SpeechT5PreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
+
+
+class HiFiGANResidualBlock(nn.Module):
+    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
+        super().__init__()
+        self.leaky_relu_slope = leaky_relu_slope
+
+        self.convs1 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=dilation[i],
+                    padding=self.get_padding(kernel_size, dilation[i]),
+                )
+                for i in range(len(dilation))
+            ]
+        )
+        self.convs2 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=1,
+                    padding=self.get_padding(kernel_size, 1),
+                )
+                for _ in range(len(dilation))
+            ]
+        )
+
+    def get_padding(self, kernel_size, dilation=1):
+        return (kernel_size * dilation - dilation) // 2
+
+    def apply_weight_norm(self):
+        for layer in self.convs1:
+            nn.utils.weight_norm(layer)
+        for layer in self.convs2:
+            nn.utils.weight_norm(layer)
+
+    def remove_weight_norm(self):
+        for layer in self.convs1:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.convs2:
+            nn.utils.remove_weight_norm(layer)
+
+    def forward(self, hidden_states):
+        for conv1, conv2 in zip(self.convs1, self.convs2):
+            residual = hidden_states
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = conv1(hidden_states)
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = conv2(hidden_states)
+            hidden_states = hidden_states + residual
+        return hidden_states
+
+
+class SpeechT5HiFiGAN(PreTrainedModel):
+    config_class = SpeechT5HiFiGANConfig
+
+    def __init__(self, config: SpeechT5HiFiGANConfig):
+        super().__init__(config)
+        self.num_kernels = len(config.resblock_kernel_sizes)
+        self.num_upsamples = len(config.upsample_rates)
+        self.conv_pre = nn.Conv1d(
+            config.model_in_dim,
+            config.upsample_initial_channel,
+            kernel_size=7,
+            stride=1,
+            padding=3,
+        )
+
+        self.upsampler = nn.ModuleList()
+        for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
+            self.upsampler.append(
+                nn.ConvTranspose1d(
+                    config.upsample_initial_channel // (2**i),
+                    config.upsample_initial_channel // (2 ** (i + 1)),
+                    kernel_size=kernel_size,
+                    stride=upsample_rate,
+                    padding=(kernel_size - upsample_rate) // 2,
+                )
+            )
+
+        self.resblocks = nn.ModuleList()
+        for i in range(len(self.upsampler)):
+            channels = config.upsample_initial_channel // (2 ** (i + 1))
+            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
+                self.resblocks.append(HiFiGANResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
+
+        self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
+
+        self.register_buffer("mean", torch.zeros(config.model_in_dim))
+        self.register_buffer("scale", torch.zeros(config.model_in_dim))
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    def apply_weight_norm(self):
+        nn.utils.weight_norm(self.conv_pre)
+        for layer in self.upsampler:
+            nn.utils.weight_norm(layer)
+        for layer in self.resblocks:
+            layer.apply_weight_norm()
+        nn.utils.weight_norm(self.conv_post)
+
+    def remove_weight_norm(self):
+        nn.utils.remove_weight_norm(self.conv_pre)
+        for layer in self.upsampler:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.resblocks:
+            layer.remove_weight_norm()
+        nn.utils.remove_weight_norm(self.conv_post)
+
+    def forward(self, spectrogram):
+        if self.config.normalize_before:
+            spectrogram = (spectrogram - self.mean) / self.scale
+
+        hidden_states = spectrogram.transpose(1, 0).unsqueeze(0)
+
+        hidden_states = self.conv_pre(hidden_states)
+        for i in range(self.num_upsamples):
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.config.leaky_relu_slope)
+            hidden_states = self.upsampler[i](hidden_states)
+
+            res_state = self.resblocks[i * self.num_kernels](hidden_states)
+            for j in range(1, self.num_kernels):
+                res_state += self.resblocks[i * self.num_kernels + j](hidden_states)
+            hidden_states = res_state / self.num_kernels
+
+        hidden_states = nn.functional.leaky_relu(hidden_states)
+        hidden_states = self.conv_post(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+
+        waveform = hidden_states.squeeze(0).transpose(1, 0).view(-1)
+        return waveform
