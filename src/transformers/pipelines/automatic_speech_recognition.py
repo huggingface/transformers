@@ -165,7 +165,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
     result = []
     for i in range(len(items)):
         result += items[i].tolist()
-    return items
+    return result
 
 
 def _find_longest_common_sequence(sequences, tokenizer):
@@ -554,7 +554,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         char_offsets, self.tokenizer.replace_word_delimiter_char
                     )
 
-        if return_timestamps:
+        if return_timestamps and self.type != "seq2seq":
             if return_timestamps == "word":
                 offsets = word_offsets
             else:
@@ -569,6 +569,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
                 chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})
             optional["chunks"] = chunks
+
+        elif return_timestamps and self.type == "seq2seq":
+            optional["chunks"] = offsets
 
         extra = defaultdict(list)
         for output in model_outputs:
