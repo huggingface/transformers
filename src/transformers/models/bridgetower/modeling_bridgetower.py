@@ -131,7 +131,7 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
 
         image_token_type_idx (`int`, *optional*):
-            TODO
+            - The token type ids for images
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -369,7 +369,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BridgeTowerModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
         Returns:
 
