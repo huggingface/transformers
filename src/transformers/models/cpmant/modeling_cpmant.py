@@ -38,7 +38,7 @@ _CONFIG_FOR_DOC = "CPMAntConfig"
 _TOKENIZER_FOR_DOC = "CPMAntTokenizer"
 
 CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "cpm-ant-10b",
+    "openbmb/cpm-ant-10b",
     # See all CPMAnt models at https://huggingface.co/models?filter=cpmant
 ]
 
@@ -1119,7 +1119,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
             dim_ff=config.dim_ff,
             num_heads=config.num_heads,
             dim_head=config.dim_head,
-            dtype=config.torch_dtype,
+            dtype=getattr(torch, "float"),
             eps=config.eps,
             dropout_p=config.dropout_p,
             mask_modules=config.mask_modules,
@@ -1128,21 +1128,21 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.prompt_embedding = CPMAntEmbeddings(
             vocab_size=config.prompt_types * config.prompt_length,
             embedding_size=config.dim_model,
-            dtype=config.torch_dtype,
+            dtype=getattr(torch, "float"),
             init_std=0.02,
         )
 
         self.segment_embedding = CPMAntEmbeddings(
             vocab_size=config.segment_types,
             embedding_size=config.dim_model,
-            dtype=config.torch_dtype,
+            dtype=getattr(torch, "float"),
             init_std=0.02,
         )
 
         self.input_embedding = CPMAntEmbeddings(
             vocab_size=config.vocab_size,
             embedding_size=config.dim_model,
-            dtype=config.torch_dtype,
+            dtype=getattr(torch, "float"),
             init_std=0.02,
         )
 
@@ -1152,7 +1152,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
             num_buckets=config.position_bias_num_buckets,
             max_distance=config.position_bias_max_distance,
             bidirectional=True,
-            dtype=config.torch_dtype,
+            dtype=getattr(torch, "float"),
         )
 
         self.prompt_length = config.prompt_length
@@ -1372,12 +1372,15 @@ class CPMAntForCausalLM(CPMAntModel):
         return padded
 
     def generate(self, input_ids, **kwargs):
-        input_ids = input_ids.detach().tolist()
+        if isinstance(input_ids, torch.Tensor):
+            input_ids = input_ids.detach().tolist()
+        if not isinstance(input_ids[0], list):
+            input_ids = [input_ids]
         model_inputs = self._process_texts(input_ids)
-
         with torch.inference_mode():
-            result = self._decode(model_inputs, **kwargs)
-        return result
+            output_ids = self._decode(model_inputs, **kwargs)
+        result = [ii + oi for ii, oi in zip(input_ids, output_ids)]
+        return torch.tensor(result)
 
     def _decode(
         self, model_inputs, beam_size=3, max_length=50, repetition_penalty=1.2, repetition_window=None, **kwargs
@@ -1593,11 +1596,11 @@ class CPMAntForCausalLM(CPMAntModel):
             best_hyp = max(hypotheses.hyp, key=lambda x: x[0])[1]
             results.append(best_hyp)
 
-        input_ids = model_inputs["input"].detach().tolist()
-        input_ids = [input_id[self.prompt_length + 1 :] for input_id in input_ids]
-        output_ids = [input_id + result for input_id, result in zip(input_ids, results)]
-
-        return torch.tensor(output_ids)
+        # input_ids = model_inputs["input"].detach().tolist()
+        # input_ids = [input_id[self.prompt_length + 1 :] for input_id in input_ids]
+        # output_ids = [input_id + result for input_id, result in zip(input_ids, results)]
+        return results
+        # return torch.tensor(output_ids)
 
     def apply_repetition_penalty(
         self,

@@ -242,8 +242,10 @@ class CPMAntTokenizer(PreTrainedTokenizer):
         """Decode ids into a string."""
         if isinstance(tokens, torch.Tensor):
             tokens = tokens.detach().tolist()
+        if isinstance(tokens[0], list):
+            tokens = tokens[0]
         tokens = [i for i in tokens if i >= 0]
-        text = "".join([self.decoder[x] for x in tokens])
+        text = "".join([self.decoder[x] for x in tokens if x != self.pad_id])
         return text
 
     def check(self, token):

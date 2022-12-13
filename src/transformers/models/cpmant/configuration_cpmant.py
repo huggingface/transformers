@@ -16,8 +16,6 @@
 
 from typing import List, Optional, Tuple
 
-import torch
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -120,6 +118,5 @@ class CPMAntConfig(PretrainedConfig):
         self.position_bias_max_distance = position_bias_max_distance
         self.dropout_p = dropout_p
         self.eps = eps
-        self.torch_dtype = torch.float
         self.vocab_size = vocab_size
         self.mask_modules = mask_modules
