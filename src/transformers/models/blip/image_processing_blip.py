@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for ViLT."""
+"""Image processor class for BLIP."""
 
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
@@ -158,7 +158,7 @@ def get_resize_output_image_size(
 
 class BlipImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a ViLT image processor.
+    Constructs a BLIP image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
