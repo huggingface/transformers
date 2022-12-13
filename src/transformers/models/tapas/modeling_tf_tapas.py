@@ -865,10 +865,10 @@ class TFTapasPreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
+            "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+        }
 
 
 TAPAS_START_DOCSTRING = r"""

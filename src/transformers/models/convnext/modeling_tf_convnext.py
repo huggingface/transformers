@@ -372,8 +372,8 @@ class TFConvNextPreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
+            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+        }
 
 
 CONVNEXT_START_DOCSTRING = r"""

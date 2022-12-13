@@ -1107,9 +1107,9 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
@@ -1148,8 +1148,8 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
+            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+        }
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
@@ -1236,10 +1236,10 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

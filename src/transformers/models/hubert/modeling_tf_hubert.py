@@ -1311,10 +1311,10 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
+            "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+        }
 
 
 HUBERT_START_DOCSTRING = r"""

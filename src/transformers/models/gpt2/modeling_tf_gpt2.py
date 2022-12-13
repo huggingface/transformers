@@ -558,9 +558,9 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
 
 @dataclass
@@ -1070,10 +1070,10 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="mc_token_ids"),
-            }
+            "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+            "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="mc_token_ids"),
+        }
 
     def serving_output(self, output):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None

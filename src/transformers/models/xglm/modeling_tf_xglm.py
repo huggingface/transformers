@@ -646,9 +646,9 @@ class TFXGLMPreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
 
 XGLM_START_DOCSTRING = r"""

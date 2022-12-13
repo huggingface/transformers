@@ -1056,9 +1056,9 @@ class TFEsmModel(TFEsmPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
     def serving_output(
         self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
@@ -1185,9 +1185,9 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
     def predict_contacts(self, tokens, attention_mask):
         return self.esm.predict_contacts(tokens, attention_mask)
@@ -1316,9 +1316,9 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        }
 
 
 @add_start_docstrings(
@@ -1407,9 +1407,9 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
 
 class TFEsmClassificationHead(Layer):

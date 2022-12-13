@@ -998,11 +998,11 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
+            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
 
 LAYOUTLMV3_START_DOCSTRING = r"""

@@ -1521,10 +1521,10 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
+            "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+        }
 
     def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
         # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of

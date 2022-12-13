@@ -567,8 +567,8 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
+            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+        }
 
 
 VIT_START_DOCSTRING = r"""

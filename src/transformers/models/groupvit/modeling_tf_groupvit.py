@@ -1640,9 +1640,9 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GROUPVIT_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1724,8 +1724,8 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
+            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+        }
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GROUPVIT_VISION_INPUTS_DOCSTRING)
@@ -1810,10 +1810,10 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
     @property
     def serving_signature(self):
         return {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float64, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "pixel_values": tf.TensorSpec((None, None, None, None), tf.float64, name="pixel_values"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        }
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GROUPVIT_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
