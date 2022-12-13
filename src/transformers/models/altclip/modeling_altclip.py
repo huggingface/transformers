@@ -53,7 +53,6 @@ ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 ALTCLIP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -726,9 +725,6 @@ class AltRobertaPooler(nn.Module):
         return pooled_output
 
 
-
-
-
 # Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->AltCLIP
 class AltCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -1215,6 +1211,7 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
             return_dict=return_dict,
         )
 
+
 class AltRobertaModel(AltCLIPPreTrainedModel):
     """
 
@@ -1417,7 +1414,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.roberta.embeddings.word_embeddings = value
-    
+
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         return super().resize_token_embeddings(new_num_tokens)
 
