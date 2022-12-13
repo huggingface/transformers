@@ -961,7 +961,7 @@ class BlipModel(BlipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP Model trained to generate captions on images. The model can also take as input a text input. The text decoder
+    BLIP Model for image captioning. The model consists of a vision encoder and a text decoder. One can optionally pass `input_ids` to the model, which serve as a text prompt, to make the text decoder continue the prompt. Otherwise, the decoder starts generating text from the [BOS] (beginning-of-sequence) token.
     will start generating the caption from the text input. If no text input is provided, the decoder will start with
     the [BOS] token only.
     """,
@@ -1008,8 +1008,8 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import BlipProcessor, BlipForConditionalGeneration
 
-        >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")   
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
