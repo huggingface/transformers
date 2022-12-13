@@ -1001,7 +1001,7 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
             "pixel_values": tf.TensorSpec(
-                (None, self.config.input_size, self.config.input_size, self.config.input_size),
+                (None, self.config.num_channels, self.config.input_size, self.config.input_size),
                 tf.float32,
                 name="pixel_values",
             ),
