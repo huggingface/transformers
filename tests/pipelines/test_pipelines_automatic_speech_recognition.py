@@ -138,7 +138,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output, {"text": "(Applaudissements)"})
 
         # Non CTC models cannot use return_timestamps
-        with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
+        with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
     @require_torch
@@ -293,12 +293,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 " worth thinking about."
             ),
             "chunks": [
-                {"text": " A man said to the universe, Sir, I exist.", "start_offset": 0.0, "end_offset": 5.5},
-                {"text": " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment", "start_offset": 5.5, "end_offset": 10.24},
-                {"text": " you wore.", "start_offset": 10.24, "end_offset": 11.74},
-                {"text": " The cut on his chest still dripping blood.", "start_offset": 11.74, "end_offset": 14.88},
-                {"text": " The ache of his overstrain dyes.", "start_offset": 14.88, "end_offset": 17.6},
-                {"text": " Even the soaring arena around him with thousands of spectators, retrievalidies not worth", "start_offset": 17.6, "end_offset": 23.28},
+                {'text': ' A man said to the universe, Sir, I exist.', 'timestamp': (0.0, 5.5)},
+                {'text': " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment", 'timestamp': (5.5, 10.24)},
+                {'text': ' you wore.', 'timestamp': (10.24, 11.74)}, {'text': ' The cut on his chest still dripping blood.', 'timestamp': (11.74, 14.88)},
+                {'text': ' The ache of his overstrain dyes.', 'timestamp': (14.88, 17.6)},
+                {'text': ' Even the soaring arena around him with thousands of spectators, retrievalidies not worth', 'timestamp': (17.6, 23.28)}
             ],
         }
         # fmt: on
