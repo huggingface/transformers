@@ -418,18 +418,27 @@ class Trainer:
             elif FSDPOption.NO_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.NO_SHARD
 
-        if len(args.xla_fsdp) > 0:
+        if args.xla_fsdp:
+            if version.parse(version.parse(torch_xla.__version__).base_version) < version.parse("1.12.0"):
+                raise ValueError("XLA FSDP requires PyTorch/XLA >= 1.12.0")
             fsdp_kwargs = args.xla_fsdp
             fsdp_wrap = lambda m: FSDP(m, **fsdp_kwargs)
             # A wrapper for gradient checkpointing
             grad_ckpt_wrap = checkpoint_module if args.xla_fsdp_grad_ckpt else (lambda m: m)
             if args.xla_fsdp_nested:
-                for submodule in model.children():
-                    submodule = fsdp_wrap(grad_ckpt_wrap(submodule))
+                if not(hasattr(model, 'transformer') and hasattr(model.transformer, 'h')):
+                    raise ValueError(
+                        "Nested XLA FSDP is currently only supported for models which expose their"
+                        " transformer blocks through `transformer.h`."
+                    )
+                for i in range(len(model.transformer.h)):
+                    model.transformer.h[i] = fsdp_wrap(grad_ckpt_wrap(model.transformer.h[i]))
+                #for submodule in model.children():
+                #    submodule = fsdp_wrap(grad_ckpt_wrap(submodule))
             # Wrap the base model with an outer FSDP wrapper
             # Also, copy the signature of the original model's forward method -- otherwise
-            # Hugging Face datasets drops the columns not appearing in the forward method's argument
-            # in its `_remove_unused_columns` in trainer.py
+            # columns not appearing in the forward method's argument will be dropped by 
+            # the `_remove_unused_columns` method
             forward_signature = inspect.signature(model.forward.__func__)
             model = fsdp_wrap(model)
             model.forward.__func__.__signature__ = forward_signature
