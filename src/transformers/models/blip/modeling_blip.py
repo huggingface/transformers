@@ -1097,7 +1097,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         ```
         """
 
-        batch_size, _ = pixel_values.shape[:2]
+        batch_size = pixel_values.shape[0]
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
         )
@@ -1131,7 +1131,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP Model fine-tuned for question answering. The model consists of a vision encoder, a text encoder as well as a
+    BLIP Model for visual question answering. The model consists of a vision encoder, a text encoder as well as a
     text decoder. The vision encoder will encode the input image, the text encoder will encode the input question
     together with the encoding of the image, and the text decoder will output the answer to the question.
     """,
