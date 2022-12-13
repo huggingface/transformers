@@ -990,7 +990,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
+    @replace_return_docstrings(output_type=BlipForConditionalGenerationModelOutput, config_class=BlipVisionConfig)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1290,8 +1290,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         image_embeds = vision_outputs[0]
 
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
-        model_kwargs = {"encoder_hidden_states": image_embeds, "encoder_attention_mask": image_atts}
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
 
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
@@ -1300,14 +1299,14 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
+            encoder_attention_mask=image_attention_mask,
             return_dict=False,
         )
 
         question_embeds = question_outputs[0]
 
         question_attention_mask = torch.ones(question_embeds.size()[:-1], dtype=torch.long).to(question_embeds.device)
-        
+
         bos_ids = torch.full(
             (question_embeds.size(0), 1), fill_value=self.decoder_bos_token_id, device=question_embeds.device
         )
