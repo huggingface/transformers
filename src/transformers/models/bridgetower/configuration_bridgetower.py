@@ -22,8 +22,10 @@ logger = logging.get_logger(__name__)
 
 BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "BridgeTower/bridgetower-base": "https://huggingface.co/BridgeTower/bridgetower-base/blob/main/config.json",
-    "BridgeTower/bridgetower-base-itm-mlm": "https://huggingface.co/BridgeTower/bridgetower-base-itm/blob/main/config.json",
- }
+    "BridgeTower/bridgetower-base-itm-mlm": (
+        "https://huggingface.co/BridgeTower/bridgetower-base-itm/blob/main/config.json"
+    ),
+}
 
 
 class BridgeTowerConfig(PretrainedConfig):
@@ -156,13 +158,13 @@ class BridgeTowerConfig(PretrainedConfig):
     model_type = "bridgetower"
 
     def __init__(
-        self,      
-        cache_dir='/tmp',
+        self,
+        cache_dir="/tmp",
         classifier_drop_rate=0.1,
         cross_modal_transform_shared=True,
         downstream_fusion=False,
         downstream_fusion_layers=1,
-        downstream_fusion_method='elmo',
+        downstream_fusion_method="elmo",
         drop_rate=0.1,
         freeze_RoBERTa=False,
         freeze_ViT=False,
@@ -177,22 +179,24 @@ class BridgeTowerConfig(PretrainedConfig):
         is_encoder_decoder=False,
         layer_norm_eps=1e-05,
         link_tower_shared=False,
-        link_tower_type='add',
-        log_dir='log_dir',
-        loss_names={'contras': 0,
-                'irtr': 0,
-                'itm': 0,
-                'mlm': 0,
-                'mpp': 0,
-                'nlvr2': 0,
-                'snli': 0,
-                'vcr': 0,
-                'vcr_qar': 0,
-                'vqa': 1},
+        link_tower_type="add",
+        log_dir="log_dir",
+        loss_names={
+            "contras": 0,
+            "irtr": 0,
+            "itm": 0,
+            "mlm": 0,
+            "mpp": 0,
+            "nlvr2": 0,
+            "snli": 0,
+            "vcr": 0,
+            "vcr_qar": 0,
+            "vqa": 1,
+        },
         max_text_len=50,
         mlp_ratio=4,
-        model_type='bridgetower',
-        nlvr2_head_format='pair',
+        model_type="bridgetower",
+        nlvr2_head_format="pair",
         num_attention_heads=12,
         num_hidden_layers=6,
         num_nodes=1,
@@ -203,14 +207,14 @@ class BridgeTowerConfig(PretrainedConfig):
         task_head_layers=2,
         test_only=False,
         tie_word_embeddings=False,
-        tokenizer='roberta-base',
+        tokenizer="roberta-base",
         unfreeze_RoBERTa_attention=False,
         unfreeze_RoBERTa_embeddings=False,
         unfreeze_RoBERTa_encoder=False,
         unfreeze_RoBERTa_layernorm=False,
         unfreeze_ViT_attention=False,
         unfreeze_ViT_layernorm=False,
-        vit='ViT-B/16',
+        vit="ViT-B/16",
         vit_layernorm_init_from_vit=False,
         vit_layernorm_shared=True,
         vit_remove_last=False,

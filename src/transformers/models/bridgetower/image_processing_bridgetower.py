@@ -14,12 +14,19 @@
 # limitations under the License.
 """Image processor class for BridgeTower."""
 
+import hashlib
+import os
+import urllib
 import warnings
+from collections import OrderedDict
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+import PIL
+import torch
+from torch import nn
+from tqdm import tqdm
 
-from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -37,19 +44,6 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import logging
-from collections import OrderedDict
-from typing import Tuple, Union
-
-import os
-import hashlib
-import urllib
-from tqdm import tqdm
-
-import warnings
-import numpy as np
-import torch
-import torch.nn.functional as F
-from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -252,6 +246,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         Resizes the shorter side of the image to `size["shortest_edge"]` while preserving the aspect ratio. If the
         longer side is larger than the max size `(int(`size["shortest_edge"]` * 1333 / 800))`, the longer side is then
         resized to the max size while preserving the aspect ratio.
+
         Args:
             image (`np.ndarray`):
                 Image to resize.
@@ -456,8 +451,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
                 created and returned.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
-                is padded with 0's and then center cropped.
+                Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the
+                image is padded with 0's and then center cropped.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -523,6 +518,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         return encoded_outputs
 
+
 class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
 
@@ -543,66 +539,98 @@ class ResidualAttentionBlock(nn.Module):
 
         self.attn = nn.MultiheadAttention(d_model, n_head)
         self.ln_1 = LayerNorm(d_model)
-        self.mlp = nn.Sequential(OrderedDict([
-            ("c_fc", nn.Linear(d_model, d_model * 4)),
-            ("gelu", QuickGELU()),
-            ("c_proj", nn.Linear(d_model * 4, d_model))
-        ]))
+        self.mlp = nn.Sequential(
+            OrderedDict(
+                [
+                    ("c_fc", nn.Linear(d_model, d_model * 4)),
+                    ("gelu", QuickGELU()),
+                    ("c_proj", nn.Linear(d_model * 4, d_model)),
+                ]
+            )
+        )
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
 
-    def attention(self, x: torch.Tensor, x_mask:torch.Tensor):
+    def attention(self, x: torch.Tensor, x_mask: torch.Tensor):
         if x_mask is not None:
             x_mask = x_mask.to(dtype=torch.bool, device=x.device)
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask, key_padding_mask=x_mask)[0]
 
-    def forward(self, x: torch.Tensor, x_mask:torch.Tensor=None):
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor = None):
         x = x + self.attention(self.ln_1(x), x_mask)
         x = x + self.mlp(self.ln_2(x))
         return x
 
 
 class Transformer(nn.Module):
-    def __init__(self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, model_type: str = "bridgetower", stop_gradient: bool = False, vit_remove_last: bool = False):
+    def __init__(
+        self,
+        width: int,
+        layers: int,
+        heads: int,
+        attn_mask: torch.Tensor = None,
+        model_type: str = "bridgetower",
+        stop_gradient: bool = False,
+        vit_remove_last: bool = False,
+    ):
         super().__init__()
         self.width = width
         self.layers = layers
         if vit_remove_last:
-            self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers - 1)])
+            self.resblocks = nn.Sequential(
+                *[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers - 1)]
+            )
         else:
             self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)])
         self.model_type = model_type
         self.stop_gradient = stop_gradient
 
-    def forward(self, x: torch.Tensor, x_mask: torch.Tensor=None):
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor = None):
         xs = []
         for block in self.resblocks:
             x = block(x, x_mask)
-            if self.model_type == 'bridgetower':
+            if self.model_type == "bridgetower":
                 if self.stop_gradient:
                     xs.append(x.detach())
                 else:
                     xs.append(x)
-        if self.model_type == 'bridgetower':
+        if self.model_type == "bridgetower":
             return xs
         else:
             return x
 
 
 class VisualTransformer(nn.Module):
-    def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int, resolution_after: int, model_type: str = "bridgetower", stop_gradient: bool = False, vit_layernorm_shared: bool = True, vit_remove_last: bool = False):
+    def __init__(
+        self,
+        input_resolution: int,
+        patch_size: int,
+        width: int,
+        layers: int,
+        heads: int,
+        output_dim: int,
+        resolution_after: int,
+        model_type: str = "bridgetower",
+        stop_gradient: bool = False,
+        vit_layernorm_shared: bool = True,
+        vit_remove_last: bool = False,
+    ):
         super().__init__()
         self.input_resolution = input_resolution
         self.output_dim = output_dim
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False)
+        self.conv1 = nn.Conv2d(
+            in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False
+        )
 
-        scale = width ** -0.5
+        scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
         self.positional_embedding = nn.Parameter(scale * torch.randn((resolution_after // patch_size) ** 2 + 1, width))
         self.ln_pre = LayerNorm(width)
 
-        self.transformer = Transformer(width, layers, heads, model_type=model_type, stop_gradient=stop_gradient, vit_remove_last=vit_remove_last)
+        self.transformer = Transformer(
+            width, layers, heads, model_type=model_type, stop_gradient=stop_gradient, vit_remove_last=vit_remove_last
+        )
         self.ln_post = LayerNorm(width)
         self.model_type = model_type
         self.vit_layernorm_shared = vit_layernorm_shared
@@ -614,12 +642,12 @@ class VisualTransformer(nn.Module):
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-        t=self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device)
+        t = self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device)
         x = torch.cat([t, x], dim=1)  # shape = [*, grid ** 2 + 1, width]
         x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
         x = x.permute(1, 0, 2)  # NLD -> LND
-        if self.model_type == 'bridgetower':
+        if self.model_type == "bridgetower":
             xs = self.transformer(x, x_mask)
             xs = torch.stack(xs, dim=0)  # shape = [layers, width, *, grid ** 2]
             xs = xs.permute(0, 2, 1, 3)  # shape = [layers, *, width, grid ** 2]
@@ -637,43 +665,45 @@ class VisualTransformer(nn.Module):
             x = x.permute(1, 0, 2)  # LND -> NLD
             x = self.ln_post(x)
             return x
-    
+
     def forward_pre(self, x: torch.Tensor):
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-        t=self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device)
+        t = self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device)
         x = torch.cat([t, x], dim=1)  # shape = [*, grid ** 2 + 1, width]
         x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
         x = x.permute(1, 0, 2)  # NLD -> LND
         return x
-    
+
     def forward_post(self, x: torch.Tensor):
         x = x.permute(1, 0, 2)
         x = self.ln_post(x)
         return x
 
+
 class CLIP(nn.Module):
-    def __init__(self,
-                 embed_dim: int,
-                 # vision
-                 image_resolution: int,
-                 vision_layers: Union[Tuple[int, int, int, int], int],
-                 vision_width: int,
-                 vision_patch_size: int,
-                 # text
-                 context_length: int,
-                 vocab_size: int,
-                 transformer_width: int,
-                 transformer_heads: int,
-                 transformer_layers: int,
-                 resolution_after=224,
-                 model_type="bridgetower",
-                 stop_gradient=False,
-                 vit_layernorm_shared=True,
-                 vit_remove_last=False
-                 ):
+    def __init__(
+        self,
+        embed_dim: int,
+        # vision
+        image_resolution: int,
+        vision_layers: Union[Tuple[int, int, int, int], int],
+        vision_width: int,
+        vision_patch_size: int,
+        # text
+        context_length: int,
+        vocab_size: int,
+        transformer_width: int,
+        transformer_heads: int,
+        transformer_layers: int,
+        resolution_after=224,
+        model_type="bridgetower",
+        stop_gradient=False,
+        vit_layernorm_shared=True,
+        vit_remove_last=False,
+    ):
         super().__init__()
 
         self.context_length = context_length
@@ -704,8 +734,8 @@ class CLIP(nn.Module):
         nn.init.normal_(self.token_embedding.weight, std=0.02)
         nn.init.normal_(self.positional_embedding, std=0.01)
 
-        proj_std = (self.visual.transformer.width ** -0.5) * ((2 * self.visual.transformer.layers) ** -0.5)
-        attn_std = self.visual.transformer.width ** -0.5
+        proj_std = (self.visual.transformer.width**-0.5) * ((2 * self.visual.transformer.layers) ** -0.5)
+        attn_std = self.visual.transformer.width**-0.5
         fc_std = (2 * self.visual.transformer.width) ** -0.5
         for block in self.visual.transformer.resblocks:
             nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
@@ -720,15 +750,18 @@ class CLIP(nn.Module):
     def forward(self, image, image_mask=None):
         return self.visual(image.type(self.dtype), image_mask)
 
+
 def available_models():
     """Returns the names of available CLIP models"""
     return list(_MODELS.keys())
+
 
 _MODELS = {
     "ViT-B/32": "https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt",
     "ViT-B/16": "https://openaipublic.azureedge.net/clip/models/5806e77cd80f8b59890b7e101eabd078d9fb84e6937f9e85e4ecb61988df416f/ViT-B-16.pt",
     "ViT-L/14": "https://openaipublic.azureedge.net/clip/models/b8cca3fd41ae0c99ba7e8951adf17d267cdb84cd88be6f7c2e0eca1737a03836/ViT-L-14.pt",
 }
+
 
 def _download(url: str, root: str = os.path.expanduser("~/.cache/clip")):
     os.makedirs(root, exist_ok=True)
@@ -747,7 +780,7 @@ def _download(url: str, root: str = os.path.expanduser("~/.cache/clip")):
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
     with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
-        with tqdm(total=int(source.info().get("Content-Length")), ncols=80, unit='iB', unit_scale=True) as loop:
+        with tqdm(total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True) as loop:
             while True:
                 buffer = source.read(8192)
                 if not buffer:
@@ -757,12 +790,12 @@ def _download(url: str, root: str = os.path.expanduser("~/.cache/clip")):
                 loop.update(len(buffer))
 
     if hashlib.sha256(open(download_target, "rb").read()).hexdigest() != expected_sha256:
-        raise RuntimeError(f"Model has been downloaded but the SHA256 checksum does not not match")
+        raise RuntimeError("Model has been downloaded but the SHA256 checksum does not not match")
 
     return download_target
 
-def adapt_position_encoding(model, patch_size=32, after=384,
-                            suffix='visual.positional_embedding'):
+
+def adapt_position_encoding(model, patch_size=32, after=384, suffix="visual.positional_embedding"):
     keys = [k for k in model if k.endswith(suffix)]
     assert len(keys) == 1
     key = keys[0]
@@ -772,7 +805,7 @@ def adapt_position_encoding(model, patch_size=32, after=384,
         origin_dim2 = True
         origin_pos_embed = origin_pos_embed.unsqueeze(0)
     grid_before = int(np.sqrt(origin_pos_embed.shape[1] - 1))
-    before = int(grid_before*patch_size)
+    before = int(grid_before * patch_size)
     assert (before % patch_size) == 0
     grid_after = after // patch_size
     assert (after % patch_size) == 0
@@ -780,7 +813,9 @@ def adapt_position_encoding(model, patch_size=32, after=384,
 
     pos_embed = origin_pos_embed[0, 1:, :].reshape((grid_before, grid_before, embed_dim))
     new_size = (grid_after, grid_after)
-    pos_embed = torch.nn.functional.interpolate(pos_embed.permute((2, 0, 1)).unsqueeze(0), size=new_size, mode='bicubic')
+    pos_embed = torch.nn.functional.interpolate(
+        pos_embed.permute((2, 0, 1)).unsqueeze(0), size=new_size, mode="bicubic"
+    )
     pos_embed = pos_embed.squeeze(0).permute((1, 2, 0)).reshape((-1, embed_dim))
     pos_embed = torch.cat((origin_pos_embed[0, 0:1, :], pos_embed), dim=0).unsqueeze(0)
     assert pos_embed.shape == (1, grid_after * grid_after + 1, embed_dim)
@@ -791,14 +826,20 @@ def adapt_position_encoding(model, patch_size=32, after=384,
     return model
 
 
-def build_model(name, resolution_after=224, model_type="bridgetower", stop_gradient=False, vit_layernorm_shared=True, vit_remove_last=False):
+def build_model(
+    name,
+    resolution_after=224,
+    model_type="bridgetower",
+    stop_gradient=False,
+    vit_layernorm_shared=True,
+    vit_remove_last=False,
+):
     if name in _MODELS:
         model_path = _download(_MODELS[name])
     elif os.path.isfile(name):
         model_path = name
     else:
-        raise RuntimeError(f"Model {name} not found; available models = {available_models()}"
-)
+        raise RuntimeError(f"Model {name} not found; available models = {available_models()}")
     try:
         jit = True
         model = torch.jit.load(model_path, map_location="cpu")
@@ -809,10 +850,11 @@ def build_model(name, resolution_after=224, model_type="bridgetower", stop_gradi
             jit = False
         state_dict = torch.load(model_path, map_location="cpu")
     state_dict = state_dict or model.state_dict()
-    vit = "visual.proj" in state_dict
 
-    vision_width = state_dict["visual.conv1.weight"].shape[0] # Feature Dimension
-    vision_layers = len([k for k in state_dict.keys() if k.startswith("visual.") and k.endswith(".attn.in_proj_weight")])
+    vision_width = state_dict["visual.conv1.weight"].shape[0]  # Feature Dimension
+    vision_layers = len(
+        [k for k in state_dict.keys() if k.startswith("visual.") and k.endswith(".attn.in_proj_weight")]
+    )
     vision_patch_size = state_dict["visual.conv1.weight"].shape[-1]
     grid_size = round((state_dict["visual.positional_embedding"].shape[0] - 1) ** 0.5)
     image_resolution = vision_patch_size * grid_size
@@ -822,13 +864,24 @@ def build_model(name, resolution_after=224, model_type="bridgetower", stop_gradi
     vocab_size = state_dict["token_embedding.weight"].shape[0]
     transformer_width = state_dict["ln_final.weight"].shape[0]
     transformer_heads = transformer_width // 64
-    transformer_layers = len(set(k.split(".")[2] for k in state_dict if k.startswith(f"transformer.resblocks")))
+    transformer_layers = len(set(k.split(".")[2] for k in state_dict if k.startswith("transformer.resblocks")))
 
     model = CLIP(
         embed_dim,
-        image_resolution, vision_layers, vision_width, vision_patch_size,
-        context_length, vocab_size, transformer_width, transformer_heads, transformer_layers,
-        resolution_after, model_type, stop_gradient, vit_layernorm_shared, vit_remove_last,
+        image_resolution,
+        vision_layers,
+        vision_width,
+        vision_patch_size,
+        context_length,
+        vocab_size,
+        transformer_width,
+        transformer_heads,
+        transformer_layers,
+        resolution_after,
+        model_type,
+        stop_gradient,
+        vit_layernorm_shared,
+        vit_remove_last,
     )
 
     for key in ["input_resolution", "context_length", "vocab_size"]:
@@ -838,12 +891,13 @@ def build_model(name, resolution_after=224, model_type="bridgetower", stop_gradi
     model_dict = model.state_dict()
     pretrained_dict = state_dict
     if resolution_after != image_resolution:
-        pretrained_dict = adapt_position_encoding(pretrained_dict, after=resolution_after, patch_size=vision_patch_size)
+        pretrained_dict = adapt_position_encoding(
+            pretrained_dict, after=resolution_after, patch_size=vision_patch_size
+        )
     # 1. filter out unnecessary keys
     pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
     # 2. overwrite entries in the existing state dict
-    model_dict.update(pretrained_dict) 
+    model_dict.update(pretrained_dict)
     # 3. load the new state dict
     model.load_state_dict(model_dict)
     return model
-

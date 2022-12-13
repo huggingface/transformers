@@ -25,10 +25,12 @@ from ...utils import TensorType
 
 class BridgeTowerProcessor(ProcessorMixin):
     r"""
-    Constructs a BridgeTower processor which wraps a Roberta tokenizer and BridgeTower feature extractor into a single processor.
+    Constructs a BridgeTower processor which wraps a Roberta tokenizer and BridgeTower feature extractor into a single
+    processor.
 
-    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerFeatureExtractor`] and [`RobertaTokenizerFast`]. See the
-    docstring of [`~BridgeTowerProcessor.__call__`] and [`~BridgeTowerProcessor.decode`] for more information.
+    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerFeatureExtractor`] and
+    [`RobertaTokenizerFast`]. See the docstring of [`~BridgeTowerProcessor.__call__`] and
+    [`~BridgeTowerProcessor.decode`] for more information.
 
     Args:
         feature_extractor (`BridgeTowerFeatureExtractor`):
@@ -89,11 +91,11 @@ class BridgeTowerProcessor(ProcessorMixin):
         )
         # add pixel_values + pixel_mask
         encoding_feature_extractor = self.feature_extractor(
-            images, 
+            images,
             return_tensors=return_tensors,
             do_normalize=True,
             do_center_crop=True,
-            image_mean=(0.48145466, 0.4578275, 0.40821073), 
+            image_mean=(0.48145466, 0.4578275, 0.40821073),
             image_std=(0.26862954, 0.26130258, 0.27577711),
         )
         encoding.update(encoding_feature_extractor)
@@ -109,8 +111,8 @@ class BridgeTowerProcessor(ProcessorMixin):
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to RobertaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
+        This method forwards all its arguments to RobertaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 

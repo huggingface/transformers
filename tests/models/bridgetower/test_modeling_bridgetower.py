@@ -519,7 +519,9 @@ class BridgeTowerForImagesAndTextClassificationModelTest(BridgeTowerModelTest, u
     all_model_classes = (BridgeTowerForImagesAndTextClassification,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = BridgeTowerModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
+        self.model_tester = BridgeTowerModelTester(
+            self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2
+        )
         self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37)
 
     @unittest.skip("We only test the model that takes in multiple images")
@@ -543,7 +545,11 @@ def prepare_img():
 class BridgeTowerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return BridgeTowerProcessor.from_pretrained("dandelin/bridgetower-b32-finetuned-vqa") if is_vision_available() else None
+        return (
+            BridgeTowerProcessor.from_pretrained("dandelin/bridgetower-b32-finetuned-vqa")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_masked_lm(self):
@@ -571,7 +577,9 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_visual_question_answering(self):
-        model = BridgeTowerForQuestionAnswering.from_pretrained("dandelin/bridgetower-b32-finetuned-vqa").to(torch_device)
+        model = BridgeTowerForQuestionAnswering.from_pretrained("dandelin/bridgetower-b32-finetuned-vqa").to(
+            torch_device
+        )
 
         processor = self.default_processor
         image = prepare_img()
@@ -607,9 +615,9 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_natural_language_visual_reasoning(self):
-        model = BridgeTowerForImagesAndTextClassification.from_pretrained("dandelin/bridgetower-b32-finetuned-nlvr2").to(
-            torch_device
-        )
+        model = BridgeTowerForImagesAndTextClassification.from_pretrained(
+            "dandelin/bridgetower-b32-finetuned-nlvr2"
+        ).to(torch_device)
 
         processor = self.default_processor
 
