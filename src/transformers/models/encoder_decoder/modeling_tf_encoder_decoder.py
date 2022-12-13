@@ -334,7 +334,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
                 model.config = config
 
                 if hasattr(model, "enc_to_dec_proj"):
-                    model(model.dummy_inputs)
+                    model.build_with_dummies()
                     model.enc_to_dec_proj.kernel.assign(enc_to_dec_proj_kernel)
                     model.enc_to_dec_proj.bias.assign(enc_to_dec_proj_bias)
 
