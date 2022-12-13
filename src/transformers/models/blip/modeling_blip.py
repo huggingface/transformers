@@ -1154,6 +1154,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
@@ -1201,7 +1202,9 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         if decoder_input_ids is None:
             decoder_input_ids = torch.LongTensor([self.decoder_bos_token_id]).repeat((batch_size, 1))
-        labels = decoder_input_ids.masked_fill(decoder_input_ids == self.decoder_pad_token_id, -100)
+        
+        if labels is None:
+            labels = decoder_input_ids.masked_fill(decoder_input_ids == self.decoder_pad_token_id, -100)
 
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,
