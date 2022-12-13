@@ -40,9 +40,6 @@ def load_demo_image(image_size, device):
     img_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
-    w, h = raw_image.size
-    # display(raw_image.resize((w//5,h//5)))
-
     transform = transforms.Compose(
         [
             transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
