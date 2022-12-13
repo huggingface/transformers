@@ -152,7 +152,7 @@ class BridgeTowerModelOutput(ModelOutput):
 
     Args:
         text_feats (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_size)`):
-                Sequence of hidden-states at the text output of the last layer of the model.
+            Sequence of hidden-states at the text output of the last layer of the model.
         image_feats (`torch.FloatTensor` of shape `(batch_size, image_sequence_length, hidden_size)`):
             Sequence of hidden-states at the image output of the last layer of the model.
         pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size x 2)`):
