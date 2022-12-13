@@ -1131,9 +1131,9 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP Model for visual question answering. The model consists of a vision encoder, a text encoder as well as a
-    text decoder. The vision encoder will encode the input image, the text encoder will encode the input question
-    together with the encoding of the image, and the text decoder will output the answer to the question.
+    BLIP Model for visual question answering. The model consists of a vision encoder, a text encoder as well as a text
+    decoder. The vision encoder will encode the input image, the text encoder will encode the input question together
+    with the encoding of the image, and the text decoder will output the answer to the question.
     """,
     BLIP_START_DOCSTRING,
 )
