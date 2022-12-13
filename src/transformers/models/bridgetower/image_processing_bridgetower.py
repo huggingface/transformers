@@ -51,7 +51,9 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-
+if is_vision_available():
+    import PIL
+    
 logger = logging.get_logger(__name__)
 
 
