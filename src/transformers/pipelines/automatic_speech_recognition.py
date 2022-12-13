@@ -86,35 +86,31 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
     timestamp_begin = tokenizer.all_special_ids[-1] + 1
     time_precision = feature_extractor.chunk_length / max_source_positions
     last_timestamp_position = 0
-    for idx, sequence in enumerate(sequences):
-        chunk_len = ( feature_extractor.chunk_length * feature_extractor.hop_length) / feature_extractor.sampling_rate
-        timestamp_offset = (last_timestamp_position * time_precision)//2  # in seconds
+    for seq_idx, sequence in enumerate(sequences):
+        timestamp_offset = (seq_idx *  feature_extractor.chunk_length)/2  # in seconds
         sequence = sequence.squeeze(0)
         # patch the matching sequence with the correct sequence of the previous chunk
         sequence = sequence[begin_idx:]
         if last_timestamp_position != 0:
             # lets only take the beginning tokens
             timestamp_tokens = np.where(sequence >= timestamp_begin)[0][1::2]
-            # lets 
             time = (sequence[timestamp_tokens]-timestamp_begin  )*0.02 + timestamp_offset
-            # 3 possibilities :
-            # - a timestamp appears before last_begin_time, e.g. last_time_stamp = [25->28.4], next = [26 -> 32]  find new in prev, [25->32]
-            # - a timestamp appears  after last_begin_time, e.g. last_time_stamp = [25->26], next = [23-> 32]     find prev in new, patch the beginnig [25->32]
-            # - a timestamp appears  after last_begin_time, e.g. last_time_stamp = [25->26], next = [26-> 32]     clean merge [25->26] -> [26->32]
-            # get the previous slice where the begin time is bigger than the offset
             merge_point = np.where(time > last_begin_time)[0][0] - 1
+            offset_idx = -1
             for idx,item in enumerate(offsets):
-                if (item["start_time"]>time[merge_point]):
+                if (item["start_time"]>=time[merge_point]):
                     offset_idx = idx - 1
                     break
-            sliced_sequence = sequence[ timestamp_tokens[merge_point] : timestamp_tokens[merge_point + 1] + 1]
-            prev_sequences = items[offset_idx]
+            sliced_sequence = sequence[ timestamp_tokens[merge_point] + 2 : timestamp_tokens[merge_point + 1] + 1]
+            prev_sequences = items[offset_idx][:-1]
+            for prev_sequence in items[offset_idx+1:]:
+                prev_sequences = np.concatenate([prev_sequences, prev_sequence[1:-1]])
             start_timestamp_position = offsets[offset_idx]["start_time"]
 
             items = items[:offset_idx]
             offsets = offsets[:offset_idx]
-
-            patch = _find_longest_common_sequence([prev_sequences[None,:-1], sliced_sequence[None,:]], tokenizer)
+            # here sometime you can have repetition if prev_sequences[None,:] exactly in
+            patch = _find_longest_common_sequence([prev_sequences[None,:], sliced_sequence[None,:]], tokenizer)
             end_timestamp_position = patch[-1] - timestamp_begin
             items.append(patch)
             offsets.append(
@@ -123,8 +119,8 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
                     "end_time": time[merge_point+1],
                 }
             )
+            print(f"prev {tokenizer.decode(prev_sequences)}\n sliced {tokenizer.decode(sliced_sequence)}\n patch {tokenizer.decode(patch)} \n sequence {tokenizer.batch_decode(sequence[None,:], skip_special_tokens=True)}")
             sequence = sequence[timestamp_tokens[merge_point+1] + 1:]
-            print(f"prev {prev_sequences}\n sliced {sliced_sequence}\n patch {patch} \n sequence")
 
 
 
@@ -147,14 +143,15 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
             last_timestamp_position = sequence[last_slice - 1].item() - timestamp_begin
         else:
             # compute the correct duration using the stride! Not done yet
-            duration = (chunk_len * idx) / feature_extractor.sampling_rate
+            stride = 1500
+            duration =(seq_idx *  feature_extractor.chunk_length) - stride
             timestamps = sequence[timestamp_tokens.nonzero()[0].flatten()]
             if len(timestamps) > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 # single timestamp at the end means no speech after the last timestamp.
                 last_timestamp_position = timestamps[-1].item() - timestamp_begin
                 duration = last_timestamp_position * time_precision
-                items.append(sliced_tokens)
+                items.append(sliced_tokens.tolist())
                 offsets.append(
                     {
                     "start_time": timestamp_offset,
@@ -163,9 +160,12 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
                 )
 
         last_begin_time = timestamp_offset + start_timestamp_position * time_precision
+        last_timestamp_position = offsets[-1]["end_time"]
 
-
-    return items, offsets
+    result = []
+    for i in range(len(items)):
+        result += items[i].tolist()
+    return items
 
 
 def _find_longest_common_sequence(sequences, tokenizer):
@@ -525,7 +525,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if stride and self.type == "seq2seq" and not return_timestamps:
             items = _find_longest_common_sequence(final_items, self.tokenizer)
         elif stride and self.type == "seq2seq" and return_timestamps:
-            items, offsets = _find_timestamp_sequence(final_items, self.tokenizer, self.feature_extractor)
+            items = _find_timestamp_sequence(final_items, self.tokenizer, self.feature_extractor)
         else:
             items = np.concatenate(final_items, axis=1)
             items = items.squeeze(0)

@@ -18,7 +18,7 @@ import os
 from typing import List, Optional, Tuple, Union
 
 import regex as re
-
+import numpy as np
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
@@ -488,11 +488,38 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
+    def _compute_offsets(self, token_ids, time_precision = 0.02):
+        """Compute offsets for a given tokenized input"""
+        offsets = []
+        timestamp_begin = self.all_special_ids[-1] + 1
+        timestamp_tokens = token_ids >= timestamp_begin
+
+        consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+        last_slice = 0
+        for current_slice in consecutive:
+            sliced_tokens = token_ids[last_slice:current_slice]
+            start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
+            end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+            offsets.append(
+                {
+                    "sequence": sliced_tokens,
+                    "start_time": start_timestamp_position * time_precision,
+                    "end_time": end_timestamp_position * time_precision,
+                }
+            )
+            last_slice = current_slice
+
+        return offsets
+
     def _decode(
-        self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs
+        self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, output_char_offsets: bool = False, time_precision = 0.02, **kwargs
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
+        # retrieve offsets
+        char_offsets = None
+        if output_char_offsets:
+            char_offsets = self._compute_offsets(token_ids, self.begin_timestamp, time_precision=time_precision)
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
@@ -517,8 +544,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if normalize:
             clean_text = self._normalize(text)
+            if output_char_offsets:
+                return {"text": clean_text, "char_offsets": char_offsets}
             return clean_text
         else:
+            if output_char_offsets:
+                return {"text": text, "char_offsets": char_offsets}
             return text
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string with GPT2 -> Whisper
