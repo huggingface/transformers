@@ -72,6 +72,9 @@ class DinatConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         layer_scale_init_value (`float`, *optional*, defaults to 0.0):
             The initial value for the layer scale. Disabled if <=0.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). Will default to the last stage if unset.
 
     Example:
 
@@ -113,6 +116,7 @@ class DinatConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         layer_scale_init_value=0.0,
+        out_features=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -138,3 +142,13 @@ class DinatConfig(PretrainedConfig):
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
         self.layer_scale_init_value = layer_scale_init_value
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        if out_features is not None:
+            if not isinstance(out_features, list):
+                raise ValueError("out_features should be a list")
+            for feature in out_features:
+                if feature not in self.stage_names:
+                    raise ValueError(
+                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
+                    )
+        self.out_features = out_features

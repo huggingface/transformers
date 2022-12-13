@@ -35,6 +35,7 @@ else:
         "DinatForImageClassification",
         "DinatModel",
         "DinatPreTrainedModel",
+        "DinatBackbone",
     ]
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DinatBackbone,
             DinatForImageClassification,
             DinatModel,
             DinatPreTrainedModel,
