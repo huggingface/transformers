@@ -1346,9 +1346,13 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
 
         self.text_encoder = BlipTextModel(config.text_config, add_pooling_layer=False)
 
+        # vision projection layer
         self.vision_proj = nn.Linear(config.vision_config.hidden_size, config.image_text_hidden_size)
+
+        # text projection layer
         self.text_proj = nn.Linear(config.text_config.hidden_size, config.image_text_hidden_size)
 
+        # image text matching head
         self.itm_head = nn.Linear(config.text_config.hidden_size, 2)
 
         self.decoder_pad_token_id = config.text_config.pad_token_id
