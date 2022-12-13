@@ -1165,8 +1165,8 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
-        answer_input_ids: Optional[torch.LongTensor] = None,
-        answer_attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1215,16 +1215,16 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
 
-        if answer_input_ids is None:
-            answer_input_ids = torch.LongTensor([self.decoder_bos_token_id]).repeat((batch_size, 1))
-        answer_targets = answer_input_ids.masked_fill(answer_input_ids == self.decoder_pad_token_id, -100)
+        if decoder_input_ids is None:
+            decoder_input_ids = torch.LongTensor([self.decoder_bos_token_id]).repeat((batch_size, 1))
+        labels = decoder_input_ids.masked_fill(decoder_input_ids == self.decoder_pad_token_id, -100)
 
         answer_output = self.text_decoder(
-            input_ids=answer_input_ids,
-            attention_mask=answer_attention_mask,
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
             encoder_hidden_states=question_embeds,
             encoder_attention_mask=attention_mask,
-            labels=answer_targets,
+            labels=labels,
             return_dict=return_dict,
             reduction="none",
         )
