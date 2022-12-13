@@ -2345,6 +2345,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 modules_to_not_convert = load_in_8bit_skip_modules
 
+            if not isinstance(modules_to_not_convert, list):
+                modules_to_not_convert = [modules_to_not_convert]
+
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
             model = replace_8bit_linear(
