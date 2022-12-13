@@ -1438,7 +1438,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
             outputs = (output, vision_outputs[0]) + vision_outputs[2:] + (question_embeds,)
             return tuple(output for output in outputs if output is not None)
 
-        return BlipITMModelOutput(
+        return BlipImageTextMatchingModelOutput(
             itm_score=output,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
