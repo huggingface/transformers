@@ -1018,8 +1018,8 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
-        >>> image_embeds = outputs.image_embeds
+        >>> outputs = model.generate(**inputs)
+        >>> print(processor.decode(outputs[0], skip_special_tokens=True))
         ```"""
         batch_size = pixel_values.shape[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
