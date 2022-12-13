@@ -1814,7 +1814,9 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "pixel_values": tf.TensorSpec(
-                (None, 3, self.config.image_size, self.config.image_size), tf.float32, name="pixel_values"
+                (None, 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
+                tf.float32,
+                name="pixel_values",
             ),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
         }
