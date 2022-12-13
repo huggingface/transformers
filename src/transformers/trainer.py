@@ -171,8 +171,7 @@ if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
-    from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
-
+    
 if is_fairscale_available():
     dep_version_check("fairscale")
     import fairscale
@@ -419,9 +418,11 @@ class Trainer:
                 self.fsdp = ShardingStrategy.NO_SHARD
 
         if args.xla_fsdp:
-            if version.parse(version.parse(torch_xla.__version__).base_version) < version.parse("1.12.0"):
-                raise ValueError("XLA FSDP requires PyTorch/XLA >= 1.12.0")
-            fsdp_kwargs = args.xla_fsdp
+            try:
+                from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
+            except ImportError:
+                assert False, "Missing module XLAFullyShardedDataParallel; this module is available in torch-xla >= 1.12.0."
+            fsdp_kwargs = args.xla_fsdp_config
             fsdp_wrap = lambda m: FSDP(m, **fsdp_kwargs)
             # A wrapper for gradient checkpointing
             grad_ckpt_wrap = checkpoint_module if args.xla_fsdp_grad_ckpt else (lambda m: m)
