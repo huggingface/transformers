@@ -1157,7 +1157,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def build_with_dummies(self, dummy_spec=None):
         if dummy_spec is None:
-            dummy_spec = {key: tf.keras.Input(type_spec=spec) for key, spec in self.serving.input_signature[0].items()}
+            dummy_spec = {key: tf.keras.Input(type_spec=spec) for key, spec in self.serving_signature.items()}
         elif isinstance(dummy_spec, dict):
             for key in list(dummy_spec.keys()):
                 if isinstance(dummy_spec[key], tf.TypeSpec):
@@ -1184,26 +1184,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return self.serving_output(output)
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
+    @property
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
+        return {
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+        }
 
     def serving_output(self, output):
         """
