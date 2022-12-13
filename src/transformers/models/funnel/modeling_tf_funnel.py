@@ -1521,9 +1521,9 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     @property
     def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
-            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+            "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+            "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
         }
 
     def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
