@@ -22,11 +22,11 @@ from collections import OrderedDict
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-import PIL
 import torch
 from torch import nn
 from tqdm import tqdm
 
+from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -45,9 +45,10 @@ from ...image_utils import (
 )
 from ...utils import logging
 
+
 if is_vision_available():
     import PIL
-    
+
 logger = logging.get_logger(__name__)
 
 

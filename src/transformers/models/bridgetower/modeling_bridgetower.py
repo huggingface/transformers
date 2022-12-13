@@ -14,7 +14,8 @@
 # limitations under the License.
 """PyTorch BridgeTower Model"""
 
-from typing import Optional
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -24,17 +25,9 @@ from torch import nn
 from transformers import RobertaConfig, RobertaModel
 from transformers.modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from transformers.models.bert.modeling_bert import BertAttention, BertIntermediate, BertOutput
-from typing import List, Optional, Tuple, Union
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
-from ...modeling_outputs import (
-    ModelOutput,
-    MaskedLMOutput,
-    SequenceClassifierOutput,
-)
-from .image_processing_bridgetower import build_model
-from ...modeling_utils import PreTrainedModel
+from ...modeling_outputs import MaskedLMOutput, ModelOutput, SequenceClassifierOutput
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_10
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig
@@ -137,6 +130,9 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
 
+        image_token_type_idx (`int`, *optional*):
+            TODO
+
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -147,6 +143,7 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
 
 @dataclass
 class BridgeTowerModelOutput(ModelOutput):
@@ -159,8 +156,8 @@ class BridgeTowerModelOutput(ModelOutput):
         image_feats (`torch.FloatTensor` of shape `(batch_size, image_sequence_length, hidden_size)`):
             Sequence of hidden-states at the image output of the last layer of the model.
         pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size x 2)`):
-            Concatenation of last layer hidden-state of the first token of the text and image sequence (classification token), respectively, after further processing
-            through layers used for auxiliary pretraining tasks. 
+            Concatenation of last layer hidden-state of the first token of the text and image sequence (classification
+            token), respectively, after further processing through layers used for auxiliary pretraining tasks.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -179,6 +176,7 @@ class BridgeTowerModelOutput(ModelOutput):
     pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
 
 @add_start_docstrings(
     "The bare BridgeTower Model transformer outputting 'text_feats', 'image_feats', 'cls_feats', 'text_ids',"
@@ -285,8 +283,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.mlm_score = BridgeTowerMLMHead(self.tokenizer_config)
             self.mlm_score.apply(self._init_weights)
 
-        hs = config.hidden_size
-
         # ===================== Initialize BridgeTower Components ===================== #
         # just for first layer
         self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size)
@@ -339,7 +335,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 for name, param in self.text_transformer.named_parameters():
                     if "LayerNorm" in name:
                         param.requires_grad_(True)
-  
+
         if config.freeze_layer_count_roberta > 0:
             modules = [
                 self.text_transformer.embeddings,
@@ -355,7 +351,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             for module in modules:
                 # module.requires_grad_(False)
                 for param in module.parameters():
-                    param.requires_grad = False           
+                    param.requires_grad = False
 
     @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BridgeTowerModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -372,8 +368,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         image_token_type_idx: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None
-    ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], BridgeTowerModelOutput]:
         r"""
         Returns:
 
@@ -397,20 +393,20 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         dict_keys(['text_feats', 'image_feats', 'cls_feats', 'text_ids', 'text_masks'])
         ```
         """
-        
-        image_token_type_idx= image_token_type_idx if image_token_type_idx else 1
-        irtr_len=0
-        input_shape = input_ids.size() 
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
+        irtr_len = 0
+        input_shape = input_ids.size()
         text_embeds = self.text_transformer.embeddings(input_ids=input_ids)
-        
+
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.device)
         extend_text_masks = self.text_transformer.get_extended_attention_mask(attention_mask, input_shape, self.device)
-        
+
         split_index = len(self.text_transformer.encoder.layer) - self.config.num_hidden_layers + 1
         for layer in self.text_transformer.encoder.layer[:split_index]:
             text_embeds = layer(text_embeds, extend_text_masks)[0]
-        
+
         image_embeds = self.vit_model.visual.forward_pre(pixel_values.type(self.vit_model.dtype))
         for block in self.vit_model.visual.transformer.resblocks[:split_index]:
             image_embeds = block(image_embeds)
@@ -431,8 +427,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             _bs, _L, _D = image_embeds_.size()
             y = y.unsqueeze(1).expand(_bs, irtr_len, _L, _D).reshape(-1, _L, _D)
         pixel_mask = torch.ones((y.size(0), y.size(1)), dtype=torch.long, device=self.device)
-        extend_image_masks = self.text_transformer.get_extended_attention_mask(pixel_mask, pixel_mask.size(), self.device)
-        
+        extend_image_masks = self.text_transformer.get_extended_attention_mask(
+            pixel_mask, pixel_mask.size(), self.device
+        )
+
         x1 = self.cross_modal_text_layers[0](x, y, extend_text_masks, extend_image_masks)[0]
         y1 = self.cross_modal_image_layers[0](y, x, extend_image_masks, extend_text_masks)[0]
 
@@ -471,6 +469,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         text_feats, image_feats = x1, y1
         cls_feats = self.get_cls_feats(text_feats, image_feats)
+
+        if not return_dict:
+            return (text_feats, image_feats, cls_feats)
 
         return BridgeTowerModelOutput(
             text_feats=text_feats,
@@ -836,7 +837,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> MaskedLMOutput:
+    ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
         r"""
         Returns:
 
@@ -864,7 +865,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         >>> print(results)
         a cat looking out of the window.
         ```"""
-
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bridgetower(
             input_ids,
             attention_mask=attention_mask,
@@ -880,6 +881,9 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         )
 
         mlm_logits = self.mlm_score(outputs.text_feats)
+
+        if not return_dict:
+            return mlm_logits
 
         return MaskedLMOutput(logits=mlm_logits)
 
@@ -932,6 +936,7 @@ class BridgeTowerITMHead(nn.Module):
     BridgeTower Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the
     [CLS] token) for image-to-text or text-to-image retrieval, e.g. MSCOCO and F30K.
     """,
+    BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
     def __init__(self, config):
@@ -956,7 +961,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> SequenceClassifierOutput:
+    ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
         r"""
 
         Returns:
@@ -983,6 +988,8 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         ...     outputs = model(**encoding)
         ...     scores[text] = outputs.logits[0, :].item()
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         outputs = self.bridgetower(
             input_ids,
             attention_mask=attention_mask,
@@ -997,8 +1004,12 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooler_output = outputs.pooler_output
+        pooler_output = outputs.pooler_output if return_dict else outputs[2]
+
         logits = self.itm_score(pooler_output)
+
+        if not return_dict:
+            return logits
 
         return SequenceClassifierOutput(
             loss=None,
