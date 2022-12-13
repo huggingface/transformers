@@ -1122,7 +1122,6 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
 
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
-# Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM with Deberta->DebertaV2
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "cls.predictions.decoder.weight"]
@@ -1149,6 +1148,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         mask="[MASK]",
     )
+    # Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM.forward with Deberta->DebertaV2
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1258,7 +1258,6 @@ class DebertaV2OnlyMLMHead(nn.Module):
     """,
     DEBERTA_START_DOCSTRING,
 )
-# Copied from transformers.models.deberta.modeling_deberta.DebertaForSequenceClassification with Deberta->DebertaV2
 class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1290,6 +1289,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.deberta.modeling_deberta.DebertaForSequenceClassification.forward with Deberta->DebertaV2
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1453,7 +1453,6 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
     """,
     DEBERTA_START_DOCSTRING,
 )
-# Copied from transformers.models.deberta.modeling_deberta.DebertaForQuestionAnswering with Deberta->DebertaV2
 class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1475,6 +1474,7 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
         qa_target_start_index=_QA_TARGET_START_INDEX,
         qa_target_end_index=_QA_TARGET_END_INDEX,
     )
+    # Copied from transformers.models.deberta.modeling_deberta.DebertaForQuestionAnswering with Deberta->DebertaV2
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
