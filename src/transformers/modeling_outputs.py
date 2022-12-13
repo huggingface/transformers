@@ -1293,7 +1293,7 @@ class BackboneOutput(ModelOutput):
 
 
 @dataclass
-class BaseModelOutputWithPoolingAndprojection(ModelOutput):
+class BaseModelOutputWithPoolingAndProjection(ModelOutput):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states.
 

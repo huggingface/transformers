@@ -919,8 +919,6 @@ else:
             "AltCLIPPreTrainedModel",
             "AltCLIPTextModel",
             "AltCLIPVisionModel",
-            "AltRobertaModel",
-            "AltRobertaPreTrainedModel",
         ]
     )
 
