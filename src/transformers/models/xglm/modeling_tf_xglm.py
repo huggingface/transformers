@@ -650,6 +650,15 @@ class TFXGLMPreTrainedModel(TFPreTrainedModel):
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
         }
 
+    def build_with_dummies(self, dummy_spec=None):
+        # This model is coded in a way which means building it
+        # with tf.keras.Input fails (weird shape-dependent computation in the attention_mask)
+        if dummy_spec is None:
+            self._set_save_spec(self.serving_signature)
+            self(self.dummy_inputs)
+        else:
+            super().build_with_dummies(dummy_spec)
+
 
 XGLM_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
