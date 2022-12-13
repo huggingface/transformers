@@ -288,7 +288,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             max_new_tokens=448,
         )
         output = pipe(array, return_timestamps=True, chunk_length_s=30, stride_length_s=[15, 0], device=0)
-        #fmt: off
+        # fmt: off
         EXPECTED_OUTPUT = {
             "text": (
                 " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing"
@@ -305,7 +305,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 {"text": " Even the soaring arena around him with thousands of spectators, retrievalidies not worth","start_offset": 17.6,"end_offset": 23.28,},
             ],
         }
-        #fmt: on
+        # fmt: on
 
         self.assertDictEqual(output, EXPECTED_OUTPUT)
 
