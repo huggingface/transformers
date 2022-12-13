@@ -1104,7 +1104,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         image_embeds = vision_outputs[0]
 
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
+        encoder_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
 
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
@@ -1122,7 +1122,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             pad_token_id=self.config.text_config.pad_token_id,
             attention_mask=attention_mask,
             encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
+            encoder_attention_mask=encoder_attention_mask,
             **generate_kwargs,
         )
 
