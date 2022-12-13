@@ -17,8 +17,10 @@ import json
 import os
 from typing import List, Optional, Tuple, Union
 
-import regex as re
 import numpy as np
+
+import regex as re
+
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
@@ -488,11 +490,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
-    def _compute_offsets(self, token_ids, time_precision = 0.02):
+    def _compute_offsets(self, token_ids, time_precision=0.02):
         """Compute offsets for a given tokenized input"""
         offsets = []
         token_ids = np.array(token_ids)
-        if token_ids.shape[0]>1 and len(token_ids.shape) > 1 :
+        if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
             raise ValueError("Can only process a single input at a time")
         timestamp_begin = self.all_special_ids[-1] + 1
         timestamp_tokens = token_ids >= timestamp_begin
@@ -514,12 +516,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return offsets
 
-    def decode(self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+    def decode(
+        self,
+        token_ids,
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         output_char_offsets: bool = False,
-        time_precision = 0.02,
+        time_precision=0.02,
         **kwargs
     ) -> str:
         """
@@ -541,7 +544,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Returns:
             `str`: The decoded sentence.
         """
-        text = super().decode(token_ids, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=clean_up_tokenization_spaces, **kwargs)
+        text = super().decode(
+            token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
         # retrieve offsets
         if output_char_offsets:
             char_offsets = None
