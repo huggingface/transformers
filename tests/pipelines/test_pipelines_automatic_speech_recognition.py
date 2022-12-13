@@ -298,11 +298,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             ),
             "chunks": [
                 {"text": " A man said to the universe, Sir, I exist.", "start_offset": 0.0, "end_offset": 5.5},
-                {"text": (" Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment"),"start_offset": 5.5,"end_offset": 10.24,},
+                {"text": " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment","start_offset": 5.5,"end_offset": 10.24,},
                 {"text": " you wore.", "start_offset": 10.24, "end_offset": 11.74},
                 {"text": " The cut on his chest still dripping blood.", "start_offset": 11.74, "end_offset": 14.88},
                 {"text": " The ache of his overstrain dyes.", "start_offset": 14.88, "end_offset": 17.6},
-                {"text": (" Even the soaring arena around him with thousands of spectators, retrievalidies not worth"),"start_offset": 17.6,"end_offset": 23.28,},
+                {"text": " Even the soaring arena around him with thousands of spectators, retrievalidies not worth","start_offset": 17.6,"end_offset": 23.28,},
             ],
         }
         #fmt: on
