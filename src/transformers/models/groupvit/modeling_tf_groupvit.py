@@ -1724,7 +1724,9 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
     @property
     def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
-            "pixel_values": tf.TensorSpec((None, 3, self.config.image_size, self.config.image_size), tf.float32, name="pixel_values"),
+            "pixel_values": tf.TensorSpec(
+                (None, 3, self.config.image_size, self.config.image_size), tf.float32, name="pixel_values"
+            ),
         }
 
     @unpack_inputs
