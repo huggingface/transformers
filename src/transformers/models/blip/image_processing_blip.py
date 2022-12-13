@@ -95,23 +95,6 @@ def pad(
     return padded_image
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.make_pixel_mask
-def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
-    """
-    Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-
-    Args:
-        image (`np.ndarray`):
-            Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
-            Output size of the mask.
-    """
-    input_height, input_width = get_image_size(image)
-    mask = np.zeros(output_size, dtype=np.int64)
-    mask[:input_height, :input_width] = 1
-    return mask
-
-
 # Copied from transformers.models.vilt.image_processing_vilt.get_max_dimensions
 def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
     """
@@ -210,8 +193,6 @@ class BlipImageProcessor(BaseImageProcessor):
         do_pad: bool = True,
         **kwargs
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
         size = size if size is not None else 384
@@ -303,7 +284,6 @@ class BlipImageProcessor(BaseImageProcessor):
     def pad(
         self,
         images: List[np.ndarray],
-        return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
     ) -> BatchFeature:
@@ -314,8 +294,6 @@ class BlipImageProcessor(BaseImageProcessor):
         Args:
             images (`List[np.ndarray]`):
                 Batch of images to pad.
-            return_pixel_mask (`bool`, *optional*, defaults to `False`):
-                Whether to return the pixel mask.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -329,9 +307,6 @@ class BlipImageProcessor(BaseImageProcessor):
         pad_size = get_max_dimensions(images)
         padded_images = [pad(image=image, output_size=pad_size, data_format=data_format) for image in images]
         data = {"pixel_values": padded_images}
-        if return_pixel_mask:
-            masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]
-            data["pixel_mask"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -365,7 +340,6 @@ class BlipImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in pixel_values_list]
         return self.pad(
             images=images,
-            return_pixel_mask=True,
             return_tensors=return_tensors,
             data_format=data_format,
         )
@@ -475,7 +449,7 @@ class BlipImageProcessor(BaseImageProcessor):
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
         if do_pad:
-            encoded_outputs = self.pad(images, return_pixel_mask=True, return_tensors=return_tensors)
+            encoded_outputs = self.pad(images, return_tensors=return_tensors)
         else:
             encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
