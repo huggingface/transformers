@@ -58,14 +58,15 @@ The following example shows how to run masked image-text retrieval using [`Bridg
 ...     # prepare inputs
 ...     encoding = processor(image, text, return_tensors="pt")
 ...     outputs = model(**encoding)
-...     scores[text] = outputs.logits[0, :].item()
-```
+...     scores[text] = outputs.logits[0, 1].item()
+```"""
 
 The following example shows how to run masked language modeling using [`BridgeTowerProcessor`] and [`BridgeTowerForMaskedLM`].
 
 ```python
 >>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
 >>> from PIL import Image
+>>> import requests
 
 >>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -83,7 +84,7 @@ The following example shows how to run masked language modeling using [`BridgeTo
 >>> results = processor.decode(outputs.logits.argmax(dim=-1).squeeze(0).tolist())
 
 >>> print(results)
-a cat looking out of the window.
+.a cat looking out of the window.
 ```
 
 The original code can be found [here](https://github.com/microsoft/BridgeTower).

@@ -179,8 +179,8 @@ class BridgeTowerModelOutput(ModelOutput):
 
 
 @add_start_docstrings(
-    "The bare BridgeTower Model transformer outputting 'text_feats', 'image_feats', 'cls_feats', 'text_ids',"
-    " 'text_masks' without any specific head on top.",
+    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+    " top.",
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -390,9 +390,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         >>> inputs = processor(image, text, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.keys()
-        dict_keys(['text_feats', 'image_feats', 'cls_feats', 'text_ids', 'text_masks'])
-        ```
-        """
+        odict_keys(['text_feats', 'image_feats', 'pooler_output'])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
         irtr_len = 0
@@ -846,6 +845,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
         >>> from PIL import Image
+        >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -863,7 +863,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         >>> results = processor.decode(outputs.logits.argmax(dim=-1).squeeze(0).tolist())
 
         >>> print(results)
-        a cat looking out of the window.
+        .a cat looking out of the window.
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bridgetower(
@@ -986,7 +986,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         ...     # prepare inputs
         ...     encoding = processor(image, text, return_tensors="pt")
         ...     outputs = model(**encoding)
-        ...     scores[text] = outputs.logits[0, :].item()
+        ...     scores[text] = outputs.logits[0, 1].item()
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
