@@ -585,6 +585,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = BlipTextImageModelsModelTester(self)
@@ -776,12 +777,12 @@ def prepare_img():
 @slow
 class BlipModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        model = BlipForConditionalGeneration.from_pretrained("ybelkada/blip-image-captioning-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("ybelkada/blip-image-captioning-base")
         image = prepare_img()
 
         # image only
-        inputs = processor(images=image).to(torch_device)
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         predictions = model.generate(**inputs)
 
@@ -790,7 +791,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
 
         # image and context
         context = ["a picture of"]
-        inputs = processor(image=image, text=context).to(torch_device)
+        inputs = processor(images=image, text=context, return_tensors="pt").to(torch_device)
 
         predictions = model.generate(**inputs)
 
