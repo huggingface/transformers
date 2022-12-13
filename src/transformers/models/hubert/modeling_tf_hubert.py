@@ -1311,7 +1311,7 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
     @property
     def serving_signature(self) -> Dict[str, tf.TypeSpec]:
         return {
-            "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
+            "input_values": tf.TensorSpec((None, 16000), tf.float32, name="input_values"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
         }
