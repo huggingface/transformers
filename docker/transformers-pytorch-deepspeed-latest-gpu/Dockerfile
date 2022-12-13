@@ -22,6 +22,9 @@ RUN python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchau
 
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
+# The base image ships with `torch_tensorrt` which currently causes the DeepSpeed CI fail from test collection
+RUN python3 -m pip uninstall -y torch_tensorrt
+
 # Pre-build **latest** DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
 # This has to be run (again) inside the GPU VMs running the tests.
