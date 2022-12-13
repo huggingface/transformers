@@ -524,14 +524,14 @@ PT_VISION_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import ImageProcessor, {model_class}
+    >>> from transformers import AutoImageProcessor, {model_class}
     >>> import torch
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> image_processor = ImageProcessor.from_pretrained("{checkpoint}")
+    >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = image_processor(image, return_tensors="pt")
@@ -549,14 +549,14 @@ PT_VISION_SEQ_CLASS_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import ImageProcessor, {model_class}
+    >>> from transformers import AutoImageProcessor, {model_class}
     >>> import torch
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> image_processor = ImageProcessor.from_pretrained("{checkpoint}")
+    >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = image_processor(image, return_tensors="pt")
