@@ -995,27 +995,14 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
             "pixel_values": pixel_values,
         }
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
                 "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 LAYOUTLMV3_START_DOCSTRING = r"""

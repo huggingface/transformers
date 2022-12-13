@@ -373,18 +373,12 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
     config_class = DPRConfig
     base_model_prefix = "reader"
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 ###############

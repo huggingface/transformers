@@ -814,9 +814,9 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         return getattr(self, self.base_model_prefix).dummy_inputs
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
                 "visual_feats": tf.TensorSpec((None, None, None), tf.float32, name="visual_feats"),
@@ -824,12 +824,6 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
                 "visual_attention_mask": tf.TensorSpec((None, None), tf.int32, name="visual_attention_mask"),
                 "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 LXMERT_START_DOCSTRING = r"""

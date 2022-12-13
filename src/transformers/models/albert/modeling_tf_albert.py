@@ -1477,20 +1477,13 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             attentions=outputs.attentions,
         )
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
                 "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
             }
-        ]
-    )
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
-        output = self.call(input_ids=inputs)
-
-        return self.serving_output(output)
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:

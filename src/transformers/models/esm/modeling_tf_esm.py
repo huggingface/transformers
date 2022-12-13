@@ -1053,18 +1053,12 @@ class TFEsmModel(TFEsmPreTrainedModel):
         )
         return outputs
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
     def serving_output(
         self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
@@ -1188,18 +1182,12 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
     def predict_contacts(self, tokens, attention_mask):
         return self.esm.predict_contacts(tokens, attention_mask)
@@ -1325,18 +1313,12 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 @add_start_docstrings(
@@ -1422,18 +1404,12 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 class TFEsmClassificationHead(Layer):

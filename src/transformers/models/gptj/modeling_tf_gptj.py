@@ -534,18 +534,12 @@ class TFGPTJPreTrainedModel(TFPreTrainedModel):
         dummy = {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
         return dummy
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 GPTJ_START_DOCSTRING = r"""

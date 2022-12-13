@@ -591,20 +591,14 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
 
         return input_lengths
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
                 "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
                 "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 SPEECH_TO_TEXT_START_DOCSTRING = r"""

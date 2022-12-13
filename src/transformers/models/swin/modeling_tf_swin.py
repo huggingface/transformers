@@ -958,16 +958,11 @@ class TFSwinPreTrainedModel(TFPreTrainedModel):
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-        return self.serving_output(output)
 
 
 SWIN_START_DOCSTRING = r"""

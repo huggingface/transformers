@@ -1341,19 +1341,13 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
             "to train/fine-tine this model, you need a GPU or a TPU"
         )
 
-    @tf.function(
-        input_signature=[
-            {
+    @property
+    def serving_signature(self):
+        return {
                 "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
                 "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(input_values=inputs, training=False)
-
-        return self.serving_output(output)
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
