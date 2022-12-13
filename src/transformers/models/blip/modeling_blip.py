@@ -1306,9 +1306,8 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         question_embeds = question_outputs[0]
 
-        question_atts = torch.ones(question_embeds.size()[:-1], dtype=torch.long).to(question_embeds.device)
-        model_kwargs = {"encoder_hidden_states": question_embeds, "encoder_attention_mask": question_atts}
-
+        question_attention_mask = torch.ones(question_embeds.size()[:-1], dtype=torch.long).to(question_embeds.device)
+        
         bos_ids = torch.full(
             (question_embeds.size(0), 1), fill_value=self.decoder_bos_token_id, device=question_embeds.device
         )
@@ -1317,8 +1316,9 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             input_ids=bos_ids,
             eos_token_id=self.config.text_config.sep_token_id,
             pad_token_id=self.config.text_config.pad_token_id,
+            encoder_hidden_states=question_embeds,
+            encoder_attention_mask=question_attention_mask,
             **generate_kwargs,
-            **model_kwargs,
         )
 
         return outputs
