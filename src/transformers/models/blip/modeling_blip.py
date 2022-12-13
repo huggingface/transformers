@@ -980,6 +980,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         self.text_decoder = BlipTextLMHeadModel(config.text_config)
 
         self.decoder_input_ids = config.text_config.bos_token_id
+        self.decoder_pad_token_id = config.text_config.pad_token_id
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -997,7 +998,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BlipTextVisionModelOutput]:
+    ) -> Union[Tuple, BlipForConditionalGenerationModelOutput]:
         r"""
         Returns:
 
@@ -1034,7 +1035,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         if input_ids is None:
             input_ids = torch.LongTensor([[self.decoder_input_ids] * batch_size]).to(image_embeds.device)
 
-        decoder_targets = input_ids.masked_fill(input_ids == self.decoder_input_ids, -100)
+        decoder_targets = input_ids.masked_fill(input_ids == self.decoder_pad_token_id, -100)
 
         outputs = self.text_decoder(
             input_ids=input_ids,
