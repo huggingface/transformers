@@ -501,6 +501,12 @@ class FeaturesManager:
         "swin": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.swin.SwinOnnxConfig"
         ),
+        "table-transformer": supported_features_mapping(
+            "default",
+            "object-detection",
+            "image-segmentation",
+            onnx_config_cls="models.table_transformer.TableTransformerOnnxConfig",
+        ),
         "t5": supported_features_mapping(
             "default",
             "default-with-past",
