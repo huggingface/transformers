@@ -221,6 +221,8 @@
         title: BLOOM
       - local: model_doc/bort
         title: BORT
+      - local: model_doc/bridgetower
+        title: BridgeTower
       - local: model_doc/byt5
         title: ByT5
       - local: model_doc/camembert

@@ -137,6 +137,7 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
+
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -145,7 +146,7 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
 """
 
 @add_start_docstrings(
-    "The bare BridgeTower Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare BridgeTower Model transformer outputting 'text_feats', 'image_feats', 'cls_feats', 'text_ids', 'text_masks' without any specific head on top.",
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -402,6 +403,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         self.current_tasks = list()
 
+    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -441,7 +444,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         ```
         """
         
-        image_token_type_idx=1
+        image_token_type_idx= image_token_type_idx if image_token_type_idx else 1
         irtr_len=0
         text_ids = input_ids
         img = pixel_values
