@@ -1351,10 +1351,14 @@ class TrainingArguments:
                 "torch.float16" : torch.float16,
                 "torch.bfloat16" : torch.bfloat16,
                 }
-            if "compute_dtype" in self.xla_fsdp:
-                self.xla_fsdp["compute_dtype"] = dtype_dict[self.xla_fsdp["compute_dtype"]]
-            if "buffer_dtype" in self.xla_fsdp:
-                self.xla_fsdp["buffer_dtype"] = dtype_dict[self.xla_fsdp["buffer_dtype"]]
+            if "compute_dtype" in self.xla_fsdp_config:
+                self.xla_fsdp_config["compute_dtype"] = dtype_dict[self.xla_fsdp_config["compute_dtype"]]
+            if "buffer_dtype" in self.xla_fsdp_config:
+                self.xla_fsdp_config["buffer_dtype"] = dtype_dict[self.xla_fsdp_config["buffer_dtype"]]
+            if self.xla_fsdp_grad_ckpt and not self.xla_fsdp_nested:
+                raise ValueError(
+                "`--xla_fsdp_grad_ckpt` may only be used when --xla_fsdp_nested is enabled."
+            )
         else:
             if self.xla_fsdp_nested:
                 raise ValueError(

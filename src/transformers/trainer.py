@@ -431,10 +431,9 @@ class Trainer:
                         "Nested XLA FSDP is currently only supported for models which expose their"
                         " transformer blocks through `transformer.h`."
                     )
+                # Wrap each transformer block
                 for i in range(len(model.transformer.h)):
                     model.transformer.h[i] = fsdp_wrap(grad_ckpt_wrap(model.transformer.h[i]))
-                #for submodule in model.children():
-                #    submodule = fsdp_wrap(grad_ckpt_wrap(submodule))
             # Wrap the base model with an outer FSDP wrapper
             # Also, copy the signature of the original model's forward method -- otherwise
             # columns not appearing in the forward method's argument will be dropped by 
@@ -443,7 +442,7 @@ class Trainer:
             model = fsdp_wrap(model)
             model.forward.__func__.__signature__ = forward_signature
 
-            # Patch `xm.optimizer_step` not to reduce gradients in this case,
+            # Patch `xm.optimizer_step` should not reduce gradients in this case,
             # as FSDP does not need gradient reduction over sharded parameters.
             def patched_optimizer_step(optimizer, barrier=False, optimizer_args={}):
                 loss = optimizer.step(**optimizer_args)
