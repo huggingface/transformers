@@ -45,7 +45,9 @@ from ...image_utils import (
 )
 from ...utils import logging
 
-
+if is_vision_available():
+    import PIL
+    
 logger = logging.get_logger(__name__)
 
 
