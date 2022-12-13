@@ -52,6 +52,7 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
         )
         self.assertEqual(outputs, [{"summary_text": ANY(str)}])
 
+        # Some models (Switch Transformers, LED, T5, LongT5, etc) can handle long sequences.
         model_can_handle_longer_seq = [
             "SwitchTransformersConfig",
             "T5Config",
@@ -63,8 +64,7 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
             "ProphetNetConfig",  # positional embeddings up to a fixed maximum size (otherwise clamping the values)
         ]
         if model.config.__class__.__name__ not in model_can_handle_longer_seq:
-            # Switch Transformers, LED, T5, LongT5 can handle it.
-            # Too long.
+            # Too long and exception is expected.
             # For TF models, if the weights are initialized in GPU context, we won't get expected index error from
             # the embedding layer.
             if not (
