@@ -45,12 +45,6 @@ class BridgeTowerConfig(PretrainedConfig):
             The drop out probability for classifier's Dropout layer.
         cross_modal_transform_shared (`bool`, *optional*, defaults to `True`):
             Whether cross modal transformer layers are shared.
-        downstream_fusion (`bool`, *optional*, defaults to `False`):
-            Whether to enable downstream fusion.
-        downstream_fusion_layers (`int`, *optional*, defaults to 1):
-            Number of fusion layers for downstream tasks.
-        downstream_fusion_method (`str`, *optional*, defaults to `"elmo"`):
-            Fusion method for downstream tasks.
         drop_rate (`float`, *optional*, defaults to 0.1):
             Drop out probability.
         freeze_RoBERTa (`bool`, *optional*, defaults to `False`):
@@ -83,8 +77,6 @@ class BridgeTowerConfig(PretrainedConfig):
             Type of the bridge/link layer.
         log_dir (`str`, *optional*, defaults to `"log_dir"`):
             Path to the log directory.
-        loss_names (`Dict[str, int]`, *optional*):
-            Various loss options.
         max_text_len (`int`, *optional*, defaults to 50):
             Maximum text length.
         mlp_ratio (`int`, *optional*, defaults to 4):
@@ -138,8 +130,6 @@ class BridgeTowerConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the text part of the model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
-        vqav2_label_size (`int`, *optional*, defaults to 3129):
-            Label size for vqav2.
 
     Example:
 
@@ -162,9 +152,6 @@ class BridgeTowerConfig(PretrainedConfig):
         cache_dir="/tmp",
         classifier_drop_rate=0.1,
         cross_modal_transform_shared=True,
-        downstream_fusion=False,
-        downstream_fusion_layers=1,
-        downstream_fusion_method="elmo",
         drop_rate=0.1,
         freeze_RoBERTa=False,
         freeze_ViT=False,
@@ -179,20 +166,8 @@ class BridgeTowerConfig(PretrainedConfig):
         is_encoder_decoder=False,
         layer_norm_eps=1e-05,
         link_tower_shared=False,
-        link_tower_type="add",
-        log_dir="log_dir",
-        loss_names={
-            "contras": 0,
-            "irtr": 0,
-            "itm": 0,
-            "mlm": 0,
-            "mpp": 0,
-            "nlvr2": 0,
-            "snli": 0,
-            "vcr": 0,
-            "vcr_qar": 0,
-            "vqa": 1,
-        },
+        link_tower_type='add',
+        log_dir='log_dir',
         max_text_len=50,
         mlp_ratio=4,
         model_type="bridgetower",
@@ -219,16 +194,12 @@ class BridgeTowerConfig(PretrainedConfig):
         vit_layernorm_shared=True,
         vit_remove_last=False,
         vocab_size=50265,
-        vqav2_label_size=3129,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.cache_dir = cache_dir
         self.classifier_drop_rate = classifier_drop_rate
         self.cross_modal_transform_shared = cross_modal_transform_shared
-        self.downstream_fusion = downstream_fusion
-        self.downstream_fusion_layers = downstream_fusion_layers
-        self.downstream_fusion_method = downstream_fusion_method
         self.drop_rate = drop_rate
         self.freeze_RoBERTa = freeze_RoBERTa
         self.freeze_ViT = freeze_ViT
@@ -245,7 +216,6 @@ class BridgeTowerConfig(PretrainedConfig):
         self.link_tower_shared = link_tower_shared
         self.link_tower_type = link_tower_type
         self.log_dir = log_dir
-        self.loss_names = loss_names
         self.max_text_len = max_text_len
         self.mlp_ratio = mlp_ratio
         self.model_type = model_type
@@ -272,4 +242,3 @@ class BridgeTowerConfig(PretrainedConfig):
         self.vit_layernorm_shared = vit_layernorm_shared
         self.vit_remove_last = vit_remove_last
         self.vocab_size = vocab_size
-        self.vqav2_label_size = vqav2_label_size

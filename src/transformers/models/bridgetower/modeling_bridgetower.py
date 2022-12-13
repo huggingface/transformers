@@ -339,7 +339,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 for name, param in self.text_transformer.named_parameters():
                     if "LayerNorm" in name:
                         param.requires_grad_(True)
-
+  
         if config.freeze_layer_count_roberta > 0:
             modules = [
                 self.text_transformer.embeddings,
@@ -355,130 +355,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             for module in modules:
                 # module.requires_grad_(False)
                 for param in module.parameters():
-                    param.requires_grad = False
-
-        # ===================== Downstream ===================== #
-
-        if config.downstream_fusion:
-            assert config.downstream_fusion_layers > 1
-            self.cross_modal_downstream_fusion_head = FusionHead(config)
-            self.cross_modal_downstream_fusion_head.apply(self._init_weights)
-
-        hscale = config.head_hidden_scale
-        dscale = 1  # downstream_fusion_scale
-        if config.downstream_fusion:
-            if config.downstream_fusion_method == "concat":
-                dscale = config.downstream_fusion_layers
-            elif config.downstream_fusion_method in ["max_mean_pooling", "lstm_bi"]:
-                dscale = 2
-        if config.loss_names["vqa"] > 0:
-            vs = config.vqav2_label_size
-            if config.task_head_layers == 1:
-                self.vqa_classifier = nn.Sequential(
-                    nn.Linear(hs * 2 * dscale, vs),
-                )
-                if config.downstream_fusion_method == "ensemble":
-                    self.vqa_classifier = nn.ModuleList(
-                        [
-                            nn.Sequential(
-                                nn.Linear(hs * 2 * dscale, vs),
-                            )
-                            for _ in range(config.downstream_fusion_layers)
-                        ]
-                    )
-            elif config.task_head_layers == 2:
-                self.vqa_classifier = nn.Sequential(
-                    nn.Linear(hs * 2 * dscale, hs * 2 * dscale * hscale),
-                    nn.LayerNorm(hs * 2 * dscale * hscale),
-                    nn.GELU(),
-                    nn.Linear(hs * 2 * dscale * hscale, vs),
-                )
-                if config.downstream_fusion_method == "ensemble":
-                    self.vqa_classifier = nn.ModuleList(
-                        [
-                            nn.Sequential(
-                                nn.Linear(hs * 2 * dscale, hs * 2 * dscale * hscale),
-                                nn.LayerNorm(hs * 2 * dscale * hscale),
-                                nn.GELU(),
-                                nn.Linear(hs * 2 * dscale * hscale, vs),
-                            )
-                            for _ in range(config.downstream_fusion_layers)
-                        ]
-                    )
-            elif config.task_head_layers == 3:
-                self.vqa_classifier = nn.Sequential(
-                    nn.Linear(hs * 2 * dscale, hs * 2 * dscale * hscale),
-                    nn.LayerNorm(hs * 2 * dscale * hscale),
-                    nn.GELU(),
-                    nn.Linear(hs * 2 * dscale * hscale, hs * 2 * dscale * hscale),
-                    nn.LayerNorm(hs * 2 * dscale * hscale),
-                    nn.GELU(),
-                    nn.Linear(hs * 2 * dscale * hscale, vs),
-                )
-            self.vqa_classifier.apply(self._init_weights)
-
-        if config.loss_names["nlvr2"] > 0:
-            nlvr2_input_scale = 4  # 2 * 2
-            if config.nlvr2_head_format == "pair-biatten":
-                self.nlvr2_biatten_head_attn1 = nn.MultiheadAttention(
-                    hs, config.num_attention_heads, dropout=config.drop_rate, batch_first=True
-                )
-                self.nlvr2_biatten_head_attn1.apply(self._init_weights)
-                self.nlvr2_biatten_head_attn2 = nn.MultiheadAttention(
-                    hs, config.num_attention_heads, dropout=config.drop_rate, batch_first=True
-                )
-                self.nlvr2_biatten_head_attn2.apply(self._init_weights)
-                self.nlvr2_biatten_head_fc = nn.Sequential(
-                    nn.Linear(hs * 2, hs * 2), nn.LayerNorm(hs * 2), nn.GELU(), nn.Dropout(config.drop_rate)
-                )
-                self.nlvr2_biatten_head_fc.apply(self._init_weights)
-                self.nlvr2_biatten_head_attn_pool = AttentionPool(hs * 2, config.drop_rate)
-                self.nlvr2_biatten_head_attn_pool.apply(self._init_weights)
-            elif config.nlvr2_head_format == "triplet":
-                nlvr2_input_scale = 3  # 1 + 1 + 1
-
-            if config.task_head_layers == 1:
-                self.nlvr2_classifier = nn.Sequential(
-                    nn.Linear(hs * nlvr2_input_scale, 2),
-                )
-            elif config.task_head_layers == 2:
-                self.nlvr2_classifier = nn.Sequential(
-                    nn.Linear(hs * nlvr2_input_scale, int(hs * 2 * hscale)),  # use int for triplet
-                    nn.LayerNorm(int(hs * 2 * hscale)),
-                    nn.GELU(),
-                    nn.Linear(int(hs * 2 * hscale), 2),
-                )
-            self.nlvr2_classifier.apply(self._init_weights)
-            self.nlvr2_classifier_dropout = nn.Dropout(config.classifier_drop_rate)
-            emb_data = self.token_type_embeddings.weight.data
-            self.token_type_embeddings = nn.Embedding(3, hs)
-            self.token_type_embeddings.apply(self._init_weights)
-            self.token_type_embeddings.weight.data[0, :] = emb_data[0, :]
-            self.token_type_embeddings.weight.data[1, :] = emb_data[1, :]
-            self.token_type_embeddings.weight.data[2, :] = emb_data[1, :]
-
-        if config.loss_names["snli"] > 0:
-            if config.task_head_layers == 1:
-                self.snli_classifier = nn.Sequential(
-                    nn.Linear(hs * 2, 3),
-                )
-            elif config.task_head_layers == 2:
-                self.snli_classifier = nn.Sequential(
-                    nn.Linear(hs * 2, hs * 2 * hscale),
-                    nn.LayerNorm(hs * 2 * hscale),
-                    nn.GELU(),
-                    nn.Linear(hs * 2 * hscale, 3),
-                )
-            self.snli_classifier.apply(self._init_weights)
-
-        if config.loss_names["irtr"] > 0:
-            self.rank_output = nn.Linear(hs * 2, 1)
-            self.rank_output.weight.data = self.itm_score.fc.weight.data[1:, :]
-            self.rank_output.bias.data = self.itm_score.fc.bias.data[1:]
-            for p in self.itm_score.parameters():
-                p.requires_grad = False
-
-        self.current_tasks = list()
+                    param.requires_grad = False           
 
     @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BridgeTowerModelOutput, config_class=_CONFIG_FOR_DOC)
