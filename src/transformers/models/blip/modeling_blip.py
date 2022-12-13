@@ -1021,7 +1021,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> image_embeds = outputs.image_embeds
         ```"""
-        batch_size, _ = pixel_values.shape[:2]
+        batch_size = pixel_values.shape[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
