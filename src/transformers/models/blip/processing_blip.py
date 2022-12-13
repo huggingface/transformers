@@ -40,12 +40,13 @@ class BlipProcessor(ProcessorMixin):
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
+        tokenizer.return_token_type_ids = False
         super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
 
     def __call__(
         self,
-        images,
+        images=None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -57,6 +58,7 @@ class BlipProcessor(ProcessorMixin):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        return_token_type_ids: bool = False,
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -68,10 +70,11 @@ class BlipProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        if images is None and text is None:
+            raise ValueError("You have to specify either images or text.")
+
         # Get only text
         if images is None:
-            if text is None:
-                raise ValueError("You have to specify either images or text.")
 
             self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(
@@ -86,6 +89,7 @@ class BlipProcessor(ProcessorMixin):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
+                return_token_type_ids=return_token_type_ids,
                 return_length=return_length,
                 verbose=verbose,
                 return_tensors=return_tensors,
@@ -110,12 +114,12 @@ class BlipProcessor(ProcessorMixin):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
+                return_token_type_ids=return_token_type_ids,
                 return_length=return_length,
                 verbose=verbose,
                 return_tensors=return_tensors,
                 **kwargs,
             )
-            _ = text_encoding.pop("token_type_ids", None)
         else:
             text_encoding = None
 

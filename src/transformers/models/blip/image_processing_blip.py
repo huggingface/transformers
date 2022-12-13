@@ -23,7 +23,7 @@ from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -44,6 +44,21 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.clip.image_processing_clip.convert_to_rgb
+def convert_to_rgb(image: Union[Any, PIL.Image.Image]) -> Union[Any, PIL.Image.Image]:
+    """
+    Converts `PIL.Image.Image` to RGB format. Images in other formats are returned as is.
+
+    Args:
+        image (`PIL.Image.Image`):
+            The image to convert.
+    """
+    if not isinstance(image, PIL.Image.Image):
+        return image
+
+    return image.convert("RGB")
 
 
 # Copied from transformers.models.vilt.image_processing_vilt.max_across_indices
@@ -175,6 +190,9 @@ class BlipImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -185,22 +203,29 @@ class BlipImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_center_crop: bool = False,
+        crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = True,
+        do_pad: bool = False,
+        do_convert_rgb: bool = True,
         **kwargs
     ) -> None:
 
         super().__init__(**kwargs)
         size = size if size is not None else 384
         size = get_size_dict(size, default_to_square=True)
+        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
         self.do_resize = do_resize
         self.size = size
         self.size_divisor = size_divisor
+        self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
@@ -208,6 +233,31 @@ class BlipImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
+        self.do_convert_rgb = do_convert_rgb
+
+    def center_crop(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
+    ) -> np.ndarray:
+        """
+        Center crop an image. If the image is too small to be cropped to the size given, it will be padded (so the
+        returned result will always be of size `size`).
+
+        Args:
+            image (`np.ndarray`):
+                Image to center crop.
+            size (`Dict[str, int]`):
+                Size of the output image in the form of a dictionary with keys `height` and `width`.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
+        size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The `size` parameter must contain the keys (height, width). Got {size.keys()}")
+        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def resize(
         self,
@@ -352,12 +402,15 @@ class BlipImageProcessor(BaseImageProcessor):
         size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
+        do_center_crop: bool = None,
+        crop_size: int = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         **kwargs,
     ) -> PIL.Image.Image:
@@ -378,6 +431,10 @@ class BlipImageProcessor(BaseImageProcessor):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -391,6 +448,8 @@ class BlipImageProcessor(BaseImageProcessor):
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
                 created and returned.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -406,12 +465,16 @@ class BlipImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -434,11 +497,18 @@ class BlipImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
+        # PIL RGBA images are converted to RGB
+        if do_convert_rgb:
+            images = [convert_to_rgb(image) for image in images]
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]
+
+        if do_center_crop:
+            images = [self.center_crop(image=image, size=crop_size) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]

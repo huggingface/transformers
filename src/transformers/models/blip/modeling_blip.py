@@ -1202,7 +1202,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         if decoder_input_ids is None:
             decoder_input_ids = torch.LongTensor([self.decoder_bos_token_id]).repeat((batch_size, 1))
-        
+
         if labels is None:
             labels = decoder_input_ids.masked_fill(decoder_input_ids == self.decoder_pad_token_id, -100)
 
