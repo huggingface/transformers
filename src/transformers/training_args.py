@@ -17,7 +17,6 @@ import json
 import math
 import os
 import warnings
-import io
 from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
@@ -530,20 +529,21 @@ class TrainingArguments:
 
             Possible choices are `"default"`, `"reduce-overhead"` and `"max-autotune"`.
         
-        xla_fsdp (`str`, *optional*):
+        xla_fsdp (`str`, `dict`, *optional*):
             Use PyTorch/XLA Fully Sharded Data Parallel Training
 
             For a complete list of options, please see [here](
             https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py#L120-L196).
 
-            This is an experimental feature and its API may evolve in the future. The value is the location of config file 
-            (e.g., `fsdp_config.json`). 
+            The value is the location of config file (e.g., `fsdp_config.json`).
         xla_fsdp_nested (`bool`, *optional*):
-            Will use nested XLA FSDP to shard each transformer block layer. This setting can only be used with xla_fsdp.
-            Currently, only models which expose their their transformers block through the class attribute `transformer.h`
-            may use this feature. 
+            Will use nested XLA FSDP to shard each model child layer. This setting can only be used with xla_fsdp.
         xla_fsdp_grad_ckpt (`bool`, *optional*):
-            Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with xla_fsdp.
+            Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with xla_fsdp
+            and xla_fsdp_nested.
+
+    
+
     """
 
     framework = "pt"
@@ -982,9 +982,7 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Will use nested XLA FSDP to shard each transformer block layer. This setting can only be used with xla_fsdp."
-                " Currently, only models which expose their their transformers block through the class attribute `transformer.h`"
-                " may use this feature."               
+                "Will use nested XLA FSDP to shard each model child layer. This setting can only be used with xla_fsdp."               
             ),
         },
     )
@@ -992,8 +990,7 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with xla_fsdp"
-                " and xla_fsdp_nested."
+                "Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with xla_fsdp."
             
             ),
         },
@@ -1347,21 +1344,17 @@ class TrainingArguments:
         if self.xla_fsdp:
             # gather fsdp configuration parameters into a dictionary from specified json file
             with io.open(self.xla_fsdp, "r", encoding="utf-8") as f:
-                self.xla_fsdp_config = json.load(f)
+                self.xla_fsdp = json.load(f)
             # apply appropriate string to torch.dtype conversions for parameters
             dtype_dict = {
                 "torch.float32": torch.float32,
                 "torch.float16" : torch.float16,
                 "torch.bfloat16" : torch.bfloat16,
                 }
-            if "compute_dtype" in self.xla_fsdp_config:
-                self.xla_fsdp_config["compute_dtype"] = dtype_dict[self.xla_fsdp_config["compute_dtype"]]
+            if "compute_dtype" in self.xla_fsdp:
+                self.xla_fsdp["compute_dtype"] = dtype_dict[self.xla_fsdp["compute_dtype"]]
             if "buffer_dtype" in self.xla_fsdp:
-                self.xla_fsdp_config["buffer_dtype"] = dtype_dict[self.xla_fsdp_config["buffer_dtype"]]
-            if self.xla_fsdp_grad_ckpt and not self.xla_fsdp_nested:
-                raise ValueError(
-                "`--xla_fsdp_grad_ckpt` may only be used when --xla_fsdp_nested is enabled."
-            )
+                self.xla_fsdp["buffer_dtype"] = dtype_dict[self.xla_fsdp["buffer_dtype"]]
         else:
             if self.xla_fsdp_nested:
                 raise ValueError(
