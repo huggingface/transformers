@@ -1093,9 +1093,11 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
         elif input_ids is None:
-            input_ids = torch.LongTensor(
-                [[self.decoder_input_ids, self.config.text_config.eos_token_id] * batch_size]
-            ).to(image_embeds.device)
+            input_ids = (
+                torch.LongTensor([[self.decoder_input_ids, self.config.text_config.eos_token_id]])
+                .repeat(batch_size, 1)
+                .to(image_embeds.device)
+            )
 
         input_ids[:, 0] = self.config.text_config.bos_token_id
         attention_mask = attention_mask[:, :-1] if attention_mask is not None else None

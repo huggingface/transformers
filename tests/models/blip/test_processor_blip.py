@@ -11,9 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import json
-import os
 import shutil
 import tempfile
 import unittest
@@ -28,7 +25,7 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BlipImageProcessor, BlipProcessor, AutoProcessor, BertTokenizer, PreTrainedTokenizerFast
+    from transformers import AutoProcessor, BertTokenizer, BlipImageProcessor, BlipProcessor, PreTrainedTokenizerFast
 
 
 @require_vision
@@ -40,12 +37,11 @@ class BlipProcessorTest(unittest.TestCase):
         tokenizer = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
 
         processor = BlipProcessor(image_processor, tokenizer)
-        
+
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
 
     def get_feature_extractor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
@@ -152,4 +148,4 @@ class BlipProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertListEqual(list(inputs.keys()), ['pixel_values', 'input_ids', 'attention_mask'])
+        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
