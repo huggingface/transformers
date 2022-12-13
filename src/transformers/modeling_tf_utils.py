@@ -1137,6 +1137,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        self.serving = tf.function(self.eager_serving, input_signature=[self.serving_signature])
 
     def get_config(self):
         return self.config.to_dict()
