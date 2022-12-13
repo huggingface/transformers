@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
+from torch.nn.functional import normalize
 import torch.utils.checkpoint
 from torch import nn
 
@@ -1428,8 +1428,8 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
             )
             question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
 
-            image_feat = F.normalize(self.vision_proj(image_embeds[:, 0, :]), dim=-1)
-            text_feat = F.normalize(self.text_proj(question_embeds[:, 0, :]), dim=-1)
+            image_feat = normalize(self.vision_proj(image_embeds[:, 0, :]), dim=-1)
+            text_feat = normalize(self.text_proj(question_embeds[:, 0, :]), dim=-1)
 
             output = image_feat @ text_feat.t()
 
