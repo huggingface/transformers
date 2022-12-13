@@ -109,6 +109,7 @@ class AltCLIPTextConfig(PretrainedConfig):
         max_position_embeddings=514,
         type_vocab_size=1,
         initializer_range=0.02,
+        initializer_factor=0.02,
         layer_norm_eps=1e-05,
         pad_token_id=1,
         bos_token_id=0,
@@ -133,6 +134,7 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache

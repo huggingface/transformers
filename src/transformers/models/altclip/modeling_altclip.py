@@ -1099,6 +1099,8 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, AltCLIPEncoder):
             module.gradient_checkpointing = value
+        if isinstance(module, AltRobertaEncoder):
+            module.gradient_checkpointing = value
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVisionTransformer->AltCLIPVisionTransformer,CLIPVisionConfig->AltCLIPVisionConfig,CLIPVisionEmbeddings->AltCLIPVisionEmbeddings,CLIPEncoder->AltCLIPEncoder,CLIP_VISION_INPUTS_DOCSTRING->ALTCLIP_VISION_INPUTS_DOCSTRING
@@ -1233,7 +1235,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->AltRoberta
     def __init__(self, config, add_pooling_layer=True):
-        super().__init__()
+        super().__init__(config)
         self.config = config
 
         self.embeddings = AltRobertaEmbeddings(config)
@@ -1412,6 +1414,12 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
 
     def get_input_embeddings(self) -> nn.Module:
         return self.roberta.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
+        self.roberta.embeddings.word_embeddings = value
+    
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
+        return super().resize_token_embeddings(new_num_tokens)
 
     @add_start_docstrings_to_model_forward(ALTCLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndProjection, config_class=AltCLIPTextConfig)
