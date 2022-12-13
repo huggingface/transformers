@@ -135,7 +135,7 @@ class BlipTextVisionModelOutput(ModelOutput):
 
 
 @dataclass
-class BlipITMModelOutput(ModelOutput):
+class BlipImageTextMatchingModelOutput(ModelOutput):
     """
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
     last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
