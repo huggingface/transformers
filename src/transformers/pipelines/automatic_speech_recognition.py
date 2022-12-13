@@ -571,7 +571,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             optional["chunks"] = chunks
 
         elif return_timestamps and self.type == "seq2seq":
-            optional["chunks"] = offsets
+            optional["chunks"] = char_offsets
 
         extra = defaultdict(list)
         for output in model_outputs:
