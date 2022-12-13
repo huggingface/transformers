@@ -18,7 +18,7 @@ Each framework has a generate method for auto-regressive text generation impleme
 - TensorFlow [`~generation.TFGenerationMixin.generate`] is implemented in [`~generation.TFGenerationMixin`].
 - Flax/JAX [`~generation.FlaxGenerationMixin.generate`] is implemented in [`~generation.FlaxGenerationMixin`].
 
-Regardless of your framework of choice, you can parametrize the generate method with a [`~generation.GenerationConfig`]
+Regardless of your framework of choice, you can parameterize the generate method with a [`~generation.GenerationConfig`]
 class instance. Please refer to this class for the complete list of generation parameters, which control the behavior
 of the generation method.
 
@@ -45,7 +45,7 @@ generation_config.save_pretrained("my_account/my_model", push_to_hub=True)
 <Tip>
 
 If you inspect a serialized [`~generation.GenerationConfig`] file or print a class instance, you will notice that
-default values are omitted. Some attributes, like `max_new_tokens`, have a conservative default value, to avoid running
+default values are omitted. Some attributes, like `max_length`, have a conservative default value, to avoid running
 into resource limitations. Make sure you double-check the defaults in the documentation.
 
 </Tip>

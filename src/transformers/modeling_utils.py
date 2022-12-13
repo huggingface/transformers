@@ -1112,7 +1112,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns whether this model can generate sequences with `.generate()`.
 
         Returns:
-            :bool: Whether this model can generate sequences with `.generate()`.
+            `bool`: Whether this model can generate sequences with `.generate()`.
         """
         return hasattr(self, "prepare_inputs_for_generation")
 
