@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import torch
-from torch.nn.functional import normalize
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn.functional import normalize
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -961,9 +961,10 @@ class BlipModel(BlipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP Model for image captioning. The model consists of a vision encoder and a text decoder. One can optionally pass `input_ids` to the model, which serve as a text prompt, to make the text decoder continue the prompt. Otherwise, the decoder starts generating text from the [BOS] (beginning-of-sequence) token.
-    will start generating the caption from the text input. If no text input is provided, the decoder will start with
-    the [BOS] token only.
+    BLIP Model for image captioning. The model consists of a vision encoder and a text decoder. One can optionally pass
+    `input_ids` to the model, which serve as a text prompt, to make the text decoder continue the prompt. Otherwise,
+    the decoder starts generating text from the [BOS] (beginning-of-sequence) token. will start generating the caption
+    from the text input. If no text input is provided, the decoder will start with the [BOS] token only.
     """,
     BLIP_START_DOCSTRING,
 )
@@ -1010,7 +1011,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> from transformers import BlipProcessor, BlipForConditionalGeneration
 
         >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")   
+        >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1063,7 +1064,6 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         **generate_kwargs
     ) -> torch.LongTensor:
@@ -1075,9 +1075,6 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
                 Input image to be processed
             input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
                 The sequence used as a prompt for the generation.
-            token_type_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
-                Segment token indices to indicate first and second portions of the inputs. Not used but kept for
-                compatibility with the *BlipProcessor*
             attention_mask (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1086,9 +1083,9 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipProcessor, BlipForImageCaptioning
+        >>> from transformers import BlipProcessor, BlipForConditionalGeneration
 
-        >>> model = BlipForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1096,8 +1093,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
-        >>> image_embeds = outputs.image_embeds
+        >>> outputs = model.generate(**inputs)
         ```
         """
 

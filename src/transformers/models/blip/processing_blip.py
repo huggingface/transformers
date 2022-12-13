@@ -53,7 +53,6 @@ class BlipProcessor(ProcessorMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
@@ -75,7 +74,7 @@ class BlipProcessor(ProcessorMixin):
                 raise ValueError("You have to specify either images or text.")
 
             self.current_processor = self.tokenizer
-            return self.tokenizer(
+            text_encoding = self.tokenizer(
                 text=text,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
@@ -83,7 +82,6 @@ class BlipProcessor(ProcessorMixin):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
-                return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
@@ -93,6 +91,8 @@ class BlipProcessor(ProcessorMixin):
                 return_tensors=return_tensors,
                 **kwargs,
             )
+            _ = text_encoding.pop("token_type_ids", None)
+            return text_encoding
 
         # add pixel_values + pixel_mask
         encoding_feature_extractor = self.feature_extractor(images, return_tensors=return_tensors)
@@ -106,7 +106,6 @@ class BlipProcessor(ProcessorMixin):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
-                return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
@@ -116,6 +115,7 @@ class BlipProcessor(ProcessorMixin):
                 return_tensors=return_tensors,
                 **kwargs,
             )
+            _ = text_encoding.pop("token_type_ids", None)
         else:
             text_encoding = None
 
