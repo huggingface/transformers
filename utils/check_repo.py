@@ -668,7 +668,7 @@ UNDOCUMENTED_OBJECTS = [
     "logger",  # Internal logger
     "logging",  # External module
     "requires_backends",  # Internal function
-    "AltCLIPVisonModel", # Internal module
+    "AltCLIPVisionModel",  # Internal module
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
