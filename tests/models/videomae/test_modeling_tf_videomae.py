@@ -168,8 +168,7 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         (TFVideoMAEModel, TFVideoMAEForPreTraining, TFVideoMAEForVideoClassification) if is_tf_available() else ()
     )
 
-    test_pruning = False
-    test_torchscript = False
+    test_onnx = False
     test_resize_embeddings = False
     test_head_masking = False
 
@@ -209,16 +208,16 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
@@ -235,8 +234,8 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VideoMAEModel.from_pretrained(model_name)
+        for model_name in TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFVideoMAEModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
@@ -250,17 +249,14 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             for model_class in self.all_model_classes:
                 num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
                 seq_len = (
-                    num_visible_patches if model_class == VideoMAEForPreTraining else self.model_tester.seq_length
+                    num_visible_patches if model_class == TFVideoMAEForPreTraining else self.model_tester.seq_length
                 )
 
                 inputs_dict["output_attentions"] = True
                 inputs_dict["output_hidden_states"] = False
                 config.return_dict = True
                 model = model_class(config)
-                model.to(torch_device)
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
                 attentions = outputs.attentions
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
@@ -268,10 +264,7 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 del inputs_dict["output_attentions"]
                 config.output_attentions = True
                 model = model_class(config)
-                model.to(torch_device)
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
                 attentions = outputs.attentions
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
@@ -285,10 +278,7 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 inputs_dict["output_attentions"] = True
                 inputs_dict["output_hidden_states"] = True
                 model = model_class(config)
-                model.to(torch_device)
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
 
                 self.assertEqual(out_len + 1, len(outputs))
 
@@ -303,18 +293,14 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
 
             hidden_states = outputs.hidden_states
             expected_num_layers = self.model_tester.num_hidden_layers + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
-            seq_length = num_visible_patches if model_class == VideoMAEForPreTraining else self.model_tester.seq_length
+            seq_length = num_visible_patches if model_class == TFVideoMAEForPreTraining else self.model_tester.seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -344,9 +330,9 @@ def prepare_video():
     return list(video)
 
 
-@require_torch
+@require_tf
 @require_vision
-class VideoMAEModelIntegrationTest(unittest.TestCase):
+class TFVideoMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         # logits were tested with a different mean and std, so we use the same here
@@ -358,61 +344,53 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_video_classification(self):
-        model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics").to(
-            torch_device
-        )
+        model = TFVideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics", from_pt=True)
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(video, return_tensors="tf")
 
         # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs, training=False)
 
         # verify the logits
-        expected_shape = torch.Size((1, 400))
+        expected_shape = tf.TensorShape((1, 400))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.3669, -0.0688, -0.2421]).to(torch_device)
+        expected_slice = tf.constant([0.3669, -0.0688, -0.2421])
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        tf.debugging.assert_near(outputs.logits[0, :3], expected_slice, atol=1e-4)
 
     @slow
     def test_inference_for_pretraining(self):
-        model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short").to(torch_device)
+        model = TFVideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short", from_pt=True)
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(video, return_tensors="tf")
 
         # add boolean mask, indicating which patches to mask
-        local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-        inputs["bool_masked_pos"] = torch.load(local_path)
+        local_path = hf_hub_download(repo_id="sayakpaul/bool-masked-pos", filename="bool_masked_pos_np.npy")
+        inputs["bool_masked_pos"] = tf.convert_to_tensor(np.load(local_path))
 
         # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs, training=False)
 
         # verify the logits
-        expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor(
-            [[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]], device=torch_device
+        expected_shape = tf.TensorShape([1, 1408, 1536])
+        expected_slice = tf.constant(
+            [[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]]
         )
         self.assertEqual(outputs.logits.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        tf.debugging.assert_near(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `True`)
-        expected_loss = torch.tensor([0.5142], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+        expected_loss = tf.constant([0.5142])
+        tf.debugging.assert_near(outputs.loss, expected_loss, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `False`)
-        model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short", norm_pix_loss=False).to(
-            torch_device
-        )
+        model = TFVideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short", norm_pix_loss=False, from_pt=True)
 
-        with torch.no_grad():
-            outputs = model(**inputs)
 
-        expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+        expected_loss =tf.constant([0.6469])
+        tf.debugging.assert_near(outputs.loss, expected_loss, atol=1e-4)
