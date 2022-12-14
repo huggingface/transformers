@@ -20,12 +20,12 @@ from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
 from ..wav2vec2 import Wav2Vec2FeatureExtractor
-from .tokenization_speecht5 import SpeechT5CTCTokenizer
+from .tokenization_speecht5 import SpeechT5Tokenizer
 
 
 class SpeechT5Processor(ProcessorMixin):
     r"""
-    Constructs a SpeechT5 processor which wraps a SpeechT5 feature extractor and a SpeechT5 CTC tokenizer into a single
+    Constructs a SpeechT5 processor which wraps a SpeechT5 feature extractor and a SpeechT5 tokenizer into a single
     processor.
 
     [`SpeechT5Processor`] offers all the functionalities of [`Wav2Vec2FeatureExtractor`] and [`PreTrainedTokenizer`].
@@ -53,14 +53,14 @@ class SpeechT5Processor(ProcessorMixin):
             warnings.warn(
                 f"Loading a tokenizer inside {cls.__name__} from a config that does not"
                 " include a `tokenizer_class` attribute is deprecated and will be "
-                "removed in v5. Please add `'tokenizer_class': 'SpeechT5CTCTokenizer'`"
+                "removed in v5. Please add `'tokenizer_class': 'SpeechT5Tokenizer'`"
                 " attribute to either your `config.json` or `tokenizer_config.json` "
                 "file to suppress this warning: ",
                 FutureWarning,
             )
 
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            tokenizer = SpeechT5CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            tokenizer = SpeechT5Tokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
