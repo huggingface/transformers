@@ -823,7 +823,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         ...     project_pos_dim=256,
         ...     trainable_position_encoding_kwargs=dict(
         ...         num_channels=256,
-        ...         index_dims=config.image_size**2,
+        ...         index_dims=config.image_size ** 2,
         ...     ),
         ... )
 
