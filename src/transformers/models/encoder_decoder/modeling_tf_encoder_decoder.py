@@ -19,7 +19,7 @@ import gc
 import os
 import tempfile
 import warnings
-from typing import Optional
+from typing import Dict, Optional
 
 import tensorflow as tf
 
@@ -274,6 +274,13 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         dummy = {"input_ids": input_ids, "decoder_input_ids": input_ids}
         return dummy
+
+    @property
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
+        return {
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+        }
 
     def get_encoder(self):
         return self.encoder
