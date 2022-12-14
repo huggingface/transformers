@@ -590,7 +590,6 @@ class SwinLayer(nn.Module):
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
-        # self.set_shift_and_window_size(input_resolution)
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads, window_size=self.window_size)
         self.drop_path = SwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
