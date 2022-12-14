@@ -5243,6 +5243,13 @@ class SqueezeBertPreTrainedModel(metaclass=DummyObject):
 SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class SwinBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SwinForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
