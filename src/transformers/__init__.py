@@ -2173,6 +2173,15 @@ else:
             "VideoMAEPreTrainedModel",
         ]
     )
+    _import_structure["models.videomae"].extend(
+        [
+            "TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFVideoMAEForPreTraining",
+            "TFVideoMAEForVideoClassification",
+            "TFVideoMAEModel",
+            "TFVideoMAEPreTrainedModel",
+        ]
+    )
     _import_structure["models.vilt"].extend(
         [
             "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2199,15 +2208,6 @@ else:
             "VisualBertLayer",
             "VisualBertModel",
             "VisualBertPreTrainedModel",
-        ]
-    )
-    _import_structure["models.videomae"].extend(
-        [
-            "TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFVideoMAEForPreTraining",
-            "TFVideoMAEModel",
-            "TFVideoMAEPreTrainedModel",
-            "TFVideoMAEForVideoClassification",
         ]
     )
     _import_structure["models.vit"].extend(

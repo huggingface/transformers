@@ -300,7 +300,9 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
-            seq_length = num_visible_patches if model_class == TFVideoMAEForPreTraining else self.model_tester.seq_length
+            seq_length = (
+                num_visible_patches if model_class == TFVideoMAEForPreTraining else self.model_tester.seq_length
+            )
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -344,7 +346,9 @@ class TFVideoMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_video_classification(self):
-        model = TFVideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics", from_pt=True)
+        model = TFVideoMAEForVideoClassification.from_pretrained(
+            "MCG-NJU/videomae-base-finetuned-kinetics", from_pt=True
+        )
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
@@ -378,9 +382,7 @@ class TFVideoMAEModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         expected_shape = tf.TensorShape([1, 1408, 1536])
-        expected_slice = tf.constant(
-            [[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]]
-        )
+        expected_slice = tf.constant([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
         self.assertEqual(outputs.logits.shape, expected_shape)
         tf.debugging.assert_near(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
 
@@ -389,8 +391,9 @@ class TFVideoMAEModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(outputs.loss, expected_loss, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `False`)
-        model = TFVideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short", norm_pix_loss=False, from_pt=True)
+        model = TFVideoMAEForPreTraining.from_pretrained(
+            "MCG-NJU/videomae-base-short", norm_pix_loss=False, from_pt=True
+        )
 
-
-        expected_loss =tf.constant([0.6469])
+        expected_loss = tf.constant([0.6469])
         tf.debugging.assert_near(outputs.loss, expected_loss, atol=1e-4)

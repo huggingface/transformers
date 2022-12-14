@@ -910,7 +910,7 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
 
         sequence_output = outputs[0]
