@@ -2223,17 +2223,18 @@ class Mask2FormerPixelLevelModule(nn.Module):
             config=config.pixel_decoder_config,
             feature_size=config.feature_size,
             mask_feature_size=config.mask_feature_size,
-            feature_channels=self.encoder.outputs_shapes,
+            feature_channels=self.encoder.channels,
         )
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
-        features: List[torch.Tensor] = self.encoder(pixel_values)
-        decoder_output = self.decoder(features)
+        backbone_output = self.encoder(pixel_values)
+        backbone_features = backbone_output.feature_maps
+        decoder_output = self.decoder(backbone_features)
 
         return Mask2FormerPixelLevelModuleOutput(
-            encoder_last_hidden_state=features[-1] if output_hidden_states else (),
+            encoder_last_hidden_state=backbone_features[-1] if output_hidden_states else (),
             decoder_last_hidden_state=decoder_output.last_hidden_state,  # per pixel embedding
-            encoder_hidden_states=tuple(features) if output_hidden_states else (),
+            encoder_hidden_states=tuple(backbone_features) if output_hidden_states else (),
             decoder_hidden_states=decoder_output.hidden_states,  # multi-scale features
         )
 
@@ -2637,7 +2638,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         else:
             transformer_decoder_outputs = outputs.transformer_decoder_last_hidden_state
 
-        class_queries_logits = self.class_predictor(transformer_decoder_outputs.transpose(0, 1))        
+        class_queries_logits = self.class_predictor(transformer_decoder_outputs.transpose(0, 1))     
         
         masks_queries_logits = outputs.masks_queries_logits
 
