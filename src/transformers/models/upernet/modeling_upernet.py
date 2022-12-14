@@ -33,7 +33,7 @@ UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class ConvModule(nn.Module):
+class UperNetConvModule(nn.Module):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
     layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
@@ -68,12 +68,12 @@ class ConvModule(nn.Module):
         return output
 
 
-class PyramidPoolingBlock(nn.Module):
+class UperNetPyramidPoolingBlock(nn.Module):
     def __init__(self, pool_scale: int, in_channels: int, channels: int) -> None:
         super().__init__()
         self.layers = [
             nn.AdaptiveAvgPool2d(pool_scale),
-            ConvModule(in_channels, channels, kernel_size=1),
+            UperNetConvModule(in_channels, channels, kernel_size=1),
         ]
         for i, layer in enumerate(self.layers):
             self.add_module(str(i), layer)
@@ -85,7 +85,7 @@ class PyramidPoolingBlock(nn.Module):
         return hidden_state
 
 
-class PyramidPoolingModule(nn.Module):
+class UperNetPyramidPoolingModule(nn.Module):
     """
     Pyramid Pooling Module (PPM) used in PSPNet.
 
@@ -108,7 +108,7 @@ class PyramidPoolingModule(nn.Module):
         self.channels = channels
         self.blocks = []
         for i, pool_scale in enumerate(pool_scales):
-            block = PyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
+            block = UperNetPyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
             self.blocks.append(block)
             self.add_module(str(i), block)
 
@@ -139,13 +139,13 @@ class UperHead(nn.Module):
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
         # PSP Module
-        self.psp_modules = PyramidPoolingModule(
+        self.psp_modules = UperNetPyramidPoolingModule(
             self.pool_scales,
             self.in_channels[-1],
             self.channels,
             align_corners=self.align_corners,
         )
-        self.bottleneck = ConvModule(
+        self.bottleneck = UperNetConvModule(
             self.in_channels[-1] + len(self.pool_scales) * self.channels,
             self.channels,
             kernel_size=3,
@@ -155,12 +155,12 @@ class UperHead(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
-            l_conv = ConvModule(in_channels, self.channels, kernel_size=1)
-            fpn_conv = ConvModule(self.channels, self.channels, kernel_size=3, padding=1)
+            l_conv = UperNetConvModule(in_channels, self.channels, kernel_size=1)
+            fpn_conv = UperNetConvModule(self.channels, self.channels, kernel_size=3, padding=1)
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
-        self.fpn_bottleneck = ConvModule(
+        self.fpn_bottleneck = UperNetConvModule(
             len(self.in_channels) * self.channels,
             self.channels,
             kernel_size=3,
@@ -238,13 +238,13 @@ class FCNHead(nn.Module):
         conv_padding = (kernel_size // 2) * dilation
         convs = []
         convs.append(
-            ConvModule(
+            UperNetConvModule(
                 self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
             )
         )
         for i in range(self.num_convs - 1):
             convs.append(
-                ConvModule(
+                UperNetConvModule(
                     self.channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
                 )
             )
@@ -253,7 +253,7 @@ class FCNHead(nn.Module):
         else:
             self.convs = nn.Sequential(*convs)
         if self.concat_input:
-            self.conv_cat = ConvModule(
+            self.conv_cat = UperNetConvModule(
                 self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
             )
 

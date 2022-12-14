@@ -41,36 +41,39 @@ logger = logging.get_logger(__name__)
 
 def _scale_size(size: Tuple[int, int], scale: Union[float, int, tuple]) -> Tuple[int, int]:
     """Rescale a size by a ratio.
+
     Args:
-        size (tuple[int]): (w, h).
-        scale (float | tuple(float)): Scaling factor.
+        size (`Tuple[int]`):
+            Size as a tuple (width, height).
+        scale (`float` or `Tuple[float]`):
+            Scaling factor.
 
     Returns:
-        tuple[int]: scaled size.
+        `Tuple[int]`: Scaled size, as a tuple (width, height).
     """
     if isinstance(scale, (float, int)):
         scale = (scale, scale)
-    w, h = size
-    return int(w * float(scale[0]) + 0.5), int(h * float(scale[1]) + 0.5)
+    width, height = size
+    return int(width * float(scale[0]) + 0.5), int(height * float(scale[1]) + 0.5)
 
 
 def rescale_size(old_size: tuple, scale: Union[float, int, List], return_scale: bool = False) -> tuple:
     """Calculate the new size to be rescaled to.
 
     Args:
-        old_size (tuple[int]):
-            The old size (w, h) of image.
-        scale (float | List[int]):
+        old_size (`Tuple[int]`):
+            The old size (width, height) of the image.
+        scale (`float` or `List[int]`):
             The scaling factor or maximum size.
 
             If it is a float number, then the image will be rescaled by this factor, else if it is a tuple of 2
             integers, then the image will be rescaled as large as possible within the scale.
-        return_scale (bool):
+        return_scale (`bool`, *optional*, defaults to `False`):
             Whether to return the scaling factor besides the rescaled image size.
     Returns:
-        tuple[int]: The new rescaled image size.
+        `Tuple[int]`: The new rescaled image size.
     """
-    w, h = old_size
+    width, height = old_size
     if isinstance(scale, (float, int)):
         if scale <= 0:
             raise ValueError(f"Invalid scale {scale}, must be positive.")
@@ -78,11 +81,11 @@ def rescale_size(old_size: tuple, scale: Union[float, int, List], return_scale: 
     elif isinstance(scale, List):
         max_long_edge = max(scale)
         max_short_edge = min(scale)
-        scale_factor = min(max_long_edge / max(h, w), max_short_edge / min(h, w))
+        scale_factor = min(max_long_edge / max(height, width), max_short_edge / min(height, width))
     else:
-        raise TypeError(f"Scale must be a number or tuple of int, but got {type(scale)}")
+        raise TypeError(f"Scale must be a number or list of int, but got {type(scale)}")
 
-    new_size = _scale_size((w, h), scale_factor)
+    new_size = _scale_size((width, height), scale_factor)
 
     if return_scale:
         return new_size, scale_factor
