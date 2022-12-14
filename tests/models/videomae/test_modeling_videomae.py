@@ -145,7 +145,7 @@ class VideoMAEModelTester:
         # important: each video needs to have the same number of masked patches
         # hence we define a single mask, which we then repeat for each example in the batch
         mask = torch.ones((self.num_masks,))
-        mask = torch.cat([mask, torch.zeros(self.seq_length - mask.size(0))], axis=0)
+        mask = torch.cat([mask, torch.zeros(self.seq_length - mask.size(0))])
         bool_masked_pos = mask.expand(self.batch_size, -1).bool()
 
         result = model(pixel_values, bool_masked_pos)

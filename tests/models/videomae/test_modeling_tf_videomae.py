@@ -157,15 +157,15 @@ class TFVideoMAEModelTester:
         return config, inputs_dict
 
 
-@require_torch
-class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
+@require_tf
+class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoMAE does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
-        (VideoMAEModel, VideoMAEForPreTraining, VideoMAEForVideoClassification) if is_torch_available() else ()
+        (TFVideoMAEModel, TFVideoMAEForPreTraining, TFVideoMAEForVideoClassification) if is_tf_available() else ()
     )
 
     test_pruning = False
@@ -174,27 +174,26 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = VideoMAEModelTester(self)
+        self.model_tester = TFVideoMAEModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VideoMAEConfig, has_text_modality=False, hidden_size=37)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
 
-        if model_class == VideoMAEForPreTraining:
+        if model_class == TFVideoMAEForPreTraining:
             # important: each video needs to have the same number of masked patches
             # hence we define a single mask, which we then repeat for each example in the batch
-            mask = torch.ones((self.model_tester.num_masks,))
-            mask = torch.cat([mask, torch.zeros(self.model_tester.seq_length - mask.size(0))])
-            bool_masked_pos = mask.expand(self.model_tester.batch_size, -1).bool()
-            inputs_dict["bool_masked_pos"] = bool_masked_pos.to(torch_device)
+            mask = tf.ones((self.model_tester.num_masks,))
+            mask = tf.concat([mask, tf.zeros(self.model_tester.seq_length - mask.size(0))], axis=0)
+            bool_masked_pos = tf.broadcast_to(mask, (self.model_tester.batch_size, self.model_tester.num_masks))
+            bool_masked_pos = tf.cast(bool_masked_pos, "bool")
+            inputs_dict["bool_masked_pos"] = bool_masked_pos
 
         if return_labels:
             if model_class in [
-                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
+                *get_values(TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
             ]:
-                inputs_dict["labels"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
+                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size))
 
         return inputs_dict
 

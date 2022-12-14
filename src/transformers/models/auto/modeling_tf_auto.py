@@ -209,7 +209,7 @@ TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("videomae", "TFVideoMAEForVideoClassification"),
     ]
