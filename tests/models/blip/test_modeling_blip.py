@@ -777,8 +777,8 @@ def prepare_img():
 @slow
 class BlipModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = BlipForConditionalGeneration.from_pretrained("ybelkada/blip-image-captioning-base").to(torch_device)
-        processor = BlipProcessor.from_pretrained("ybelkada/blip-image-captioning-base")
+        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         image = prepare_img()
 
         # image only
@@ -802,8 +802,8 @@ class BlipModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_vqa(self):
-        model = BlipForQuestionAnswering.from_pretrained("ybelkada/blip-vqa-base").to(torch_device)
-        processor = BlipProcessor.from_pretrained("ybelkada/blip-vqa-base")
+        model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         image = prepare_img()
         text = "how many dogs are in the picture?"
@@ -815,8 +815,8 @@ class BlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(out[0].tolist(), [30522, 1015, 102])
 
     def test_inference_itm(self):
-        model = BlipForImageTextRetrieval.from_pretrained("ybelkada/blip-itm-base").to(torch_device)
-        processor = BlipProcessor.from_pretrained("ybelkada/blip-itm-base")
+        model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base")
 
         image = prepare_img()
         text = "A woman and her dog sitting in a beach"
