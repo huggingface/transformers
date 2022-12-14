@@ -17,7 +17,7 @@
 import unittest
 
 import numpy as np
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
