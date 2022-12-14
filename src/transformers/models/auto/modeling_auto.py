@@ -869,6 +869,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),
+        ("swin", "SwinBackbone"),
     ]
 )
 
