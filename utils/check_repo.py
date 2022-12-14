@@ -35,6 +35,7 @@ PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
+    "AltRobertaModel",
     "DPRSpanPredictor",
     "LongT5Stack",
     "RealmBertModel",
@@ -667,6 +668,7 @@ UNDOCUMENTED_OBJECTS = [
     "logger",  # Internal logger
     "logging",  # External module
     "requires_backends",  # Internal function
+    "AltCLIPVisionModel",  # Internal module
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

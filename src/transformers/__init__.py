@@ -919,8 +919,6 @@ else:
             "AltCLIPPreTrainedModel",
             "AltCLIPTextModel",
             "AltCLIPVisionModel",
-            "AltRobertaModel",
-            "AltRobertaPreTrainedModel",
         ]
     )
 
@@ -4103,8 +4101,6 @@ if TYPE_CHECKING:
             AltCLIPPreTrainedModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
-            AltRobertaModel,
-            AltRobertaPreTrainedModel,
         )
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

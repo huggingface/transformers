@@ -328,7 +328,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("albert", "ALBERT"),
-        ("altclip", "AltClip"),
+        ("altclip", "AltCLIP"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
