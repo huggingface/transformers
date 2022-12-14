@@ -305,10 +305,10 @@ PT_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import torch
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")

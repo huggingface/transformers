@@ -844,7 +844,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
-        processor_class="AutoTokenizer",
     )
     def forward(
         self,

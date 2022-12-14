@@ -913,7 +913,6 @@ class BertModel(BertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
-        processor_class="AutoTokenizer",
     )
     def forward(
         self,

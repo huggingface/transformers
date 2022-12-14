@@ -47,7 +47,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 # General docstring
 _CONFIG_FOR_DOC = "Data2VecAudioConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/data2vec-audio-base-960h"
@@ -56,20 +55,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
 _CTC_EXPECTED_LOSS = 66.95
-
-# Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-data2vec-seq-class"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.69
-
-# Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-data2vec-audio-frame"
-_FRAME_EXPECTED_OUTPUT = [1, 1]
-
-# Speaker Verification docstring
-_XVECTOR_CHECKPOINT = "hf-internal-testing/tiny-random-data2vec-xvector"
-_XVECTOR_EXPECTED_OUTPUT = 1.0
 
 
 DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -917,12 +902,12 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
+        processor_class="AutoProcessor",
     )
     def forward(
         self,
@@ -1025,7 +1010,6 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1160,13 +1144,10 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1284,12 +1265,10 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_FRAME_CLASS_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_FRAME_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -1467,12 +1446,10 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_XVECTOR_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_XVECTOR_EXPECTED_OUTPUT,
     )
     def forward(
         self,
