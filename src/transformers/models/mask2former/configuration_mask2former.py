@@ -16,12 +16,14 @@
 import copy
 from typing import Dict, List, Optional
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-from ..auto.configuration_auto import AutoConfig
 from ..deformable_detr import DeformableDetrConfig
 from ..detr import DetrConfig
 from ..swin import SwinConfig
+
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+from ..auto.configuration_auto import AutoConfig
+from ..auto import CONFIG_MAPPING
 
 
 MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -56,7 +58,7 @@ class Mask2FormerConfig(PretrainedConfig):
         use_auxiliary_loss(`bool`, *optional*, defaults to `False`):
             If `True` [`Mask2FormerForInstanceSegmentationOutput`] will contain the auxiliary losses computed using the
             logits from each decoder's stage.
-        backbone_config (`Dict`, *optional*):
+        backbone_config (`Dict`, *optional*, defaults to `swin-tiny-patch4-window7-224`):
             The configuration passed to the backbone, if unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
         decoder_config (`Dict`, *optional*):
@@ -89,6 +91,7 @@ class Mask2FormerConfig(PretrainedConfig):
             feature strides corresponding to features generated from backbone network
         mask2former_num_feature_levels (`int`, *optional*, defaults to 3):
             Number of feature levels for Mask2former model
+
     Raises:
         `ValueError`:
             Raised if the backbone model type selected is not in `["swin"]` or the decoder model type selected is not
@@ -102,7 +105,7 @@ class Mask2FormerConfig(PretrainedConfig):
     >>> # Initializing a Mask2Former shivi/mask2former-instance-swin-small-coco configuration
     >>> configuration = Mask2FormerConfig()
 
-    >>> # Initializing a model from the shivi/mask2former-instance-swin-small-coco style configuration
+    >>> # Initializing a model (with random weights) from the shivi/mask2former-instance-swin-small-coco style configuration
     >>> model = Mask2FormerModel(configuration)
 
     >>> # Accessing the model configuration
@@ -139,27 +142,31 @@ class Mask2FormerConfig(PretrainedConfig):
         mask2former_num_feature_levels: Optional[int] = 3,
         **kwargs,
     ):
+
         if backbone_config is None:
-            # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
-            # https://huggingface.co/microsoft/swin-small-patch4-window7-224
             backbone_config = SwinConfig(
-                image_size=384,
+                image_size=224,
                 in_channels=3,
                 patch_size=4,
                 embed_dim=96,
-                depths=[2, 2, 18, 2],
+                depths=[2, 2, 6, 2],
                 num_heads=[3, 6, 12, 24],
                 window_size=7,
                 drop_path_rate=0.3,
+                out_features=["stage1", "stage2", "stage3", "stage4"],
             )
         else:
-            backbone_model_type = backbone_config.pop("model_type")
+            backbone_model_type = (
+                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
+            )
             if backbone_model_type not in self.backbones_supported:
                 raise ValueError(
                     f"Backbone {backbone_model_type} not supported, please use one of"
                     f" {','.join(self.backbones_supported)}"
                 )
-            backbone_config = AutoConfig.for_model(backbone_model_type, **backbone_config)
+            if isinstance(backbone_config, dict):
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
 
         if decoder_config is None:
             # fall back to https://huggingface.co/facebook/detr-resnet-50
