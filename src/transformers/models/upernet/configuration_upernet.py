@@ -30,13 +30,13 @@ class UperNetConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`UperNetForSemanticSegmentation`]. It is used to
     instantiate an UperNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the UperNet
-    [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
+    [facebook/upernet-convnext-tiny](https://huggingface.co/facebook/upernet-convnext-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig`, *optional*, defaults to `ResNetConfig`):
+        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig`):
             The configuration of the backbone model.
         hidden_size (`int`, *optional*, defaults to 512):
             The number of hidden units in the convolutional layers.
@@ -88,19 +88,15 @@ class UperNetConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = {}
-
-        if isinstance(backbone_config, dict):
-
-            if "model_type" in backbone_config:
-                backbone_config_class = CONFIG_MAPPING[backbone_config["model_type"]]
-            else:
-                logger.info(
-                    "`model_type` is not found in `backbone_config`. Use `ResNet` as the backbone configuration class."
-                )
-                backbone_config_class = ResNetConfig
-            backbone_config = backbone_config_class(**backbone_config)
+            backbone_config = ResNetConfig()
+        else:
+            # verify that the backbone is supported
+            backbone_model_type = (
+                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
+            )
+            if isinstance(backbone_config, dict):
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
         self.hidden_size = hidden_size
@@ -119,7 +115,6 @@ class UperNetConfig(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        print("Backbone config: ", type(self.backbone_config))
         output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
