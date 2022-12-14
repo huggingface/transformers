@@ -106,7 +106,7 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
     def test_batch_feature(self):
         pass
 
-    @is_flaky
+    @is_flaky()
     def test_call_pil(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -139,7 +139,7 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             ),
         )
 
-    @is_flaky
+    @is_flaky()
     def test_call_numpy(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -172,7 +172,7 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             ),
         )
 
-    @is_flaky
+    @is_flaky()
     def test_call_pytorch(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
