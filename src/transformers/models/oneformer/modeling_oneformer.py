@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 
-from transformers import AutoBackbone, MaskFormerSwinConfig
+from transformers import AutoBackbone
 from transformers.utils import logging
 
 from ...activations import ACT2FN
@@ -1513,10 +1513,6 @@ class OneFormerPixelLevelModule(nn.Module):
         """
         super().__init__()
         backbone_config = config.backbone_config
-        if backbone_config.model_type == "swin":
-            # for backwards compatibility
-            backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
-            backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
         self.encoder = AutoBackbone.from_config(backbone_config)
         self.decoder = OneFormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
