@@ -17,7 +17,7 @@
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from ..utils import cached_property, is_tf_available, logging, tf_required
+from ..utils import cached_property, is_tf_available, logging, requires_backends
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -77,8 +77,8 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
     )
 
     @cached_property
-    @tf_required
     def _setup_tpu(self) -> Tuple["tf.distribute.cluster_resolver.TPUClusterResolver"]:
+        requires_backends(self, ["tf"])
         tpu = None
         if self.tpu:
             try:
@@ -91,8 +91,8 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
         return tpu
 
     @cached_property
-    @tf_required
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", "tf.distribute.cluster_resolver.TPUClusterResolver"]:
+        requires_backends(self, ["tf"])
         if self.is_tpu:
             tf.config.experimental_connect_to_cluster(self._setup_tpu)
             tf.tpu.experimental.initialize_tpu_system(self._setup_tpu)
@@ -111,23 +111,23 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
         return strategy
 
     @property
-    @tf_required
     def is_tpu(self) -> bool:
+        requires_backends(self, ["tf"])
         return self._setup_tpu is not None
 
     @property
-    @tf_required
     def strategy(self) -> "tf.distribute.Strategy":
+        requires_backends(self, ["tf"])
         return self._setup_strategy
 
     @property
-    @tf_required
     def gpu_list(self):
+        requires_backends(self, ["tf"])
         return tf.config.list_physical_devices("GPU")
 
     @property
-    @tf_required
     def n_gpu(self) -> int:
+        requires_backends(self, ["tf"])
         if self.cuda:
             return len(self.gpu_list)
         return 0
