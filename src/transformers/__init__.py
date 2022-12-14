@@ -1192,7 +1192,6 @@ else:
         [
             "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "CPMAntForCausalLM",
-            "CPMAntLayer",
             "CPMAntModel",
             "CPMAntPreTrainedModel",
             "load_tf_weights_in_cpmant",
@@ -4331,7 +4330,6 @@ if TYPE_CHECKING:
         from .models.cpmant import (
             CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CPMAntForCausalLM,
-            CPMAntLayer,
             CPMAntModel,
             CPMAntPreTrainedModel,
             load_tf_weights_in_cpmant,
