@@ -179,8 +179,10 @@ class BridgeTowerModelOutput(ModelOutput):
 
 
 @add_start_docstrings(
-    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-    " top.",
+    (
+        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+        " top."
+    ),
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -364,8 +366,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels are currently not supported.
         Returns:
 
         Examples:
@@ -466,7 +471,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         cls_feats = self.get_cls_feats(text_feats, image_feats)
 
         if not return_dict:
-            return (text_feats, image_feats, cls_feats)
+            return tuple(v for v in [text_feats, image_feats, cls_feats] if v is not None)
 
         return BridgeTowerModelOutput(
             text_feats=text_feats,
@@ -812,8 +817,11 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels are currently not supported.
         Returns:
 
         Examples:
@@ -857,10 +865,10 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             return_dict=return_dict,
         )
 
-        mlm_logits = self.mlm_score(outputs.text_feats)
+        mlm_logits = self.mlm_score(outputs.text_feats if return_dict else outputs[0])
 
         if not return_dict:
-            return mlm_logits
+            return tuple(mlm_logits)
 
         return MaskedLMOutput(logits=mlm_logits)
 
@@ -938,9 +946,11 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
     ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
         r"""
-
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels are currently not supported.
         Returns:
 
         Examples:
@@ -987,7 +997,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         logits = self.itm_score(pooler_output)
 
         if not return_dict:
-            return logits
+            return tuple(logits)
 
         return SequenceClassifierOutput(
             loss=None,
