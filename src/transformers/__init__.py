@@ -855,61 +855,6 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.fan"].extend(
-        [
-            "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FANForImageClassification",
-            "FANForSemanticSegmentation",
-            "FANModel",
-            "FANPreTrainedModel",
-        ]
-    )
-    _import_structure["models.roc_bert"].extend(
-        [
-            "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "RoCBertForMaskedLM",
-            "RoCBertForCausalLM",
-            "RoCBertForMultipleChoice",
-            "RoCBertForQuestionAnswering",
-            "RoCBertForSequenceClassification",
-            "RoCBertForTokenClassification",
-            "RoCBertLayer",
-            "RoCBertModel",
-            "RoCBertForPreTraining",
-            "RoCBertPreTrainedModel",
-            "load_tf_weights_in_roc_bert",
-        ]
-    )
-
-    _import_structure["models.time_series_transformer"].extend(
-        [
-            "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TimeSeriesTransformerForPrediction",
-            "TimeSeriesTransformerModel",
-            "TimeSeriesTransformerPreTrainedModel",
-        ]
-    )
-    _import_structure["models.fan"].extend(
-        [
-            "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FANForImageClassification",
-            "FANForSemanticSegmentation",
-            "FANLayer",
-            "FANModel",
-            "FANPreTrainedModel",
-            "load_tf_weights_in_fan",
-        ]
-    )
-
-    _import_structure["models.time_series_transformer"].extend(
-        [
-            "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TimeSeriesTransformerForPrediction",
-            "TimeSeriesTransformerModel",
-            "TimeSeriesTransformerPreTrainedModel",
-
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1354,6 +1299,15 @@ else:
             "EsmForTokenClassification",
             "EsmModel",
             "EsmPreTrainedModel",
+        ]
+    )
+    _import_structure["models.fan"].extend(
+        [
+            "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FANForImageClassification",
+            "FANForSemanticSegmentation",
+            "FANModel",
+            "FANPreTrainedModel",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -1958,6 +1912,22 @@ else:
             "RobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roc_bert"].extend(
+        [
+            "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RoCBertForMaskedLM",
+            "RoCBertForCausalLM",
+            "RoCBertForMultipleChoice",
+            "RoCBertForQuestionAnswering",
+            "RoCBertForSequenceClassification",
+            "RoCBertForTokenClassification",
+            "RoCBertLayer",
+            "RoCBertModel",
+            "RoCBertForPreTraining",
+            "RoCBertPreTrainedModel",
+            "load_tf_weights_in_roc_bert",
+        ]
+    )
     _import_structure["models.lilt"].extend(
         [
             "LILT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2080,6 +2050,14 @@ else:
             "TapasModel",
             "TapasPreTrainedModel",
             "load_tf_weights_in_tapas",
+        ]
+    )
+    _import_structure["models.time_series_transformer"].extend(
+        [
+            "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TimeSeriesTransformerForPrediction",
+            "TimeSeriesTransformerModel",
+            "TimeSeriesTransformerPreTrainedModel",
         ]
     )
     _import_structure["models.t5"].extend(
