@@ -18,6 +18,7 @@
 import inspect
 import unittest
 
+from huggingface_hub import hf_hub_download
 from transformers import ConvNextConfig, UperNetConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -35,6 +36,8 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
+    from transformers import UperNetImageProcessor
 
 
 class UperNetModelTester:
@@ -235,19 +238,34 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-# We will verify our results on an image of cute cats
+# We will verify our results on an image of ADE20k
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    filepath = hf_hub_download(
+        repo_id="hf-internal-testing/fixtures_ade20k", repo_type="dataset", filename="ADE_val_00000001.jpg"
+    )
+    image = Image.open(filepath).convert("RGB")$
     return image
 
 
 @require_torch
 @require_vision
+@slow
 class UperNetModelIntegrationTest(unittest.TestCase):
-    # @cached_property
-    # def default_feature_extractor(self):
-    #     return UperNetFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+    def test_inference_swin_backbone(self):
+        # TODO update the organization
+        processor = UperNetImageProcessor.from_pretrained("nielsr/upernet-swin-tiny")
+        model = UperNetForSemanticSegmentation.from_pretrained("nielsr/upernet-swin-tiny")
 
-    @slow
-    def test_inference_image_classification_head(self):
-        raise NotImplementedError("To do")
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape = torch.Size((1, model.config.num_labels, 512, 683))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-7.6034, -7.6034, -7.4257], [-7.6034, -7.6034, -7.4257], [-7.4655, -7.4655, -7.2804]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))

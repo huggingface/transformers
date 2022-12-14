@@ -27,11 +27,9 @@ import argparse
 
 import torch
 from PIL import Image
-from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
-from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation, UperNetImageProcessor
 
 
 def get_upernet_config(model_name):
@@ -133,11 +131,6 @@ def read_in_q_k_v(state_dict, backbone_config):
             # fmt: on
 
 
-image_transforms = Compose(
-    [Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)]
-)
-
-
 def correct_unfold_reduction_order(x):
     out_channel, in_channel = x.shape
     x = x.reshape(out_channel, 4, in_channel // 4)
@@ -169,8 +162,8 @@ def reverse_correct_unfold_norm_order(x):
 
 def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model_name_to_url = {
-        "upernet-swin-tiny-mmsegmentation": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210531_112542-e380ad3e.pth",
-        "upernet-swin-small-mmsegmentation": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210526_192015-ee2fff1c.pth",
+        "upernet-swin-tiny": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210531_112542-e380ad3e.pth",
+        "upernet-swin-small": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210526_192015-ee2fff1c.pth",
     }
     checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[
@@ -210,10 +203,17 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # verify on image
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    pixel_values = image_transforms(image).unsqueeze(0)
 
-    # processor = UperNetImageProcessor()
-    # pixel_values = processor(image, return_tensors="pt").pixel_values
+    # TODO: remove
+    # from torchvision.transforms import Compose, Normalize, Resize, ToTensor
+    # from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+    # image_transforms = Compose(
+    #     [Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)]
+    # )
+    # pixel_values = image_transforms(image).unsqueeze(0)
+
+    processor = UperNetImageProcessor()
+    pixel_values = processor(image, return_tensors="pt").pixel_values
 
     with torch.no_grad():
         outputs = model(pixel_values)
@@ -223,7 +223,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     print("First values of logits:", logits[0, 0, :3, :3])
     # assert values
     expected_slice = torch.tensor(
-        [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
+        [[-7.6034, -7.6034, -7.4257], [-7.6034, -7.6034, -7.4257], [-7.4655, -7.4655, -7.2804]]
     )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
@@ -232,13 +232,13 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving processor to {pytorch_dump_folder_path}")
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving processor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"nielsr/{model_name}")
-        # processor.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -246,9 +246,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="upernet-swin-tiny-mmsegmentation",
+        default="upernet-swin-tiny",
         type=str,
-        choices=["upernet-swin-tiny-mmsegmentation", "upernet-swin-small-mmsegmentation"],
+        choices=["upernet-swin-tiny", "upernet-swin-small"],
         help="Name of the Swin + UperNet model you'd like to convert.",
     )
     parser.add_argument(
