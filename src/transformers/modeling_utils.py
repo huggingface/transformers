@@ -1024,7 +1024,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.config = config
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
-        self.generation_config = None
+        self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
 
     def post_init(self):
         """
@@ -1116,8 +1116,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
         if "GenerationMixin" in str(self.prepare_inputs_for_generation):
-            return True
-        return False
+            return False
+        return True
 
     def get_input_embeddings(self) -> nn.Module:
         """
@@ -2490,10 +2490,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
 
-        # If it is a model with generation capabilities, set the generation config
+        # If it is a model with generation capabilities, attempt to load the generation config
         if model.can_generate():
             try:
-                generation_config = GenerationConfig.from_pretrained(
+                model.generation_config = GenerationConfig.from_pretrained(
                     pretrained_model_name_or_path,
                     cache_dir=cache_dir,
                     force_download=force_download,
@@ -2508,9 +2508,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     **kwargs,
                 )
             except OSError:
-                logger.warning("Generation config not found, creating it from the model config")
-                generation_config = GenerationConfig.from_model_config(config)
-            model.generation_config = generation_config
+                logger.warning(
+                    "Generation config file not found, using a generation config created from the model config."
+                )
+                pass
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
