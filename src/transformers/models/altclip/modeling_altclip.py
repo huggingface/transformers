@@ -203,9 +203,8 @@ class AltCLIPOutput(ModelOutput):
             for k in self.keys()
         )
 
+
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->AltRoberta
-
-
 class AltRobertaEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -1000,9 +999,8 @@ class AltCLIPEncoder(nn.Module):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->AltCLIP
-
-
 class AltCLIPVisionEmbeddings(nn.Module):
     def __init__(self, config: AltCLIPVisionConfig):
         super().__init__()
