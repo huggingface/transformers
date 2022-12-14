@@ -916,7 +916,7 @@ else:
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
             "AltCLIPModel",
-            "AltCLIPPretrainedModel",
+            "AltCLIPPreTrainedModel",
             "AltCLIPTextModel",
             "AltCLIPVisionModel",
         ]
@@ -4098,7 +4098,7 @@ if TYPE_CHECKING:
         from .models.altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             AltCLIPModel,
-            AltCLIPPretrainModel,
+            AltCLIPPreTrainedModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
         )
