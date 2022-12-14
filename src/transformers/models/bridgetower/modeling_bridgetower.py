@@ -179,8 +179,10 @@ class BridgeTowerModelOutput(ModelOutput):
 
 
 @add_start_docstrings(
-    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-    " top.",
+    (
+        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+        " top."
+    ),
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -880,7 +882,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         mlm_logits = self.mlm_score(outputs.text_feats if return_dict else outputs[0])
 
         if not return_dict:
@@ -1012,7 +1014,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         logits = self.itm_score(pooler_output)
 
         if not return_dict:
-            return tuple(logits)            
+            return tuple(logits)
 
         return SequenceClassifierOutput(
             loss=None,
