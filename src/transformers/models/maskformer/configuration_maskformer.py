@@ -53,7 +53,7 @@ class MaskFormerConfig(PretrainedConfig):
         no_object_weight (`float`, *optional*, defaults to 0.1):
             Weight to apply to the null (no object) class.
         use_auxiliary_loss(`bool`, *optional*, defaults to `False`):
-            If `True` [`MaskFormerForInstanceSegmentationOutput`] will contain the auxiliary losses computed using the
+            If `True` [`MaskFormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using the
             logits from each decoder's stage.
         backbone_config (`Dict`, *optional*):
             The configuration passed to the backbone, if unset, the configuration corresponding to

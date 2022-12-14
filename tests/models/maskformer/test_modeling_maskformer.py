@@ -31,7 +31,7 @@ from ...test_modeling_common import ModelTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
+    from transformers import MaskFormerForUniversalSegmentation, MaskFormerModel
 
     if is_vision_available():
         from transformers import MaskFormerFeatureExtractor
@@ -135,7 +135,7 @@ class MaskFormerModelTester:
     def create_and_check_maskformer_instance_segmentation_head_model(
         self, config, pixel_values, pixel_mask, mask_labels, class_labels
     ):
-        model = MaskFormerForInstanceSegmentation(config=config)
+        model = MaskFormerForUniversalSegmentation(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -174,7 +174,7 @@ class MaskFormerModelTester:
 @require_torch
 class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
+    all_model_classes = (MaskFormerModel, MaskFormerForUniversalSegmentation) if is_torch_available() else ()
 
     is_encoder_decoder = False
     test_pruning = False
@@ -245,7 +245,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
             "class_labels": torch.zeros(2, 10, device=torch_device).long(),
         }
 
-        model = MaskFormerForInstanceSegmentation(MaskFormerConfig()).to(torch_device)
+        model = MaskFormerForUniversalSegmentation(MaskFormerConfig()).to(torch_device)
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
 
@@ -264,7 +264,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         if not self.model_tester.is_training:
             return
-        # only MaskFormerForInstanceSegmentation has the loss
+        # only MaskFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
         config, pixel_values, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
 
@@ -276,7 +276,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         loss.backward()
 
     def test_retain_grad_hidden_states_attentions(self):
-        # only MaskFormerForInstanceSegmentation has the loss
+        # only MaskFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
         config, pixel_values, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
         config.output_hidden_states = True
@@ -371,7 +371,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
 
     def test_inference_instance_segmentation_head(self):
         model = (
-            MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-small-coco")
+            MaskFormerForUniversalSegmentation.from_pretrained("facebook/maskformer-swin-small-coco")
             .to(torch_device)
             .eval()
         )
@@ -415,7 +415,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
 
     def test_inference_instance_segmentation_head_resnet_backbone(self):
         model = (
-            MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-resnet101-coco-stuff")
+            MaskFormerForUniversalSegmentation.from_pretrained("facebook/maskformer-resnet101-coco-stuff")
             .to(torch_device)
             .eval()
         )
@@ -451,7 +451,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
 
     def test_with_segmentation_maps_and_loss(self):
         model = (
-            MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-small-coco")
+            MaskFormerForUniversalSegmentation.from_pretrained("facebook/maskformer-swin-small-coco")
             .to(torch_device)
             .eval()
         )

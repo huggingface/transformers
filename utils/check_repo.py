@@ -49,6 +49,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "MaskFormerForInstanceSegmentation",  # This class name is deprecated, MaskFormerForUniversalSegmentation is tested
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
     "TableTransformerEncoder",  # Building part of bigger (tested) model.
     "TableTransformerDecoder",  # Building part of bigger (tested) model.
@@ -614,6 +615,7 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
+    "MaskFormerForInstanceSegmentation",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
     "SingleSentenceClassificationProcessor",
