@@ -65,7 +65,6 @@ if TYPE_CHECKING:
             AltCLIPModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
-            AltRobertaModel,
         )
 
 
