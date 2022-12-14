@@ -154,7 +154,7 @@ class MaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions):
             Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
             layernorm. This is useful when training the model with auxiliary decoding losses.
         masks_queries_logits (`tuple(torch.FloatTensor)`):
-            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, height, width)` representing the predicted mask for each
             query.
     """
 
@@ -244,7 +244,7 @@ class Mask2FormerModelOutput(ModelOutput):
             sequence_length)`. Attentions weights from MaksedAttentionDecoder after the attention softmax, used to
             compute the weighted average in the self-attention heads.
         masks_queries_logits (`torch.FloatTensor`):
-            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, height, width)` representing the predicted mask for each
             query.
     """
 
@@ -874,7 +874,8 @@ class MaskedAttentionDecoder(nn.Module):
         for idx, decoder_layer in enumerate(self.layers):
             # Add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+                out_hidden_states = self.layernorm(hidden_states)
+                all_hidden_states += (out_hidden_states,)
 
             dropout_probability = random.uniform(0, 1)
 
@@ -935,7 +936,7 @@ class MaskedAttentionDecoder(nn.Module):
                     all_cross_attentions += (layer_outputs[2],)
 
         # finally, apply layernorm
-        # hidden_states = self.layernorm(hidden_states)
+        hidden_states = self.layernorm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -2185,10 +2186,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         self.mask_projection = nn.Conv2d(feature_size, mask_feature_size, kernel_size=1, stride=1, padding=0)
 
     def forward(self, backbone_features: List[Tensor]) -> Mask2FormerPixelDecoderOutput:
-        print("ours")
-        for feat in backbone_features:
-            print(feat.shape)
-            print(feat)
+    
         multi_scale_features = self.msda_module(backbone_features)
 
         fpn_features = self.feature_pyramid_network(multi_scale_features, backbone_features)
@@ -2474,13 +2472,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         pixel_level_module_output = self.pixel_level_module(pixel_values, output_hidden_states)
 
         multi_scale_features = pixel_level_module_output.decoder_hidden_states
-        """
-        print("our implementation")
-        print(len(multi_scale_features))
-        for i in multi_scale_features:
-            print(i.shape)
-            print(i)
-        """
+        
         pixel_embeddings = pixel_level_module_output.decoder_last_hidden_state
 
         # pass multi-scale features from pixel decoder to transformer module
@@ -2508,7 +2500,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
             hidden_states=hidden_states,
             attentions=transformer_module_output.attentions,
-            masks_queries_logits=transformer_module_output.masks_queries_logits[-1],
+            masks_queries_logits=transformer_module_output.masks_queries_logits,
         )
 
         if not return_dict:
@@ -2523,6 +2515,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         self.model = Mask2FormerModel(config)
         hidden_size = config.decoder_config.hidden_size
         # + 1 because we add the "null" class
+
         self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
 
         self.weight_dict = {
@@ -2559,7 +2552,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         return sum(loss_dict.values())
 
     def get_auxiliary_logits(classes: torch.Tensor, output_masks: torch.Tensor):
-        auxiliary_logits: List[str, Tensor] = []
+        auxiliary_logits: List[Dict(str, Tensor)] = []
 
         for aux_binary_masks, aux_classes in zip(output_masks[:-1], classes[:-1]):
             auxiliary_logits.append({"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes})
@@ -2637,17 +2630,17 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
             transformer_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
         else:
             transformer_decoder_outputs = outputs.transformer_decoder_last_hidden_state
-
-        class_queries_logits = self.class_predictor(transformer_decoder_outputs.transpose(0, 1))     
+        
+        class_queries_logits = self.class_predictor(transformer_decoder_outputs.transpose(0, 1))       
         
         masks_queries_logits = outputs.masks_queries_logits
 
         if self.config.use_auxiliary_loss:
-            auxiliary_logits = self.get_auxiliary_logits(class_queries_logits[-1], masks_queries_logits[-1])
+            auxiliary_logits = self.get_auxiliary_logits(class_queries_logits, masks_queries_logits)
 
         if mask_labels is not None and class_labels is not None:
             loss_dict: Dict[str, Tensor] = self.get_loss_dict(
-                masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxiliary_logits
+                masks_queries_logits[-1], class_queries_logits, mask_labels, class_labels, auxiliary_logits
             )
             loss = self.get_loss(loss_dict)
 
@@ -2663,6 +2656,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
             class_queries_logits=class_queries_logits,
             auxiliary_logits=auxiliary_logits,
         )
+
 
         if not return_dict:
             output = tuple(v for v in output.values())

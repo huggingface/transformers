@@ -892,8 +892,9 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
         # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
+        masks_queries_logits = outputs.masks_queries_logits[-1]
         if target_size is not None:
+            ## upsample masks
             masks_queries_logits = torch.nn.functional.interpolate(
                 masks_queries_logits,
                 size=target_size,
@@ -933,7 +934,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 `torch.Tensor` correspond to a semantic class id.
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        masks_queries_logits = outputs.masks_queries_logits[-1]  # [batch_size, num_queries, height, width]
 
         # Remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
@@ -1003,7 +1004,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 - **score** -- Prediction score of segment with `segment_id`.
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        masks_queries_logits = outputs.masks_queries_logits[-1]  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
@@ -1096,7 +1097,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             label_ids_to_fuse = set()
 
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        masks_queries_logits = outputs.masks_queries_logits[-1]  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
