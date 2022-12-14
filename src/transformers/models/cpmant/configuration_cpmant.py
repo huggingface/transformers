@@ -55,7 +55,7 @@ class CPMAntConfig(PretrainedConfig):
         dropout_p (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder.
         position_bias_num_buckets (`int`, *optional*, defaults to 512):
-            The dropout ratio for the attention probabilities.
+            The number of position_bias buckets.
         position_bias_max_distance (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
