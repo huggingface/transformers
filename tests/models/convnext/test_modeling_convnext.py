@@ -159,10 +159,6 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="ConvNext does not output attentions")
-    def test_attention_outputs(self):
-        pass
-
     @unittest.skip(reason="ConvNext does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

@@ -147,10 +147,6 @@ class TFRegNetModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="Model doesn't have attention layers")
-    def test_attention_outputs(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
