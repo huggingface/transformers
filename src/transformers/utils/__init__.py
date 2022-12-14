@@ -163,9 +163,7 @@ from .import_utils import (
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
-    tf_required,
     torch_only_method,
-    torch_required,
     torch_version,
 )
 

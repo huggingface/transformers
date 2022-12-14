@@ -56,8 +56,8 @@ from .utils import (
     is_torch_device,
     is_torch_tensor,
     logging,
+    requires_backends,
     to_py_obj,
-    torch_required,
 )
 
 
@@ -739,7 +739,6 @@ class BatchEncoding(UserDict):
 
         return self
 
-    @torch_required
     def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
         """
         Send all values to device by calling `v.to(device)` (PyTorch only).
@@ -750,6 +749,7 @@ class BatchEncoding(UserDict):
         Returns:
             [`BatchEncoding`]: The same instance after modification.
         """
+        requires_backends(self, ["torch"])
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs

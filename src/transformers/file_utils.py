@@ -127,10 +127,8 @@ from .utils import (
     is_vision_available,
     replace_return_docstrings,
     requires_backends,
-    tf_required,
     to_numpy,
     to_py_obj,
     torch_only_method,
-    torch_required,
     torch_version,
 )
