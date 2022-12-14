@@ -85,33 +85,6 @@ def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
     return (max_height, max_width)
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.get_resize_output_image_size
-def get_resize_output_image_size(
-    input_image: np.ndarray, shorter: int = 800, longer: int = 1333, size_divisor: int = 32
-) -> Tuple[int, int]:
-    input_height, input_width = get_image_size(input_image)
-    min_size, max_size = shorter, longer
-
-    scale = min_size / min(input_height, input_width)
-
-    if input_height < input_width:
-        new_height = min_size
-        new_width = scale * input_width
-    else:
-        new_height = scale * input_height
-        new_width = min_size
-
-    if max(new_height, new_width) > max_size:
-        scale = max_size / max(new_height, new_width)
-        new_height = scale * new_height
-        new_width = scale * new_width
-
-    new_height, new_width = int(new_height + 0.5), int(new_width + 0.5)
-    new_height = new_height // size_divisor * size_divisor
-    new_width = new_width // size_divisor * size_divisor
-
-    return new_height, new_width
-
 
 class BlipImageProcessor(BaseImageProcessor):
     r"""
@@ -123,9 +96,6 @@ class BlipImageProcessor(BaseImageProcessor):
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]`, *optional*, defaults to `384`):
             Resize the input to the given size. Only has an effect if `do_resize` is set to `True`.
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
@@ -157,7 +127,6 @@ class BlipImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -174,7 +143,6 @@ class BlipImageProcessor(BaseImageProcessor):
 
         self.do_resize = do_resize
         self.size = size
-        self.size_divisor = size_divisor
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
@@ -262,7 +230,6 @@ class BlipImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
