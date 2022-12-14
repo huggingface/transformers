@@ -40,7 +40,6 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from .backbone_dinat_oneformer import OneFormerDinatModel
 from .configuration_oneformer import OneFormerConfig
 
 
@@ -908,44 +907,6 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     text_queries: Optional[torch.FloatTensor] = None
     task_token: torch.FloatTensor = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-
-
-# Dinat Backbone Classes #
-
-
-class OneFormerDinatBackbone(nn.Module):
-    """
-    This class uses [`OneFormerDinatModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
-    hidden_size)` output four level of features of varying resolutions: (`batch_size, num_channels, height, width)`).
-
-    Args:
-        config (`OneFormerConfig`):
-            The configuration used by [`OneFormerDinatModel`].
-    """
-
-    def __init__(self, config: OneFormerConfig):
-        super().__init__()
-        self.model = OneFormerDinatModel(config)
-        self.outputs_shapes = config.backbone_config["feature_channels"]
-        self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(out_shape) for out_shape in self.outputs_shapes])
-
-    def forward(self, *args, **kwargs) -> List[Tensor]:
-        output = self.model(*args, **kwargs, output_hidden_states=True)
-        hidden_states_permuted: List[Tensor] = []
-        hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
-        # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
-        for i, hidden_state in enumerate(hidden_states):
-            norm = self.hidden_states_norms[i]
-            # the last element corespond to the layer's last block output but before patch merging
-            batch_size, hidden_size, height, width = hidden_state.shape
-            hidden_state_unpolled = hidden_state.permute(0, 2, 3, 1).view((batch_size, -1, hidden_size))
-            hidden_state_norm = norm(hidden_state_unpolled)
-            # reshape our tensor "b (h w) d -> b d h w"
-            hidden_state_permuted = (
-                hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
-            )
-            hidden_states_permuted.append(hidden_state_permuted)
-        return hidden_states_permuted
 
 
 # Pixel Decoder Classes #
@@ -2928,15 +2889,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                         elif isinstance(module, nn.LayerNorm):
                             module.bias.data.zero_()
                             module.weight.data.fill_(1.0)
-        elif isinstance(module, OneFormerDinatModel):
-            for submodule in module.modules():
-                if isinstance(submodule, (nn.Conv2d, nn.Linear)):
-                    submodule.weight.data.normal_(mean=0.0, std=std)
-                    if submodule.bias is not None:
-                        submodule.bias.data.zero_()
-                elif isinstance(module, nn.LayerNorm):
-                    module.bias.data.zero_()
-                    module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:

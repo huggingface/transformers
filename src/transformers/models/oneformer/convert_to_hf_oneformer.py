@@ -35,7 +35,7 @@ try:
     from detectron2.projects.deeplab import add_deeplab_config
 except ImportError:
     pass
-from transformers import CLIPTokenizer, SwinConfig
+from transformers import CLIPTokenizer, DinatConfig, SwinConfig
 from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
 from transformers.models.oneformer.modeling_oneformer import (
     OneFormerConfig,
@@ -134,24 +134,11 @@ class OriginalOneFormerConfigToOursConverter:
             else:
                 raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
         else:
-            # TODO replace this with DinatConfig once DinatBackBone is added
-            backbone_config = dict(
-                num_channels=3,
-                hidden_act="gelu",
-                mlp_ratio=model.DiNAT.MLP_RATIO,
-                patch_size=model.DiNAT.IN_PATCH_SIZE,
-                embed_dim=model.DiNAT.EMBED_DIM,
-                depths=model.DiNAT.DEPTHS,
-                num_heads=model.DiNAT.NUM_HEADS,
-                strides=[4, 8, 16, 32],
-                kernel_size=model.DiNAT.KERNEL_SIZE,
-                qkv_bias=model.DiNAT.QKV_BIAS,
-                hidden_dropout_prob=model.DiNAT.DROP_RATE,
-                attention_probs_dropout_prob=model.DiNAT.ATTN_DROP_RATE,
-                drop_path_rate=model.DiNAT.DROP_PATH_RATE,
+            backbone_config = DinatConfig.from_pretrained(
+                "shi-labs/dinat-large-11x11-in22k-in1k-384",
                 dilations=model.DiNAT.DILATIONS,
-                layer_scale_init_value=0.0,
-                encoder_stride=model.ONE_FORMER.SIZE_DIVISIBILITY,
+                kernel_size=model.DiNAT.KERNEL_SIZE,
+                out_features=["stage1", "stage2", "stage3", "stage4"],
             )
 
         config: OneFormerConfig = OneFormerConfig(
@@ -424,32 +411,30 @@ class OriginalOneFormerCheckpointToOursConverter:
                 (f"{src_prefix}.bias", f"{dst_prefix}.bias"),
             ]
 
-        renamed_keys = rename_keys_for_weight_bias(
-            f"{src_prefix}.patch_embed.norm", f"{dst_prefix}.model.embeddings.norm"
-        )
+        renamed_keys = rename_keys_for_weight_bias(f"{src_prefix}.patch_embed.norm", f"{dst_prefix}.embeddings.norm")
 
         for i in range(2):
             renamed_keys.extend(
                 rename_keys_for_weight_bias(
                     f"{src_prefix}.patch_embed.proj.{i}",
-                    f"{dst_prefix}.model.embeddings.patch_embeddings.projection.{i}",
+                    f"{dst_prefix}.embeddings.patch_embeddings.projection.{i}",
                 )
             )
 
-        num_layers = len(config.backbone_config["depths"])
+        num_layers = len(config.backbone_config.depths)
         for layer_idx in range(num_layers):
-            for block_idx in range(config.backbone_config["depths"][layer_idx]):
+            for block_idx in range(config.backbone_config.depths[layer_idx]):
                 renamed_keys.extend(
                     rename_keys_for_weight_bias(
                         f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.norm1",
-                        f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.layernorm_before",
+                        f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.layernorm_before",
                     )
                 )
 
                 renamed_keys.extend(
                     rename_keys_for_weight_bias(
                         f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.norm2",
-                        f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.layernorm_after",
+                        f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.layernorm_after",
                     )
                 )
 
@@ -457,7 +442,7 @@ class OriginalOneFormerCheckpointToOursConverter:
                     [  # src, dst
                         (
                             f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.rpb",
-                            f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.rpb",
+                            f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.rpb",
                         ),
                     ]
                 )
@@ -470,24 +455,24 @@ class OriginalOneFormerCheckpointToOursConverter:
                 size = src_att_weight.shape[0]
                 offset = size // 3
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.query.weight"
+                    f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.query.weight"
                 ] = src_att_weight[:offset, :]
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.query.bias"
+                    f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.query.bias"
                 ] = src_att_bias[:offset]
 
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.key.weight"
+                    f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.key.weight"
                 ] = src_att_weight[offset : offset * 2, :]
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.key.bias"
+                    f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.key.bias"
                 ] = src_att_bias[offset : offset * 2]
 
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.value.weight"
+                    f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.value.weight"
                 ] = src_att_weight[-offset:, :]
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.value.bias"
+                    f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.attention.self.value.bias"
                 ] = src_att_bias[-offset:]
 
                 # let's pop them
@@ -498,7 +483,7 @@ class OriginalOneFormerCheckpointToOursConverter:
                 renamed_keys.extend(
                     rename_keys_for_weight_bias(
                         f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.proj",
-                        f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.attention.output.dense",
+                        f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.attention.output.dense",
                     )
                 )
 
@@ -506,14 +491,14 @@ class OriginalOneFormerCheckpointToOursConverter:
                 renamed_keys.extend(
                     rename_keys_for_weight_bias(
                         f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.mlp.fc1",
-                        f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.intermediate.dense",
+                        f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.intermediate.dense",
                     )
                 )
 
                 renamed_keys.extend(
                     rename_keys_for_weight_bias(
                         f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.mlp.fc2",
-                        f"{dst_prefix}.model.encoder.levels.{layer_idx}.layers.{block_idx}.output.dense",
+                        f"{dst_prefix}.encoder.levels.{layer_idx}.layers.{block_idx}.output.dense",
                     )
                 )
 
@@ -523,15 +508,15 @@ class OriginalOneFormerCheckpointToOursConverter:
                     [
                         (
                             f"{src_prefix}.levels.{layer_idx}.downsample.reduction.weight",
-                            f"{dst_prefix}.model.encoder.levels.{layer_idx}.downsample.reduction.weight",
+                            f"{dst_prefix}.encoder.levels.{layer_idx}.downsample.reduction.weight",
                         ),
                         (
                             f"{src_prefix}.levels.{layer_idx}.downsample.norm.weight",
-                            f"{dst_prefix}.model.encoder.levels.{layer_idx}.downsample.norm.weight",
+                            f"{dst_prefix}.encoder.levels.{layer_idx}.downsample.norm.weight",
                         ),
                         (
                             f"{src_prefix}.levels.{layer_idx}.downsample.norm.bias",
-                            f"{dst_prefix}.model.encoder.levels.{layer_idx}.downsample.norm.bias",
+                            f"{dst_prefix}.encoder.levels.{layer_idx}.downsample.norm.bias",
                         ),
                     ]
                 )
@@ -541,11 +526,11 @@ class OriginalOneFormerCheckpointToOursConverter:
                 [
                     (
                         f"{src_prefix}.norm{layer_idx}.weight",
-                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.weight",
                     ),
                     (
                         f"{src_prefix}.norm{layer_idx}.bias",
-                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.bias",
                     ),
                 ]
             )
