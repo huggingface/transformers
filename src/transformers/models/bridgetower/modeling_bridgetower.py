@@ -278,11 +278,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.cross_modal_text_pooler = Pooler(config.hidden_size)
         self.cross_modal_text_pooler.apply(self._init_weights)
 
-        if config.loss_names["mlm"] > 0:
-            # MLM Head weights don't tie with BERT Embedding weights. Train from scratch.
-            self.mlm_score = BridgeTowerMLMHead(self.tokenizer_config)
-            self.mlm_score.apply(self._init_weights)
-
         # ===================== Initialize BridgeTower Components ===================== #
         # just for first layer
         self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size)
