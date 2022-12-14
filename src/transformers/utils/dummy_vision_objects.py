@@ -10,18 +10,6 @@ class ImageProcessingMixin(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-def rescale(*args, **kwargs):
-    requires_backends(rescale, ["vision"])
-
-
-def resize(*args, **kwargs):
-    requires_backends(resize, ["vision"])
-
-
-def to_pil_image(*args, **kwargs):
-    requires_backends(to_pil_image, ["vision"])
-
-
 class ImageFeatureExtractionMixin(metaclass=DummyObject):
     _backends = ["vision"]
 
