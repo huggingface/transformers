@@ -36,7 +36,7 @@ class UperNetConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig`):
+        backbone_config (`PretrainedConfig`, *optional*, defaults to `ResNetConfig`):
             The configuration of the backbone model.
         hidden_size (`int`, *optional*, defaults to 512):
             The number of hidden units in the convolutional layers.
