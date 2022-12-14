@@ -94,8 +94,17 @@ class BlipImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
+<<<<<<< HEAD
         size (`Dict[str, int]`, *optional*, defaults to `384`):
             Resize the input to the given size. Only has an effect if `do_resize` is set to `True`.
+=======
+        size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
+            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
+            method.
+        size_divisor (`int`, *optional*, defaults to 32):
+            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
+            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
+>>>>>>> d5115fa6fda841caa18ebe6028dca202004a694b
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
