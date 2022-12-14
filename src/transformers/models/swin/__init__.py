@@ -36,6 +36,7 @@ else:
         "SwinForMaskedImageModeling",
         "SwinModel",
         "SwinPreTrainedModel",
+        "SwinBackbone",
     ]
 
 try:
@@ -63,6 +64,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SwinBackbone,
             SwinForImageClassification,
             SwinForMaskedImageModeling,
             SwinModel,
