@@ -50,7 +50,6 @@ from .utils import (
     is_torch_tpu_available,
     logging,
     requires_backends,
-    torch_required,
 )
 
 
@@ -1386,8 +1385,8 @@ class TrainingArguments:
         return timedelta(seconds=self.ddp_timeout)
 
     @cached_property
-    @torch_required
     def _setup_devices(self) -> "torch.device":
+        requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
         if torch.distributed.is_available() and torch.distributed.is_initialized() and self.local_rank == -1:
             logger.warning(
@@ -1537,15 +1536,14 @@ class TrainingArguments:
         return device
 
     @property
-    @torch_required
     def device(self) -> "torch.device":
         """
         The device used by this process.
         """
+        requires_backends(self, ["torch"])
         return self._setup_devices
 
     @property
-    @torch_required
     def n_gpu(self):
         """
         The number of GPUs used by this process.
@@ -1554,12 +1552,12 @@ class TrainingArguments:
             This will only be greater than one when you have multiple GPUs available but are not using distributed
             training. For distributed training, it will always be 1.
         """
+        requires_backends(self, ["torch"])
         # Make sure `self._n_gpu` is properly setup.
         _ = self._setup_devices
         return self._n_gpu
 
     @property
-    @torch_required
     def parallel_mode(self):
         """
         The current mode used for parallelism if multiple GPUs/TPU cores are available. One of:
@@ -1570,6 +1568,7 @@ class TrainingArguments:
           `torch.nn.DistributedDataParallel`).
         - `ParallelMode.TPU`: several TPU cores.
         """
+        requires_backends(self, ["torch"])
         if is_torch_tpu_available():
             return ParallelMode.TPU
         elif is_sagemaker_mp_enabled():
@@ -1584,11 +1583,12 @@ class TrainingArguments:
             return ParallelMode.NOT_PARALLEL
 
     @property
-    @torch_required
     def world_size(self):
         """
         The number of processes used in parallel.
         """
+        requires_backends(self, ["torch"])
+
         if is_torch_tpu_available():
             return xm.xrt_world_size()
         elif is_sagemaker_mp_enabled():
@@ -1600,11 +1600,11 @@ class TrainingArguments:
         return 1
 
     @property
-    @torch_required
     def process_index(self):
         """
         The index of the current process used.
         """
+        requires_backends(self, ["torch"])
         if is_torch_tpu_available():
             return xm.get_ordinal()
         elif is_sagemaker_mp_enabled():
@@ -1616,11 +1616,11 @@ class TrainingArguments:
         return 0
 
     @property
-    @torch_required
     def local_process_index(self):
         """
         The index of the local process used.
         """
+        requires_backends(self, ["torch"])
         if is_torch_tpu_available():
             return xm.get_local_ordinal()
         elif is_sagemaker_mp_enabled():

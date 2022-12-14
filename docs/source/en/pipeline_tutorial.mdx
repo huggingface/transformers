@@ -133,30 +133,7 @@ For instance, the [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] m
 >>> # Not using whisper, as it cannot provide timestamps.
 >>> generator = pipeline(model="facebook/wav2vec2-large-960h-lv60-self", return_timestamps="word")
 >>> generator("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
-{'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP AND LIVE OUT THE TRUE MEANING OF ITS CREED',
- 'chunks': [
-      {'text': 'I', 'timestamp': (1.22, 1.24)},
-      {'text': 'HAVE', 'timestamp': (1.42, 1.58)},
-      {'text': 'A', 'timestamp': (1.66, 1.68)},
-      {'text': 'DREAM', 'timestamp': (1.76, 2.14)},
-      {'text': 'BUT', 'timestamp': (3.68, 3.8)},
-      {'text': 'ONE', 'timestamp': (3.94, 4.06)},
-      {'text': 'DAY', 'timestamp': (4.16, 4.3)},
-      {'text': 'THIS', 'timestamp': (6.36, 6.54)},
-      {'text': 'NATION', 'timestamp': (6.68, 7.1)},
-      {'text': 'WILL', 'timestamp': (7.32, 7.56)},
-      {'text': 'RISE', 'timestamp': (7.8, 8.26)},
-      {'text': 'UP', 'timestamp': (8.38, 8.48)},
-      {'text': 'AND', 'timestamp': (10.08, 10.18)},
-      {'text': 'LIVE', 'timestamp': (10.26, 10.48)},
-      {'text': 'OUT', 'timestamp': (10.58, 10.7)},
-      {'text': 'THE', 'timestamp': (10.82, 10.9)},
-      {'text': 'TRUE', 'timestamp': (10.98, 11.18)},
-      {'text': 'MEANING', 'timestamp': (11.26, 11.58)},
-      {'text': 'OF', 'timestamp': (11.66, 11.7)},
-      {'text': 'ITS', 'timestamp': (11.76, 11.88)},
-      {'text': 'CREED', 'timestamp': (12.0, 12.38)}
-]}
+{'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP AND LIVE OUT THE TRUE MEANING OF ITS CREED', 'chunks': [{'text': 'I', 'timestamp': (1.22, 1.24)}, {'text': 'HAVE', 'timestamp': (1.42, 1.58)}, {'text': 'A', 'timestamp': (1.66, 1.68)}, {'text': 'DREAM', 'timestamp': (1.76, 2.14)}, {'text': 'BUT', 'timestamp': (3.68, 3.8)}, {'text': 'ONE', 'timestamp': (3.94, 4.06)}, {'text': 'DAY', 'timestamp': (4.16, 4.3)}, {'text': 'THIS', 'timestamp': (6.36, 6.54)}, {'text': 'NATION', 'timestamp': (6.68, 7.1)}, {'text': 'WILL', 'timestamp': (7.32, 7.56)}, {'text': 'RISE', 'timestamp': (7.8, 8.26)}, {'text': 'UP', 'timestamp': (8.38, 8.48)}, {'text': 'AND', 'timestamp': (10.08, 10.18)}, {'text': 'LIVE', 'timestamp': (10.26, 10.48)}, {'text': 'OUT', 'timestamp': (10.58, 10.7)}, {'text': 'THE', 'timestamp': (10.82, 10.9)}, {'text': 'TRUE', 'timestamp': (10.98, 11.18)}, {'text': 'MEANING', 'timestamp': (11.26, 11.58)}, {'text': 'OF', 'timestamp': (11.66, 11.7)}, {'text': 'ITS', 'timestamp': (11.76, 11.88)}, {'text': 'CREED', 'timestamp': (12.0, 12.38)}]}
 ```
 
 As you can see, the model inferred the text and also outputted **when** the various words were pronounced
@@ -250,9 +227,7 @@ Using a [`pipeline`] for NLP tasks is practically identical.
 ...     "I have a problem with my iphone that needs to be resolved asap!!",
 ...     candidate_labels=["urgent", "not urgent", "phone", "tablet", "computer"],
 ... )
-{'sequence': 'I have a problem with my iphone that needs to be resolved asap!!',
- 'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'],
- 'scores': [0.504,0.479,0.013,0.003,0.002]}
+{'sequence': 'I have a problem with my iphone that needs to be resolved asap!!', 'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'], 'scores': [0.504, 0.479, 0.013, 0.003, 0.002]}
 ```
 
 ### Multimodal pipeline
@@ -269,5 +244,5 @@ For example, if you use this [invoice image](https://huggingface.co/spaces/impir
 ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
 ...     question="What is the invoice number?",
 ... )
-[{'score': 0.635722279548645, 'answer': '1110212019', 'start': 22, 'end': 22}]
+[{'score': 0.42514941096305847, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
