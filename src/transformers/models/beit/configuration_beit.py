@@ -59,6 +59,8 @@ class BeitConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        cls_token_initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the normal initializer for initializing the `cls_token` parameter.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -127,6 +129,7 @@ class BeitConfig(PretrainedConfig):
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
+        cls_token_initializer_range=0.02,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         image_size=224,
@@ -159,6 +162,7 @@ class BeitConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.cls_token_initializer_range = cls_token_initializer_range
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
 

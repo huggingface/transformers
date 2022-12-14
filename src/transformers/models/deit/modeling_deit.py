@@ -387,7 +387,6 @@ class DeiTEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->DeiT all-casing
 class DeiTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -400,9 +399,9 @@ class DeiTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, nn.Linear):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
@@ -413,6 +412,14 @@ class DeiTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, DeiTEmbeddings):
+            module.cls_token.data.normal_(mean=0.0, std=self.config.cls_token_initializer_range)
+            torch.nn.init.trunc_normal_(
+                module.distillation_token.data, std=self.config.distillation_token_initializer_range
+            )
+            if module.mask_token is not None:
+                torch.nn.init.trunc_normal_(module.mask_token.data, std=self.config.initializer_range)
+            torch.nn.init.trunc_normal_(module.position_embeddings.data, std=self.config.initializer_range)
 
     def _set_gradient_checkpointing(self, module: DeiTEncoder, value: bool = False) -> None:
         if isinstance(module, DeiTEncoder):

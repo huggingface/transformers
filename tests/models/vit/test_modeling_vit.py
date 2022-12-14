@@ -197,6 +197,11 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
+    # disable these tests because there are some parameters
+    # initialized from a truncated normal distribution
+    test_save_load_fast_init_from_base = False
+    test_save_load_fast_init_to_base = False
+
     def setUp(self):
         self.model_tester = ViTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)

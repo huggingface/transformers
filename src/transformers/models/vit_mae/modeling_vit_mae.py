@@ -213,21 +213,6 @@ class ViTMAEEmbeddings(nn.Module):
             torch.zeros(1, self.num_patches + 1, config.hidden_size), requires_grad=False
         )
         self.config = config
-        self.initialize_weights()
-
-    def initialize_weights(self):
-        # initialize (and freeze) position embeddings by sin-cos embedding
-        pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches**0.5), add_cls_token=True
-        )
-        self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
-
-        # initialize patch_embeddings like nn.Linear (instead of nn.Conv2d)
-        w = self.patch_embeddings.projection.weight.data
-        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-
-        # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        torch.nn.init.normal_(self.cls_token, std=self.config.initializer_range)
 
     def random_masking(self, sequence, noise=None):
         """
@@ -583,15 +568,38 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, nn.Linear):
+            # use xavier_uniform following official JAX ViT:
+            torch.nn.init.xavier_uniform_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.constant_(module.bias, 0)
+
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            nn.init.constant_(module.weight, 1.0)
+            nn.init.constant_(module.bias, 0)
+
+        elif isinstance(module, ViTMAEEmbeddings):
+            # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
+            torch.nn.init.normal_(module.cls_token.data, std=self.config.initializer_range)
+            # initialize patch embeddings like nn.Linear (instead of nn.Conv2d)
+            weights = module.patch_embeddings.projection.weight.data
+            torch.nn.init.xavier_uniform_(weights.view([weights.shape[0], -1]))
+            # initialize (and freeze) position embeddings by sin-cos embedding
+            position_embeddings = get_2d_sincos_pos_embed(
+                module.position_embeddings.shape[-1],
+                int(module.patch_embeddings.num_patches**0.5),
+                add_cls_token=True,
+            )
+            module.position_embeddings.data.copy_(torch.from_numpy(position_embeddings).float().unsqueeze(0))
+
+        elif isinstance(module, ViTMAEDecoder):
+            # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
+            torch.nn.init.normal_(module.mask_token.data, std=self.config.initializer_range)
+            # initialize (and freeze) decoder position embeddings by sin-cos embedding
+            decoder_pos_embed = get_2d_sincos_pos_embed(
+                module.decoder_pos_embed.shape[-1], int(module.num_patches**0.5), add_cls_token=True
+            )
+            module.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ViTMAEEncoder):
@@ -755,17 +763,7 @@ class ViTMAEDecoder(nn.Module):
         )  # encoder to decoder
         self.gradient_checkpointing = False
         self.config = config
-        self.initialize_weights(num_patches)
-
-    def initialize_weights(self, num_patches):
-        # initialize (and freeze) position embeddings by sin-cos embedding
-        decoder_pos_embed = get_2d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1], int(num_patches**0.5), add_cls_token=True
-        )
-        self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
-
-        # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        torch.nn.init.normal_(self.mask_token, std=self.config.initializer_range)
+        self.num_patches = num_patches
 
     def forward(
         self,

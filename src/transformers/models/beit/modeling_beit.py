@@ -560,19 +560,17 @@ class BeitPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        if isinstance(module, nn.Linear):
+            torch.nn.init.trunc_normal_(module.data, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BeitEmbeddings):
+            module.cls_token.data.normal_(mean=0.0, std=self.config.cls_token_initializer_range)
+            if module.mask_token is not None:
+                torch.nn.init.trunc_normal_(module.mask_token.data, std=self.config.initializer_range)
+            if module.position_embeddings is not None:
+                torch.nn.init.trunc_normal_(module.position_embeddings.data, std=self.config.initializer_range)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BeitEncoder):

@@ -937,17 +937,20 @@ class Swinv2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            torch.nn.init.trunc_normal_(module.weight.data, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Swinv2Embeddings):
+            if module.mask_token is not None:
+                torch.nn.init.trunc_normal_(module.mask_token.data, std=self.config.initializer_range)
+            if module.position_embeddings is not None:
+                torch.nn.init.trunc_normal_(module.position_embeddings.data, std=self.config.initializer_range)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, Swinv2Encoder):
