@@ -69,47 +69,6 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.pad
-def pad(
-    image: np.ndarray,
-    output_size: Tuple[int, int],
-    input_channel_dimension: Optional[ChannelDimension] = None,
-    data_format: Optional[ChannelDimension] = None,
-) -> np.ndarray:
-    """
-    Pad the bottom and right of the image with zeros to the output size.
-
-    Args:
-        image (`np.ndarray`):
-            Image to pad.
-        output_size (`Tuple[int, int]`):
-            Output size of the image.
-        input_channel_dimension (`ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be inferred from the input image.
-        data_format (`str` or `ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be the same as the input image.
-    """
-    if input_channel_dimension is None:
-        input_channel_dimension = infer_channel_dimension_format(image)
-
-    output_height, output_width = output_size
-    input_height, input_width = get_image_size(image)
-    pad_bottom = output_height - input_height
-    pad_right = output_width - input_width
-
-    if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=0)
-    elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=0)
-    else:
-        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
-
-    if data_format is not None:
-        padded_image = to_channel_dimension_format(padded_image, data_format)
-
-    return padded_image
-
-
 # Copied from transformers.models.vilt.image_processing_vilt.get_max_dimensions
 def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
     """
@@ -187,9 +146,6 @@ class BlipImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
-            the `do_pad` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -210,7 +166,6 @@ class BlipImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = False,
         do_convert_rgb: bool = True,
         **kwargs
     ) -> None:
@@ -232,7 +187,6 @@ class BlipImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.do_pad = do_pad
         self.do_convert_rgb = do_convert_rgb
 
     def center_crop(
@@ -331,68 +285,6 @@ class BlipImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
-    def pad(
-        self,
-        images: List[np.ndarray],
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
-    ) -> BatchFeature:
-        """
-        Pads a batch of images with zeros to the size of largest height and width in the batch and optionally returns
-        their corresponding pixel mask.
-
-        Args:
-            images (`List[np.ndarray]`):
-                Batch of images to pad.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        pad_size = get_max_dimensions(images)
-        padded_images = [pad(image=image, output_size=pad_size, data_format=data_format) for image in images]
-        data = {"pixel_values": padded_images}
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    def pad_and_create_pixel_mask(
-        self,
-        pixel_values_list: List[ImageInput],
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
-    ) -> BatchFeature:
-        """
-        Pads a batch of images with zeros to the size of largest height and width in the batch and returns their
-        corresponding pixel mask.
-
-        Args:
-            images (`List[np.ndarray]`):
-                Batch of images to pad.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        warnings.warn(
-            "This method is deprecated and will be removed in v4.26.0. Please use pad instead.", FutureWarning
-        )
-        # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
-        images = [to_numpy_array(image) for image in pixel_values_list]
-        return self.pad(
-            images=images,
-            return_tensors=return_tensors,
-            data_format=data_format,
-        )
 
     def preprocess(
         self,
@@ -408,7 +300,6 @@ class BlipImageProcessor(BaseImageProcessor):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -445,9 +336,6 @@ class BlipImageProcessor(BaseImageProcessor):
                 Image mean to normalize the image by if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
-            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
-                created and returned.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
             return_tensors (`str` or `TensorType`, *optional*):
@@ -473,7 +361,6 @@ class BlipImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         size = size if size is not None else self.size
@@ -518,9 +405,6 @@ class BlipImageProcessor(BaseImageProcessor):
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
-        if do_pad:
-            encoded_outputs = self.pad(images, return_tensors=return_tensors)
-        else:
-            encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
         return encoded_outputs
