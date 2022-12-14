@@ -1562,7 +1562,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        pooled_output = text_outputs[0]
+        pooled_output = text_outputs[1]
         text_features = self.text_projection(pooled_output)
 
         return text_features
