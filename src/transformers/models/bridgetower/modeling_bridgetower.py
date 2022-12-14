@@ -131,7 +131,7 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
 
         image_token_type_idx (`int`, *optional*):
-            - The token type ids for images
+            - The token type ids for images.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -264,18 +264,18 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 ln.bias.data = self.vit_model.visual.ln_post.bias.data
 
         self.cross_modal_image_layers = nn.ModuleList(
-            [BertCrossLayer(self.tokenizer_config) for _ in range(config.num_hidden_layers)]
+            [BridgeTowerBertCrossLayer(self.tokenizer_config) for _ in range(config.num_hidden_layers)]
         )
         self.cross_modal_image_layers.apply(self._init_weights)
         self.cross_modal_text_layers = nn.ModuleList(
-            [BertCrossLayer(self.tokenizer_config) for _ in range(config.num_hidden_layers)]
+            [BridgeTowerBertCrossLayer(self.tokenizer_config) for _ in range(config.num_hidden_layers)]
         )
         self.cross_modal_text_layers.apply(self._init_weights)
 
         # Class token => Linear => Tanh
-        self.cross_modal_image_pooler = Pooler(config.hidden_size)
+        self.cross_modal_image_pooler = BridgeTowerPooler(config.hidden_size)
         self.cross_modal_image_pooler.apply(self._init_weights)
-        self.cross_modal_text_pooler = Pooler(config.hidden_size)
+        self.cross_modal_text_pooler = BridgeTowerPooler(config.hidden_size)
         self.cross_modal_text_pooler.apply(self._init_weights)
 
         # ===================== Initialize BridgeTower Components ===================== #
@@ -386,6 +386,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> outputs.keys()
         odict_keys(['text_feats', 'image_feats', 'pooler_output'])
+
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
@@ -539,7 +540,7 @@ class LinkTower(nn.Module):
                 )
             self.LayerNorm = nn.LayerNorm(self.hidden_size)
         elif config.link_tower_type in ["cross_attention", "cross_attention_ffn"]:
-            self.dense = BertLinkLayer(tokenizer_config, self.link_tower_type)
+            self.dense = BridgeTowerBertLinkLayer(tokenizer_config, self.link_tower_type)
         else:
             raise NotImplementedError(f"link_tower_type {config.link_tower_type} is not implemented")
 
@@ -657,26 +658,7 @@ class FusionHead(nn.Module):
         return self.LayerNorm(feats)
 
 
-class AttentionPool(nn.Module):
-    """attention pooling layer"""
-
-    def __init__(self, hidden_size, drop=0.0):
-        super().__init__()
-        self.fc = nn.Sequential(nn.Linear(hidden_size, 1), nn.GELU())
-        self.dropout = nn.Dropout(drop)
-
-    def forward(self, input_, mask=None):
-        """input: [B, T, D], mask = [B, T]"""
-        score = self.fc(input_).squeeze(-1)
-        if mask is not None:
-            mask = mask.to(dtype=input_.dtype) * -1e4
-            score = score + mask
-        norm_score = self.dropout(F.softmax(score, dim=1))
-        output = norm_score.unsqueeze(1).matmul(input_).squeeze(1)
-        return output
-
-
-class Pooler(nn.Module):
+class BridgeTowerPooler(nn.Module):
     def __init__(self, hidden_size):
         super().__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
@@ -689,13 +671,12 @@ class Pooler(nn.Module):
         return pooled_output
 
 
-class BertLinkLayer(nn.Module):
+class BridgeTowerBertLinkLayer(nn.Module):
     def __init__(self, config, link_tower_type):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.link_tower_type = link_tower_type
-        # self.attention = BertAttention(config)
         # Like ViL-BERT and LXMERT, we don't use the self-attention and just use the cross-attention instead (optional with ffn).
         self.crossattention = BertAttention(config)
         if self.link_tower_type == "cross_attention_ffn":
@@ -739,7 +720,7 @@ class BertLinkLayer(nn.Module):
         return layer_output
 
 
-class BertCrossLayer(nn.Module):
+class BridgeTowerBertCrossLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -859,6 +840,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
 
         >>> print(results)
         .a cat looking out of the window.
+
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bridgetower(
@@ -982,6 +964,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         ...     encoding = processor(image, text, return_tensors="pt")
         ...     outputs = model(**encoding)
         ...     scores[text] = outputs.logits[0, 1].item()
+
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

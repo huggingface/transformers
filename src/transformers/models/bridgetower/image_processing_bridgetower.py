@@ -522,7 +522,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         return encoded_outputs
 
 
-class LayerNorm(nn.LayerNorm):
+class BridgeTowerLayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
 
     def forward(self, x: torch.Tensor):
@@ -531,27 +531,27 @@ class LayerNorm(nn.LayerNorm):
         return ret.type(orig_type)
 
 
-class QuickGELU(nn.Module):
+class BridgeTowerQuickGELU(nn.Module):
     def forward(self, x: torch.Tensor):
         return x * torch.sigmoid(1.702 * x)
 
 
-class ResidualAttentionBlock(nn.Module):
+class BridgeTowerResidualAttention(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
         super().__init__()
 
         self.attn = nn.MultiheadAttention(d_model, n_head)
-        self.ln_1 = LayerNorm(d_model)
+        self.ln_1 = BridgeTowerLayerNorm(d_model)
         self.mlp = nn.Sequential(
             OrderedDict(
                 [
                     ("c_fc", nn.Linear(d_model, d_model * 4)),
-                    ("gelu", QuickGELU()),
+                    ("gelu", BridgeTowerQuickGELU()),
                     ("c_proj", nn.Linear(d_model * 4, d_model)),
                 ]
             )
         )
-        self.ln_2 = LayerNorm(d_model)
+        self.ln_2 = BridgeTowerLayerNorm(d_model)
         self.attn_mask = attn_mask
 
     def attention(self, x: torch.Tensor, x_mask: torch.Tensor):
@@ -566,7 +566,7 @@ class ResidualAttentionBlock(nn.Module):
         return x
 
 
-class Transformer(nn.Module):
+class BridgeTowerTransformer(nn.Module):
     def __init__(
         self,
         width: int,
@@ -582,10 +582,12 @@ class Transformer(nn.Module):
         self.layers = layers
         if vit_remove_last:
             self.resblocks = nn.Sequential(
-                *[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers - 1)]
+                *[BridgeTowerResidualAttention(width, heads, attn_mask) for _ in range(layers - 1)]
             )
         else:
-            self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)])
+            self.resblocks = nn.Sequential(
+                *[BridgeTowerResidualAttention(width, heads, attn_mask) for _ in range(layers)]
+            )
         self.model_type = model_type
         self.stop_gradient = stop_gradient
 
@@ -604,7 +606,7 @@ class Transformer(nn.Module):
             return x
 
 
-class VisualTransformer(nn.Module):
+class BridgeTowerVisualTransformer(nn.Module):
     def __init__(
         self,
         input_resolution: int,
@@ -629,17 +631,17 @@ class VisualTransformer(nn.Module):
         scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
         self.positional_embedding = nn.Parameter(scale * torch.randn((resolution_after // patch_size) ** 2 + 1, width))
-        self.ln_pre = LayerNorm(width)
+        self.ln_pre = BridgeTowerLayerNorm(width)
 
-        self.transformer = Transformer(
+        self.transformer = BridgeTowerTransformer(
             width, layers, heads, model_type=model_type, stop_gradient=stop_gradient, vit_remove_last=vit_remove_last
         )
-        self.ln_post = LayerNorm(width)
+        self.ln_post = BridgeTowerLayerNorm(width)
         self.model_type = model_type
         self.vit_layernorm_shared = vit_layernorm_shared
         if not vit_layernorm_shared:
             # self.cross_modal_ln_separate
-            self.ln_separate = nn.ModuleList([LayerNorm(width) for _ in range(layers)])
+            self.ln_separate = nn.ModuleList([BridgeTowerLayerNorm(width) for _ in range(layers)])
 
     def forward(self, x: torch.Tensor, x_mask):
         x = self.conv1(x)  # shape = [*, width, grid, grid]
@@ -686,7 +688,7 @@ class VisualTransformer(nn.Module):
         return x
 
 
-class CLIP(nn.Module):
+class BridgeTowerCLIP(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -712,7 +714,7 @@ class CLIP(nn.Module):
         self.context_length = context_length
 
         vision_heads = vision_width // 64
-        self.visual = VisualTransformer(
+        self.visual = BridgeTowerVisualTransformer(
             input_resolution=image_resolution,
             patch_size=vision_patch_size,
             width=vision_width,
@@ -729,7 +731,7 @@ class CLIP(nn.Module):
         self.vocab_size = vocab_size
         self.token_embedding = nn.Embedding(vocab_size, transformer_width)
         self.positional_embedding = nn.Parameter(torch.empty(self.context_length, transformer_width))
-        self.ln_final = LayerNorm(transformer_width)
+        self.ln_final = BridgeTowerLayerNorm(transformer_width)
 
         self.initialize_parameters()
 
@@ -755,7 +757,7 @@ class CLIP(nn.Module):
 
 
 def available_models():
-    """Returns the names of available CLIP models"""
+    """Returns the names of available CLIP ViT models"""
     return list(_MODELS.keys())
 
 
@@ -869,7 +871,7 @@ def build_model(
     transformer_heads = transformer_width // 64
     transformer_layers = len(set(k.split(".")[2] for k in state_dict if k.startswith("transformer.resblocks")))
 
-    model = CLIP(
+    model = BridgeTowerCLIP(
         embed_dim,
         image_resolution,
         vision_layers,
