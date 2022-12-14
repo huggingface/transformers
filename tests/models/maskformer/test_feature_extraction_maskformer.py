@@ -32,7 +32,7 @@ if is_torch_available():
     if is_vision_available():
         from transformers import MaskFormerFeatureExtractor
         from transformers.models.maskformer.image_processing_maskformer import binary_mask_to_rle
-        from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
+        from transformers.models.maskformer.modeling_maskformer import MaskFormerForUniversalSegmentationOutput
 
 if is_vision_available():
     from PIL import Image
@@ -121,7 +121,7 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
         return expected_height, expected_width
 
     def get_fake_maskformer_outputs(self):
-        return MaskFormerForInstanceSegmentationOutput(
+        return MaskFormerForUniversalSegmentationOutput(
             # +1 for null class
             class_queries_logits=torch.randn((self.batch_size, self.num_queries, self.num_classes + 1)),
             masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
