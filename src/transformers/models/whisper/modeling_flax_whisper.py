@@ -962,16 +962,19 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         encoder_hidden_states = encoder_outputs[0]
 
         batch_size, sequence_length = decoder_input_ids.shape
-        if decoder_attention_mask is None:
-            decoder_attention_mask = jnp.ones((batch_size, sequence_length))
-
         if decoder_position_ids is None:
             if past_key_values is not None:
                 raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
 
-            decoder_position_ids = jnp.broadcast_to(
-                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
-            )
+            if decoder_attention_mask is not None:
+                decoder_position_ids = decoder_attention_mask.cumsum(-1) - 1
+            else:
+                decoder_position_ids = jnp.broadcast_to(
+                    jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+                )
+
+        if decoder_attention_mask is None:
+            decoder_attention_mask = jnp.ones((batch_size, sequence_length))
 
         # Handle any PRNG if needed
         rngs = {}
@@ -1047,13 +1050,17 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # prepare decoder inputs
+        if decoder_position_ids is None:
+            if decoder_attention_mask is not None:
+                decoder_position_ids = decoder_attention_mask.cumsum(-1) - 1
+            else:
+                batch_size, sequence_length = decoder_input_ids.shape
+
+                decoder_position_ids = jnp.broadcast_to(
+                    jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+                )
         if decoder_attention_mask is None:
             decoder_attention_mask = jnp.ones_like(decoder_input_ids)
-        if decoder_position_ids is None:
-            batch_size, sequence_length = decoder_input_ids.shape
-            decoder_position_ids = jnp.broadcast_to(
-                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
-            )
 
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
@@ -1206,16 +1213,18 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
         encoder_hidden_states = encoder_outputs[0]
 
         batch_size, sequence_length = decoder_input_ids.shape
-        if decoder_attention_mask is None:
-            decoder_attention_mask = jnp.ones((batch_size, sequence_length))
-
         if decoder_position_ids is None:
             if past_key_values is not None:
                 raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
 
-            decoder_position_ids = jnp.broadcast_to(
-                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
-            )
+            if decoder_attention_mask is not None:
+                decoder_position_ids = decoder_attention_mask.cumsum(-1) - 1
+            else:
+                decoder_position_ids = jnp.broadcast_to(
+                    jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+                )
+        if decoder_attention_mask is None:
+            decoder_attention_mask = jnp.ones((batch_size, sequence_length), dtype="i4")
 
         # Handle any PRNG if needed
         rngs = {}
