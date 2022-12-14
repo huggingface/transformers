@@ -30,6 +30,8 @@ In particular, on the VQAv2 test-std set, BRIDGETOWER achieves an accuracy of 78
 Notably, when further scaling the model, BRIDGETOWER achieves an accuracy of 81.15%, surpassing models that are pre-trained on orders-of-magnitude larger datasets.
 *
 
+Please refer to [Figure 2](https://arxiv.org/pdf/2206.08657.pdf) for an illustration of BridgeTower's architecture.
+
 ## Usage
 
 BridgeTower consists of a visual encoder, a textual encoder and cross-modal encoder with multiple lightweight bridge layers.
@@ -94,13 +96,8 @@ Tips:
 
 - This implementation of BridgeTower uses [`RobertaTokenizer`] to generate text embeddings and OpenAI's CLIP/ViT model to compute visual embeddings.
 - Checkpoints for pre-trained [bridgeTower-base](https://huggingface.co/BridgeTower/bridgetower-base) and [bridgetower masked language modeling and image text matching](https://huggingface.co/BridgeTower/bridgetower-base-itm-mlm) are released.
+- Please refer to [Table 5](https://arxiv.org/pdf/2206.08657.pdf) for BridgeTower's performance on Image Retrieval and other down stream tasks.
 - The PyTorch version of this model is only available in torch 1.10 and higher.
-
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bridgetower_architecture.jpg"
-alt="drawing" width="600"/>
-
-<small> BridgeTower architecture. Taken from the <a href="https://arxiv.org/pdf/2206.08657.pdf">original paper</a>. </small>
 
 
 ## BridgeTowerConfig
