@@ -1185,12 +1185,12 @@ class CPMAntModel(CPMAntPreTrainedModel):
     )
     def forward(
         self,
-        input: torch.Tensor,  
-        length: torch.Tensor, 
-        context: torch.Tensor,  
-        position: torch.Tensor,  
-        segment: torch.Tensor,  
-        span: torch.Tensor,  
+        input: torch.Tensor,
+        length: torch.Tensor,
+        context: torch.Tensor,
+        position: torch.Tensor,
+        segment: torch.Tensor,
+        span: torch.Tensor,
     ):
         """
         Args:
@@ -1238,13 +1238,13 @@ class CPMAntForCausalLM(CPMAntModel):
 
     def inference(
         self,
-        input: torch.Tensor,  
-        length: torch.Tensor,  
-        context: torch.Tensor,  
-        position: torch.Tensor, 
-        segment: torch.Tensor,  
-        span: torch.Tensor,  
-        past_key_values=None,  
+        input: torch.Tensor,
+        length: torch.Tensor,
+        context: torch.Tensor,
+        position: torch.Tensor,
+        segment: torch.Tensor,
+        span: torch.Tensor,
+        past_key_values=None,
     ):
         """
         Args:
