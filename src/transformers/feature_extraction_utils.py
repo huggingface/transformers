@@ -42,7 +42,7 @@ from .utils import (
     is_torch_device,
     is_torch_dtype,
     logging,
-    torch_required,
+    requires_backends,
 )
 
 
@@ -175,7 +175,6 @@ class BatchFeature(UserDict):
 
         return self
 
-    @torch_required
     def to(self, *args, **kwargs) -> "BatchFeature":
         """
         Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
@@ -190,6 +189,7 @@ class BatchFeature(UserDict):
         Returns:
             [`BatchFeature`]: The same instance after modification.
         """
+        requires_backends(self, ["torch"])
         import torch  # noqa
 
         new_data = {}
