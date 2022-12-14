@@ -535,15 +535,15 @@ class TrainingArguments:
             For a complete list of options, please see [here](
             https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
 
-            This is an experimental feature and its API may evolve in the future. The value is the location of config file 
-            (e.g., `fsdp_config.json`). 
+            This is an experimental feature and its API may evolve in the future. The value is the location of config
+            file (e.g., `fsdp_config.json`).
         xla_fsdp_nested (`bool`, *optional*, defaults to `False`):
-            Will use nested XLA FSDP to shard each transformer block layer. This setting can only be used with xla_fsdp.
-            Currently, only models which expose their their transformers block through the class attribute `transformer.h`
-            may use this feature. 
+            Will use nested XLA FSDP to shard each transformer block layer. This setting can only be used with
+            xla_fsdp. Currently, only models which expose their their transformers block through the class attribute
+            `transformer.h` may use this feature.
         xla_fsdp_grad_ckpt (`bool`, *optional*, defaults to `False`):
-            Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with xla_fsdp
-            and xla_fsdp_nested.
+            Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with
+            xla_fsdp and xla_fsdp_nested.
 
     
 
