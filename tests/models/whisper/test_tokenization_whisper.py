@@ -242,7 +242,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             2619, 4004, 811, 2709, 702, 51449, 51449, 50257
         ]
         # fmt: on
-        output = multilingual_tokenizer.decode(INPUT_TOKENS, skip_special_tokens=False, output_offsets = True)["offsets"]
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets = True)["offsets"]
         EXCPECTED_OUTPUT = [
             {'text': " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles", 'timestamp': (0.0, 7.2)},
             {'text': " are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the", 'timestamp': (7.2, 15.16)},
