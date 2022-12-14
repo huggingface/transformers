@@ -28,6 +28,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     is_batched,
     to_numpy_array,
     valid_images,
@@ -53,13 +54,13 @@ def _scale_size(size: Tuple[int, int], scale: Union[float, int, tuple]) -> Tuple
     return int(w * float(scale[0]) + 0.5), int(h * float(scale[1]) + 0.5)
 
 
-def rescale_size(old_size: tuple, scale: Union[float, int, tuple], return_scale: bool = False) -> tuple:
+def rescale_size(old_size: tuple, scale: Union[float, int, List], return_scale: bool = False) -> tuple:
     """Calculate the new size to be rescaled to.
 
     Args:
         old_size (tuple[int]):
             The old size (w, h) of image.
-        scale (float | tuple[int]):
+        scale (float | List[int]):
             The scaling factor or maximum size.
 
             If it is a float number, then the image will be rescaled by this factor, else if it is a tuple of 2
@@ -74,7 +75,7 @@ def rescale_size(old_size: tuple, scale: Union[float, int, tuple], return_scale:
         if scale <= 0:
             raise ValueError(f"Invalid scale {scale}, must be positive.")
         scale_factor = scale
-    elif isinstance(scale, tuple):
+    elif isinstance(scale, List):
         max_long_edge = max(scale)
         max_short_edge = min(scale)
         scale_factor = min(max_long_edge / max(h, w), max_short_edge / min(h, w))
@@ -98,7 +99,7 @@ class UperNetImageProcessor(BaseImageProcessor):
             Whether to rescale (= resize while keeping the aspect ratio) the image's (height, width) dimensions as
             large as possible within the specified `scale`. Can be overridden by the `do_resize` parameter in the
             `preprocess` method.
-        scale (`float` or `Tuple[int]`, *optional*, defaults to `(2048, 512)`):
+        scale (`float` or `Tuple[int]`, *optional*, defaults to `[2048, 512]`):
             Scale of the output image when resizing.
 
             If it is a float number, then the image will be rescaled by this factor, else if it is a tuple of 2
@@ -140,7 +141,7 @@ class UperNetImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
-        scale = scale if scale is not None else (2048, 512)
+        scale = scale if scale is not None else [2048, 512]
         self.do_resize = do_resize
         self.do_rescale = do_rescale
         self.do_normalize = do_normalize
@@ -177,7 +178,7 @@ class UperNetImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        height, width = image.shape[:2]
+        height, width = get_image_size(image)
         new_width, new_height = rescale_size((width, height), scale)
         return resize(image, size=(new_height, new_width), resample=resample, data_format=data_format, **kwargs)
 
