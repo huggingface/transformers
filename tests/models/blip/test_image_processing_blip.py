@@ -44,8 +44,6 @@ class BlipImageProcessingTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         size=None,
-        do_center_crop=True,
-        crop_size=None,
         do_normalize=True,
         do_pad=False,
         image_mean=[0.48145466, 0.4578275, 0.40821073],
@@ -53,7 +51,6 @@ class BlipImageProcessingTester(unittest.TestCase):
         do_convert_rgb=True,
     ):
         size = size if size is not None else {"height": 20, "width": 20}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -62,8 +59,6 @@ class BlipImageProcessingTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -74,8 +69,6 @@ class BlipImageProcessingTester(unittest.TestCase):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -131,8 +124,6 @@ class BlipImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "center_crop"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
@@ -156,8 +147,8 @@ class BlipImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -168,8 +159,8 @@ class BlipImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -188,8 +179,8 @@ class BlipImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -200,8 +191,8 @@ class BlipImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -220,8 +211,8 @@ class BlipImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -232,8 +223,8 @@ class BlipImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -256,8 +247,6 @@ class BlipImageProcessingTestFourChannels(FeatureExtractionSavingTestMixin, unit
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "center_crop"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
@@ -281,8 +270,8 @@ class BlipImageProcessingTestFourChannels(FeatureExtractionSavingTestMixin, unit
             (
                 1,
                 self.expected_encoded_image_num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -293,7 +282,7 @@ class BlipImageProcessingTestFourChannels(FeatureExtractionSavingTestMixin, unit
             (
                 self.feature_extract_tester.batch_size,
                 self.expected_encoded_image_num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )

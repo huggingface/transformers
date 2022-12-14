@@ -23,7 +23,7 @@ from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -159,8 +159,6 @@ class BlipImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_center_crop: bool = False,
-        crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -171,16 +169,12 @@ class BlipImageProcessor(BaseImageProcessor):
     ) -> None:
 
         super().__init__(**kwargs)
-        size = size if size is not None else 384
+        size = size if size is not None else {"height": 384, "width": 384}
         size = get_size_dict(size, default_to_square=True)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
         self.do_resize = do_resize
         self.size = size
         self.size_divisor = size_divisor
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
@@ -189,29 +183,6 @@ class BlipImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_convert_rgb = do_convert_rgb
 
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ) -> np.ndarray:
-        """
-        Center crop an image. If the image is too small to be cropped to the size given, it will be padded (so the
-        returned result will always be of size `size`).
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Size of the output image in the form of a dictionary with keys `height` and `width`.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` parameter must contain the keys (height, width). Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def resize(
         self,
@@ -294,8 +265,6 @@ class BlipImageProcessor(BaseImageProcessor):
         size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
@@ -322,10 +291,6 @@ class BlipImageProcessor(BaseImageProcessor):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -353,9 +318,6 @@ class BlipImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -393,9 +355,6 @@ class BlipImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]
-
-        if do_center_crop:
-            images = [self.center_crop(image=image, size=crop_size) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
