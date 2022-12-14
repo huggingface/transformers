@@ -43,7 +43,6 @@ else:
     _import_structure["modeling_cpmant"] = [
         "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CPMAntForCausalLM",
-        "CPMAntLayer",
         "CPMAntModel",
         "CPMAntPreTrainedModel",
         "load_tf_weights_in_cpmant",
