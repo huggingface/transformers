@@ -38,38 +38,40 @@ class CPMAntConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 30720):
             Vocabulary size of the CPMAnt model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~CPMAntModel`] or [`~TFCPMAntModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+            `input` passed when calling [`~CPMAntModel`].
+        dim_model (`int`, *optional*, defaults to 4096):
+            Dimension of the encoder layers.
+        num_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads in the Transformer encoder.
+        dim_head (`int`, *optional*, defaults to 128):
+            Dimension of attention heads for each attention layer in the Transformer encoder.
+        dim_ff (`int`, *optional*, defaults to 10240):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        num_layers (`int`, *optional*, defaults to 48):
+            Number of layers of the Transformer encoder.
+        dropout_p (`float`, *optional*, defaults to 0.1):
+            The dropout probabilitiy for all fully connected layers in the embeddings, encoder.
+        position_bias_num_buckets (`int`, *optional*, defaults to 512):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
+        position_bias_max_distance (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~CPMAntModel`] or [`~TFCPMAntModel`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+        half (`bool`, *optional*, defaults to False):
+            The dtype of tensor.
+        prompt_types (`int`, *optional*, defaults to 32):
+            The type of prompt.
+        prompt_length (`int`, *optional*, defaults to 32):
+            The length of prompt.
+        segment_types (`int`, *optional*, defaults to 32):
+            The type of segment.
+        mask_modules (`List[Tuple[bool, bool]]`, *optional*, defaults to None):
+            Determine whether the module should be masked.
+
         Example:
 
     ```python

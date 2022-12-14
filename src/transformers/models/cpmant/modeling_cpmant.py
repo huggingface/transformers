@@ -1185,21 +1185,22 @@ class CPMAntModel(CPMAntPreTrainedModel):
     )
     def forward(
         self,
-        input: torch.Tensor,  # (batch, seqlen)
-        length: torch.Tensor,  # (batch)
-        context: torch.Tensor,  # (batch, seqlen)
-        position: torch.Tensor,  # (batch, seqlen)
-        segment: torch.Tensor,  # (batch, seqlen)
-        span: torch.Tensor,  # (batch, seqlen)
+        input: torch.Tensor,  
+        length: torch.Tensor, 
+        context: torch.Tensor,  
+        position: torch.Tensor,  
+        segment: torch.Tensor,  
+        span: torch.Tensor,  
     ):
         """
         Args:
             input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
             length (`torch.Tensor`): length of input, shape = `(batch)`
-            context (`torch.Tensor`): context of input, shape = `(batch, seq_len)`
+            context (`torch.Tensor`): context determines whether model predicts, shape = `(batch, seq_len)`
             position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
-            segment (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
-            span (`torch.Tensor`): span of input, shape = `(batch, seq_len)`
+            segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
+            span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
         batch = input.size(0)
         seqlen = input.size(1)
@@ -1237,22 +1238,22 @@ class CPMAntForCausalLM(CPMAntModel):
 
     def inference(
         self,
-        input: torch.Tensor,  # (batch, seqlen)
-        length: torch.Tensor,  # (batch)
-        context: torch.Tensor,  # (batch, seqlen)
-        position: torch.Tensor,  # (batch, seqlen)
-        segment: torch.Tensor,  # (batch, seqlen)
-        span: torch.Tensor,  # (batch, seqlen)
-        past_key_values=None,  # num_layers * 2 * (batch, num_heads, seqlen, dim_head)
+        input: torch.Tensor,  
+        length: torch.Tensor,  
+        context: torch.Tensor,  
+        position: torch.Tensor, 
+        segment: torch.Tensor,  
+        span: torch.Tensor,  
+        past_key_values=None,  
     ):
         """
         Args:
             input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
             length (`torch.Tensor`): length of input, shape = `(batch)`
-            context (`torch.Tensor`): context of input, shape = `(batch, seq_len)`
+            context (`torch.Tensor`): context determines whether model predicts, shape = `(batch, seq_len)`
             position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
-            segment (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
-            span (`torch.Tensor`): span of input, shape = `(batch, seq_len)`
+            segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
+            span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
         batch = input.size(0)
@@ -1387,10 +1388,10 @@ class CPMAntForCausalLM(CPMAntModel):
     ):
         """
         Args:
-        Beam search
-            model_inputs (dict): input ids. beam_size (int, optional, defaults to 3): beam size of beam search.
-            generate_length (int, optional, defaults to 100): maximum generation length. repetition_penalty (float,
-            optional, defaults to 1.0):
+            model_inputs (dict): {input, context, segment, length, span, position}.
+            beam_size (int, optional, defaults to 3): beam size of beam search.
+            max_length (int, optional, defaults to 50): maximum generation length.
+            repetition_penalty (float, optional, defaults to 1.2):
                 repetition penalty coefficient, 1.0 means no penalty.
             repetition_window (int, optional, defaults to None):
                 window size of repetition penalty, None means that all output tokens are penalized.
