@@ -1899,16 +1899,18 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
             future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
                 Future time features, which the model internally will add to predicted `future_values`.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not the model should returns all attentions.
             output_hidden_states (`bool`, *optional*, defaults to `False`):
                 Whether or not the model should return all hidden-states.
+
         Returns:
             `SampleTimeSeriesPredictionOutput` containing:
                 - `sequences` (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)`): sampled
-                  sequences of predictions.
+                sequences of predictions.
         """
         outputs = self(
             static_categorical_features=static_categorical_features,
