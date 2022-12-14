@@ -19,7 +19,7 @@ import gc
 import os
 import tempfile
 import warnings
-from typing import Optional
+from typing import Dict, Optional
 
 import tensorflow as tf
 
@@ -277,6 +277,22 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         # Add `decoder_input_ids` because `self.decoder` requires it.
         dummy = {"pixel_values": pixel_values, "decoder_input_ids": decoder_input_ids}
         return dummy
+
+    @property
+    def serving_signature(self) -> Dict[str, tf.TypeSpec]:
+        return {
+            "pixel_values": tf.TensorSpec(
+                (
+                    None,
+                    self.config.encoder.num_channels,
+                    self.config.encoder.image_size,
+                    self.config.encoder.image_size,
+                ),
+                tf.float32,
+                name="pixel_values",
+            ),
+            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+        }
 
     def get_encoder(self):
         return self.encoder
