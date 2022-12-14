@@ -45,6 +45,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTImageProcessor"),
         ("dinat", "ViTImageProcessor"),
         ("dpt", "DPTImageProcessor"),
+        ("fan", "FanImageProcessor"),
         ("flava", "FlavaImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),

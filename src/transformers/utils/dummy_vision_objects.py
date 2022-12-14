@@ -127,14 +127,14 @@ class DPTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class FANFeatureExtractor(metaclass=DummyObject):
+class FanFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
 
 
-class FANImageProcessor(metaclass=DummyObject):
+class FanImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

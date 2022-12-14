@@ -27,7 +27,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FANConfig"]}
+_import_structure = {"configuration_fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FanConfig"]}
 
 try:
     if not is_vision_available():
@@ -35,8 +35,8 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_fan"] = ["FANFeatureExtractor"]
-    _import_structure["image_processing_fan"] = ["FANImageProcessor"]
+    _import_structure["feature_extraction_fan"] = ["FanFeatureExtractor"]
+    _import_structure["image_processing_fan"] = ["FanImageProcessor"]
 
 
 try:
@@ -47,15 +47,15 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_fan"] = [
         "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "FANForImageClassification",
-        "FANForSemanticSegmentation",
-        "FANModel",
-        "FANPreTrainedModel",
+        "FanForImageClassification",
+        "FanForSemanticSegmentation",
+        "FanModel",
+        "FanPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_fan import FAN_PRETRAINED_CONFIG_ARCHIVE_MAP, FANConfig
+    from .configuration_fan import FAN_PRETRAINED_CONFIG_ARCHIVE_MAP, FanConfig
 
     try:
         if not is_vision_available():
@@ -63,8 +63,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_fan import FANFeatureExtractor
-        from .image_processing_fan import FANImageProcessor
+        from .feature_extraction_fan import FanFeatureExtractor
+        from .image_processing_fan import FanImageProcessor
 
     try:
         if not is_torch_available():
@@ -74,10 +74,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_fan import (
             FAN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FANForImageClassification,
-            FANForSemanticSegmentation,
-            FANModel,
-            FANPreTrainedModel,
+            FanForImageClassification,
+            FanForSemanticSegmentation,
+            FanModel,
+            FanPreTrainedModel,
         )
 
 

@@ -51,6 +51,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("dinat", "ViTFeatureExtractor"),
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
+        ("fan", "FanFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),

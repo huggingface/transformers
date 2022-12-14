@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The FAN model was proposed in [Understanding The Robustness in Vision Transformers](https://arxiv.org/abs/2204.12451)  by Daquan Zhou, Zhiding Yu, Enze Xie,
+The Fan model was proposed in [Understanding The Robustness in Vision Transformers](https://arxiv.org/abs/2204.12451)  by Daquan Zhou, Zhiding Yu, Enze Xie,
 Chaowei Xiao, Anima Anandkumar, Jiashi Feng, Jose M. Alvarez. Since the introduction of [Vision Transformer (ViT)](vit) introduced in [Dosovitskiy et al., 2020](https://arxiv.org/abs/2010.11929),
 they've achieved great performance in many visual tasks. These self-attention models were outperforming ConvNets on corruption robustness as per ([Bai et al., 2021](https://arxiv.org/abs/2111.05464); [Xie et al., 2021](https://arxiv.org/abs/2105.15203); [Paul & Chen, 2022](https://arxiv.org/abs/2105.07581); [Naseer et al., 2021](https://arxiv.org/abs/2105.10497)),
 which was attributed to their designs, this was later challenged by the introduction of [ConvNeXt](https://arxiv.org/abs/2201.03545) where a model built from convolution modules without self-attention competed favorably against ViT in generalization and robustness.
@@ -23,7 +23,7 @@ This paper aims to answer the above question regarding the performance of ConvNe
 
 The abstract from the paper is the following:
 
-Recent studies show that Vision Transformers
+*Recent studies show that Vision Transformers
 (ViTs) exhibit strong robustness against various
 corruptions. Although this property is partly attributed to the self-attention mechanism, there
 is still a lack of systematic understanding. In
@@ -34,11 +34,12 @@ emerging visual grouping in Vision Transformers,
 which indicates that self-attention may promote
 robustness through improved mid-level representations. We further propose a family of fully attentional networks (FANs) that strengthen this
 capability by incorporating an attentional channel
-processing design. We validate the design comprehensively on various hierarchical backbones.
-Our model achieves a state-of-the-art 87.1% accuracy and 35.8% mCE on ImageNet-1k and
+processing design. We validate the design comprehensively on various hierarchical backbones.*
+
+*Our model achieves a state-of-the-art 87.1% accuracy and 35.8% mCE on ImageNet-1k and
 ImageNet-C with 76.8M parameters. We also
-demonstrate state-of-the-art accuracy and robustness in two downstream tasks: semantic segmentation and object detection. Code will be available
-at https://github.com/NVlabs/FAN.
+demonstrate state-of-the-art accuracy and robustness in two downstream tasks: semantic segmentation and object detection. Code is available at
+https://github.com/NVlabs/FAN.*
 
 Tips:
 
@@ -48,35 +49,35 @@ Tips:
 
 This model was contributed by [ksmcg](<https://huggingface.co/ksmcg). The original code can be found [here](https://github.com/NVlabs/FAN).
 
-## FANConfig
+## FanConfig
 
-[[autodoc]] FANConfig
+[[autodoc]] FanConfig
 
-## FANFeatureExtractor
+## FanFeatureExtractor
 
-[[autodoc]] FANFeatureExtractor
+[[autodoc]] FanFeatureExtractor
     - __call__
     
-## FANImageProcessor
+## FanImageProcessor
 
-[[autodoc]] FANImageProcessor
+[[autodoc]] FanImageProcessor
     - preprocess
 
 
-## FANModel
+## FanModel
 
-[[autodoc]] FANModel
+[[autodoc]] FanModel
     - forward
 
 
-## FANForImageClassification
+## FanForImageClassification
 
-[[autodoc]] FANForImageClassification
+[[autodoc]] FanForImageClassification
     - forward
 
 
-## FANForSemanticSegmentation
+## FanForSemanticSegmentation
 
-[[autodoc]] FANForSemanticSegmentation
+[[autodoc]] FanForSemanticSegmentation
     - forward
 

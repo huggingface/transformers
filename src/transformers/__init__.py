@@ -222,7 +222,7 @@ _import_structure = {
         "ErnieConfig",
     ],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
-    "models.fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FANConfig"],
+    "models.fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FanConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -725,7 +725,7 @@ else:
     _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
     _import_structure["models.donut"].append("DonutFeatureExtractor")
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
-    _import_structure["models.fan"].extend(["FANFeatureExtractor", "FANImageProcessor"])
+    _import_structure["models.fan"].extend(["FanFeatureExtractor", "FanImageProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor", "FlavaImageProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -1304,10 +1304,10 @@ else:
     _import_structure["models.fan"].extend(
         [
             "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FANForImageClassification",
-            "FANForSemanticSegmentation",
-            "FANModel",
-            "FANPreTrainedModel",
+            "FanForImageClassification",
+            "FanForSemanticSegmentation",
+            "FanModel",
+            "FanPreTrainedModel",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -3402,7 +3402,7 @@ if TYPE_CHECKING:
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
-    from .models.fan import FAN_PRETRAINED_CONFIG_ARCHIVE_MAP, FANConfig
+    from .models.fan import FAN_PRETRAINED_CONFIG_ARCHIVE_MAP, FanConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3846,7 +3846,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrFeatureExtractor
         from .models.donut import DonutFeatureExtractor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
-        from .models.fan import FANFeatureExtractor, FANImageProcessor
+        from .models.fan import FanFeatureExtractor, FanImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
@@ -4322,10 +4322,10 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.fan import (
             FAN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FANForImageClassification,
-            FANForSemanticSegmentation,
-            FANModel,
-            FANPreTrainedModel,
+            FanForImageClassification,
+            FanForSemanticSegmentation,
+            FanModel,
+            FanPreTrainedModel,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

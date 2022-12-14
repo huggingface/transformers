@@ -2127,28 +2127,28 @@ class EsmPreTrainedModel(metaclass=DummyObject):
 FAN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class FANForImageClassification(metaclass=DummyObject):
+class FanForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FANForSemanticSegmentation(metaclass=DummyObject):
+class FanForSemanticSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FANModel(metaclass=DummyObject):
+class FanModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FANPreTrainedModel(metaclass=DummyObject):
+class FanPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

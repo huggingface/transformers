@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FAN model. """
+""" Testing suite for the PyTorch Fan model. """
 
 
 import inspect
 import unittest
 
-from transformers import FANConfig
+from transformers import FanConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -30,17 +30,17 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import FANForImageClassification, FANForSemanticSegmentation, FANModel
+    from transformers import FanForImageClassification, FanForSemanticSegmentation, FanModel
     from transformers.models.fan.modeling_fan import FAN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import FANFeatureExtractor
+    from transformers import FanFeatureExtractor
 
 
 # Copied and adapted from transformers.tests.models.deit.test_modeling_deit.py
-class FANModelTester:
+class FanModelTester:
     def __init__(
         self,
         parent,
@@ -106,7 +106,7 @@ class FANModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return FANConfig(
+        return FanConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -121,7 +121,7 @@ class FANModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = FANModel(config=config)
+        model = FanModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -132,7 +132,7 @@ class FANModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = FANForImageClassification(config)
+        model = FanForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -140,7 +140,7 @@ class FANModelTester:
 
         # test greyscale images
         config.num_channels = 1
-        model = FANForImageClassification(config)
+        model = FanForImageClassification(config)
         model.to(torch_device)
         model.eval()
 
@@ -151,7 +151,7 @@ class FANModelTester:
     # Copied and adapted from transformers.tests.models.deit.test_modeling_deit.py
 
 
-class FANModelSegmenentationTester:
+class FanModelSegmenentationTester:
     def __init__(
         self,
         parent,
@@ -242,7 +242,7 @@ class FANModelSegmenentationTester:
         return config, inputs_dict
 
     def get_config(self):
-        return FANConfig(
+        return FanConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -269,7 +269,7 @@ class FANModelSegmenentationTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = FANModel(config=config)
+        model = FanModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -280,12 +280,12 @@ class FANModelSegmenentationTester:
 
 
 @require_torch
-class FANModelTest(ModelTesterMixin, unittest.TestCase):
+class FanModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            FANModel,
-            FANForImageClassification,
+            FanModel,
+            FanForImageClassification,
         )
         if is_torch_available()
         else ()
@@ -295,8 +295,8 @@ class FANModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = FANModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FANConfig, hidden_size=37, has_text_modality=False)
+        self.model_tester = FanModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=FanConfig, hidden_size=37, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -305,7 +305,7 @@ class FANModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="FAN does not use inputs_embeds")
+    @unittest.skip(reason="Fan does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -333,7 +333,7 @@ class FANModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in FAN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FANModel.from_pretrained(model_name)
+            model = FanModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_for_image_classification(self):
@@ -342,16 +342,16 @@ class FANModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class FANModelSegmentationTest(ModelTesterMixin, unittest.TestCase):
+class FanModelSegmentationTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FANForSemanticSegmentation,) if is_torch_available() else ()
+    all_model_classes = (FanForSemanticSegmentation,) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = FANModelSegmenentationTester(self)
-        self.config_tester = ConfigTester(self, config_class=FANConfig, hidden_size=37, has_text_modality=False)
+        self.model_tester = FanModelSegmenentationTester(self)
+        self.config_tester = ConfigTester(self, config_class=FanConfig, hidden_size=37, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -360,7 +360,7 @@ class FANModelSegmentationTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="FAN does not use inputs_embeds")
+    @unittest.skip(reason="Fan does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -388,7 +388,7 @@ class FANModelSegmentationTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in FAN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FANModel.from_pretrained(model_name)
+            model = FanModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -401,15 +401,15 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class FANModelIntegrationTest(unittest.TestCase):
+class FanModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return FANFeatureExtractor() if is_vision_available() else None
+        return FanFeatureExtractor() if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         IMG_CLF_PATH = "ksmcg/fan_base_18_p16_224"
-        model = FANForImageClassification.from_pretrained(IMG_CLF_PATH).to(torch_device)
+        model = FanForImageClassification.from_pretrained(IMG_CLF_PATH).to(torch_device)
         model.eval()
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

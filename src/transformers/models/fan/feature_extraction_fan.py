@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for FAN."""
+"""Feature extractor class for Fan."""
 
 from ...utils import logging
-from .image_processing_fan import FANImageProcessor
+from .image_processing_fan import FanImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
-FANFeatureExtractor = FANImageProcessor
+FanFeatureExtractor = FanImageProcessor

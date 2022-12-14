@@ -1,4 +1,4 @@
-# Copied from transformers.models.deit.image_processing_deit with DeiT->FAN
+# Copied from transformers.models.deit.image_processing_deit with DeiT->Fan
 # coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for FAN."""
+"""Image processor class for Fan."""
 
 from typing import Dict, List, Optional, Union
 
@@ -44,9 +44,9 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class FANImageProcessor(BaseImageProcessor):
+class FanImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a FAN image processor.
+    Constructs a Fan image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
