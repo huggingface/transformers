@@ -56,21 +56,28 @@ store several generation configurations for a single model (e.g. one for creativ
 other for summarization with beam search).
 
 ```python
-from transformers import GenerationConfig
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
 
-# Create a new generation configuration for later use
-my_awesome_config = GenerationConfig(num_beams=8, do_sample=False, bad_words_ids=[[42, 43, 44]], eos_token_id=2)
-my_awesome_config.save_pretrained(
-    "my_account/my_model", config_file_name="awesome_generation_config.json", push_to_hub=True
+tokenizer = AutoTokenizer.from_pretrained("t5-small")
+model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+
+translation_generation_config = GenerationConfig(
+    num_beams=4,
+    early_stopping=True,
+    decoder_start_token_id=0,
+    eos_token_id=model.config.eos_token_id,
+    pad_token=model.config.pad_token_id,
 )
+# If you were working on a model for which your had the right Hub permissions, you could store a named generation
+# config as follows
+translation_generation_config.save_pretrained("t5-small", "translation_generation_config.json", push_to_hub=True)
 
-# Restore the generation configuration
-generation_config = GenerationConfig.from_pretrained(
-    "my_account/my_model", config_file_name="awesome_generation_config.json"
-)
-
-# Generate with the restored generation configuration
-model.generate(inputs, generation_config=generation_config)
+# You could then use the named generation config file to parameterize generation
+generation_config = GenerationConfig.from_pretrained("t5-small", "translation_generation_config.json")
+inputs = tokenizer("translate English to French: Configuration files are easy to use!", return_tensors="pt")
+outputs = model.generate(**inputs, generation_config=generation_config)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+# ['Les fichiers de configuration sont faciles à utiliser !']
 ```
 
 Finally, you can specify ad hoc modifications to the used generation configuration by passing the attribute you

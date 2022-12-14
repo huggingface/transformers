@@ -256,12 +256,20 @@ class GenerationConfig(PushToHubMixin):
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
-        # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the the hub interface.
+        # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the the hub
+        # interface.
+        self._from_model_config = kwargs.pop("_from_model_config", False)
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
 
     def __eq__(self, other):
-        return self.__dict__ == other.__dict__
+        self_dict = self.__dict__.copy()
+        other_dict = other.__dict__.copy()
+        # ignore metadata
+        for metadata_field in ("_from_model_config", "_commit_hash", "transformers_version"):
+            self_dict.pop(metadata_field, None)
+            other_dict.pop(metadata_field, None)
+        return self_dict == other_dict
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
@@ -614,6 +622,7 @@ class GenerationConfig(PushToHubMixin):
                     if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
                         setattr(config, attr, decoder_config[attr])
 
+        config._from_model_config = True
         return config
 
     def update(self, **kwargs):
