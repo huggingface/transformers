@@ -176,7 +176,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Wwhether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
             `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
@@ -196,6 +196,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
+        image_size (`int`, *optional*, defaults to 288):
+            Size of the image. Defaults to 288. Can be overriden if set with image_size in the configuration.
+
     """
 
     model_input_names = ["pixel_values"]
@@ -213,13 +216,15 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
+        image_size = 288,
         **kwargs
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": self.image_size}
+        image_size = self.image_size if hasattr(self, 'image_size') else image_size
+        size = size if size is not None else {"shortest_edge": image_size}
         size = get_size_dict(size, default_to_square=False)
 
         self.do_resize = do_resize
