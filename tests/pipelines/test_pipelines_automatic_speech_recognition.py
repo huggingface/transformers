@@ -138,7 +138,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output, {"text": "(Applaudissements)"})
 
         # Non CTC models cannot use return_timestamps
-        with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"):
+        with self.assertRaisesRegex(
+            ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+        ):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
     @require_torch
@@ -267,10 +269,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     def test_whisper_timestamp_prediction(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(
-            task="transcribe", language="en", no_timestamps=False
-        )
-        model.config.begin_suppress_tokens += [50363]
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         array = np.concatenate(
             [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]

@@ -776,7 +776,10 @@ class TimeStampLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids, scores):
         # suppress <|notimestamps|> which is handled by without_timestamps
         if self.no_timestamps_token_id is not None:
-            scores[:, self.no_timestamps_token_id] = -np.inf
+            scores[:, self.no_timestamps_token_id] = -float("inf")
+        # Make sure that the first token is the begin timestamp
+        if input_ids.shape[-1] == 3:
+            scores[:, self.timestamp_begin] = 0
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):
@@ -786,14 +789,14 @@ class TimeStampLogitsProcessor(LogitsProcessor):
 
             if last_was_timestamp:
                 if penultimate_was_timestamp:  # has to be non-timestamp
-                    scores[k, self.timestamp_begin :] = -np.inf
+                    scores[k, self.timestamp_begin :] = -float("inf")
                 else:  # cannot be normal text tokens
-                    scores[k, : self.eos_token_id] = -np.inf
+                    scores[k, : self.eos_token_id] = -float("inf")
 
             # apply the `max_initial_timestamp` option
             if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
                 last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
-                scores[:, last_allowed + 1 :] = -np.inf
+                scores[:, last_allowed + 1 :] = -float("inf")
 
             # if sum of probability over timestamps is above any other token, sample timestamp
             logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
@@ -801,6 +804,6 @@ class TimeStampLogitsProcessor(LogitsProcessor):
                 timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
                 max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
                 if timestamp_logprob > max_text_token_logprob:
-                    scores[k, : self.timestamp_begin] = -np.inf
+                    scores[k, : self.timestamp_begin] = -float("inf")
 
         return scores

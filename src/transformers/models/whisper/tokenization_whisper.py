@@ -500,7 +500,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         timestamp_tokens = token_ids >= timestamp_begin
 
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
-        last_slice = 0
+        last_slice = np.where(token_ids == timestamp_begin)[0][0]
         for current_slice in consecutive:
             sliced_tokens = token_ids[last_slice:current_slice]
             start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
@@ -520,7 +520,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         token_ids,
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
-        output_char_offsets: bool = False,
+        output_offsets: bool = False,
         time_precision=0.02,
         **kwargs
     ) -> str:
@@ -550,11 +550,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         # retrieve offsets
-        if output_char_offsets:
+        if output_offsets:
             char_offsets = None
             char_offsets = self._compute_offsets(token_ids, time_precision=time_precision)
-        if output_char_offsets:
-            return {"text": text, "char_offsets": char_offsets}
+        if output_offsets:
+            return {"text": text, "offsets": char_offsets}
         return text
 
     def _decode(
