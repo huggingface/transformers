@@ -137,11 +137,7 @@ class UperNetImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Test
         # old_size needs to be provided as tuple (width, height)
         old_size = image.size if isinstance(image, Image.Image) else image.shape[-2:][::-1]
 
-        print("Old size:", old_size)
-
         new_size = rescale_size(old_size=old_size, scale=feature_extractor.scale, return_scale=False)
-
-        print("New size:", new_size)
 
         return new_size
 
@@ -195,7 +191,6 @@ class UperNetImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Test
         # create random PyTorch tensors
         image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
-            print("Shape of image:", image.shape)
             self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
