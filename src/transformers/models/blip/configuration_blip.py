@@ -252,7 +252,7 @@ class BlipVisionConfig(PretrainedConfig):
         layer_norm_eps=0.00001,
         dropout=0.0,
         attention_dropout=0.0,
-        initializer_range=0.02,
+        initializer_range=1e-10,
         initializer_factor=1.0,
         **kwargs
     ):
@@ -374,6 +374,7 @@ class BlipConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+        self.initializer_range = 0.02
         self.image_text_hidden_size = image_text_hidden_size
 
     @classmethod

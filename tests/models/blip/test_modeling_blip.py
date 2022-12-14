@@ -74,7 +74,7 @@ class BlipVisionModelTester:
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
-        initializer_range=0.02,
+        initializer_range=1e-10,
         scope=None,
     ):
         self.parent = parent

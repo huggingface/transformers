@@ -222,7 +222,13 @@ class BlipVisionEmbeddings(nn.Module):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.class_embedding = nn.Parameter(torch.randn(1, 1, self.embed_dim))
+        self.class_embedding = nn.Parameter(
+            nn.init.trunc_normal_(
+                torch.zeros(1, 1, self.embed_dim, dtype=torch.float32),
+                mean=0.0,
+                std=config.initializer_range,
+            )
+        )
 
         self.patch_embedding = nn.Conv2d(
             in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size
@@ -230,16 +236,24 @@ class BlipVisionEmbeddings(nn.Module):
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Parameter(torch.zeros(1, self.num_positions, self.embed_dim))
+
+        self.position_embedding = nn.Parameter(
+            nn.init.trunc_normal_(
+                torch.zeros(1, self.num_positions, self.embed_dim, dtype=torch.float32),
+                mean=0.0,
+                std=config.initializer_range,
+            )
+        )
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :]
+        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :].to(target_dtype)
         return embeddings
 
 
@@ -426,44 +440,11 @@ class BlipPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = self.config.initializer_factor
-        if isinstance(module, BlipTextEmbeddings):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, BlipVisionEmbeddings):
-            module.class_embedding.data.normal_(mean=0.0, std=factor * 0.02)
-            module.patch_embedding.weight.data.normal_(mean=0.0, std=module.config.initializer_range * factor)
-            module.patch_embedding.bias.data.normal_(mean=0.0, std=module.config.initializer_range * factor)
-        elif isinstance(module, BlipAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.qkv.weight, std=in_proj_std)
-            if module.qkv.bias is not None:
-                nn.init.normal_(module.qkv.bias, std=in_proj_std)
-            nn.init.normal_(module.projection.weight, std=in_proj_std)
-            if module.projection.bias is not None:
-                nn.init.normal_(module.projection.bias, std=in_proj_std)
-        elif isinstance(module, BlipMLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, BlipModel):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, nn.Conv2d) or isinstance(module, nn.Embedding) or isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=factor * 0.02)
+        factor = self.config.initializer_range
+        if isinstance(module, nn.Conv2d) or isinstance(module, nn.Embedding) or isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=factor)
             if hasattr(module, "bias") and module.bias is not None:
-                nn.init.normal_(module.bias, mean=0.0, std=factor * 0.02)
+                module.bias.data.zero_()
 
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
