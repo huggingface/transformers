@@ -14,8 +14,7 @@
 # limitations under the License.
 """Image processor class for BLIP."""
 
-import warnings
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -30,7 +29,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    get_image_size,
     infer_channel_dimension_format,
     is_batched,
     to_numpy_array,
@@ -85,7 +83,6 @@ def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
     return (max_height, max_width)
 
 
-
 class BlipImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BLIP image processor.
@@ -94,17 +91,9 @@ class BlipImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-<<<<<<< HEAD
-        size (`Dict[str, int]`, *optional*, defaults to `384`):
-            Resize the input to the given size. Only has an effect if `do_resize` is set to `True`.
-=======
         size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
->>>>>>> d5115fa6fda841caa18ebe6028dca202004a694b
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
@@ -159,7 +148,6 @@ class BlipImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_convert_rgb = do_convert_rgb
-
 
     def resize(
         self,
@@ -233,7 +221,6 @@ class BlipImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
-
     def preprocess(
         self,
         images: ImageInput,
@@ -263,8 +250,6 @@ class BlipImageProcessor(BaseImageProcessor):
                 `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
                 is > `int(size["shortest_edge"] * (1333 / 800))`, then the image is resized again to make the longest
                 edge equal to `int(size["shortest_edge"] * (1333 / 800))`.
-            size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
-                The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -292,7 +277,6 @@ class BlipImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
