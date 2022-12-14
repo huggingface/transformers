@@ -68,6 +68,9 @@ my_awesome_config.save_pretrained(
 generation_config = GenerationConfig.from_pretrained(
     "my_account/my_model", config_file_name="awesome_generation_config.json"
 )
+
+# Generate with the restored generation configuration
+model.generate(inputs, generation_config=generation_config)
 ```
 
 Finally, you can specify ad hoc modifications to the used generation configuration by passing the attribute you

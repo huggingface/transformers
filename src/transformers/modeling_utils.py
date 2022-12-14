@@ -1114,7 +1114,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
-        return hasattr(self, "prepare_inputs_for_generation")
+        try:
+            self.prepare_inputs_for_generation()
+        except NotImplementedError:
+            return True
+        return False
 
     def get_input_embeddings(self) -> nn.Module:
         """
@@ -2487,8 +2491,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
 
-        # If it is a model with generation capabilities, attempt to set the generation config to an existing
-        # `generation_config.json` file.
+        # If it is a model with generation capabilities, set the generation config
         if model.can_generate():
             try:
                 generation_config = GenerationConfig.from_pretrained(
@@ -2505,9 +2508,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     _from_pipeline=from_pipeline,
                     **kwargs,
                 )
-                model.generation_config = generation_config
-            except EnvironmentError:
-                pass
+            except OSError:
+                logger.warning("Generation config not found, creating it from the model config")
+                generation_config = GenerationConfig.from_model_config(config)
+            model.generation_config = generation_config
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
