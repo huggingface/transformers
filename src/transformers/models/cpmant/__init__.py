@@ -70,7 +70,6 @@ if TYPE_CHECKING:
         from .modeling_cpmant import (
             CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CPMAntForCausalLM,
-            CPMAntLayer,
             CPMAntModel,
             CPMAntPreTrainedModel,
             load_tf_weights_in_cpmant,
