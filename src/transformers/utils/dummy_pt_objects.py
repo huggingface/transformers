@@ -360,6 +360,13 @@ class AltCLIPModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class AltCLIPPretrainModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AltCLIPTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -368,13 +375,6 @@ class AltCLIPTextModel(metaclass=DummyObject):
 
 
 class AltCLIPVisionModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class AltRobertaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

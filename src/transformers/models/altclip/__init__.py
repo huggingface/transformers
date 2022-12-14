@@ -39,6 +39,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_altclip"] = [
         "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "AltCLIPPretrainedModel",
         "AltCLIPModel",
         "AltCLIPTextModel",
         "AltCLIPVisionModel",
@@ -63,6 +64,7 @@ if TYPE_CHECKING:
         from .modeling_altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             AltCLIPModel,
+            AltCLIPPretrainedModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
         )
