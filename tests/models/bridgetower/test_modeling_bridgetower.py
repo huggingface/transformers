@@ -16,7 +16,6 @@
 
 import tempfile
 
-# import inspect
 import unittest
 
 import numpy as np
@@ -383,7 +382,6 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_gradient_checkpointing_enable_disable(self):
         pass
 
-    # TODO: ShaoYen please check this one should be skipped or not
     @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
     def test_initialization(self):
         pass
