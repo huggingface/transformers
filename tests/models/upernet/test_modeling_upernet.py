@@ -243,7 +243,7 @@ def prepare_img():
     filepath = hf_hub_download(
         repo_id="hf-internal-testing/fixtures_ade20k", repo_type="dataset", filename="ADE_val_00000001.jpg"
     )
-    image = Image.open(filepath).convert("RGB")$
+    image = Image.open(filepath).convert("RGB")
     return image
 
 
@@ -267,5 +267,24 @@ class UperNetModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [[-7.6034, -7.6034, -7.4257], [-7.6034, -7.6034, -7.4257], [-7.4655, -7.4655, -7.2804]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_inference_convnext_backbone(self):
+        # TODO update the organization
+        processor = UperNetImageProcessor.from_pretrained("nielsr/upernet-convnext-tiny")
+        model = UperNetForSemanticSegmentation.from_pretrained("nielsr/upernet-convnext-tiny")
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape = torch.Size((1, model.config.num_labels, 512, 683))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-8.8408, -8.8408, -8.6897], [-8.8408, -8.8408, -8.6897], [-8.7968, -8.7968, -8.6412]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))

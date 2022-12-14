@@ -21,7 +21,7 @@ from PIL import Image
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
+from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation, UperNetImageProcessor
 from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
@@ -89,7 +89,7 @@ image_transforms = Compose(
 
 def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model_name_to_url = {
-        "convnext-tiny-upernet": "https://download.openmmlab.com/mmsegmentation/v0.5/convnext/upernet_convnext_tiny_fp16_512x512_160k_ade20k/upernet_convnext_tiny_fp16_512x512_160k_ade20k_20220227_124553-cad485de.pth",
+        "upernet-convnext-tiny": "https://download.openmmlab.com/mmsegmentation/v0.5/convnext/upernet_convnext_tiny_fp16_512x512_160k_ade20k/upernet_convnext_tiny_fp16_512x512_160k_ade20k_20220227_124553-cad485de.pth",
     }
     checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
@@ -115,13 +115,23 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # verify on image
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    pixel_values = image_transforms(image).unsqueeze(0)
+
+    # TODO: remove
+    # from torchvision.transforms import Compose, Normalize, Resize, ToTensor
+    # from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+    # image_transforms = Compose(
+    #     [Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)]
+    # )
+    # pixel_values = image_transforms(image).unsqueeze(0)
+
+    processor = UperNetImageProcessor()
+    pixel_values = processor(image, return_tensors="pt").pixel_values
 
     with torch.no_grad():
         outputs = model(pixel_values)
 
     expected_slice = torch.tensor(
-        [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
+        [[-8.8408, -8.8408, -8.6897], [-8.8408, -8.8408, -8.6897], [-8.7968, -8.7968, -8.6412]]
     )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
@@ -130,13 +140,13 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving processor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and feature extractor for {model_name} to hub")
+        print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"nielsr/{model_name}")
-        # feature_extractor.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -144,9 +154,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="convnext-tiny-upernet",
+        default="upernet-convnext-tiny",
         type=str,
-        choices=["convnext-tiny-upernet", "convnext-base-upernet"],
+        choices=["upernet-convnext-tiny", "upernet-convnext-base"],
         help="Name of the ConvNext UperNet model you'd like to convert.",
     )
     parser.add_argument(
