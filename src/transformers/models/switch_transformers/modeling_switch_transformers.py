@@ -278,7 +278,7 @@ class SwitchTransformersDenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->SwitchTransformers
+# Copied from transformers.models.longt5.modeling_longt5.LongT5DenseGatedActDense with LongT5->SwitchTransformers
 class SwitchTransformersDenseGatedActDense(nn.Module):
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__()
@@ -293,12 +293,6 @@ class SwitchTransformersDenseGatedActDense(nn.Module):
         hidden_linear = self.wi_1(hidden_states)
         hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states)
-
-        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
-        # See https://github.com/huggingface/transformers/issues/20287
-        if hidden_states.dtype != self.wo.weight.dtype:
-            hidden_states = hidden_states.to(self.wo.weight.dtype)
-
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
