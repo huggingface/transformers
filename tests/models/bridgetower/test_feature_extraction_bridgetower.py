@@ -17,10 +17,13 @@
 import unittest
 
 import numpy as np
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
-
+from transformers.image_utils import (
+    PILImageResampling,
+)
 from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
 
 
@@ -37,31 +40,39 @@ class BridgeTowerFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
+        
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        size_divisor: int = 32,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        do_center_crop: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = [0.48145466, 0.4578275, 0.40821073],
+        image_std: Optional[Union[float, List[float]]] = [0.26862954, 0.26130258, 0.27577711],
+        do_pad: bool = True,
         batch_size=7,
-        num_channels=3,
-        image_size=18,
         min_resolution=30,
         max_resolution=400,
-        do_resize=True,
-        size=None,
-        size_divisor=2,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
+        num_channels=3,
     ):
-        size = size if size is not None else {"shortest_edge": 30}
-        self.parent = parent
+        self.parent = parent        
+        self.do_resize=do_resize
+        self.size = size if size is not None else {"shortest_edge": 288}
+        self.size_divisor=size_divisor
+        self.resample=resample
+        self.do_rescale=do_rescale
+        self.rescale_factor=rescale_factor
+        self.do_normalize=do_normalize
+        self.do_center_crop=do_center_crop
+        self.image_mean=image_mean
+        self.image_std=image_std
+        self.do_pad=do_pad
         self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.size_divisor = size_divisor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
+        self.num_channels = num_channels
 
     def prepare_feat_extract_dict(self):
         return {
@@ -117,7 +128,6 @@ class BridgeTowerFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class BridgeTowerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = BridgeTowerFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
