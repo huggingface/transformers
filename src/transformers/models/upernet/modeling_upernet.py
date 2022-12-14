@@ -90,13 +90,13 @@ class UperNetPyramidPoolingModule(nn.Module):
     Pyramid Pooling Module (PPM) used in PSPNet.
 
     Args:
-        pool_scales (tuple[int]):
+        pool_scales (`Tuple[int]`):
             Pooling scales used in Pooling Pyramid Module.
-        in_channels (int):
+        in_channels (`int`):
             Input channels.
-        channels (int):
+        channels (`int`):
             Channels after modules, before conv_seg.
-        align_corners (bool):
+        align_corners (`bool`):
             align_corners argument of F.interpolate.
     """
 
