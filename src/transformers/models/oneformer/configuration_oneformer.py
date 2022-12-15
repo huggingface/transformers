@@ -148,6 +148,7 @@ class OneFormerConfig(PretrainedConfig):
                 num_heads=[3, 6, 12, 24],
                 window_size=7,
                 drop_path_rate=0.3,
+                use_absolute_embeddings=False,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
         else:

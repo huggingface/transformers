@@ -125,11 +125,15 @@ class OriginalOneFormerConfigToOursConverter:
         if is_swin:
             if model.SWIN.EMBED_DIM == 96:
                 backbone_config = SwinConfig.from_pretrained(
-                    "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+                    "microsoft/swin-tiny-patch4-window7-224",
+                    drop_path_rate=model.SWIN.DROP_PATH_RATE, 
+                    out_features=["stage1", "stage2", "stage3", "stage4"]
                 )
             elif model.SWIN.EMBED_DIM == 192:
                 backbone_config = SwinConfig.from_pretrained(
-                    "microsoft/swin-large-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
+                    "microsoft/swin-large-patch4-window12-384",
+                    drop_path_rate=model.SWIN.DROP_PATH_RATE, 
+                    out_features=["stage1", "stage2", "stage3", "stage4"]
                 )
             else:
                 raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
@@ -960,7 +964,7 @@ def test(
 
         tr = T.Compose(
             [
-                T.Resize((384, 384)),
+                T.Resize((640, 640)),
                 T.ToTensor(),
                 T.Normalize(
                     mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
@@ -985,7 +989,6 @@ def test(
             assert torch.allclose(
                 original_model_feature, our_model_feature, atol=2e-3
             ), "The backbone features are not the same."
-
         mask_features, _, multi_scale_features, _, _ = original_model.sem_seg_head.pixel_decoder.forward_features(
             original_model_backbone_features
         )
@@ -1004,7 +1007,7 @@ def test(
 
         tr_complete = T.Compose(
             [
-                T.Resize((384, 384)),
+                T.Resize((640, 640)),
                 T.ToTensor(),
             ],
         )
@@ -1020,7 +1023,7 @@ def test(
             x.clone(), task_token, output_hidden_states=True
         )
 
-        our_segmentation = feature_extractor.post_process_sem_seg_output(our_model_out, target_size=(384, 384))[0]
+        our_segmentation = feature_extractor.post_process_sem_seg_output(our_model_out, target_size=(640, 640))[0]
 
         assert torch.allclose(
             original_segmentation, our_segmentation, atol=1e-3
