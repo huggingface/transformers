@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for BLIP."""
 
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
@@ -29,7 +29,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
     is_batched,
     to_numpy_array,
     valid_images,
@@ -91,8 +90,7 @@ class BlipImageProcessor(BaseImageProcessor):
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Whether to convert the image to RGB.
     """
 
     model_input_names = ["pixel_values"]
