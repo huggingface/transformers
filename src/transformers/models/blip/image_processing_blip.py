@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for BLIP."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
