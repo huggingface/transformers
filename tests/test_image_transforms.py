@@ -473,14 +473,16 @@ class ImageTransformsTester(unittest.TestCase):
 
         # And PIL images are converted
         rgb_image = convert_to_rgb(pil_image)
-        self.assertEqual(rgb_image.shape, (1, 2, 3))
-        self.assertTrue(np.allclose(rgb_image, np.array([[[1, 2, 3], [5, 6, 7]]], dtype=np.uint8)))
+        self.assertEqual(rgb_image.mode, "RGB")
+        self.assertEqual(rgb_image.size, (2, 1))
+        self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[1, 2, 3], [5, 6, 7]]], dtype=np.uint8)))
 
         # Test that a grayscale image is converted to RGB
         image = np.array([[0, 255]], dtype=np.uint8)
         pil_image = PIL.Image.fromarray(image)
         self.assertEqual(pil_image.mode, "L")
         self.assertEqual(pil_image.size, (2, 1))
-        rgb_image = convert_to_rgb(image)
-        self.assertEqual(rgb_image.shape, (1, 2, 3))
-        self.assertTrue(np.allclose(rgb_image, np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
+        rgb_image = convert_to_rgb(pil_image)
+        self.assertEqual(rgb_image.mode, "RGB")
+        self.assertEqual(rgb_image.size, (2, 1))
+        self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
