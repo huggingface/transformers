@@ -985,7 +985,9 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Will use nested XLA FSDP to shard each model child layer. This setting can only be used with xla_fsdp."               
+                "Will use nested XLA FSDP to shard each transformer block layer. This setting can only be used with xla_fsdp."
+                " Currently, only models which expose their their transformers block through the class attribute `transformer.h`"
+                " may use this feature."               
             ),
         },
     )
@@ -993,7 +995,8 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with xla_fsdp."
+                "Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with xla_fsdp"
+                " and xla_fsdp_nested."
             
             ),
         },
