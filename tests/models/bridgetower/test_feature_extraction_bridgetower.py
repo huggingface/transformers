@@ -15,15 +15,14 @@
 
 
 import unittest
-
-import numpy as np
 from typing import Dict, List, Optional, Union
 
+import numpy as np
+
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
-from transformers.image_utils import (
-    PILImageResampling,
-)
+
 from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
 
 
@@ -40,7 +39,6 @@ class BridgeTowerFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
-        
         do_resize: bool = True,
         size: Dict[str, int] = None,
         size_divisor: int = 32,
@@ -57,18 +55,18 @@ class BridgeTowerFeatureExtractionTester(unittest.TestCase):
         max_resolution=400,
         num_channels=3,
     ):
-        self.parent = parent        
-        self.do_resize=do_resize
+        self.parent = parent
+        self.do_resize = do_resize
         self.size = size if size is not None else {"shortest_edge": 288}
-        self.size_divisor=size_divisor
-        self.resample=resample
-        self.do_rescale=do_rescale
-        self.rescale_factor=rescale_factor
-        self.do_normalize=do_normalize
-        self.do_center_crop=do_center_crop
-        self.image_mean=image_mean
-        self.image_std=image_std
-        self.do_pad=do_pad
+        self.size_divisor = size_divisor
+        self.resample = resample
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
+        self.do_center_crop = do_center_crop
+        self.image_mean = image_mean
+        self.image_std = image_std
+        self.do_pad = do_pad
         self.batch_size = batch_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution

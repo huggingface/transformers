@@ -144,6 +144,7 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 class BridgeTowerLayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
 
@@ -364,6 +365,7 @@ class BridgeTowerCLIP(nn.Module):
     def forward(self, image, image_mask=None):
         return self.visual(image.type(self.dtype), image_mask)
 
+
 @dataclass
 class BridgeTowerModelOutput(ModelOutput):
     """
@@ -398,10 +400,8 @@ class BridgeTowerModelOutput(ModelOutput):
 
 
 @add_start_docstrings(
-    (
-        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-        " top."
-    ),
+    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+    " top.",
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -594,7 +594,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> outputs.keys()
         odict_keys(['text_feats', 'image_feats', 'pooler_output'])
-
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
@@ -1051,7 +1050,6 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
 
         >>> print(results)
         .a cat looking out of the window.
-
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bridgetower(
@@ -1177,7 +1175,6 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         ...     encoding = processor(image, text, return_tensors="pt")
         ...     outputs = model(**encoding)
         ...     scores[text] = outputs.logits[0, 1].item()
-
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

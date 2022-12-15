@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch BridgeTower model. """
 
 import tempfile
-
 import unittest
 
 import numpy as np

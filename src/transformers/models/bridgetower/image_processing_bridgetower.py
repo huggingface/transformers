@@ -169,8 +169,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
@@ -209,14 +209,14 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        image_size = 288,
+        image_size=288,
         **kwargs
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
-        image_size = self.image_size if hasattr(self, 'image_size') else image_size
+        image_size = self.image_size if hasattr(self, "image_size") else image_size
         size = size if size is not None else {"shortest_edge": image_size}
         size = get_size_dict(size, default_to_square=False)
 
