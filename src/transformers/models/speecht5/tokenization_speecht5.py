@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -36,7 +36,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"speecht5": 512}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"speecht5": 1024}
 
 
 class SpeechT5Tokenizer(PreTrainedTokenizer):
@@ -93,13 +93,9 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        mask_token="<mask>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> None:
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
@@ -107,7 +103,6 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            mask_token=mask_token,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
@@ -116,9 +111,6 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
-
-        self.add_special_tokens({"mask_token": mask_token})
-        self.add_tokens(["<ctc_blank>"])
 
     @property
     def vocab_size(self):
@@ -187,37 +179,3 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
-
-
-    # def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
-    #     """Do not add eos again if user already added it."""
-    #     if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
-    #         warnings.warn(
-    #             f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated"
-    #             " eos tokens being added."
-    #         )
-    #         return token_ids
-    #     else:
-    #         return token_ids + [self.eos_token_id]
-
-
-
-
-    # def convert_tokens_to_string(self, tokens):
-    #     """Converts a sequence of tokens (string) in a single string."""
-    #     current_sub_tokens = []
-    #     out_string = ""
-    #     prev_is_special = False
-    #     for token in tokens:
-    #         # make sure that special tokens are not decoded using sentencepiece model
-    #         if token in self.all_special_tokens:
-    #             if not prev_is_special:
-    #                 out_string += " "
-    #             out_string += self.sp_model.decode(current_sub_tokens) + token
-    #             prev_is_special = True
-    #             current_sub_tokens = []
-    #         else:
-    #             current_sub_tokens.append(token)
-    #             prev_is_special = False
-    #     out_string += self.sp_model.decode(current_sub_tokens)
-    #     return out_string.strip()

@@ -28,8 +28,10 @@ from transformers import (
     SpeechT5ForPreTraining,
     SpeechT5ForSpeechToText,
     SpeechT5ForTextToSpeech,
+    SpeechT5Tokenizer,
     logging,
 )
+from transformers.tokenization_utils import AddedToken
 
 
 logging.set_verbosity_info()
@@ -324,7 +326,7 @@ def convert_speecht5_checkpoint(
     checkpoint_path,
     pytorch_dump_folder_path,
     config_path=None,
-    dict_path=None,
+    vocab_path=None,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
@@ -335,47 +337,6 @@ def convert_speecht5_checkpoint(
         config = SpeechT5Config()
 
     if task == "s2t":
-        #     if dict_path:
-        #         target_dict = Dictionary.load(dict_path)
-
-        #         # important change bos & pad token id since CTC symbol is <pad> and
-        #         # not <s> as in fairseq
-        #         config.bos_token_id = target_dict.pad_index
-        #         config.pad_token_id = target_dict.bos_index
-        #         config.eos_token_id = target_dict.eos_index
-        #         config.vocab_size = len(target_dict.symbols)
-        #         vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
-        #         if not os.path.isdir(pytorch_dump_folder_path):
-        #             logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
-        #             return
-        #         os.makedirs(pytorch_dump_folder_path, exist_ok=True)
-        #         vocab_dict = target_dict.indices
-
-        #         # fairseq has the <pad> and <s> switched
-        #         vocab_dict["<pad>"] = 0
-        #         vocab_dict["<s>"] = 1
-        #         with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
-        #             json.dump(vocab_dict, vocab_handle)
-        #         tokenizer = SpeechT5Tokenizer(
-        #             vocab_path,
-        #             unk_token=target_dict.unk_word,
-        #             pad_token=target_dict.pad_word,
-        #             bos_token=target_dict.bos_word,
-        #             eos_token=target_dict.eos_word,
-        #             word_delimiter_token="|",
-        #             do_lower_case=False,
-        #         )
-        #         return_attention_mask = True if config.feat_extract_norm == "layer" else False
-        #         feature_extractor = Wav2Vec2FeatureExtractor(
-        #             feature_size=1,
-        #             sampling_rate=16000,
-        #             padding_value=0,
-        #             do_normalize=True,
-        #             return_attention_mask=return_attention_mask,
-        #         )
-        #         processor = SpeechT5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-        #         processor.save_pretrained(pytorch_dump_folder_path)
-
         model = SpeechT5ForSpeechToText(config)
     elif task == "ctc":
         model = SpeechT5ForCTC(config)
@@ -387,6 +348,29 @@ def convert_speecht5_checkpoint(
         model = SpeechT5ForPreTraining(config)
     else:
         raise ValueError(f"Unknown task name: {task}")
+
+    if vocab_path:
+        tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
+
+        if task in ["pretrain", "ctc"]:
+            # Mask token behaves like a normal word, i.e. include the space before it
+            mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
+            tokenizer.mask_token = mask_token
+            tokenizer.add_special_tokens({"mask_token": mask_token})
+            tokenizer.add_tokens(["<ctc_blank>"])
+
+        tokenizer.save_pretrained(pytorch_dump_folder_path)
+
+        #         return_attention_mask = True if config.feat_extract_norm == "layer" else False
+        #         feature_extractor = Wav2Vec2FeatureExtractor(
+        #             feature_size=1,
+        #             sampling_rate=16000,
+        #             padding_value=0,
+        #             do_normalize=True,
+        #             return_attention_mask=return_attention_mask,
+        #         )
+        #         processor = SpeechT5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+        #         processor.save_pretrained(pytorch_dump_folder_path)
 
     fairseq_checkpoint = torch.load(checkpoint_path)
     recursively_load_weights(fairseq_checkpoint["model"], model, task)
@@ -403,7 +387,7 @@ if __name__ == "__main__":
         help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 't2s', 'pretrain'.",
     )
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
+    parser.add_argument("--vocab_path", default=None, type=str, help="Path to SentencePiece model")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
@@ -414,5 +398,5 @@ if __name__ == "__main__":
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
         args.config_path,
-        args.dict_path,
+        args.vocab_path,
     )
