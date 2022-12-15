@@ -36,12 +36,20 @@ class TvltConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to 224):
+        pixel_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
+        audio_size (`int`, *optional*, defaults to 2048):
+            The time length of each audio spectrogram.
+        feature_size (`int`, *optional*, defaults to 128):
+            The frequency length of audio spectrogram.
+        pixel_patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each image patch.
+        audio_patch_size (`list`, *optional*, defaults to [16, 16]):
+            The size (resolution) of each audio patch.
+        num_pixel_channels (`int`, *optional*, defaults to 3):
+            The number of input image channels.
+        num_audio_channels (`int`, *optional*, defaults to 1):
+            The number of input audio channels.
         num_frames (`int`, *optional*, defaults to 16):
             The number of frames in each video.
         hidden_size (`int`, *optional*, defaults to 768):
@@ -77,6 +85,16 @@ class TvltConfig(PretrainedConfig):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
         norm_pix_loss (`bool`, *optional*, defaults to `True`):
             Whether to normalize the target patch pixels.
+        pixel_mask_ratio (`float`, *optional*, defaults to `0.75`):
+            Pixel patch masking ratio.
+        audio_mask_ratio (`float`, *optional*, defaults to `0.15`):
+            Audio patch masking ratio.
+        task_matching (`bool`, *optional*, defaults to `True`):
+            Whether to use vision audio matching task in pretraining.
+        task_mae (`bool`, *optional*, defaults to `True`):
+            Whether to use mae task in pretraining.
+        num_labels (`int`, *optional*, defaults to `1`):
+            Number of labels in training and tasks like question answering.
 
     Example:
 
