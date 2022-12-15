@@ -31,18 +31,19 @@ class BlipProcessor(ProcessorMixin):
     docstring of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (`BlipImageProcessor`):
-            An instance of [`BlipImageProcessor`]. The feature extractor is a required input.
+        image_processor (`BlipImageProcessor`):
+            An instance of [`BlipImageProcessor`]. The image processor is a required input.
         tokenizer (`BertTokenizerFast`):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "BlipImageProcessor"
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "BlipImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
+    def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
+        super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
 
     def __call__(
         self,
@@ -99,7 +100,7 @@ class BlipProcessor(ProcessorMixin):
             return text_encoding
 
         # add pixel_values + pixel_mask
-        encoding_feature_extractor = self.feature_extractor(images, return_tensors=return_tensors)
+        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
 
         if text is not None:
             text_encoding = self.tokenizer(
@@ -124,9 +125,9 @@ class BlipProcessor(ProcessorMixin):
             text_encoding = None
 
         if text_encoding is not None:
-            encoding_feature_extractor.update(text_encoding)
+            encoding_image_processor.update(text_encoding)
 
-        return encoding_feature_extractor
+        return encoding_image_processor
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -145,5 +146,5 @@ class BlipProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
