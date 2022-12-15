@@ -22,7 +22,7 @@ from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import convert_to_rgb, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -41,21 +41,6 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.clip.image_processing_clip.convert_to_rgb
-def convert_to_rgb(image: Union[Any, PIL.Image.Image]) -> Union[Any, PIL.Image.Image]:
-    """
-    Converts `PIL.Image.Image` to RGB format. Images in other formats are returned as is.
-
-    Args:
-        image (`PIL.Image.Image`):
-            The image to convert.
-    """
-    if not isinstance(image, PIL.Image.Image):
-        return image
-
-    return image.convert("RGB")
 
 
 class BlipImageProcessor(BaseImageProcessor):
