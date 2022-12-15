@@ -270,8 +270,6 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     read_in_q_k_v(state_dict, config, prefix=prefix)
 
     # load HuggingFace model
-    # TODO fix use_cache for video models
-    config.use_cache = False if "vatex" in model_name else True
     model = GitForCausalLM(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model.eval()
