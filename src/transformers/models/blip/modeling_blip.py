@@ -771,7 +771,7 @@ class BlipModel(BlipPreTrainedModel):
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
-        >>> inputs = processor(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -982,8 +982,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> outputs = model.generate(**inputs)
-        >>> print(processor.decode(outputs[0], skip_special_tokens=True))
+        >>> outputs = model(**inputs)
         ```"""
         batch_size = pixel_values.shape[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1059,6 +1058,8 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> outputs = model.generate(**inputs)
+        >>> print(processor.decode(outputs[0], skip_special_tokens=True))
+        two cats are laying on a couch
         ```
         """
 
@@ -1155,10 +1156,11 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "How many cats are in the picture?"
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
-        >>> outputs = model.generate(**inputs)
+        >>> outputs = model(**inputs)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         batch_size = input_ids.shape[0]
@@ -1240,18 +1242,20 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipTokenizer, BlipForImageCaptioning
+        >>> from transformers import BlipProcessor, BlipForQuestionAnswering
 
-        >>> model = BlipForImageCaptioning.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = CLIPProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "How many cats are in the picture?"
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
-        >>> image_embeds = outputs.image_embeds
+        >>> outputs = model.generate(**inputs)
+        >>> print(processor.decode(outputs[0], skip_special_tokens=True))
+        2
         ```
         """
         vision_outputs = self.vision_model(
@@ -1351,18 +1355,17 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import BlipProcessor, BlipForImageTextRetrieval
 
-        >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "an image of a cat"
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
-
         >>> outputs = model(**inputs)
-        >>> print(outputs[0])  # similarity score
-        ```"""
+        ```
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
