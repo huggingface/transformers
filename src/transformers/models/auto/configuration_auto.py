@@ -608,10 +608,8 @@ class _LazyLoadAllMappings(OrderedDict):
         if self._initialized:
             return
         warnings.warn(
-            (
                 "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP is deprecated and will be removed in v5 of Transformers. "
                 "It does not contain all available model checkpoints, far from it. Checkout hf.co/models for that."
-            ),
             FutureWarning,
         )
 
