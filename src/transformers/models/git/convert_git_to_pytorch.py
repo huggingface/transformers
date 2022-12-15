@@ -282,7 +282,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     # verify results
     image_processor = VideoMAEImageProcessor() if "vatex" in model_name else CLIPImageProcessor()
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", model_input_names=["input_ids", "attention_mask"])
     tokenizer.model_input_names = ["input_ids", "attention_mask"]
     processor = GitProcessor(tokenizer=tokenizer, image_processor=image_processor)
 

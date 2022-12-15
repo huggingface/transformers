@@ -41,14 +41,12 @@ from .configuration_git import GitConfig, GitVisionConfig
 
 logger = logging.get_logger(__name__)
 
-# TODO update checkpoint
-_CHECKPOINT_FOR_DOC = "nielsr/git-base"
+_CHECKPOINT_FOR_DOC = "microsoft/git-base"
 _CONFIG_FOR_DOC = "GitConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO update checkpoints
-    "nielsr/git-base",
+    "microsoft/git-base",
     # See all GIT models at https://huggingface.co/models?filter=git
 ]
 

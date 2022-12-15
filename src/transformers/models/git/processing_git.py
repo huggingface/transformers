@@ -81,8 +81,6 @@ class GitProcessor(ProcessorMixin):
 
         if text is not None:
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
-            # the model doesn't use token type ids
-            encoding.pop("token_type_ids", None)
 
         if images is not None:
             image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
