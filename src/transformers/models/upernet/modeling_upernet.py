@@ -132,6 +132,7 @@ class UperNetHead(nn.Module):
     def __init__(self, config, in_channels):
         super().__init__()
 
+        self.config = config
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
         self.in_channels = in_channels
         self.channels = config.hidden_size
@@ -168,7 +169,13 @@ class UperNetHead(nn.Module):
         )
 
     def init_weights(self):
-        pass
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     def psp_forward(self, inputs):
         x = inputs[-1]
@@ -229,6 +236,8 @@ class FCNHead(nn.Module):
         self, config, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
     ) -> None:
         super().__init__()
+
+        self.config = config
         self.in_channels = config.auxiliary_in_channels
         self.channels = config.auxiliary_channels
         self.num_convs = config.auxiliary_num_convs
@@ -260,7 +269,13 @@ class FCNHead(nn.Module):
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
     def init_weights(self):
-        pass
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
         # just take the relevant feature maps
