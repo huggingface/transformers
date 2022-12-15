@@ -62,6 +62,7 @@ from .base import (
 from .conversational import Conversation, ConversationalPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
+from .document_token_classification import DocumentTokenClassificationPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
@@ -123,6 +124,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForCTC,
         AutoModelForDocumentQuestionAnswering,
+        AutoModelForDocumentTokenClassification,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
@@ -238,6 +240,12 @@ SUPPORTED_TASKS = {
         "default": {
             "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
         },
+        "type": "multimodal",
+    },
+    "document-token-classification": {
+        "impl": DocumentTokenClassificationPipeline,
+        "pt": (AutoModelForDocumentTokenClassification,) if is_torch_available() else (),
+        "tf": (),
         "type": "multimodal",
     },
     "fill-mask": {
