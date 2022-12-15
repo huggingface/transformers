@@ -1647,14 +1647,6 @@ else:
         ]
     )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
-    _import_structure["models.mask2former"].extend(
-        [
-            "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Mask2FormerForInstanceSegmentation",
-            "Mask2FormerModel",
-            "Mask2FormerPreTrainedModel",
-        ]
-    )
     _import_structure["models.markuplm"].extend(
         [
             "MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1663,6 +1655,14 @@ else:
             "MarkupLMForTokenClassification",
             "MarkupLMModel",
             "MarkupLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mask2former"].extend(
+        [
+            "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Mask2FormerForInstanceSegmentation",
+            "Mask2FormerModel",
+            "Mask2FormerPreTrainedModel",
         ]
     )
     _import_structure["models.maskformer"].extend(

@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -51,10 +51,6 @@ from transformers.utils import (
 
 
 logger = logging.get_logger(__name__)
-
-
-if TYPE_CHECKING:
-    from transformers import Mask2FormerForInstanceSegmentationOutput
 
 
 if is_torch_available():
@@ -871,49 +867,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    def post_process_segmentation(
-        self, outputs: "Mask2FormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
-    ) -> "torch.Tensor":
-        """
-        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
-        supports PyTorch.
-
-        Args:
-            outputs ([`Mask2FormerForInstanceSegmentationOutput`]):
-                The outputs from [`Mask2FormerForInstanceSegmentation`].
-
-            target_size (`Tuple[int, int]`, *optional*):
-                If set, the `masks_queries_logits` will be resized to `target_size`.
-
-        Returns:
-            `torch.Tensor`:
-                A tensor of shape (`batch_size, num_class_labels, height, width`).
-        """
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits[-1]
-        if target_size is not None:
-            ## upsample masks
-            masks_queries_logits = torch.nn.functional.interpolate(
-                masks_queries_logits,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-        # remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs = masks_queries_logits.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-
-        return segmentation
-
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":
@@ -974,8 +927,8 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         return_coco_annotation: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
-        supports PyTorch.
+        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into instance segmentation predictions.
+        Only supports PyTorch.
 
         Args:
             outputs ([`Mask2FormerForInstanceSegmentation`]):

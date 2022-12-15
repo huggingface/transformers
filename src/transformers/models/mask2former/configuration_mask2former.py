@@ -14,16 +14,12 @@
 # limitations under the License.
 """ Mask2Former model configuration"""
 import copy
-from typing import Dict, List, Optional
-
-from ..deformable_detr import DeformableDetrConfig
-from ..detr import DetrConfig
-from ..swin import SwinConfig
+from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto.configuration_auto import AutoConfig
 from ..auto import CONFIG_MAPPING
+from ..swin import SwinConfig
 
 
 MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -64,38 +60,11 @@ class Mask2FormerConfig(PretrainedConfig):
         decoder_config (`Dict`, *optional*):
             The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
             will be used.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        dice_weight (`float`, *optional*, defaults to 1.0):
-            The weight for the dice loss.
-        cross_entropy_weight (`float`, *optional*, defaults to 1.0):
-            The weight for the cross entropy loss.
-        mask_weight (`float`, *optional*, defaults to 20.0):
-            The weight for the mask loss.
-        output_auxiliary_logits (`bool`, *optional*):
-            Should the model output its `auxiliary_logits` or not.
-        train_num_points (`int`, *optional*, defaults to 12544):
-            Number of points used for sampling during loss calculation.
-        importance_sample_ratio (`float`, *optional*, defaults to 0.75):
-            Ratio of points that are sampled via importance sampling.
-        oversample_ratio (`float`, *optional*, defaults to 3.0):
-            Oversampling parameter used for calculating no. of sampled points
-        pixel_decoder_config (`Dict`, *optional*):
-            The configuration passed to the pixel decoder module, if unset, the configuration corresponding to
-            `deformable-detr` will be used.
-        common_stride (`int`, *optional*, defaults to 4):
-            parameter used for determining number of FPN levels used as part of pixel decoder
-        feature_strides (`List`, *optional*, defaults to [4, 8, 16, 32]):
-            feature strides corresponding to features generated from backbone network
-        mask2former_num_feature_levels (`int`, *optional*, defaults to 3):
-            Number of feature levels for Mask2former model
 
     Raises:
         `ValueError`:
             Raised if the backbone model type selected is not in `["swin"]` or the decoder model type selected is not
-            in `["detr"]` or the pixel decoder type selected is not in `["deformable_detr"]`
+            in `["detr"]`.
 
     Examples:
 
@@ -114,34 +83,58 @@ class Mask2FormerConfig(PretrainedConfig):
 
     """
     model_type = "mask2former"
-    attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["swin"]
-    decoders_supported = ["detr"]
-    pixel_decoders_supported = ["deformable_detr"]
 
     def __init__(
         self,
-        feature_size: int = 256,
-        mask_feature_size: int = 256,
-        no_object_weight: float = 0.1,
-        use_auxiliary_loss: bool = False,
+        general_config: Optional[Dict] = None,
         backbone_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
-        init_std: float = 0.02,
-        init_xavier_std: float = 1.0,
-        dice_weight: float = 5.0,
-        cross_entropy_weight: float = 2.0,
-        mask_weight: float = 5.0,
-        output_auxiliary_logits: Optional[bool] = None,
-        train_num_points: Optional[int] = 12544,
-        importance_sample_ratio: Optional[float] = 0.75,
-        oversample_ratio: Optional[float] = 3.0,
-        pixel_decoder_config: Optional[Dict] = None,
-        common_stride: Optional[int] = 4,
-        feature_strides: Optional[List[int]] = [4, 8, 16, 32],
-        mask2former_num_feature_levels: Optional[int] = 3,
         **kwargs,
     ):
+        cfgs = self._setup_cfg(general_config, backbone_config, decoder_config)
+
+        general_config, backbone_config, decoder_config = cfgs
+
+        self.general_config = general_config
+        self.backbone_config = backbone_config
+        self.decoder_config = decoder_config
+
+        self.hidden_size = self.decoder_config["hidden_dim"]
+        self.num_attention_heads = self.decoder_config["num_heads"]
+        self.num_hidden_layers = self.decoder_config["decoder_layers"]
+        self.init_std = self.general_config["init_std"]
+        self.init_xavier_std = self.general_config["init_xavier_std"]
+
+        super().__init__(**kwargs)
+
+    def _setup_cfg(
+        self,
+        general_config: Optional[Dict] = None,
+        backbone_config: Optional[SwinConfig] = None,
+        decoder_config: Optional[Dict] = None,
+    ) -> Dict[str, any]:
+
+        if general_config is None:
+            general_config = {}
+            general_config["ignore_value"] = 255
+            general_config["num_classes"] = 150
+            general_config["num_queries"] = 150
+            general_config["no_object_weight"] = 0.1
+            general_config["class_weight"] = 2.0
+            general_config["mask_weight"] = 5.0
+            general_config["dice_weight"] = 5.0
+            general_config["train_num_points"] = 12544
+            general_config["oversample_ratio"] = 3.0
+            general_config["importance_sample_ratio"] = 0.75
+            general_config["init_std"] = 0.02
+            general_config["init_xavier_std"] = 1.0
+            general_config["layer_norm_eps"] = 1e-05
+            general_config["is_train"] = False
+            general_config["use_auxiliary_loss"] = False
+            general_config["output_auxiliary_logits"] = False
+            general_config["feature_strides"] = ([4, 8, 16, 32],)
+            general_config["deep_supervision"] = True
 
         if backbone_config is None:
             backbone_config = SwinConfig(
@@ -169,100 +162,31 @@ class Mask2FormerConfig(PretrainedConfig):
                 backbone_config = config_class.from_dict(backbone_config)
 
         if decoder_config is None:
-            # fall back to https://huggingface.co/facebook/detr-resnet-50
-            decoder_config = DetrConfig(
-                decoder_layers=10,
-                encoder_layers=0,
-                dropout=0.0,
-            )
-        else:
-            decoder_type = decoder_config.pop("model_type")
-            if decoder_type not in self.decoders_supported:
-                raise ValueError(
-                    f"Transformer Decoder {decoder_type} not supported, please use one of"
-                    f" {','.join(self.decoders_supported)}"
-                )
-            decoder_config = AutoConfig.for_model(decoder_type, **decoder_config)
+            decoder_config = {}
+            decoder_config["feature_size"] = 256
+            decoder_config["mask_feature_size"] = 256
+            decoder_config["hidden_dim"] = 256
+            decoder_config["encoder_feedforward_dim"] = 1024
+            decoder_config["norm"] = "GN"
+            decoder_config["encoder_layers"] = 6
+            decoder_config["decoder_layers"] = 10
+            decoder_config["use_task_norm"] = True
+            decoder_config["num_heads"] = 8
+            decoder_config["dropout"] = 0.1
+            decoder_config["dim_feedforward"] = 2048
+            decoder_config["pre_norm"] = False
+            decoder_config["enforce_input_proj"] = False
+            decoder_config["query_dec_layers"] = 2
+            decoder_config["common_stride"] = 4
 
-        if pixel_decoder_config is None:
-            # fall back to https://huggingface.co/sensetime/deformable-detr
-            pixel_decoder_config = DeformableDetrConfig()
-        else:
-            pixel_decoder_type = pixel_decoder_config.pop("model_type")
-            if pixel_decoder_type not in self.pixel_decoders_supported:
-                raise ValueError(
-                    f"Pixel Decoder {pixel_decoder_type} not supported, please use one of"
-                    f" {'.'.join(self.pixel_decoders_supported)}"
-                )
-            pixel_decoder_config = AutoConfig.for_model(pixel_decoder_type, **pixel_decoder_config)
-
-        self.backbone_config = backbone_config
-        self.decoder_config = decoder_config
-        # main feature dimension for the model
-        self.feature_size = feature_size
-        self.mask_feature_size = mask_feature_size
-        # initializer
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        # Hungarian matcher && loss
-        self.cross_entropy_weight = cross_entropy_weight
-        self.dice_weight = dice_weight
-        self.mask_weight = mask_weight
-        self.use_auxiliary_loss = use_auxiliary_loss
-        self.no_object_weight = no_object_weight
-        self.output_auxiliary_logits = output_auxiliary_logits
-        self.train_num_points = train_num_points
-        self.importance_sample_ratio = importance_sample_ratio
-        self.oversample_ratio = oversample_ratio
-        # Pixel Decoder Config
-        self.pixel_decoder_config = pixel_decoder_config
-        self.pixel_decoder_config.feature_strides = feature_strides
-        self.pixel_decoder_config.common_stride = common_stride
-        self.pixel_decoder_config.mask2former_num_feature_levels = mask2former_num_feature_levels
-
-        self.num_attention_heads = self.decoder_config.encoder_attention_heads
-        self.num_hidden_layers = self.decoder_config.num_hidden_layers
-        super().__init__(**kwargs)
-
-    @classmethod
-    def from_backbone_decoder_pixel_decoder_configs(
-        cls,
-        backbone_config: PretrainedConfig,
-        decoder_config: PretrainedConfig,
-        pixel_decoder_config: PretrainedConfig,
-        **kwargs
-    ):
-        """Instantiate a [`Mask2FormerConfig`] (or a derived class) from a pre-trained backbone model configuration, DETR model
-        configuration and Deformable Detr model configuration.
-
-            Args:
-                backbone_config ([`PretrainedConfig`]):
-                    The backbone configuration.
-                decoder_config ([`PretrainedConfig`]):
-                    The transformer decoder configuration to use.
-                pixel_decoder_config ([`PretrainedConfig`]):
-                    The pixel decoder configuration to use.
-
-            Returns:
-                [`Mask2FormerConfig`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config.to_dict(),
-            decoder_config=decoder_config.to_dict(),
-            pixel_decoder_config=pixel_decoder_config.to_dict(),
-            **kwargs,
-        )
+        return general_config, backbone_config, decoder_config
 
     def to_dict(self) -> Dict[str, any]:
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
         output["backbone_config"] = self.backbone_config.to_dict()
-        output["decoder_config"] = self.decoder_config.to_dict()
-        output["pixel_decoder_config"] = self.pixel_decoder_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

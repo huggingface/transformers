@@ -21,7 +21,6 @@ from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
 import torch
-import torchvision.transforms as T
 from PIL import Image
 from torch import Tensor, nn
 
@@ -36,7 +35,6 @@ from transformers.models.mask2former.modeling_mask2former import (
     Mask2FormerForInstanceSegmentation,
     Mask2FormerForInstanceSegmentationOutput,
     Mask2FormerModel,
-    Mask2FormerModelOutput,
 )
 from transformers.utils import logging
 
@@ -360,120 +358,64 @@ class OriginalMask2FormerCheckpointToOursConverter:
         src_prefix: str = "sem_seg_head.pixel_decoder.transformer.encoder.layers"
 
         renamed_keys = []
-        
+
         for i in range(self.config.pixel_decoder_config.encoder_layers):
 
             renamed_keys.append(
                 (
-                    f"{src_prefix}.{i}.self_attn.sampling_offsets.weight", 
-                    f"{dst_prefix}.{i}.self_attn.sampling_offsets.weight"
+                    f"{src_prefix}.{i}.self_attn.sampling_offsets.weight",
+                    f"{dst_prefix}.{i}.self_attn.sampling_offsets.weight",
                 )
             )
             renamed_keys.append(
                 (
-                    f"{src_prefix}.{i}.self_attn.sampling_offsets.bias", 
-                    f"{dst_prefix}.{i}.self_attn.sampling_offsets.bias"
+                    f"{src_prefix}.{i}.self_attn.sampling_offsets.bias",
+                    f"{dst_prefix}.{i}.self_attn.sampling_offsets.bias",
                 )
             )
             renamed_keys.append(
                 (
-                    f"{src_prefix}.{i}.self_attn.attention_weights.weight", 
-                    f"{dst_prefix}.{i}.self_attn.attention_weights.weight"
+                    f"{src_prefix}.{i}.self_attn.attention_weights.weight",
+                    f"{dst_prefix}.{i}.self_attn.attention_weights.weight",
                 )
             )
             renamed_keys.append(
                 (
-                    f"{src_prefix}.{i}.self_attn.attention_weights.bias", 
-                    f"{dst_prefix}.{i}.self_attn.attention_weights.bias"
+                    f"{src_prefix}.{i}.self_attn.attention_weights.bias",
+                    f"{dst_prefix}.{i}.self_attn.attention_weights.bias",
                 )
             )
             renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.self_attn.value_proj.weight", 
-                    f"{dst_prefix}.{i}.self_attn.value_proj.weight"
-                )
+                (f"{src_prefix}.{i}.self_attn.value_proj.weight", f"{dst_prefix}.{i}.self_attn.value_proj.weight")
             )
             renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.self_attn.value_proj.bias", 
-                    f"{dst_prefix}.{i}.self_attn.value_proj.bias"
-                )
+                (f"{src_prefix}.{i}.self_attn.value_proj.bias", f"{dst_prefix}.{i}.self_attn.value_proj.bias")
             )
             renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.self_attn.output_proj.weight", 
-                    f"{dst_prefix}.{i}.self_attn.output_proj.weight"
-                )
+                (f"{src_prefix}.{i}.self_attn.output_proj.weight", f"{dst_prefix}.{i}.self_attn.output_proj.weight")
             )
             renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.self_attn.output_proj.bias", 
-                    f"{dst_prefix}.{i}.self_attn.output_proj.bias"
-                )
+                (f"{src_prefix}.{i}.self_attn.output_proj.bias", f"{dst_prefix}.{i}.self_attn.output_proj.bias")
             )
-            renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.norm1.weight", 
-                    f"{dst_prefix}.{i}.self_attn_layer_norm.weight"
-                )
-            )
-            renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.norm1.bias", 
-                    f"{dst_prefix}.{i}.self_attn_layer_norm.bias"
-                )
-            )
-            renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.linear1.weight", 
-                    f"{dst_prefix}.{i}.fc1.weight"
-                )
-            )
-            renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.linear1.bias", 
-                    f"{dst_prefix}.{i}.fc1.bias"
-                )
-            )
-            renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.norm2.weight", 
-                    f"{dst_prefix}.{i}.final_layer_norm.weight"
-                )
-            )
-            renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.norm2.bias", 
-                    f"{dst_prefix}.{i}.final_layer_norm.bias"
-                )
-            )
+            renamed_keys.append((f"{src_prefix}.{i}.norm1.weight", f"{dst_prefix}.{i}.self_attn_layer_norm.weight"))
+            renamed_keys.append((f"{src_prefix}.{i}.norm1.bias", f"{dst_prefix}.{i}.self_attn_layer_norm.bias"))
+            renamed_keys.append((f"{src_prefix}.{i}.linear1.weight", f"{dst_prefix}.{i}.fc1.weight"))
+            renamed_keys.append((f"{src_prefix}.{i}.linear1.bias", f"{dst_prefix}.{i}.fc1.bias"))
+            renamed_keys.append((f"{src_prefix}.{i}.norm2.weight", f"{dst_prefix}.{i}.final_layer_norm.weight"))
+            renamed_keys.append((f"{src_prefix}.{i}.norm2.bias", f"{dst_prefix}.{i}.final_layer_norm.bias"))
 
-            renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.linear2.weight", 
-                    f"{dst_prefix}.{i}.fc2.weight"
-                )
-            )
-            renamed_keys.append(
-                (
-                    f"{src_prefix}.{i}.linear2.bias", 
-                    f"{dst_prefix}.{i}.fc2.bias"
-                )
-            )
-        
+            renamed_keys.append((f"{src_prefix}.{i}.linear2.weight", f"{dst_prefix}.{i}.fc2.weight"))
+            renamed_keys.append((f"{src_prefix}.{i}.linear2.bias", f"{dst_prefix}.{i}.fc2.bias"))
+
         return renamed_keys
 
     def replace_deformable_detr_encoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "pixel_level_module.decoder.msda_module"
         src_prefix: str = "sem_seg_head.pixel_decoder.transformer"
 
-        renamed_keys = self.replace_deformable_detr_encoder_layers(dst_state_dict,src_state_dict)
+        renamed_keys = self.replace_deformable_detr_encoder_layers(dst_state_dict, src_state_dict)
 
-        renamed_keys.extend(
-            [
-            (f"{src_prefix}.level_embed", f"{dst_prefix}.level_embed")
-            ]
-        )
+        renamed_keys.extend([(f"{src_prefix}.level_embed", f"{dst_prefix}.level_embed")])
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
@@ -782,8 +724,8 @@ def test(
         im = prepare_img()
         x = feature_extractor(images=im, return_tensors="pt")["pixel_values"]
         """
-        original_model_backbone_features = original_model.backbone(x.clone())
-        our_model_output: Mask2FormerModelOutput = our_model.model(x.clone(), output_hidden_states=True)
+        original_model_backbone_features = original_model.backbone(x.clone()) our_model_output: Mask2FormerModelOutput
+        = our_model.model(x.clone(), output_hidden_states=True)
 
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
