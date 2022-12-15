@@ -25,11 +25,11 @@ Tips:
 
 - The quickest way to get started with TVLT is by checking the [example notebooks](https://github.com/zinengtang/TVLT)
   (which showcase MAE and 2 downstream tasks in the original github).
-- TVLT is a model that takes both `pixel_values` and `audio_values` as input. One can use [`TVLTFeatureExtractor`] to prepare data for the model.
+- TVLT is a model that takes both `pixel_values` and `audio_values` as input. One can use [`TvltPixelFeatureExtractor`, ``TvltAudioFeatureExtractor] to prepare data for the model.
   This processor wraps a feature extractor (for the image modality) and a tokenizer (for the language modality) into one.
 - TVLT is trained with images/videos and audios of various sizes: the authors resize and crop the input images/videos to 224 and limit the length of audio spectrogram to 2048. To make batching of videos and audios possible, the authors use a `pixel_mask` that indicates
   which pixel values are real and which are padding and `audio_masks` that indicates
-  which audio values are real and which are padding. [`TVLTFeatureExtractor`] automatically creates this for you.
+  which audio values are real and which are padding. [`TvltAudioFeatureExtractor`] automatically creates this for you.
 - The design of TVLT is very similar to that of a standard Vision Transformer (ViT) and masked autoencoder (MAE). The difference is that the model includes embedding layers for the audio modality.
 
 <p align="center">
@@ -46,36 +46,31 @@ Tips:
 
 - The PyTorch version of this model is only available in torch 1.10 and higher.
 
-## TVLTConfig
+## TvltConfig
 
-[[autodoc]] TVLTConfig
+[[autodoc]] TvltConfig
 
-## TVLTPixelFeatureExtractor
+## TvltPixelFeatureExtractor
 
-[[autodoc]] TVLTPixelFeatureExtractor
+[[autodoc]] TvltPixelFeatureExtractor
     - __call__
 
-## TVLTAudioFeatureExtractor
+## TvltAudioFeatureExtractor
 
-[[autodoc]] TVLTAudioFeatureExtractor
+[[autodoc]] TvltAudioFeatureExtractor
     - __call__
     
-## TVLTModel
+## TvltModel
 
 [[autodoc]] TVLTModel
     - forward
 
-## TVLTForPreTraining
+## TvltForPreTraining
 
-[[autodoc]] TVLTForPreTraining
+[[autodoc]] TvltForPreTraining
     - forward
 
-## TVLTForVisionAndAudioRetrieval
+## TvltForSequenceClassification
 
-[[autodoc]] TVLTForVideoAndAudioRetrieval
-    - forward
-
-## TVLTForSequenceClassification
-
-[[autodoc]] TVLTForSequenceClassification
+[[autodoc]] TvltForSequenceClassification
     - forward
