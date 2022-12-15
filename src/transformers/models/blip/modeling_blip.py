@@ -656,10 +656,9 @@ class BlipEncoder(nn.Module):
 
 class BlipVisionModel(BlipPreTrainedModel):
     main_input_name = "pixel_values"
+    config_class = BlipVisionConfig
 
     def __init__(self, config: BlipVisionConfig):
-        if hasattr(config, "vision_config"):
-            config = config.vision_config
         super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
