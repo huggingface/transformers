@@ -24,7 +24,7 @@ from pathlib import Path
 
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
-from transformers import ImageProcessor, ViTImageProcessor
+from transformers import AutoImageProcessor, ViTImageProcessor
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -313,7 +313,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
             {"ImageProcessor": "custom_image_processing.CustomImageProcessor"},
         )
 
-        new_image_processor = ImageProcessor.from_pretrained(
+        new_image_processor = AutoImageProcessor.from_pretrained(
             f"{USER}/test-dynamic-image-processor", trust_remote_code=True
         )
         # Can't make an isinstance check because the new_image_processor is from the CustomImageProcessor class of a dynamic module
