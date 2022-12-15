@@ -12,16 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" Testing suite for the TVLT feature extractor. """
 
-import unittest
 import random
+import unittest
 
 import numpy as np
 
+from test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
-
-from test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
 
 
 if is_torch_available():
@@ -30,9 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TVLTPixelFeatureExtractor, TVLTAudioFeatureExtractor
+    from transformers import TvltAudioFeatureExtractor, TvltPixelFeatureExtractor
 
 global_rng = random.Random()
+
 
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
@@ -48,7 +49,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class TVLTPixelFeatureExtractionTester(unittest.TestCase):
+class TvltPixelFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -63,7 +64,7 @@ class TVLTPixelFeatureExtractionTester(unittest.TestCase):
         max_resolution=384,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
-        crop_size=None
+        crop_size=None,
     ):
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
 
@@ -94,12 +95,11 @@ class TVLTPixelFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class TVLTPixelFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
-    feature_extraction_class = TVLTPixelFeatureExtractor if is_vision_available() else None
+class TvltPixelFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+    feature_extraction_class = TvltPixelFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = TVLTPixelFeatureExtractionTester(self)
+        self.feature_extract_tester = TvltPixelFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):
@@ -151,7 +151,7 @@ class TVLTPixelFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
                 self.feature_extract_tester.crop_size["width"],
             ),
         )
-        
+
     def test_call_numpy(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -160,7 +160,7 @@ class TVLTPixelFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], np.ndarray)
-            
+
         # Test not batched input
         encoded_pixels = feature_extractor(video_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
@@ -222,8 +222,8 @@ class TVLTPixelFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
 
-        
-class TVLTAudioFeatureExtractionTester(unittest.TestCase):
+
+class TvltAudioFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -237,10 +237,9 @@ class TVLTAudioFeatureExtractionTester(unittest.TestCase):
         hop_length=512,
         chunk_length=30,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
-        
+
         self.min_seq_length = min_seq_length
         self.max_seq_length = max_seq_length
         self.audio_size = audio_size
@@ -257,12 +256,11 @@ class TVLTAudioFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class TVLTAudioFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
-    feature_extraction_class = TVLTAudioFeatureExtractor
+class TvltAudioFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+    feature_extraction_class = TvltAudioFeatureExtractor
 
     def setUp(self):
-        self.feature_extract_tester = TVLTAudioFeatureExtractionTester(self)
+        self.feature_extract_tester = TvltAudioFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):
@@ -285,20 +283,19 @@ class TVLTAudioFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
 
         # Test not batched input
         encoded_audios = feature_extractor(np_speech_inputs[0], return_tensors="pt").audio_values
-        
-        self.assertTrue(encoded_audios.ndim == 4)
-        self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
-        self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.audio_size)
-        self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
-        
-        # Test batched
-        encoded_audios = feature_extractor(np_speech_inputs[0], return_tensors="pt").audio_values
-        
+
         self.assertTrue(encoded_audios.ndim == 4)
         self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
         self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.audio_size)
         self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
 
+        # Test batched
+        encoded_audios = feature_extractor(np_speech_inputs[0], return_tensors="pt").audio_values
+
+        self.assertTrue(encoded_audios.ndim == 4)
+        self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
+        self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.audio_size)
+        self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
 
     def test_call_pytorch(self):
         # Initialize feature_extractor
@@ -310,15 +307,15 @@ class TVLTAudioFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
 
         # Test not batched input
         encoded_audios = feature_extractor(torch_speech_inputs[0], return_tensors="pt").audio_values
-        
+
         self.assertTrue(encoded_audios.ndim == 4)
         self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
         self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.audio_size)
         self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
-        
+
         # Test batched
         encoded_audios = feature_extractor(torch_speech_inputs[0], return_tensors="pt").audio_values
-        
+
         self.assertTrue(encoded_audios.ndim == 4)
         self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
         self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.audio_size)
