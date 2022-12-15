@@ -82,7 +82,7 @@ class DonutImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class DonutImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = DonutImageProcessor if is_vision_available() else None
 

@@ -77,7 +77,7 @@ class ConvNextImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ConvNextFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ConvNextImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = ConvNextImageProcessor if is_vision_available() else None
 

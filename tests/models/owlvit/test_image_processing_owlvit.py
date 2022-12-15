@@ -82,7 +82,7 @@ class OwlViTImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class OwlViTImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = OwlViTImageProcessor if is_vision_available() else None
 

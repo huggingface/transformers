@@ -81,7 +81,7 @@ class LevitImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class LevitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class LevitImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = LevitImageProcessor if is_vision_available() else None
 

@@ -115,7 +115,7 @@ class ConditionalDetrImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ConditionalDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ConditionalDetrImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = ConditionalDetrImageProcessor if is_vision_available() else None
 

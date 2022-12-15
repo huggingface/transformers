@@ -105,7 +105,7 @@ def prepare_semantic_batch_inputs():
 
 @require_torch
 @require_vision
-class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class BeitImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = BeitImageProcessor if is_vision_available() else None
 

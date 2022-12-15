@@ -78,7 +78,7 @@ class PoolFormerImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class PoolFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = PoolFormerImageProcessor if is_vision_available() else None
 

@@ -113,7 +113,7 @@ class CLIPImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class CLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class CLIPImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = CLIPImageProcessor if is_vision_available() else None
 
@@ -246,7 +246,7 @@ class CLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
 @require_torch
 @require_vision
-class CLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class CLIPImageProcessingTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = CLIPImageProcessor if is_vision_available() else None
 

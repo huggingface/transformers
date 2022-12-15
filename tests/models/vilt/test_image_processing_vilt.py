@@ -117,7 +117,7 @@ class ViltImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ViltImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = ViltImageProcessor if is_vision_available() else None
 

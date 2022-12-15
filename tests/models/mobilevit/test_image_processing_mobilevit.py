@@ -75,7 +75,7 @@ class MobileViTImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class MobileViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class MobileViTImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = MobileViTImageProcessor if is_vision_available() else None
 

@@ -81,7 +81,7 @@ class VideoMAEImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class VideoMAEImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = VideoMAEImageProcessor if is_vision_available() else None
 

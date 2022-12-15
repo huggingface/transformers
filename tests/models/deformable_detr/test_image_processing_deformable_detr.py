@@ -115,7 +115,7 @@ class DeformableDetrImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class DeformableDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class DeformableDetrImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = DeformableDetrImageProcessor if is_vision_available() else None
 

@@ -72,7 +72,7 @@ class MobileNetV1ImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class MobileNetV1FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class MobileNetV1ImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = MobileNetV1ImageProcessor if is_vision_available() else None
 

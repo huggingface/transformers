@@ -131,7 +131,7 @@ class MaskFormerImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class MaskFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = MaskFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
 

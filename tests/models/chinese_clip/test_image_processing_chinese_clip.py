@@ -113,7 +113,7 @@ class ChineseCLIPImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ChineseCLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ChineseCLIPImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = ChineseCLIPImageProcessor if is_vision_available() else None
 
@@ -246,7 +246,7 @@ class ChineseCLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
 
 @require_torch
 @require_vision
-class ChineseCLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ChineseCLIPImageProcessingTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = ChineseCLIPImageProcessor if is_vision_available() else None
 

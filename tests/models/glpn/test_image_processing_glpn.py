@@ -67,7 +67,7 @@ class GLPNImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class GLPNFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class GLPNImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = GLPNImageProcessor if is_vision_available() else None
 

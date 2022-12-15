@@ -74,7 +74,7 @@ class ViTImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ViTImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = ViTImageProcessor if is_vision_available() else None
 

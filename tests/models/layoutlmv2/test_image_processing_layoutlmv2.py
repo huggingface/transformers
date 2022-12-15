@@ -64,7 +64,7 @@ class LayoutLMv2ImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_pytesseract
-class LayoutLMv2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class LayoutLMv2ImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     image_processing_class = LayoutLMv2ImageProcessor if is_pytesseract_available() else None
 
