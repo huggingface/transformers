@@ -300,7 +300,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("time_series_transformer", "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("timesformer", "TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("tvlt", "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("tvlt", "Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -473,7 +473,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("trajectory_transformer", "Trajectory Transformer"),
         ("transfo-xl", "Transformer-XL"),
         ("trocr", "TrOCR"),
-        ("tvlt", "TVLT"),
+        ("tvlt", "Tvlt"),
         ("ul2", "UL2"),
         ("unispeech", "UniSpeech"),
         ("unispeech-sat", "UniSpeechSat"),
@@ -608,8 +608,10 @@ class _LazyLoadAllMappings(OrderedDict):
         if self._initialized:
             return
         warnings.warn(
-            "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP is deprecated and will be removed in v5 of Transformers. "
-            "It does not contain all available model checkpoints, far from it. Checkout hf.co/models for that.",
+            (
+                "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP is deprecated and will be removed in v5 of Transformers. "
+                "It does not contain all available model checkpoints, far from it. Checkout hf.co/models for that."
+            ),
             FutureWarning,
         )
 
