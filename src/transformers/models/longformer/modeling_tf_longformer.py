@@ -1905,6 +1905,8 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
 
     def build_with_dummies(self, dummy_spec=None):
         # This model is coded in a way which means building it with tf.keras.Input fails
+        # This is usually because of a use of name_scope somewhere in the call() method
+        # The model should ideally have explicit build() methods instead
         if dummy_spec is not None:
             super().build_with_dummies(dummy_spec)
         else:
