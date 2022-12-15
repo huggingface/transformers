@@ -167,6 +167,8 @@ class SegformerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
@@ -285,7 +287,6 @@ class SegformerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
         segmentation_map = to_numpy_array(segmentation_map)
@@ -299,7 +300,7 @@ class SegformerImageProcessor(BaseImageProcessor):
             image=segmentation_map,
             do_reduce_labels=do_reduce_labels,
             do_resize=do_resize,
-            resample=PIL.Image.NEAREST,
+            resample=PILImageResampling.NEAREST,
             size=size,
             do_rescale=False,
             do_normalize=False,
@@ -436,7 +437,6 @@ class SegformerImageProcessor(BaseImageProcessor):
                     segmentation_map=segmentation_map,
                     do_reduce_labels=do_reduce_labels,
                     do_resize=do_resize,
-                    resample=PIL.Image.NEAREST,
                     size=size,
                 )
                 for segmentation_map in segmentation_maps

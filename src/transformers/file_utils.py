@@ -102,7 +102,6 @@ from .utils import (
     is_rjieba_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_sklearn_available,
@@ -128,10 +127,8 @@ from .utils import (
     is_vision_available,
     replace_return_docstrings,
     requires_backends,
-    tf_required,
     to_numpy,
     to_py_obj,
     torch_only_method,
-    torch_required,
     torch_version,
 )

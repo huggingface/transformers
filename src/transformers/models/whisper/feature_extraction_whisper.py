@@ -307,7 +307,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            **kwargs,
         )
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)

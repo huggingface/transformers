@@ -63,7 +63,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIPSeg.html
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
@@ -420,7 +420,6 @@ class CLIPSegEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->CLIPSeg
 class CLIPSegPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -747,7 +746,8 @@ class CLIPSegTextTransformer(nn.Module):
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
-            torch.arange(last_hidden_state.shape[0], device=input_ids.device), input_ids.to(torch.int).argmax(dim=-1)
+            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
+            input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
         ]
 
         if not return_dict:

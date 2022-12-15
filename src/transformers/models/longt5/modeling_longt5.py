@@ -281,7 +281,6 @@ class LongT5DenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->LongT5
 class LongT5DenseGatedActDense(nn.Module):
     def __init__(self, config: LongT5Config):
         super().__init__()
@@ -479,6 +478,12 @@ class LongT5Attention(nn.Module):
                     # self-attn
                     # (batch_size, n_heads, key_length, dim_per_head)
                     hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+                elif past_key_value.shape[2] != key_value_states.shape[1]:
+                    # checking that the `sequence_length` of the `past_key_value` is the same as
+                    # the provided `key_value_states` to support prefix tuning
+                    # cross-attn
+                    # (batch_size, n_heads, seq_length, dim_per_head)
+                    hidden_states = shape(proj_layer(key_value_states))
                 else:
                     # cross-attn
                     hidden_states = past_key_value
@@ -642,9 +647,12 @@ class LongT5LocalAttention(nn.Module):
 
     def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
-        memory_position = torch.arange(
-            3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
+        target_device = (
+            self.relative_attention_bias.weight.device
+            if self.relative_attention_bias.weight.device.type != "meta"
+            else None
         )
+        memory_position = torch.arange(3 * block_length, dtype=torch.long, device=target_device)
         context_position = memory_position[block_length:-block_length]
 
         # (block_length, 3 * block_length)
@@ -837,9 +845,12 @@ class LongT5TransientGlobalAttention(nn.Module):
 
     def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
-        memory_position = torch.arange(
-            3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
+        target_device = (
+            self.relative_attention_bias.weight.device
+            if self.relative_attention_bias.weight.device.type != "meta"
+            else None
         )
+        memory_position = torch.arange(3 * block_length, dtype=torch.long, device=target_device)
         context_position = memory_position[block_length:-block_length]
 
         # (block_length, 3 * block_length)
@@ -1265,6 +1276,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
     config_class = LongT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["LongT5Block"]
 
     @property
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel.dummy_inputs
@@ -1360,7 +1372,9 @@ class LongT5Stack(LongT5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
-        self.embed_tokens = embed_tokens
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
         self.is_decoder = config.is_decoder
 
         self.local_radius = config.local_radius

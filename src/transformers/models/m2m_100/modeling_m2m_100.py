@@ -247,7 +247,14 @@ class M2M100Attention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -1128,7 +1135,14 @@ class M2M100Decoder(M2M100PreTrainedModel):
     M2M_100_START_DOCSTRING,
 )
 class M2M100Model(M2M100PreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_missing = [
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_positions.weights",
+        "encoder.embed_positions.bias",
+        "decoder.embed_positions.weights",
+        "decoder.embed_positions.bias",
+    ]
 
     def __init__(self, config: M2M100Config):
         super().__init__(config)
@@ -1248,6 +1262,10 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         r"lm_head.weight",
         r"encoder.embed_tokens.weight",
         r"decoder.embed_tokens.weight",
+        r"encoder.embed_positions.weights",
+        r"encoder.embed_positions.bias",
+        r"decoder.embed_positions.weights",
+        r"decoder.embed_positions.bias",
     ]
 
     def __init__(self, config: M2M100Config):

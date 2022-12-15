@@ -53,11 +53,11 @@ Tips:
   Techniques like data augmentation, optimization, and regularization were used in order to simulate training on a much larger dataset
   (while only using ImageNet-1k for pre-training). The 5 variants available are (all trained on images of size 224x224):
   *facebook/levit-128S*, *facebook/levit-128*, *facebook/levit-192*, *facebook/levit-256* and
-  *facebook/levit-384*. Note that one should use [`LevitFeatureExtractor`] in order to
+  *facebook/levit-384*. Note that one should use [`LevitImageProcessor`] in order to
   prepare images for the model.
 - [`LevitForImageClassificationWithTeacher`] currently supports only inference and not training or fine-tuning.
 - You can check out demo notebooks regarding inference as well as fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer)
-  (you can just replace [`ViTFeatureExtractor`] by [`LevitFeatureExtractor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
+  (you can just replace [`ViTFeatureExtractor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
 
 This model was contributed by [anugunj](https://huggingface.co/anugunj). The original code can be found [here](https://github.com/facebookresearch/LeViT).
 

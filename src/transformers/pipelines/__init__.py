@@ -79,6 +79,7 @@ from .token_classification import (
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
 )
+from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
@@ -133,6 +134,7 @@ if is_torch_available():
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelForVideoClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
         AutoModelForZeroShotObjectDetection,
@@ -361,6 +363,13 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("Intel/dpt-large", "e93beec")}},
         "type": "image",
     },
+    "video-classification": {
+        "impl": VideoClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModelForVideoClassification,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "4800870")}},
+        "type": "video",
+    },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
@@ -369,11 +378,16 @@ NO_TOKENIZER_TASKS = set()
 # any tokenizer/feature_extractor might be use for a given model so we cannot
 # use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
 # see if the model defines such objects or not.
-MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
+MULTI_MODEL_CONFIGS = {
+    "SpeechEncoderDecoderConfig",
+    "VisionEncoderDecoderConfig",
+    "VisionTextDualEncoderConfig",
+    "LayoutLMConfig",
+}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
-    elif values["type"] in {"audio", "image"}:
+    elif values["type"] in {"audio", "image", "video"}:
         NO_TOKENIZER_TASKS.add(task)
     elif values["type"] != "multimodal":
         raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
@@ -558,8 +572,9 @@ def pipeline(
             pipeline will be allocated.
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
-            `device_map="auto"` to compute the most optimized `device_map` automatically. [More
-            information](https://huggingface.co/docs/accelerate/main/en/big_modeling#accelerate.cpu_offload)
+            `device_map="auto"` to compute the most optimized `device_map` automatically (see
+            [here](https://huggingface.co/docs/accelerate/main/en/package_reference/big_modeling#accelerate.cpu_offload)
+            for more information).
 
             <Tip warning={true}>
 
@@ -590,15 +605,17 @@ def pipeline(
     >>> from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
 
     >>> # Sentiment analysis pipeline
-    >>> pipeline("sentiment-analysis")
+    >>> analyzer = pipeline("sentiment-analysis")
 
     >>> # Question answering pipeline, specifying the checkpoint identifier
-    >>> pipeline("question-answering", model="distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased")
+    >>> oracle = pipeline(
+    ...     "question-answering", model="distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
+    ... )
 
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
     >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    >>> pipeline("ner", model=model, tokenizer=tokenizer)
+    >>> recognizer = pipeline("ner", model=model, tokenizer=tokenizer)
     ```"""
     if model_kwargs is None:
         model_kwargs = {}

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import tempfile
 import unittest
 
 from transformers import (
@@ -106,6 +107,60 @@ class MixedInt8Test(BaseMixedInt8Test):
         output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_warns_save_pretrained(self):
+        r"""
+        Test whether trying to save a model after converting it in 8-bit will throw a warning.
+        """
+        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname)
+
+    def test_device_and_dtype_assignment(self):
+        r"""
+        Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
+        Checks also if other models are casted correctly.
+        """
+        with self.assertRaises(ValueError):
+            # Tries with `str`
+            self.model_8bit.to("cpu")
+
+        with self.assertRaises(ValueError):
+            # Tries with a `dtype``
+            self.model_8bit.to(torch.float16)
+
+        with self.assertRaises(ValueError):
+            # Tries with a `device`
+            self.model_8bit.to(torch.device("cuda:0"))
+
+        with self.assertRaises(ValueError):
+            # Tries with a `device`
+            self.model_8bit.float()
+
+        with self.assertRaises(ValueError):
+            # Tries with a `device`
+            self.model_8bit.half()
+
+        # Test if we did not break anything
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        self.model_fp16 = self.model_fp16.to(torch.float32)
+        _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        # Check this does not throw an error
+        _ = self.model_fp16.to("cpu")
+
+        # Check this does not throw an error
+        _ = self.model_fp16.half()
+
+        # Check this does not throw an error
+        _ = self.model_fp16.float()
+
+    def test_fp32_int8_conversion(self):
+        r"""
+        Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
+        """
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_8bit=True, device_map="auto")
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
 
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):
@@ -207,23 +262,8 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
             self.model_name, load_in_8bit=True, max_memory=memory_mapping, device_map="auto"
         )
 
-        def get_list_devices(model):
-            list_devices = []
-            for _, module in model.named_children():
-                if len(list(module.children())) > 0:
-                    list_devices.extend(get_list_devices(module))
-                else:
-                    # Do a try except since we can encounter Dropout modules that does not
-                    # have any device set
-                    try:
-                        list_devices.append(next(module.parameters()).device.index)
-                    except BaseException:
-                        continue
-            return list_devices
-
-        list_devices = get_list_devices(model_parallel)
-        # Check that we have dispatched the model into 2 separate devices
-        self.assertTrue((1 in list_devices) and (0 in list_devices))
+        # Check correct device map
+        self.assertEqual(set(model_parallel.hf_device_map.values()), {0, 1})
 
         # Check that inference pass works on the model
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
