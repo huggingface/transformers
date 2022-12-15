@@ -74,10 +74,10 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             Languge modeling loss from the text decoder.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
-            The image embeddings obtained after applying the Vision Transformer model to the input image.
         decoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
             Prediction scores of the language modeling head of the text decoder model.
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
+            The image embeddings obtained after applying the Vision Transformer model to the input image.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
