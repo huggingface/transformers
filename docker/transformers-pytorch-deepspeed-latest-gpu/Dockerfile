@@ -24,6 +24,11 @@ RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
 RUN python3 -m pip install torch-tensorrt==1.3.0 --find-links https://github.com/pytorch/TensorRT/releases/expanded_assets/v1.3.0
 
+# recompile apex
+RUN python3 -m pip uninstall -y apex
+RUN git clone https://github.com/NVIDIA/apex
+RUN cd apex && python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
+
 # Pre-build **latest** DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
 # This has to be run (again) inside the GPU VMs running the tests.
