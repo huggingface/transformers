@@ -27,17 +27,18 @@ class GitProcessor(ProcessorMixin):
     [`~GitProcessor.__call__`] and [`~GitProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`CLIPImageProcessor`]):
+        image_processor ([`CLIPImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`BertTokenizerFast`]):
             The tokenizer is a required input.
     """
-    feature_extractor_class = ("CLIPImageProcessor", "VideoMAEImageProcessor")
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = ("CLIPImageProcessor", "VideoMAEImageProcessor")
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
 
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
@@ -84,7 +85,7 @@ class GitProcessor(ProcessorMixin):
             encoding.pop("token_type_ids", None)
 
         if images is not None:
-            image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
