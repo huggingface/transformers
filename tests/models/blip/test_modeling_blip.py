@@ -801,6 +801,33 @@ class BlipModelIntegrationTest(unittest.TestCase):
             [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
         )
 
+    def test_inference_image_captioning_fp16(self):
+        model = BlipForConditionalGeneration.from_pretrained(
+            "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16
+        ).to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        image = prepare_img()
+
+        # image only
+        inputs = processor(images=image, return_tensors="pt").to(torch_device, torch.float16)
+
+        predictions = model.generate(**inputs)
+
+        # Test output
+        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
+
+        # image and context
+        context = ["a picture of"]
+        inputs = processor(images=image, text=context, return_tensors="pt").to(torch_device, torch.float16)
+
+        predictions = model.generate(**inputs)
+
+        # Test output
+        self.assertEqual(
+            predictions[0].tolist(),
+            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+        )
+
     def test_inference_vqa(self):
         model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(torch_device)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")

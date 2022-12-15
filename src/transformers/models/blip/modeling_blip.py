@@ -223,11 +223,7 @@ class BlipVisionEmbeddings(nn.Module):
         self.patch_size = config.patch_size
 
         self.class_embedding = nn.Parameter(
-            nn.init.trunc_normal_(
-                torch.zeros(1, 1, self.embed_dim, dtype=torch.float32),
-                mean=0.0,
-                std=config.initializer_range,
-            )
+            torch.randn(1, 1, self.embed_dim),
         )
 
         self.patch_embedding = nn.Conv2d(
@@ -237,13 +233,7 @@ class BlipVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
 
-        self.position_embedding = nn.Parameter(
-            nn.init.trunc_normal_(
-                torch.zeros(1, self.num_positions, self.embed_dim, dtype=torch.float32),
-                mean=0.0,
-                std=config.initializer_range,
-            )
-        )
+        self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -445,6 +435,21 @@ class BlipPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=factor)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
+
+        if isinstance(module, BlipVisionEmbeddings):
+            if hasattr(self.config, "vision_config"):
+                factor = self.config.vision_config.initializer_range
+            nn.init.trunc_normal_(
+                module.position_embedding,
+                mean=0.0,
+                std=factor,
+            )
+
+            nn.init.trunc_normal_(
+                module.class_embedding,
+                mean=0.0,
+                std=factor,
+            )
 
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
