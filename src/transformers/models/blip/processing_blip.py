@@ -98,7 +98,7 @@ class BlipProcessor(ProcessorMixin):
             )
             return text_encoding
 
-        # add pixel_values + pixel_mask
+        # add pixel_values
         encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
 
         if text is not None:
