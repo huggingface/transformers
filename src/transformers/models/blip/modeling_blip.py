@@ -42,13 +42,13 @@ _CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
 
 BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Salesforce/blip-vqa-base",
-    "Salesforce/blip-vqa-base-capfit",
+    "Salesforce/blip-vqa-capfit-large",
     "Salesforce/blip-image-captioning-base",
     "Salesforce/blip-image-captioning-large",
-    "Salesforce/blip-retrieval-coco-base",
-    "Salesforce/blip-retrieval-coco-large",
-    "Salesforce/blip-retrieval-flikr-base",
-    "Salesforce/blip-retrieval-flikr-large",
+    "Salesforce/blip-itm-base-coco",
+    "Salesforce/blip-itm-large-coco",
+    "Salesforce/blip-itm-base-flikr",
+    "Salesforce/blip-itm-large-flikr",
     # See all BLIP models at https://huggingface.co/models?filter=blip
 ]
 
@@ -658,6 +658,8 @@ class BlipVisionModel(BlipPreTrainedModel):
     main_input_name = "pixel_values"
 
     def __init__(self, config: BlipVisionConfig):
+        if hasattr(config, "vision_config"):
+            config = config.vision_config
         super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size

@@ -96,7 +96,6 @@ class BlipProcessor(ProcessorMixin):
                 return_tensors=return_tensors,
                 **kwargs,
             )
-            _ = text_encoding.pop("token_type_ids", None)
             return text_encoding
 
         # add pixel_values + pixel_mask

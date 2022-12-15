@@ -842,8 +842,8 @@ class BlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(out[0].tolist(), [30522, 1015, 102])
 
     def test_inference_itm(self):
-        model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base").to(torch_device)
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base")
+        model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base-coco")
 
         image = prepare_img()
         text = "A woman and her dog sitting in a beach"
