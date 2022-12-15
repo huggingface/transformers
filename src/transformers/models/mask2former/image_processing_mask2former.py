@@ -867,6 +867,40 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
+    def post_process_segmentation(
+        self, outputs: "Mask2FormerForUniversalSegmentationOutput", target_size: Tuple[int, int] = None
+    ) -> "torch.Tensor":
+        """
+        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into image segmentation predictions. Only
+        supports PyTorch.
+
+        Args:
+            outputs ([`Mask2FormerForUniversalSegmentationOutput`]):
+                The outputs from [`Mask2FormerForUniversalSegmentation`].
+            target_size (`Tuple[int, int]`, *optional*):
+                If set, the `masks_queries_logits` will be resized to `target_size`.
+        Returns:
+            `torch.Tensor`:
+                A tensor of shape (`batch_size, num_class_labels, height, width`).
+        """
+        class_queries_logits = outputs.class_queries_logits # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits # [batch_size, num_queries, height, width]
+
+        if target_size is not None:
+            masks_queries_logits = torch.nn.functional.interpolate(
+                masks_queries_logits,
+                size=target_size,
+                mode="bilinear",
+                align_corners=False,
+            )
+        # Remove the null class `[..., :-1]`
+        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        masks_probs = masks_queries_logits.sigmoid()
+
+        # Sum over the queries -> (batch_size, num_classes, height, width)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        return segmentation
+
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":

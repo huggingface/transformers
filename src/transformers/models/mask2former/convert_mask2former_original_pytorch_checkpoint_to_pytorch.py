@@ -23,6 +23,7 @@ from typing import Any, Dict, Iterator, List, Set, Tuple
 import torch
 from PIL import Image
 from torch import Tensor, nn
+import torchvision.transforms as T
 
 import requests
 from detectron2.checkpoint import DetectionCheckpointer
@@ -93,7 +94,6 @@ def prepare_img():
 @dataclass
 class Args:
     """Fake command line arguments needed by mask2former/detectron implementation"""
-
     config_file: str
 
 
@@ -147,7 +147,7 @@ class OriginalMask2FormerConfigToOursConverter:
                 layer_norm_eps=1e-05,
                 is_train=False,
                 use_auxiliary_loss=model.MASK_FORMER.DEEP_SUPERVISION,
-                output_auxiliary_logits=False,
+                output_auxiliary_logits=True,
                 feature_strides=[4, 8, 16, 32],
             ),
             backbone_config=backbone_config,
@@ -458,16 +458,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
             dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.bias"] = in_proj_bias[256:512]
             dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
             dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.bias"] = in_proj_bias[-256:]
-            # # read in weights + bias of input projection layer of cross-attention
-            # in_proj_weight_cross_attn = src_state_dict.pop(f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.in_proj_weight")
-            # in_proj_bias_cross_attn = src_state_dict.pop(f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.in_proj_bias")
-            # # next, add query, keys and values (in that order) of cross-attention to the state dict
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.q_proj.weight"] = in_proj_weight_cross_attn[:256, :]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.q_proj.bias"] = in_proj_bias_cross_attn[:256]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.k_proj.weight"] = in_proj_weight_cross_attn[256:512, :]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.k_proj.bias"] = in_proj_bias_cross_attn[256:512]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.v_proj.weight"] = in_proj_weight_cross_attn[-256:, :]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
 
     def replace_transformer_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module"
@@ -644,16 +634,20 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
             ), "The pixel decoder feature are not the same"
 
         # Let's test the full model
-        original_model_out = original_model([{"image": x.squeeze(0)}])
-        original_segmentation = original_model_out[0]["instances"].pred_masks.unsqueeze(0)
+        tr_complete = T.Compose([T.Resize((384, 384)), T.ToTensor()],)
+        y = (tr_complete(im) * 255.0).to(torch.int).float()
 
-        our_model_out: Mask2FormerForUniversalSegmentationOutput = our_model(x)
-        our_segmentation = feature_extractor.post_process_segmentation(our_model_out)
+        original_class_logits, original_mask_logits = original_model([{"image": y.clone().squeeze(0)}])
 
-        assert original_segmentation.shape == our_segmentation.shape, "Output masks shapes are not matching."
+        our_model_out: Mask2FormerForUniversalSegmentationOutput = our_model(x.clone())
+        our_mask_logits = our_model_out.masks_queries_logits
+        our_class_logits = our_model_out.class_queries_logits
+
+        assert original_mask_logits.shape == our_mask_logits.shape, "Output masks shapes are not matching."
+        assert original_class_logits.shape == our_class_logits.shape, "Output class logits shapes are not matching."
         assert torch.allclose(
-            original_segmentation, our_segmentation, atol=1e-3
-        ), "The segmentation image is not the same."
+            original_mask_logits, our_mask_logits, atol=3e-3
+        ), "The predicted masks are not the same."
 
         logger.info("✅ Test passed!")
 
@@ -767,16 +761,5 @@ if __name__ == "__main__":
         feature_extractor.save_pretrained(save_directory / model_name)
         mask2former_for_segmentation.save_pretrained(save_directory / model_name)
 
-        repo_id = os.path.join(save_directory, model_name)
-
-        feature_extractor.push_to_hub(
-            repo_id=repo_id,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-
-        mask2former_for_segmentation.push_to_hub(
-            repo_id=repo_id,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        feature_extractor.push_to_hub(model_name)
+        mask2former_for_segmentation.push_to_hub(model_name)

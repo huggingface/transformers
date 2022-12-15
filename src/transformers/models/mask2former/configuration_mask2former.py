@@ -124,8 +124,8 @@ class Mask2FormerConfig(PretrainedConfig):
             general_config["init_xavier_std"] = 1.0
             general_config["layer_norm_eps"] = 1e-05
             general_config["is_train"] = False
-            general_config["use_auxiliary_loss"] = False
-            general_config["output_auxiliary_logits"] = False
+            general_config["use_auxiliary_loss"] = True
+            general_config["output_auxiliary_logits"] = True
             general_config["feature_strides"] = ([4, 8, 16, 32],)
             general_config["deep_supervision"] = True
 

@@ -89,8 +89,6 @@ class Mask2FormerTransformerDecoderOutput(BaseModelOutput):
     predictions logits to BaseModelOutputWithCrossAttentions.
 
     Args:
-        object_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
-            Queries representation for the region proposals.
         prediction_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
             Mask predictions from last layer of the transformer decoder.
         prediction_class (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
@@ -99,7 +97,6 @@ class Mask2FormerTransformerDecoderOutput(BaseModelOutput):
             Tuple of class and mask predictions from each layer of the transformer decoder.
     """
 
-    object_queries: torch.FloatTensor = None
     prediction_masks: torch.FloatTensor = None
     prediction_class: torch.FloatTensor = None
     auxiliary_predictions: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
@@ -149,8 +146,6 @@ class Mask2FormerModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
-        transformer_decoder_object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`)
-            Output object queries from the last layer in the transformer decoder.
         transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
             Mask Predictions from the last layer in the transformer decoder.
         transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
@@ -165,7 +160,6 @@ class Mask2FormerModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
-    transformer_decoder_object_queries: torch.FloatTensor = None
     transformer_decoder_mask_predictions: torch.FloatTensor = None
     transformer_decoder_class_predictions: torch.FloatTensor = None
     transformer_decoder_auxiliary_predictions: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
@@ -205,8 +199,6 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
-        transformer_decoder_object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`)
-            Output object queries from the last layer in the transformer decoder.
         transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
             Mask Predictions from the last layer in the transformer decoder.
         transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
@@ -225,7 +217,6 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[List[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
-    transformer_decoder_object_queries: torch.FloatTensor = None
     transformer_decoder_mask_predictions: torch.FloatTensor = None
     transformer_decoder_class_predictions: torch.FloatTensor = None
     transformer_decoder_auxiliary_predictions: Optional[List[Dict[str, torch.FloatTensor]]] = None
@@ -2006,8 +1997,7 @@ class Mask2FormerTransformerDecoder(nn.Module):
         multi_stage_features=None,
         multi_stage_positional_embeddings=None,
         mask_features=None,
-        query_features=None,
-        query_features_weight=None,
+        output=None,
         query_embeddings=None,
         size_list=None,
         output_attentions=None,
@@ -2018,17 +2008,16 @@ class Mask2FormerTransformerDecoder(nn.Module):
 
         # Prediction heads on learnable query features
         outputs_class, outputs_mask, attention_mask = self.forward_prediction_heads(
-            query_features_weight, mask_features, attention_mask_target_size=size_list[0]
+            output, mask_features, attention_mask_target_size=size_list[0]
         )
         intermediate_class_predictions.append(outputs_class)
         intermediate_mask_predictions.append(outputs_mask)
 
         attentions = ()
-
         for index, layer in enumerate(self.layers):
             layer_outputs = layer(
                 index=index,
-                output=query_features_weight,
+                output=output,
                 multi_stage_features=multi_stage_features,
                 multi_stage_positional_embeddings=multi_stage_positional_embeddings,
                 attention_mask=attention_mask,
@@ -2042,13 +2031,11 @@ class Mask2FormerTransformerDecoder(nn.Module):
             outputs_class, outputs_mask, attention_mask = self.forward_prediction_heads(
                 output, mask_features, attention_mask_target_size=size_list[(index + 1) % self.num_feature_levels]
             )
+
             intermediate_class_predictions.append(outputs_class)
             intermediate_mask_predictions.append(outputs_mask)
 
-        object_queries = layer_outputs[0].permute(1, 0, 2)
-
         return Mask2FormerTransformerDecoderOutput(
-            object_queries=object_queries,
             prediction_masks=intermediate_mask_predictions[-1],
             prediction_class=intermediate_class_predictions[-1],
             auxiliary_predictions=self._get_aux_predictions(
@@ -2138,15 +2125,13 @@ class Mask2FormerTransformerModule(nn.Module):
 
         # QxNxC
         query_embeddings = self.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
-        query_features_weight = self.queries_features.weight.unsqueeze(1).repeat(1, batch_size, 1)
-        query_features = self.position_embedder(mask_features, None)
+        output = self.queries_features.weight.unsqueeze(1).repeat(1, batch_size, 1)
 
         decoder_output: Mask2FormerTransformerDecoderOutput = self.decoder(
             multi_stage_features=multi_stage_features,
             multi_stage_positional_embeddings=multi_stage_positional_embeddings,
             mask_features=mask_features,
-            query_features=query_features,
-            query_features_weight=query_features_weight,
+            output=output,
             query_embeddings=query_embeddings,
             size_list=size_list,
             output_attentions=output_attentions,
@@ -2234,8 +2219,6 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        queries = transformer_module_output.object_queries
-
         encoder_hidden_states = None
         pixel_decoder_hidden_states = None
         transformer_decoder_hidden_states = None
@@ -2249,7 +2232,6 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
-            transformer_decoder_object_queries=queries,
             transformer_decoder_mask_predictions=transformer_module_output.prediction_masks,
             transformer_decoder_class_predictions=transformer_module_output.prediction_class,
             transformer_decoder_auxiliary_predictions=transformer_module_output.auxiliary_predictions,
