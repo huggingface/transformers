@@ -126,14 +126,14 @@ class OriginalOneFormerConfigToOursConverter:
             if model.SWIN.EMBED_DIM == 96:
                 backbone_config = SwinConfig.from_pretrained(
                     "microsoft/swin-tiny-patch4-window7-224",
-                    drop_path_rate=model.SWIN.DROP_PATH_RATE, 
-                    out_features=["stage1", "stage2", "stage3", "stage4"]
+                    drop_path_rate=model.SWIN.DROP_PATH_RATE,
+                    out_features=["stage1", "stage2", "stage3", "stage4"],
                 )
             elif model.SWIN.EMBED_DIM == 192:
                 backbone_config = SwinConfig.from_pretrained(
                     "microsoft/swin-large-patch4-window12-384",
-                    drop_path_rate=model.SWIN.DROP_PATH_RATE, 
-                    out_features=["stage1", "stage2", "stage3", "stage4"]
+                    drop_path_rate=model.SWIN.DROP_PATH_RATE,
+                    out_features=["stage1", "stage2", "stage3", "stage4"],
                 )
             else:
                 raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
@@ -987,7 +987,7 @@ def test(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
             assert torch.allclose(
-                original_model_feature, our_model_feature, atol=2e-3
+                original_model_feature, our_model_feature, atol=3e-3
             ), "The backbone features are not the same."
         mask_features, _, multi_scale_features, _, _ = original_model.sem_seg_head.pixel_decoder.forward_features(
             original_model_backbone_features
