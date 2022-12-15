@@ -400,10 +400,10 @@ _import_structure = {
         "TrOCRProcessor",
     ],
     "models.tvlt": [
-        "Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TvltAudioFeatureExtractor",
         "TvltConfig",
         "TvltPixelFeatureExtractor",
-        "TvltAudioFeatureExtractor",
+        "Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TvltProcessor",
     ],
     "models.unispeech": [
@@ -786,7 +786,9 @@ else:
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
-    _import_structure["models.tvlt"].extend(["TvltPixelFeatureExtractor", "TvltAudioFeatureExtractor", "TvltProcessor"])
+    _import_structure["models.tvlt"].extend(
+        ["TvltAudioFeatureExtractor", "TvltPixelFeatureExtractor", "TvltProcessor"]
+    )
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -2174,10 +2176,10 @@ else:
     _import_structure["models.tvlt"].extend(
         [
             "Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TvltModel",
             "TvltForPreTraining",
-            "TvltForVisionAndAudioRetrieval",
             "TvltForSequenceClassification",
+            "TvltForVisionAndAudioRetrieval",
+            "TvltModel",
         ]
     )
     _import_structure["models.unispeech"].extend(
@@ -3667,7 +3669,7 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
-    from .models.tvlt import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TVLTConfig, TVLTProcessor
+    from .models.tvlt import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
@@ -3994,7 +3996,7 @@ if TYPE_CHECKING:
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
-        from .models.tvlt import TvltPixelFeatureExtractor, TvltAudioFeatureExtractor
+        from .models.tvlt import TvltAudioFeatureExtractor, TvltPixelFeatureExtractor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -5129,10 +5131,10 @@ if TYPE_CHECKING:
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.tvlt import (
             Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TvltModel, 
-            TvltForPreTraining, 
-            TvltForVisionAndAudioRetrieval,
+            TvltForPreTraining,
             TvltForSequenceClassification,
+            TvltForVisionAndAudioRetrieval,
+            TvltModel,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
