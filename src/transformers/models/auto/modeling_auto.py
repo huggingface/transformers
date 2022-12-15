@@ -459,7 +459,6 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
         ("big_bird", "BigBirdForMaskedLM"),
-        ("bridgetower", "BridgeTowerForMaskedLM"),
         ("camembert", "CamembertForMaskedLM"),
         ("convbert", "ConvBertForMaskedLM"),
         ("data2vec-text", "Data2VecTextForMaskedLM"),
