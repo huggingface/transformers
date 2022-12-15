@@ -1127,7 +1127,8 @@ class GitModel(GitPreTrainedModel):
         if memory_key_padding_mask is None:
             memory_key_padding_mask = torch.full((memory.shape[0], memory.shape[1]), fill_value=False, device=device)
         # if it is False, it means valid. That is, it is not a padding
-        assert memory_key_padding_mask.dtype == torch.bool
+        if memory_key_padding_mask.dtype != torch.bool:
+            raise ValueError("Memory key padding mask must be a boolean tensor.")
         zero_negative_infinity = torch.zeros_like(memory_key_padding_mask, dtype=tgt.dtype)
         zero_negative_infinity[memory_key_padding_mask] = float("-inf")
         full_attention_mask = full_attention_mask.expand(
