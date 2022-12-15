@@ -461,9 +461,6 @@ class GitEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
-                # if i == 0:
-                #     print(f"First values of hidden states before layer {i}: ", hidden_states[0, :3, :3])
-                #     print(f"Last values of hidden states before layer {i}: ", hidden_states[0, -3:, -3:])
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -471,9 +468,6 @@ class GitEncoder(nn.Module):
                     past_key_value,
                     output_attentions,
                 )
-                # if i == 0:
-                #     print(f"First values of hidden states after layer {i}: ", layer_outputs[0][0, :3, :3])
-                #     print(f"Last values of hidden states before layer {i}: ", layer_outputs[0][0, -3:, -3:])
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -483,9 +477,6 @@ class GitEncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        # print("Shape of final hidden states: ", hidden_states.shape)
-        # print("First values of final hidden states:", hidden_states[0, :3, :3])
 
         if not return_dict:
             return tuple(
@@ -1290,9 +1281,6 @@ class GitModel(GitPreTrainedModel):
                 expanded_attn_mask = expanded_attn_mask[:, :, -past_key_values_length:, :]
             else:
                 combined_attention_mask[:, :, -input_shape[1] :, -input_shape[1] :] += expanded_attn_mask
-
-        # print("Shape of hidden states:", hidden_states.shape)
-        # print("Shape of combined attention mask:", combined_attention_mask.shape)
 
         encoder_outputs = self.encoder(
             hidden_states,
