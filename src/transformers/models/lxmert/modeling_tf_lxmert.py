@@ -1271,6 +1271,30 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
 
+    def build_with_dummies(self, dummy_spec=None):
+        if dummy_spec is None:
+            dummy_spec = {key: tf.keras.Input(type_spec=spec) for key, spec in self.serving_signature.items()}
+            if self.config.task_obj_predict:
+                obj_labels = {}
+                if self.config.visual_attr_loss:
+                    obj_labels["attr"] = (
+                        tf.keras.Input(shape=[None, None], dtype=tf.float32),
+                        tf.keras.Input(shape=[None, None], dtype=tf.float32),
+                    )
+                if self.config.visual_feat_loss:
+                    obj_labels["feat"] = (
+                        tf.keras.Input(shape=[None, None, self.config.visual_feat_dim], dtype=tf.float32),
+                        tf.keras.Input(shape=[None, None], dtype=tf.float32),
+                    )
+                if self.config.visual_obj_loss:
+                    obj_labels["obj"] = (
+                        tf.keras.Input(shape=[None, None], dtype=tf.float32),
+                        tf.keras.Input(shape=[None, None], dtype=tf.float32),
+                    )
+                dummy_spec["obj_labels"] = obj_labels
+        super().build_with_dummies(dummy_spec)
+
+
     def get_lm_head(self):
         return self.cls.predictions
 
@@ -1381,7 +1405,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
                     tf.reshape(visn_prediction_scores, [-1, output_dim]),
                 )
 
-                if visn_loss.ndim > 1:  # Regression Losses
+                if visn_loss.shape.rank > 1:  # Regression Losses
                     visn_loss = tf.reduce_mean(visn_loss)
                 visn_loss = tf.reduce_mean(visn_loss * tf.cast(tf.reshape(mask_conf, [-1]), visn_loss.dtype)) * weight
                 total_visn_loss += visn_loss
