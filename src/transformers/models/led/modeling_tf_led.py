@@ -15,7 +15,6 @@
 """ TF 2.0 LED model."""
 
 
-import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -1346,10 +1345,12 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
 
     def build_with_dummies(self, dummy_spec=None):
         # This model is coded in a way which means building it with tf.keras.Input fails
+        # This is usually because of a use of name_scope somewhere in the call() method
+        # The model should ideally have explicit build() methods instead
         if dummy_spec is None:
-            self(self.dummy_inputs)
-        else:
-            super().build_with_dummies(dummy_spec)
+            dummy_spec = self.serving_signature
+        self._set_save_spec(dummy_spec)
+        self(self.dummy_inputs)
 
 
 @dataclass
@@ -1815,10 +1816,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             if output_hidden_states:
                 hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
                 encoder_states = encoder_states + (hidden_states_to_add,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if training and (dropout_probability < self.layerdrop):  # skip the layer
-                continue
 
             layer_outputs = encoder_layer(
                 hidden_states=hidden_states,
@@ -1933,7 +1930,6 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         self.embed_tokens = embed_tokens
         if config.decoder_layerdrop > 0:
             logger.warning("Layerdrop is currently disabled in TFLED models.")
-        self.layerdrop = 0.0
         self.embed_positions = TFLEDLearnedPositionalEmbedding(
             config.max_decoder_position_embeddings,
             config.d_model,
@@ -2091,13 +2087,8 @@ class TFLEDDecoder(tf.keras.layers.Layer):
             )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-
-            if training and (dropout_probability < self.layerdrop):
-                continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -2195,7 +2186,6 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
 
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
-
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -2450,7 +2440,6 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
-
         outputs = self.led(
             input_ids,
             attention_mask=attention_mask,

@@ -1163,8 +1163,10 @@ class TFModelTesterMixin:
             output_for_kw_input = model(**inputs_np)
             self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
 
+    @slow
     def test_resize_token_embeddings(self):
         # TODO (joao): after the embeddings refactor is complete, rework this test so as to rely exclusively on
+        # TODO (matt): Also remove the slow decorator at that point
         # tf.keras.layers.Embedding
 
         if not self.test_resize_embeddings:
