@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for BiT."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -23,6 +23,7 @@ from transformers.utils.generic import TensorType
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
+    convert_to_rgb,
     get_resize_output_image_size,
     normalize,
     rescale,
@@ -39,20 +40,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
-
-
-def convert_to_rgb(image: Union[Any, PIL.Image.Image]) -> Union[Any, PIL.Image.Image]:
-    """
-    Converts `PIL.Image.Image` to RGB format. Images in other formats are returned as is.
-
-    Args:
-        image (`PIL.Image.Image`):
-            The image to convert.
-    """
-    if not isinstance(image, PIL.Image.Image):
-        return image
-
-    return image.convert("RGB")
 
 
 class BitImageProcessor(BaseImageProcessor):
