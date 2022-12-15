@@ -37,7 +37,7 @@ One can easily tweak it for their own use case.
 - A notebook that illustrates how to visualize reconstructed pixel values with [`ViTMAEForPreTraining`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTMAE/ViT_MAE_visualization_demo.ipynb).
 - After pre-training, one "throws away" the decoder used to reconstruct pixels, and one uses the encoder for fine-tuning/linear probing. This means that after
 fine-tuning, one can directly plug in the weights into a [`ViTForImageClassification`].
-- One can use [`ViTFeatureExtractor`] to prepare images for the model. See the code examples for more info. 
+- One can use [`ViTImageProcessor`] to prepare images for the model. See the code examples for more info.
 - Note that the encoder of MAE is only used to encode the visual patches. The encoded patches are then concatenated with mask tokens, which the decoder (which also
 consists of Transformer blocks) takes as input. Each mask token is a shared, learned vector that indicates the presence of a missing patch to be predicted. Fixed
 sin/cos position embeddings are added both to the input of the encoder and the decoder.
