@@ -498,28 +498,26 @@ class Mask2FormerLoss(nn.Module):
             weight_dict (`Dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
         """
-
         super().__init__()
         requires_backends(self, ["scipy"])
         self.num_labels = config.num_labels
         self.weight_dict = weight_dict
 
         # Weight to apply to the null class
-        general_config = config.general_config
-        self.eos_coef = general_config.no_object_weight
+        self.eos_coef = config.general_config["no_object_weight"]
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
         # pointwise mask loss parameters
-        self.num_points = general_config.train_num_points
-        self.oversample_ratio = general_config.oversample_ratio
-        self.importance_sample_ratio = general_config.importance_sample_ratio
+        self.num_points = config.general_config["train_num_points"]
+        self.oversample_ratio = config.general_config["oversample_ratio"]
+        self.importance_sample_ratio = config.general_config["importance_sample_ratio"]
 
         self.matcher = Mask2FormerHungarianMatcher(
             cost_class=1.0,
-            cost_dice=general_config.dice_weight,
-            cost_mask=general_config.mask_weight,
+            cost_dice=config.general_config["dice_weight"],
+            cost_mask=config.general_config["mask_weight"],
             num_points=self.num_points,
         )
 
@@ -1345,16 +1343,6 @@ class Mask2FormerPixelDecoder(nn.Module):
                 return_dict=return_dict,
             )
 
-        # Compute final features
-        encoder_features = []
-        for i, feature in enumerate(encoder_outputs):
-            batch_size = feature.shape[0]
-            height, width = spatial_shapes[i][0], spatial_shapes[i][1]
-            feature = feature.transpose(1, 2).view(batch_size, -1, height, width)
-            encoder_features.append(feature)
-
-        return encoder_features
-
         last_hidden_state = encoder_outputs.last_hidden_state
         batch_size = last_hidden_state.shape[0]
 
@@ -1496,9 +1484,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                     if not isinstance(input_projection, nn.Sequential):
                         nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
                         nn.init.constant_(input_projection.bias, 0)
-        elif isinstance(module, Mask2FormerTransformerDecoder):
-            nn.init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
-            nn.init.constant_(module.query_input_projection.bias, 0)
         elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
             module._reset_parameters()
         elif isinstance(module, Mask2FormerPixelLevelModule):
@@ -2012,7 +1997,7 @@ class Mask2FormerTransformerDecoder(nn.Module):
         self.mask_embed = Mask2FormerMLPPredictionHead(
             config.decoder_config["hidden_dim"],
             config.decoder_config["hidden_dim"],
-            config.decoder_config["mask_dim"],
+            config.decoder_config["mask_feature_size"],
             3,
         )
 
@@ -2153,7 +2138,7 @@ class Mask2FormerTransformerModule(nn.Module):
 
         # QxNxC
         query_embeddings = self.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
-        query_features_weight = self.query_features.weight.unsqueeze(1).repeat(1, batch_size, 1)
+        query_features_weight = self.queries_features.weight.unsqueeze(1).repeat(1, batch_size, 1)
         query_features = self.position_embedder(mask_features, None)
 
         decoder_output: Mask2FormerTransformerDecoderOutput = self.decoder(
@@ -2265,8 +2250,8 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
             transformer_decoder_object_queries=queries,
-            masks_queries_logits=transformer_module_output.prediction_masks,
-            class_queries_logits=transformer_module_output.prediction_class,
+            transformer_decoder_mask_predictions=transformer_module_output.prediction_masks,
+            transformer_decoder_class_predictions=transformer_module_output.prediction_class,
             transformer_decoder_auxiliary_predictions=transformer_module_output.auxiliary_predictions,
             attentions=transformer_module_output.attentions,
         )
@@ -2297,16 +2282,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             "loss_dice": config.general_config["dice_weight"],
         }
 
-        self.criterion = Mask2FormerLoss(
-            num_classes=config.general_config["num_classes"],
-            matcher=self.matcher,
-            weight_dict=self.weight_dict,
-            eos_coef=config.general_config["no_object_weight"],
-            num_points=config.general_config["train_num_points"],
-            oversample_ratio=config.general_config["oversample_ratio"],
-            importance_sample_ratio=config.general_config["importance_sample_ratio"],
-        )
-
+        self.criterion = Mask2FormerLoss(config=config, weight_dict=self.weight_dict)
         self.post_init()
 
     def get_loss_dict(

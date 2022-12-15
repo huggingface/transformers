@@ -32,11 +32,13 @@ from detectron2.projects.deeplab import add_deeplab_config
 from transformers import (
     Mask2FormerConfig,
     Mask2FormerForUniversalSegmentation,
-    Mask2FormerForUniversalSegmentationOutput,
     Mask2FormerImageProcessor,
     Mask2FormerModel,
-    Mask2FormerModelOutput,
     SwinConfig,
+)
+from transformers.models.mask2former.modeling_mask2former import (
+    Mask2FormerForUniversalSegmentationOutput,
+    Mask2FormerModelOutput,
 )
 from transformers.utils import logging
 
@@ -123,6 +125,10 @@ class OriginalMask2FormerConfigToOursConverter:
         else:
             raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
 
+        backbone_config.drop_path_rate = model.SWIN.DROP_PATH_RATE
+        backbone_config.attention_probs_dropout_prob = model.SWIN.ATTN_DROP_RATE
+        backbone_config.depths = model.SWIN.DEPTHS
+
         config: Mask2FormerConfig = Mask2FormerConfig(
             general_config=dict(
                 ignore_value=model.SEM_SEG_HEAD.IGNORE_VALUE,
@@ -142,7 +148,7 @@ class OriginalMask2FormerConfigToOursConverter:
                 is_train=False,
                 use_auxiliary_loss=model.MASK_FORMER.DEEP_SUPERVISION,
                 output_auxiliary_logits=False,
-                strides=[4, 8, 16, 32],
+                feature_strides=[4, 8, 16, 32],
             ),
             backbone_config=backbone_config,
             decoder_config=dict(
@@ -153,7 +159,6 @@ class OriginalMask2FormerConfigToOursConverter:
                 encoder_layers=model.SEM_SEG_HEAD.TRANSFORMER_ENC_LAYERS,
                 encoder_feedforward_dim=1024,
                 decoder_layers=model.MASK_FORMER.DEC_LAYERS,
-                use_task_norm=model.MASK_FORMER.USE_TASK_NORM,
                 num_heads=model.MASK_FORMER.NHEADS,
                 dropout=model.MASK_FORMER.DROPOUT,
                 dim_feedforward=model.MASK_FORMER.DIM_FEEDFORWARD,
@@ -351,14 +356,11 @@ class OriginalMask2FormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     # Backbone + Pixel Decoder
-    def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict, is_swin: bool):
+    def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
-        if is_swin:
-            self.replace_swin_backbone(dst_state_dict, src_state_dict, self.config)
-        else:
-            self.replace_dinat_backbone(dst_state_dict, src_state_dict, self.config)
+        self.replace_backbone(dst_state_dict, src_state_dict, self.config)
 
         def rename_keys_for_weight_bias(src_prefix: str, dst_prefix: str):
             return [
@@ -554,13 +556,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
             rename_keys_for_weight_bias(f"{src_prefix}.decoder_norm", f"{dst_prefix}.decoder.decoder_norm")
         )
 
-        # proj
-        renamed_keys.extend(
-            rename_keys_for_weight_bias(
-                f"{src_prefix}.class_input_proj", f"{dst_prefix}.decoder.query_input_projection"
-            )
-        )
-
         renamed_keys.extend(
             rename_keys_for_weight_bias(f"{src_prefix}.class_embed", f"{dst_prefix}.decoder.class_embed")
         )
@@ -585,19 +580,19 @@ class OriginalMask2FormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
         self.replace_keys_qkv_transformer_decoder(dst_state_dict, src_state_dict)
 
-    def convert(self, oneformer: Mask2FormerModel, is_swin: bool) -> Mask2FormerModel:
+    def convert(self, mask2former: Mask2FormerModel) -> Mask2FormerModel:
         dst_state_dict = TrackedStateDict(mask2former.state_dict())
         src_state_dict = self.original_model.state_dict()
 
-        self.replace_pixel_module(dst_state_dict, src_state_dict, is_swin)
+        self.replace_pixel_module(dst_state_dict, src_state_dict)
         self.replace_transformer_module(dst_state_dict, src_state_dict)
 
         logger.info(f"Missed keys are {pformat(dst_state_dict.diff())}")
         logger.info(f"Not copied keys are {pformat(src_state_dict.keys())}")
         logger.info("🙌 Done")
 
-        # state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
-        mask2former.load_state_dict(dst_state_dict)
+        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
+        mask2former.load_state_dict(state_dict)
         return mask2former
 
     @staticmethod
@@ -633,7 +628,7 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
             assert torch.allclose(
-                original_model_feature, our_model_feature, atol=2e-3
+                original_model_feature, our_model_feature, atol=1e-3
             ), "The backbone features are not the same."
 
         # Test pixel decoder
@@ -641,16 +636,11 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
             original_model_backbone_features
         )
 
-        original_pixel_decoder_features = []
-        original_pixel_decoder_features.append(mask_features)
-        for i in range(len(multi_scale_features)):
-            original_pixel_decoder_features.append(multi_scale_features[i])
-
         for original_model_feature, our_model_feature in zip(
-            original_pixel_decoder_features, our_model_output.pixel_decoder_hidden_states
+            multi_scale_features, our_model_output.pixel_decoder_hidden_states
         ):
             assert torch.allclose(
-                original_model_feature, our_model_feature, atol=3e-4
+                original_model_feature, our_model_feature, atol=1e-4
             ), "The pixel decoder feature are not the same"
 
         # Let's test the full model
