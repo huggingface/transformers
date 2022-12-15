@@ -155,6 +155,13 @@ class MixedInt8Test(BaseMixedInt8Test):
         # Check this does not throw an error
         _ = self.model_fp16.float()
 
+    def test_fp32_int8_conversion(self):
+        r"""
+        Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
+        """
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_8bit=True, device_map="auto")
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+
 
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):
     def setUp(self):

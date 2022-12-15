@@ -99,6 +99,7 @@ _import_structure = {
     "file_utils": [],
     "generation": ["GenerationConfig"],
     "hf_argparser": ["HfArgumentParser"],
+    "image_transforms": [],
     "integrations": [
         "is_clearml_available",
         "is_comet_available",
@@ -755,7 +756,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils"] = ["ImageProcessingMixin"]
-    _import_structure["image_transforms"] = ["rescale", "resize", "to_pil_image"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
@@ -1282,6 +1282,7 @@ else:
     _import_structure["models.dinat"].extend(
         [
             "DINAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DinatBackbone",
             "DinatForImageClassification",
             "DinatModel",
             "DinatPreTrainedModel",
@@ -1777,6 +1778,7 @@ else:
     _import_structure["models.nat"].extend(
         [
             "NAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NatBackbone",
             "NatForImageClassification",
             "NatModel",
             "NatPreTrainedModel",
@@ -2084,6 +2086,7 @@ else:
     _import_structure["models.swin"].extend(
         [
             "SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SwinBackbone",
             "SwinForImageClassification",
             "SwinForMaskedImageModeling",
             "SwinModel",
@@ -3965,7 +3968,6 @@ if TYPE_CHECKING:
         from .utils.dummy_vision_objects import *
     else:
         from .image_processing_utils import ImageProcessingMixin
-        from .image_transforms import rescale, resize, to_pil_image
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
@@ -4407,6 +4409,7 @@ if TYPE_CHECKING:
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DinatBackbone,
             DinatForImageClassification,
             DinatModel,
             DinatPreTrainedModel,
@@ -4803,6 +4806,7 @@ if TYPE_CHECKING:
         )
         from .models.nat import (
             NAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NatBackbone,
             NatForImageClassification,
             NatModel,
             NatPreTrainedModel,
@@ -5057,6 +5061,7 @@ if TYPE_CHECKING:
         )
         from .models.swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SwinBackbone,
             SwinForImageClassification,
             SwinForMaskedImageModeling,
             SwinModel,
