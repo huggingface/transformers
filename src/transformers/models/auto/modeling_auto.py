@@ -77,6 +77,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTModel"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
         ("glpn", "GLPNModel"),
+        ("gpt-sw3", "GPT2Model"),
         ("gpt2", "GPT2Model"),
         ("gpt_neo", "GPTNeoModel"),
         ("gpt_neox", "GPTNeoXModel"),
@@ -198,6 +199,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetForPreTraining"),
         ("fsmt", "FSMTForConditionalGeneration"),
         ("funnel", "FunnelForPreTraining"),
+        ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
         ("ibert", "IBertForMaskedLM"),
         ("layoutlm", "LayoutLMForMaskedLM"),
@@ -259,6 +261,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetForMaskedLM"),
         ("fsmt", "FSMTForConditionalGeneration"),
         ("funnel", "FunnelForMaskedLM"),
+        ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
@@ -322,6 +325,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
+        ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
@@ -578,6 +582,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("flaubert", "FlaubertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
         ("funnel", "FunnelForSequenceClassification"),
+        ("gpt-sw3", "GPT2ForSequenceClassification"),
         ("gpt2", "GPT2ForSequenceClassification"),
         ("gpt_neo", "GPTNeoForSequenceClassification"),
         ("gptj", "GPTJForSequenceClassification"),
@@ -714,6 +719,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("flaubert", "FlaubertForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
         ("funnel", "FunnelForTokenClassification"),
+        ("gpt-sw3", "GPT2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
         ("ibert", "IBertForTokenClassification"),
         ("layoutlm", "LayoutLMForTokenClassification"),
@@ -861,8 +867,11 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
     [
         # Backbone mapping
         ("bit", "BitBackbone"),
+        ("dinat", "DinatBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
+        ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),
+        ("swin", "SwinBackbone"),
     ]
 )
 

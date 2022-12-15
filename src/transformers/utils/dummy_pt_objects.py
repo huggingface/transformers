@@ -1908,6 +1908,13 @@ class DeiTPreTrainedModel(metaclass=DummyObject):
 DINAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class DinatBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class DinatForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3965,6 +3972,13 @@ class MvpPreTrainedModel(metaclass=DummyObject):
 NAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class NatBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class NatForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5279,6 +5293,13 @@ class SqueezeBertPreTrainedModel(metaclass=DummyObject):
 
 
 SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SwinBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class SwinForImageClassification(metaclass=DummyObject):

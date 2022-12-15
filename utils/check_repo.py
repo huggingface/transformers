@@ -209,6 +209,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaImageModel",
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
+    "GPTSw3DoubleHeadsModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
@@ -683,8 +684,11 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "MaskFormerSwinBackbone",
     "ResNetBackbone",
     "AutoBackbone",
+    "DinatBackbone",
+    "NatBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
+    "SwinBackbone",
 ]
 
 

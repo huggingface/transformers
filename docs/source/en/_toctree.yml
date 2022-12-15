@@ -275,6 +275,8 @@
         title: GPT-J
       - local: model_doc/gpt2
         title: GPT2
+      - local: model_doc/gpt-sw3
+        title: GPTSw3
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
