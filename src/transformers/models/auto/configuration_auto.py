@@ -155,7 +155,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("trajectory_transformer", "TrajectoryTransformerConfig"),
         ("transfo-xl", "TransfoXLConfig"),
         ("trocr", "TrOCRConfig"),
-        ("tvlt", "TVLTConfig"),
+        ("tvlt", "TvltConfig"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("van", "VanConfig"),
