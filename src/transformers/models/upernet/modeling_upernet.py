@@ -123,7 +123,7 @@ class UperNetPyramidPoolingModule(nn.Module):
         return ppm_outs
 
 
-class UperHead(nn.Module):
+class UperNetHead(nn.Module):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
     [UPerNet](https://arxiv.org/abs/1807.10221).
@@ -287,7 +287,7 @@ class UperNetPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         if isinstance(module, BackboneMixin):
             module.init_weights()
-        elif isinstance(module, UperHead):
+        elif isinstance(module, UperNetHead):
             module.init_weights()
         elif isinstance(module, FCNHead):
             module.init_weights()
@@ -304,7 +304,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         self.backbone = AutoBackbone.from_config(config.backbone_config)
 
         # Semantic segmentation head(s)
-        self.decode_head = UperHead(config, in_channels=self.backbone.channels)
+        self.decode_head = UperNetHead(config, in_channels=self.backbone.channels)
         self.auxiliary_head = FCNHead(config) if config.use_auxiliary_head else None
 
         # Initialize weights and apply final processing
