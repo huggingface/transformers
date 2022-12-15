@@ -1890,9 +1890,6 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
         global_attention_mask = tf.convert_to_tensor(
             [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]], dtype=tf.int32
         )
-        global_attention_mask = tf.convert_to_tensor(
-            [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]], dtype=tf.int32
-        )
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -1905,6 +1902,14 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
         }
+
+    def build_with_dummies(self, dummy_spec=None):
+        # This model is coded in a way which means building it with tf.keras.Input fails
+        if dummy_spec is not None:
+            super().build_with_dummies(dummy_spec)
+        else:
+            self._set_save_spec(self.serving_signature)
+            self(self.dummy_inputs)
 
 
 LONGFORMER_START_DOCSTRING = r"""

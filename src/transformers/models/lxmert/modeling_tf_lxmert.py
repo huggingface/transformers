@@ -1294,7 +1294,6 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
                 dummy_spec["obj_labels"] = obj_labels
         super().build_with_dummies(dummy_spec)
 
-
     def get_lm_head(self):
         return self.cls.predictions
 
