@@ -59,30 +59,6 @@ def convert_to_rgb(image: Union[Any, PIL.Image.Image]) -> Union[Any, PIL.Image.I
     return image.convert("RGB")
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.max_across_indices
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
-    """
-    Return the maximum value across all indices of an iterable of values.
-    """
-    return [max(values_i) for values_i in zip(*values)]
-
-
-# Copied from transformers.models.vilt.image_processing_vilt.get_max_dimensions
-def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
-    """
-    Get the maximum height and width across all images in a batch.
-    """
-    input_channel_dimension = infer_channel_dimension_format(images[0])
-
-    if input_channel_dimension == ChannelDimension.FIRST:
-        _, max_height, max_width = max_across_indices([img.shape for img in images])
-    elif input_channel_dimension == ChannelDimension.LAST:
-        max_height, max_width, _ = max_across_indices([img.shape for img in images])
-    else:
-        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
-    return (max_height, max_width)
-
-
 class BlipImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BLIP image processor.
