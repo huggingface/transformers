@@ -2784,8 +2784,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
                 )
 
-        model.build_with_dummies(dummy_spec)  # Make sure restore ops are run
-
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:
                 missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
