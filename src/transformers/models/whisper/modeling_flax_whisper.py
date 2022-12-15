@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Flax whisper model."""
 
-
+import random
 from functools import partial
 from typing import Optional, Tuple
 
@@ -327,6 +327,7 @@ class FlaxWhisperAttention(nn.Module):
         return key, value, attention_mask
 
 
+# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartEncoderLayer with MBart->Whisper
 class FlaxWhisperEncoderLayer(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -335,36 +336,35 @@ class FlaxWhisperEncoderLayer(nn.Module):
         self.embed_dim = self.config.d_model
         self.self_attn = FlaxWhisperAttention(
             config=self.config,
-            num_heads=self.config.encoder_attention_heads,
             embed_dim=self.embed_dim,
-            causal=False,
+            num_heads=self.config.encoder_attention_heads,
+            dropout=self.config.attention_dropout,
             dtype=self.dtype,
         )
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
-        self.self_attn_layer_norm = nn.LayerNorm(epsilon=1e-05)
+        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
         hidden_states: jnp.ndarray,
-        output_attentions: bool = False,
+        attention_mask: jnp.ndarray,
+        output_attentions: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights = self.self_attn(hidden_states)
+        hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
 
@@ -373,6 +373,7 @@ class FlaxWhisperEncoderLayer(nn.Module):
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -383,35 +384,44 @@ class FlaxWhisperEncoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartEncoderLayerCollection with MBart->Whisper
 class FlaxWhisperEncoderLayerCollection(nn.Module):
     config: WhisperConfig
-    dtype: jnp.dtype = jnp.float32
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    def setup(self) -> None:
+    def setup(self):
         self.layers = [
             FlaxWhisperEncoderLayer(self.config, name=str(i), dtype=self.dtype)
             for i in range(self.config.encoder_layers)
         ]
+        self.layerdrop = self.config.encoder_layerdrop
 
     def __call__(
         self,
-        hidden_states: jnp.ndarray,
+        hidden_states,
+        attention_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
         for encoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-            layer_outputs = encoder_layer(
-                hidden_states,
-                output_attentions=output_attentions,
-                deterministic=deterministic,
-            )
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+            if not deterministic and (dropout_probability < self.layerdrop):  # skip the layer
+                layer_outputs = (None, None)
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    output_attentions,
+                    deterministic,
+                )
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -429,6 +439,7 @@ class FlaxWhisperEncoderLayerCollection(nn.Module):
         )
 
 
+# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayer with MBart->Whisper
 class FlaxWhisperDecoderLayer(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -437,101 +448,110 @@ class FlaxWhisperDecoderLayer(nn.Module):
         self.embed_dim = self.config.d_model
         self.self_attn = FlaxWhisperAttention(
             config=self.config,
-            num_heads=self.config.decoder_attention_heads,
             embed_dim=self.embed_dim,
+            num_heads=self.config.decoder_attention_heads,
+            dropout=self.config.attention_dropout,
             causal=True,
+            dtype=self.dtype,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
+        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
+        self.activation_fn = ACT2FN[self.config.activation_function]
+        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
 
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.encoder_attn = FlaxWhisperAttention(
             config=self.config,
-            num_heads=self.config.decoder_attention_heads,
             embed_dim=self.embed_dim,
-            causal=False,
+            num_heads=self.config.decoder_attention_heads,
+            dropout=self.config.attention_dropout,
             dtype=self.dtype,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
-        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
-        self.activation_fn = ACT2FN[self.config.activation_function]
         self.fc1 = nn.Dense(
             self.config.decoder_ffn_dim,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
             dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
-            dtype=self.dtype,
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
         hidden_states: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
+        attention_mask: jnp.ndarray,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         output_attentions: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
-
         hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
-            hidden_states,
-            attention_mask=attention_mask,
-            init_cache=init_cache,
+            hidden_states=hidden_states, attention_mask=attention_mask, init_cache=init_cache
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
 
+        # Cross-Attention Block
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
+
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
             hidden_states, cross_attn_weights = self.encoder_attn(
-                hidden_states,
-                encoder_hidden_states,
+                hidden_states=hidden_states,
+                key_value_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
             )
             hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
             hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
+        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
+
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
 
 
+# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayerCollection with MBart->Whisper
 class FlaxWhisperDecoderLayerCollection(nn.Module):
     config: WhisperConfig
-    dtype: jnp.dtype = jnp.float32
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    def setup(self) -> None:
+    def setup(self):
         self.layers = [
             FlaxWhisperDecoderLayer(self.config, name=str(i), dtype=self.dtype)
             for i in range(self.config.decoder_layers)
         ]
+        self.layerdrop = self.config.decoder_layerdrop
 
     def __call__(
         self,
-        hidden_states: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
+        hidden_states,
+        attention_mask,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
-        init_cache: bool = False,
-        output_hidden_states: bool = False,
-        output_attentions: bool = False,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
+        init_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -540,14 +560,21 @@ class FlaxWhisperDecoderLayerCollection(nn.Module):
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask,
-                encoder_hidden_states,
-                init_cache=init_cache,
-                output_attentions=output_attentions,
-                deterministic=deterministic,
-            )
+                # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = random.uniform(0, 1)
+            if not deterministic and (dropout_probability < self.layerdrop):
+                layer_outputs = (None, None, None)
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    init_cache=init_cache,
+                    output_attentions=output_attentions,
+                    deterministic=deterministic,
+                )
+
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
