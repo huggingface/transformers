@@ -388,8 +388,8 @@ class GitModelTest(ModelTesterMixin, unittest.TestCase):
 class GitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_captioning(self):
-        processor = GitProcessor.from_pretrained("nielsr/git-base")
-        model = GitForCausalLM.from_pretrained("nielsr/git-base")
+        processor = GitProcessor.from_pretrained("microsoft/git-base")
+        model = GitForCausalLM.from_pretrained("microsoft/git-base")
         model.to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

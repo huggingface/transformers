@@ -14,10 +14,20 @@
 # limitations under the License.
 """Feature extractor class for FLAVA."""
 
+import warnings
+
 from ...utils import logging
 from .image_processing_flava import FlavaImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
-FlavaFeatureExtractor = FlavaImageProcessor
+
+class FlavaFeatureExtractor(FlavaImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class FlavaFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
+            " use FlavaImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)

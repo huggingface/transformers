@@ -23,7 +23,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-Git_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+GIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/git-base": "https://huggingface.co/microsoft/git-base/resolve/main/config.json",
 }
 

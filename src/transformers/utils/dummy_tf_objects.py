@@ -449,6 +449,13 @@ class TFBartForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFBartForSequenceClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFBartModel(metaclass=DummyObject):
     _backends = ["tf"]
 
