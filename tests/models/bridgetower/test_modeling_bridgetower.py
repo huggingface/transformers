@@ -47,8 +47,6 @@ class BridgeTowerModelTester:
     def __init__(
         self,
         parent,
-        cache_dir="/tmp",
-        classifier_drop_rate=0.1,
         cross_modal_transform_shared=True,
         drop_rate=0.1,
         freeze_RoBERTa=False,
@@ -64,20 +62,12 @@ class BridgeTowerModelTester:
         layer_norm_eps=1e-05,
         link_tower_shared=False,
         link_tower_type="add",
-        log_dir="log_dir",
         max_text_len=50,
         mlp_ratio=4,
-        model_type="bridgetower",
-        nlvr2_head_format="pair",
         num_attention_heads=12,
         num_hidden_layers=6,
-        num_nodes=1,
-        only_load_cross_modal_from_meter=False,
-        patch_size=16,
         resolution_before=224,
         stop_gradient=False,
-        task_head_layers=2,
-        test_only=False,
         tie_word_embeddings=False,
         tokenizer="roberta-base",
         unfreeze_RoBERTa_attention=False,
@@ -86,15 +76,17 @@ class BridgeTowerModelTester:
         unfreeze_RoBERTa_layernorm=False,
         unfreeze_ViT_attention=False,
         unfreeze_ViT_layernorm=False,
-        vit="ViT-B/16",
+        vit_embed_dim=512,
+        vit_layers=12,
         vit_layernorm_init_from_vit=False,
         vit_layernorm_shared=True,
+        vit_patch_size=16,
+        vit_transformer_width=512,
+        vit_width=768,
         vit_remove_last=False,
         vocab_size=50265,
     ):
         self.parent = parent
-        self.cache_dir = cache_dir
-        self.classifier_drop_rate = classifier_drop_rate
         self.cross_modal_transform_shared = cross_modal_transform_shared
         self.drop_rate = drop_rate
         self.freeze_RoBERTa = freeze_RoBERTa
@@ -110,20 +102,12 @@ class BridgeTowerModelTester:
         self.layer_norm_eps = layer_norm_eps
         self.link_tower_shared = link_tower_shared
         self.link_tower_type = link_tower_type
-        self.log_dir = log_dir
         self.max_text_len = max_text_len
         self.mlp_ratio = mlp_ratio
-        self.model_type = model_type
-        self.nlvr2_head_format = nlvr2_head_format
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
-        self.num_nodes = num_nodes
-        self.only_load_cross_modal_from_meter = only_load_cross_modal_from_meter
-        self.patch_size = patch_size
         self.resolution_before = resolution_before
         self.stop_gradient = stop_gradient
-        self.task_head_layers = task_head_layers
-        self.test_only = test_only
         self.tie_word_embeddings = tie_word_embeddings
         self.tokenizer = tokenizer
         self.unfreeze_RoBERTa_attention = unfreeze_RoBERTa_attention
@@ -132,10 +116,14 @@ class BridgeTowerModelTester:
         self.unfreeze_RoBERTa_layernorm = unfreeze_RoBERTa_layernorm
         self.unfreeze_ViT_attention = unfreeze_ViT_attention
         self.unfreeze_ViT_layernorm = unfreeze_ViT_layernorm
-        self.vit = vit
+        self.vit_embed_dim = vit_embed_dim
+        self.vit_layers = vit_layers
         self.vit_layernorm_init_from_vit = vit_layernorm_init_from_vit
         self.vit_layernorm_shared = vit_layernorm_shared
+        self.vit_patch_size = vit_patch_size
         self.vit_remove_last = vit_remove_last
+        self.vit_transformer_width = vit_transformer_width
+        self.vit_width = vit_width
         self.vocab_size = vocab_size
         self.num_channels = 3
         self.seq_length = 4
@@ -155,8 +143,6 @@ class BridgeTowerModelTester:
 
     def get_config(self):
         return BridgeTowerConfig(
-            cache_dir=self.cache_dir,
-            classifier_drop_rate=self.classifier_drop_rate,
             cross_modal_transform_shared=self.cross_modal_transform_shared,
             drop_rate=self.drop_rate,
             freeze_RoBERTa=self.freeze_RoBERTa,
@@ -172,20 +158,12 @@ class BridgeTowerModelTester:
             layer_norm_eps=self.layer_norm_eps,
             link_tower_shared=self.link_tower_shared,
             link_tower_type=self.link_tower_type,
-            log_dir=self.log_dir,
             max_text_len=self.max_text_len,
             mlp_ratio=self.mlp_ratio,
-            model_type=self.model_type,
-            nlvr2_head_format=self.nlvr2_head_format,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
-            num_nodes=self.num_nodes,
-            only_load_cross_modal_from_meter=self.only_load_cross_modal_from_meter,
-            patch_size=self.patch_size,
             resolution_before=self.resolution_before,
             stop_gradient=self.stop_gradient,
-            task_head_layers=self.task_head_layers,
-            test_only=self.test_only,
             tie_word_embeddings=self.tie_word_embeddings,
             tokenizer=self.tokenizer,
             unfreeze_RoBERTa_attention=self.unfreeze_RoBERTa_attention,
@@ -194,10 +172,14 @@ class BridgeTowerModelTester:
             unfreeze_RoBERTa_layernorm=self.unfreeze_RoBERTa_layernorm,
             unfreeze_ViT_attention=self.unfreeze_ViT_attention,
             unfreeze_ViT_layernorm=self.unfreeze_ViT_layernorm,
-            vit=self.vit,
+            vit_embed_dim=self.vit_embed_dim,
+            vit_layers=self.vit_layers,
             vit_layernorm_init_from_vit=self.vit_layernorm_init_from_vit,
             vit_layernorm_shared=self.vit_layernorm_shared,
+            vit_patch_size=self.vit_patch_size,
             vit_remove_last=self.vit_remove_last,
+            vit_transformer_width=self.vit_transformer_width,
+            vit_width=self.vit_width,
             vocab_size=self.vocab_size,
         )
 
