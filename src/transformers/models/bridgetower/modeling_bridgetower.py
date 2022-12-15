@@ -1074,6 +1074,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         return MaskedLMOutput(logits=mlm_logits)
 
 
+# Copied from transformers.models.vilt.modeling_vilt.ViltPredictionHeadTransform with Vilt->BridgeTower
 class BridgeTowerPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
