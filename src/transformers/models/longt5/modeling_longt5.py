@@ -281,7 +281,6 @@ class LongT5DenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->LongT5
 class LongT5DenseGatedActDense(nn.Module):
     def __init__(self, config: LongT5Config):
         super().__init__()
