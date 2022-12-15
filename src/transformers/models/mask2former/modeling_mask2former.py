@@ -173,9 +173,9 @@ class Mask2FormerModelOutput(ModelOutput):
 
 
 @dataclass
-class Mask2FormerForInstanceSegmentationOutput(ModelOutput):
+class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     """
-    Class for outputs of [`Mask2FormerForInstanceSegmentationOutput`].
+    Class for outputs of [`Mask2FormerForUniversalSegmentationOutput`].
 
     This output can be directly passed to [`~Mask2FormerImageProcessor.post_process_semantic_segmentation`] or
     [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] or
@@ -2277,7 +2277,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         return output
 
 
-class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
+class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
     main_input_name = ["pixel_values"]
 
     def __init__(self, config: Mask2FormerConfig):
@@ -2339,7 +2339,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         return sum(loss_dict.values())
 
     @add_start_docstrings_to_model_forward(MASK2FORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Mask2FormerForInstanceSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Mask2FormerForUniversalSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Tensor,
@@ -2350,7 +2350,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Mask2FormerForInstanceSegmentationOutput:
+    ) -> Mask2FormerForUniversalSegmentationOutput:
         r"""
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
@@ -2359,18 +2359,18 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
 
         Returns:
-            `Mask2FormerInstanceSegmentationOutput`
+            `Mask2FormerUniversalSegmentationOutput`
 
         Examples:
         ```python
-        >>> from transformers import Mask2FormerImageProcessor, Mask2FormerForInstanceSegmentation
+        >>> from transformers import Mask2FormerImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import requests
         >>> import torch
 
         >>> # Load Mask2Former trained on ADE20k
         >>> image_processor = Mask2FormerImageProcessor.from_pretrained("FILL")
-        >>> model = Mask2FormerForInstanceSegmentation.from_pretrained("FILL")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("FILL")
 
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
@@ -2431,7 +2431,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         if not output_auxiliary_logits:
             auxiliary_predictions = None
 
-        output = Mask2FormerForInstanceSegmentationOutput(
+        output = Mask2FormerForUniversalSegmentationOutput(
             class_queries_logits=class_queries_logits,
             masks_queries_logits=masks_queries_logits,
             auxiliary_predictions=auxiliary_predictions,

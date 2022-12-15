@@ -31,7 +31,7 @@ from ...test_modeling_common import ModelTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import Mask2FormerForInstanceSegmentation, Mask2FormerModel
+    from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
 
     if is_vision_available():
         from transformers import Mask2FormerFeatureExtractor
@@ -135,7 +135,7 @@ class Mask2FormerModelTester:
     def create_and_check_mask2former_instance_segmentation_head_model(
         self, config, pixel_values, pixel_mask, mask_labels, class_labels
     ):
-        model = Mask2FormerForInstanceSegmentation(config=config)
+        model = Mask2FormerForUniversalSegmentation(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -174,7 +174,7 @@ class Mask2FormerModelTester:
 @require_torch
 class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (Mask2FormerModel, Mask2FormerForInstanceSegmentation) if is_torch_available() else ()
+    all_model_classes = (Mask2FormerModel, Mask2FormerForUniversalSegmentation) if is_torch_available() else ()
 
     is_encoder_decoder = False
     test_pruning = False
@@ -245,7 +245,7 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
             "class_labels": torch.zeros(2, 10, device=torch_device).long(),
         }
 
-        model = Mask2FormerForInstanceSegmentation(Mask2FormerConfig()).to(torch_device)
+        model = Mask2FormerForUniversalSegmentation(Mask2FormerConfig()).to(torch_device)
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
 
@@ -264,7 +264,7 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         if not self.model_tester.is_training:
             return
-        # only Mask2FormerForInstanceSegmentation has the loss
+
         model_class = self.all_model_classes[1]
         config, pixel_values, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
 
@@ -276,7 +276,6 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
         loss.backward()
 
     def test_retain_grad_hidden_states_attentions(self):
-        # only Mask2FormerForInstanceSegmentation has the loss
         model_class = self.all_model_classes[1]
         config, pixel_values, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
         config.output_hidden_states = True
@@ -369,8 +368,8 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             )
         )
 
-    def test_inference_instance_segmentation_head(self):
-        model = Mask2FormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+    def test_inference_universal_segmentation_head(self):
+        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
         inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
@@ -407,7 +406,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_with_segmentation_maps_and_loss(self):
-        model = Mask2FormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         feature_extractor = self.default_feature_extractor
 
         inputs = feature_extractor(

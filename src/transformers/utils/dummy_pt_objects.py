@@ -3433,7 +3433,7 @@ class MarkupLMPreTrainedModel(metaclass=DummyObject):
 MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class Mask2FormerForInstanceSegmentation(metaclass=DummyObject):
+class Mask2FormerForUniversalSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

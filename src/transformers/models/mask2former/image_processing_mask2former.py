@@ -871,11 +871,11 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
-        Converts the output of [`Mask2FormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
+        Converts the output of [`Mask2FormerForUniversalSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
 
         Args:
-            outputs ([`Mask2FormerForInstanceSegmentation`]):
+            outputs ([`Mask2FormerForUniversalSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
@@ -927,11 +927,11 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         return_coco_annotation: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into instance segmentation predictions.
+        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into instance segmentation predictions.
         Only supports PyTorch.
 
         Args:
-            outputs ([`Mask2FormerForInstanceSegmentation`]):
+            outputs ([`Mask2FormerForUniversalSegmentation`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
@@ -1010,12 +1010,12 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into image panoptic segmentation
+        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
 
         Args:
-            outputs ([`Mask2FormerForInstanceSegmentationOutput`]):
-                The outputs from [`Mask2FormerForInstanceSegmentation`].
+            outputs ([`Mask2FormerForUniversalSegmentationOutput`]):
+                The outputs from [`Mask2FormerForUniversalSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
             mask_threshold (`float`, *optional*, defaults to 0.5):

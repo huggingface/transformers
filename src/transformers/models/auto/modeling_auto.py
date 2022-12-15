@@ -435,7 +435,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Instance Segmentation mapping
-        ("mask2former", "Mask2FormerForInstanceSegmentation"),
+        ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
     ]
 )

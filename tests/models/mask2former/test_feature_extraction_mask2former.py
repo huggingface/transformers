@@ -29,7 +29,7 @@ if is_torch_available():
 
     if is_vision_available():
         from transformers import Mask2FormerFeatureExtractor
-        from transformers.models.mask2former.modeling_mask2former import Mask2FormerForInstanceSegmentationOutput
+        from transformers.models.mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentationOutput
 
 if is_vision_available():
     from PIL import Image
@@ -121,7 +121,7 @@ class Mask2FormerFeatureExtractionTester(unittest.TestCase):
         return expected_height, expected_width
 
     def get_fake_mask2former_outputs(self):
-        return Mask2FormerForInstanceSegmentationOutput(
+        return Mask2FormerForUniversalSegmentationOutput(
             # +1 for null class
             class_queries_logits=torch.randn((self.batch_size, self.num_queries, self.num_classes + 1)),
             masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),

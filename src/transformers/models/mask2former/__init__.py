@@ -43,7 +43,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mask2former"] = [
         "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Mask2FormerForInstanceSegmentation",
+        "Mask2FormerForUniversalSegmentation",
         "Mask2FormerModel",
         "Mask2FormerPreTrainedModel",
     ]
@@ -73,7 +73,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_mask2former import (
             MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Mask2FormerForInstanceSegmentation,
+            Mask2FormerForUniversalSegmentation,
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,
         )

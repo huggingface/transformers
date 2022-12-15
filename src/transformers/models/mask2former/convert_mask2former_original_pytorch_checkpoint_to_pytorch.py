@@ -32,8 +32,8 @@ from detectron2.projects.deeplab import add_deeplab_config
 from transformers.models.mask2former.feature_extraction_mask2former import Mask2FormerFeatureExtractor
 from transformers.models.mask2former.modeling_mask2former import (
     Mask2FormerConfig,
-    Mask2FormerForInstanceSegmentation,
-    Mask2FormerForInstanceSegmentationOutput,
+    Mask2FormerForUniversalSegmentation,
+    Mask2FormerForUniversalSegmentationOutput,
     Mask2FormerModel,
 )
 from transformers.utils import logging
@@ -686,8 +686,8 @@ class OriginalMask2FormerCheckpointToOursConverter:
         return mask2former
 
     def convert_instance_segmentation(
-        self, mask2former: Mask2FormerForInstanceSegmentation
-    ) -> Mask2FormerForInstanceSegmentation:
+        self, mask2former: Mask2FormerForUniversalSegmentation
+    ) -> Mask2FormerForUniversalSegmentation:
         dst_state_dict = TrackedStateDict(mask2former.state_dict())
         src_state_dict = self.original_model.state_dict()
 
@@ -715,7 +715,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
 
 def test(
-    original_model, our_model: Mask2FormerForInstanceSegmentation, feature_extractor: Mask2FormerFeatureExtractor
+    original_model, our_model: Mask2FormerForUniversalSegmentation, feature_extractor: Mask2FormerFeatureExtractor
 ):
     with torch.no_grad():
         original_model = original_model.eval()
@@ -746,7 +746,7 @@ def test(
         original_model_out = original_model([{"image": x.squeeze(0)}])
         original_segmentation = original_model_out[0]["instances"].pred_masks.unsqueeze(0)
 
-        our_model_out: Mask2FormerForInstanceSegmentationOutput = our_model(x)
+        our_model_out: Mask2FormerForUniversalSegmentationOutput = our_model(x)
         our_segmentation = feature_extractor.post_process_segmentation(our_model_out)
 
         assert original_segmentation.shape == our_segmentation.shape, "Output masks shapes are not matching."
@@ -857,7 +857,7 @@ if __name__ == "__main__":
 
         mask2former = converter.convert(mask2former)
 
-        mask2former_for_instance_segmentation = Mask2FormerForInstanceSegmentation(config=config).eval()
+        mask2former_for_instance_segmentation = Mask2FormerForUniversalSegmentation(config=config).eval()
 
         mask2former_for_instance_segmentation.model = mask2former
         mask2former_for_instance_segmentation = converter.convert_instance_segmentation(
