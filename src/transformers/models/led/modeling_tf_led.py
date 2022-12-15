@@ -1344,6 +1344,13 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
             "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
         }
 
+    def build_with_dummies(self, dummy_spec=None):
+        # This model is coded in a way which means building it with tf.keras.Input fails
+        if dummy_spec is None:
+            self(self.dummy_inputs)
+        else:
+            super().build_with_dummies(dummy_spec)
+
 
 @dataclass
 # Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutput with TFLongformer->TFLEDEncoder
