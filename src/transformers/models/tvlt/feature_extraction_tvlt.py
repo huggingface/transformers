@@ -14,23 +14,23 @@
 # limitations under the License.
 """Feature extractor class for TVLT."""
 
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 import numpy as np
 from numpy.fft import fft
 
-from ...image_utils import PILImageResampling
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
-from ...utils import TensorType, logging, is_vision_available
+from ...image_utils import ImageFeatureExtractionMixin, ImageInput, PILImageResampling, is_torch_tensor
+from ...utils import TensorType, is_vision_available, logging
+
 
 logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
-    
-    
-class TVLTPixelFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+
+
+class TvltPixelFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a TVLT pixel feature extractor. This feature extractor can be used to prepare videos/images for the model.
 
@@ -74,7 +74,6 @@ class TVLTPixelFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         **kwargs
     ):
-        
         self.do_resize = do_resize
         self.pixel_size = pixel_size
         self.pixel_patch_size = pixel_patch_size
@@ -104,13 +103,13 @@ class TVLTPixelFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             mean = np.array(mean).astype(video.dtype)
         if not isinstance(std, np.ndarray):
             std = np.array(std).astype(video.dtype)
-        
+
         return (video - mean[None, :, None, None]) / std[None, :, None, None]
 
     def __call__(
-        self, 
-        pixel_features: ImageInput, 
-        return_tensors: Optional[Union[str, TensorType]] = None, 
+        self,
+        pixel_features: ImageInput,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
@@ -150,7 +149,7 @@ class TVLTPixelFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 </Tip>
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
-                
+
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -164,12 +163,12 @@ class TVLTPixelFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_frames, num_channels,
               height, width).
-              
+
             - **pixel_masks** -- Pixel masks to be fed to a model, of shape (batch_size, num_pixel_patch).
-              
+
         Main method to featurize and prepare for the model one or several sequence(s).
         Args:
-            
+
         """
         # Input type checking for clearer error
         valid_pixels = False
@@ -197,29 +196,40 @@ class TVLTPixelFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.pixel_size is not None:
-            pixel_features = [self.resize_pixel(pixel_feature, size=self.pixel_size, resample=self.resample) for pixel_feature in pixel_features]
+            pixel_features = [
+                self.resize_pixel(pixel_feature, size=self.pixel_size, resample=self.resample)
+                for pixel_feature in pixel_features
+            ]
         if self.do_center_crop and self.pixel_size is not None:
             pixel_features = [self.crop_pixel(pixel_feature, size=self.pixel_size) for pixel_feature in pixel_features]
         if self.do_normalize:
-            pixel_features = [self.normalize_pixel(pixel_feature, mean=self.image_mean, std=self.image_std) for pixel_feature in pixel_features]
-        
-        pixel_masks = [len(pixel_feature)*(self.pixel_size//self.pixel_patch_size)**2*[1]+(self.num_frames-len(pixel_feature))*(self.pixel_size//self.pixel_patch_size)**2*[0] for pixel_feature in pixel_features]
+            pixel_features = [
+                self.normalize_pixel(pixel_feature, mean=self.image_mean, std=self.image_std)
+                for pixel_feature in pixel_features
+            ]
+
+        pixel_masks = [
+            len(pixel_feature) * (self.pixel_size // self.pixel_patch_size) ** 2 * [1]
+            + (self.num_frames - len(pixel_feature)) * (self.pixel_size // self.pixel_patch_size) ** 2 * [0]
+            for pixel_feature in pixel_features
+        ]
         pixel_masks = np.array(pixel_masks)
-        
-        padded_pixel_features = np.zeros([len(pixel_features), self.num_frames, 3, self.pixel_size, self.pixel_size]).astype(np.float32)
+
+        padded_pixel_features = np.zeros(
+            [len(pixel_features), self.num_frames, 3, self.pixel_size, self.pixel_size]
+        ).astype(np.float32)
         for i in range(len(pixel_features)):
             pixel_feature = pixel_features[i]
             padded_pixel_features[i, : pixel_feature.shape[0], :, :, :] = pixel_feature
-        
+
         # return as BatchFeature
         data = {"pixel_values": padded_pixel_features, "pixel_masks": pixel_masks}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
-    
-    
-    
-class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+
+
+class TvltAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a TVLT audio feature extractor. This feature extractor can be used to prepare audios for the model.
 
@@ -227,7 +237,7 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
     should refer to this superclass for more information regarding those methods.
 
     Args:
-        
+
     """
 
     model_input_names = ["audio_values", "audio_masks"]
@@ -253,7 +263,7 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-        
+
         self.audio_size = audio_size
         self.num_channels = num_channels
         self.audio_patch_size = audio_patch_size
@@ -267,13 +277,12 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
 
     def normalize_pixel(self, audio, mean, std):
-
         # normalize
         if not isinstance(mean, np.ndarray):
             mean = np.array(mean).astype(video.dtype)
         if not isinstance(std, np.ndarray):
             std = np.array(std).astype(video.dtype)
-        
+
         return (audio - mean[None, None, None]) / std[None, None, None]
 
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
@@ -385,7 +394,7 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             else:
                 fft_signal[:frame_size] = frame
             data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
-        
+
         return data.T
 
     def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
@@ -408,9 +417,9 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         return log_spec.T
 
     def __call__(
-        self, 
+        self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        return_tensors: Optional[Union[str, TensorType]] = None, 
+        return_tensors: Optional[Union[str, TensorType]] = None,
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
@@ -429,7 +438,7 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         </Tip>
 
         Args:
-                
+
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
@@ -468,7 +477,7 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         Main method to featurize and prepare for the model one or several sequence(s).
         Args:
-            
+
         """
 
         if sampling_rate is not None:
@@ -500,14 +509,20 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
 
-        audio_features = [self._np_extract_fbank_features(waveform.squeeze())[:self.audio_size] for waveform in raw_speech]
+        audio_features = [
+            self._np_extract_fbank_features(waveform.squeeze())[: self.audio_size] for waveform in raw_speech
+        ]
         if isinstance(audio_features[0], List):
             audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
-        
+
         max_length = max([feature.shape[0] for feature in audio_features])
-        audio_masks = [feature.shape[0]//self.audio_patch_size[0]*self.frequency_length*[1]+(max_length-feature.shape[0])//self.audio_patch_size[0]**self.frequency_length*[0] for feature in audio_features]
+        audio_masks = [
+            feature.shape[0] // self.audio_patch_size[0] * self.frequency_length * [1]
+            + (max_length - feature.shape[0]) // self.audio_patch_size[0] ** self.frequency_length * [0]
+            for feature in audio_features
+        ]
         audio_masks = np.array(audio_masks).astype(np.float32)
-        
+
         # convert into correct format for padding
         padded_audio_features = np.zeros([len(audio_features), 1, max_length, 128]).astype(np.float32)
         for i in range(len(audio_features)):
@@ -518,4 +533,4 @@ class TVLTAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         data = {"audio_values": padded_audio_features, "audio_masks": audio_masks}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
-        return encoded_inputs    
+        return encoded_inputs

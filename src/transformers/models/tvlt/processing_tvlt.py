@@ -22,21 +22,21 @@ from ...processing_utils import ProcessorMixin
 from ...utils import TensorType
 
 
-class TVLTProcessor(ProcessorMixin):
+class TvltProcessor(ProcessorMixin):
     r"""
     Constructs a TVLT processor which wraps a TVLT pixel feature extractor and TVLT audio feature extractor into a single processor.
 
-    [`TVLTProcessor`] offers all the functionalities of [`TVLTPixelFeatureExtractor`] and [`TVLTAudioFeatureExtractor`]. See the
-    docstring of [`~TVLTProcessor.__call__`] and [`~TVLTProcessor.decode`] for more information.
+    [`TvltProcessor`] offers all the functionalities of [`TvltPixelFeatureExtractor`] and [`TvltAudioFeatureExtractor`]. See the
+    docstring of [`~TvltProcessor.__call__`] and [`~TvltProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (`TVLTPixelFeatureExtractor`):
-            An instance of [`TVLTPixelFeatureExtractor`]. The pixel feature extractor is a required input.
-        feature_extractor (`TVLTAudioFeatureExtractor`):
-            An instance of [`TVLTAudioFeatureExtractor`]. The audio feature extractor is a required input.
+        feature_extractor (`TvltPixelFeatureExtractor`):
+            An instance of [`TvltPixelFeatureExtractor`]. The pixel feature extractor is a required input.
+        feature_extractor (`TvltAudioFeatureExtractor`):
+            An instance of [`TvltAudioFeatureExtractor`]. The audio feature extractor is a required input.
     """
-    pixel_feature_extractor_class = "TVLTPixelFeatureExtractor"
-    audio_feature_extractor_class = "TVLTAudioFeatureExtractor"
+    pixel_feature_extractor_class = "TvltPixelFeatureExtractor"
+    audio_feature_extractor_class = "TvltAudioFeatureExtractor"
 
     def __init__(self, pixel_feature_extractor, audio_feature_extractor):
         super().__init__(pixel_feature_extractor, audio_feature_extractor)
@@ -45,7 +45,7 @@ class TVLTProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        Forwards the `pixel_values` argument to TVLTPixelFeatureExtractor's [`~TVLTPixelTokenizer.__call__`] and the `audio_values` argument to TVLTAudioFeatureExtractor's [`~TVLTAudioFeatureExtractor.__call__`]. Please refer to the doctsring of the above two methods for more
+        Forwards the `pixel_values` argument to TvltPixelFeatureExtractor's [`~TvltPixelTokenizer.__call__`] and the `audio_values` argument to TvltAudioFeatureExtractor's [`~TvltAudioFeatureExtractor.__call__`]. Please refer to the doctsring of the above two methods for more
         information.
         """
         # For backward compatibility

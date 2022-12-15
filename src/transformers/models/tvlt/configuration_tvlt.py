@@ -25,12 +25,12 @@ TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class TVLTConfig(PretrainedConfig):
+class TvltConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TVLTModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`TvltModel`]. It is used to instantiate a
     TVLT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the VideoMAE
-    [MCG-NJU/tvlt-base](https://huggingface.co/MCG-NJU/tvlt-base) architecture.
+    with the defaults will yield a similar configuration to that of the Tvlt
+    [TVLT/tvlt-base](https://huggingface.co/TVLT/tvlt-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -81,13 +81,13 @@ class TVLTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import TVLTConfig, TVLTModel
+    >>> from transformers import TvltConfig, TvltModel
 
-    >>> # Initializing a TVLT configuration
-    >>> configuration = TVLTConfig()
+    >>> # # Initializing a TVLT TVLT/tvlt-base style configuration
+    >>> configuration = TvltConfig()
 
-    >>> # Randomly initializing a model from the configuration
-    >>> model = TVLTModel(configuration)
+    >>> # # Initializing a model (with random weights) from the TVLT/tvlt-base style configuration
+    >>> model = TvltModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -157,7 +157,7 @@ class TVLTConfig(PretrainedConfig):
         self.norm_pix_loss = norm_pix_loss
         self.pixel_mask_ratio = pixel_mask_ratio
         self.audio_mask_ratio = audio_mask_ratio
-        
+
         self.task_matching = task_matching
         self.task_mae = task_mae
         self.num_labels = num_labels

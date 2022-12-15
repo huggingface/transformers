@@ -21,7 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_tvlt": ["TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TVLTConfig"],
+    "configuration_tvlt": ["Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP", "TvltConfig"],
 }
 
 try:
@@ -31,12 +31,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tvlt"] = [
-        "TVLT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TVLTForPreTraining",
-        "TVLTModel",
-        "TVLTPreTrainedModel",
-        "TVLTForVisionAndAudioRetrieval",
-        "TVLTForSequenceClassification",
+        "Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TvltModel",
+        "TvltForPreTraining",
+        "TvltForQuestionAnswering",
+        "TvltForSequenceClassification",
+        "TvltPreTrainedModel",
     ]
 
 try:
@@ -46,14 +46,16 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_tvlt"] = [
-        "TVLTPixelFeatureExtractor", 
-        "TVLTAudioFeatureExtractor", 
+        "TvltPixelFeatureExtractor",
+        "TvltAudioFeatureExtractor",
     ]
-    _import_structure["processing_tvlt"] = ["TVLTProcessor",]
+    _import_structure["processing_tvlt"] = [
+        "TvltProcessor",
+    ]
 
 
 if TYPE_CHECKING:
-    from .configuration_tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TVLTConfig
+    from .configuration_tvlt import Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
 
     try:
         if not is_torch_available():
@@ -62,12 +64,12 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tvlt import (
-            TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TVLTForPreTraining,
-            TVLTModel,
-            TVLTPreTrainedModel,
-            TVLTForVideoAndAudioRetrieval,
-            TVLTForSequenceClassification,
+            Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvltModel,
+            TvltForPreTraining,
+            TvltForQuestionAnswering,
+            TvltForSequenceClassification,
+            TvltPreTrainedModel,
         )
 
     try:
@@ -76,9 +78,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_tvlt import TVLTPixelFeatureExtractor, TVLTAudioFeatureExtractor
-        from .processing_tvlt import TVLTProcessor
+        from .feature_extraction_tvlt import TvltAudioFeatureExtractor, TvltPixelFeatureExtractor
+        from .processing_tvlt import TvltProcessor
 
 else:
     import sys
+
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
