@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "TVLT/tvlt-base": "https://huggingface.co/TVLT/models/resolve/main/tvlt-base/config.json",
+    "TVLT/tvlt-base": "https://huggingface.co/TVLT/tvlt-base/blob/main/config.json",
 }
 
 
