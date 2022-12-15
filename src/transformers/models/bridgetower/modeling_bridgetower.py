@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch BridgeTower Model"""
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -31,7 +32,6 @@ from ...modeling_outputs import MaskedLMOutput, ModelOutput, SequenceClassifierO
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_10
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig
-from .image_processing_bridgetower import build_model
 
 
 logger = logging.get_logger(__name__)
@@ -144,6 +144,225 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+class BridgeTowerLayerNorm(nn.LayerNorm):
+    """Subclass torch's LayerNorm to handle fp16."""
+
+    def forward(self, x: torch.Tensor):
+        orig_type = x.dtype
+        ret = super().forward(x.type(torch.float32))
+        return ret.type(orig_type)
+
+
+class BridgeTowerQuickGELU(nn.Module):
+    def forward(self, x: torch.Tensor):
+        return x * torch.sigmoid(1.702 * x)
+
+
+class BridgeTowerResidualAttention(nn.Module):
+    def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
+        super().__init__()
+
+        self.attn = nn.MultiheadAttention(d_model, n_head)
+        self.ln_1 = BridgeTowerLayerNorm(d_model)
+        self.mlp = nn.Sequential(
+            OrderedDict(
+                [
+                    ("c_fc", nn.Linear(d_model, d_model * 4)),
+                    ("gelu", BridgeTowerQuickGELU()),
+                    ("c_proj", nn.Linear(d_model * 4, d_model)),
+                ]
+            )
+        )
+        self.ln_2 = BridgeTowerLayerNorm(d_model)
+        self.attn_mask = attn_mask
+
+    def attention(self, x: torch.Tensor, x_mask: torch.Tensor):
+        if x_mask is not None:
+            x_mask = x_mask.to(dtype=torch.bool, device=x.device)
+        self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
+        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask, key_padding_mask=x_mask)[0]
+
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor = None):
+        x = x + self.attention(self.ln_1(x), x_mask)
+        x = x + self.mlp(self.ln_2(x))
+        return x
+
+
+class BridgeTowerTransformer(nn.Module):
+    def __init__(
+        self,
+        width: int,
+        layers: int,
+        heads: int,
+        attn_mask: torch.Tensor = None,
+        model_type: str = "bridgetower",
+        stop_gradient: bool = False,
+        vit_remove_last: bool = False,
+    ):
+        super().__init__()
+        self.width = width
+        self.layers = layers
+        if vit_remove_last:
+            self.resblocks = nn.Sequential(
+                *[BridgeTowerResidualAttention(width, heads, attn_mask) for _ in range(layers - 1)]
+            )
+        else:
+            self.resblocks = nn.Sequential(
+                *[BridgeTowerResidualAttention(width, heads, attn_mask) for _ in range(layers)]
+            )
+        self.model_type = model_type
+        self.stop_gradient = stop_gradient
+
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor = None):
+        xs = []
+        for block in self.resblocks:
+            x = block(x, x_mask)
+            if self.model_type == "bridgetower":
+                if self.stop_gradient:
+                    xs.append(x.detach())
+                else:
+                    xs.append(x)
+        if self.model_type == "bridgetower":
+            return xs
+        else:
+            return x
+
+
+class BridgeTowerVisualTransformer(nn.Module):
+    def __init__(
+        self,
+        input_resolution: int,
+        patch_size: int,
+        width: int,
+        layers: int,
+        heads: int,
+        output_dim: int,
+        resolution_after: int,
+        model_type: str = "bridgetower",
+        stop_gradient: bool = False,
+        vit_layernorm_shared: bool = True,
+        vit_remove_last: bool = False,
+    ):
+        super().__init__()
+        self.input_resolution = input_resolution
+        self.output_dim = output_dim
+        self.conv1 = nn.Conv2d(
+            in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False
+        )
+
+        scale = width**-0.5
+        self.class_embedding = nn.Parameter(scale * torch.randn(width))
+        self.positional_embedding = nn.Parameter(scale * torch.randn((resolution_after // patch_size) ** 2 + 1, width))
+        self.ln_pre = BridgeTowerLayerNorm(width)
+
+        self.transformer = BridgeTowerTransformer(
+            width, layers, heads, model_type=model_type, stop_gradient=stop_gradient, vit_remove_last=vit_remove_last
+        )
+        self.ln_post = BridgeTowerLayerNorm(width)
+        self.model_type = model_type
+        self.vit_layernorm_shared = vit_layernorm_shared
+        if not vit_layernorm_shared:
+            # self.cross_modal_ln_separate
+            self.ln_separate = nn.ModuleList([BridgeTowerLayerNorm(width) for _ in range(layers)])
+
+    def forward(self, x: torch.Tensor, x_mask):
+        x = self.conv1(x)  # shape = [*, width, grid, grid]
+        x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
+        x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
+        t = self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device)
+        x = torch.cat([t, x], dim=1)  # shape = [*, grid ** 2 + 1, width]
+        x = x + self.positional_embedding.to(x.dtype)
+        x = self.ln_pre(x)
+        x = x.permute(1, 0, 2)  # NLD -> LND
+        if self.model_type == "bridgetower":
+            xs = self.transformer(x, x_mask)
+            xs = torch.stack(xs, dim=0)  # shape = [layers, width, *, grid ** 2]
+            xs = xs.permute(0, 2, 1, 3)  # shape = [layers, *, width, grid ** 2]
+            if self.vit_layernorm_shared:
+                xs = self.ln_post(xs)
+            else:
+                xs_ = []
+                for x, ln in zip(xs, self.ln_separate):
+                    x = ln(x)
+                    xs_.append(x)
+                xs = torch.stack(xs_, dim=0)  # shape = [layers, *, width, grid ** 2]
+            return xs
+        else:
+            x = self.transformer(x, x_mask)
+            x = x.permute(1, 0, 2)  # LND -> NLD
+            x = self.ln_post(x)
+            return x
+
+    def forward_pre(self, x: torch.Tensor):
+        x = self.conv1(x)  # shape = [*, width, grid, grid]
+        x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
+        x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
+        t = self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device)
+        x = torch.cat([t, x], dim=1)  # shape = [*, grid ** 2 + 1, width]
+        x = x + self.positional_embedding.to(x.dtype)
+        x = self.ln_pre(x)
+        x = x.permute(1, 0, 2)  # NLD -> LND
+        return x
+
+    def forward_post(self, x: torch.Tensor):
+        x = x.permute(1, 0, 2)
+        x = self.ln_post(x)
+        return x
+
+
+class BridgeTowerCLIP(nn.Module):
+    def __init__(
+        self,
+        embed_dim: int,
+        # vision
+        image_resolution: int,
+        vision_layers: Union[Tuple[int, int, int, int], int],
+        vision_width: int,
+        vision_patch_size: int,
+        transformer_width: int,
+        resolution_after=224,
+        model_type="bridgetower",
+        stop_gradient=False,
+        vit_layernorm_shared=True,
+        vit_remove_last=False,
+    ):
+        super().__init__()
+
+        vision_heads = vision_width // 64
+        self.visual = BridgeTowerVisualTransformer(
+            input_resolution=image_resolution,
+            patch_size=vision_patch_size,
+            width=vision_width,
+            layers=vision_layers,
+            heads=vision_heads,
+            output_dim=embed_dim,
+            resolution_after=resolution_after,
+            model_type=model_type,
+            stop_gradient=stop_gradient,
+            vit_layernorm_shared=vit_layernorm_shared,
+            vit_remove_last=vit_remove_last,
+        )
+
+        self.ln_final = BridgeTowerLayerNorm(transformer_width)
+
+        self.initialize_parameters()
+
+    def initialize_parameters(self):
+        proj_std = (self.visual.transformer.width**-0.5) * ((2 * self.visual.transformer.layers) ** -0.5)
+        attn_std = self.visual.transformer.width**-0.5
+        fc_std = (2 * self.visual.transformer.width) ** -0.5
+        for block in self.visual.transformer.resblocks:
+            nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
+            nn.init.normal_(block.attn.out_proj.weight, std=proj_std)
+            nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
+            nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
+
+    @property
+    def dtype(self):
+        return self.visual.conv1.weight.dtype
+
+    def forward(self, image, image_mask=None):
+        return self.visual(image.type(self.dtype), image_mask)
 
 @dataclass
 class BridgeTowerModelOutput(ModelOutput):
@@ -188,7 +407,7 @@ class BridgeTowerModelOutput(ModelOutput):
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.is_clip = True if config.vit else False
+        self.is_clip = True if config.vit_layers > 0 else False
 
         if "roberta" in config.tokenizer:
             self.tokenizer_config = RobertaConfig(
@@ -203,8 +422,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             )
         else:
             raise ValueError("Incorrect value of tokenizer. Currently roberta tokenizer is supported")
-
-        resolution_after = config.image_size
 
         if config.cross_modal_transform_shared:
             self.cross_modal_text_transform = nn.Linear(config.input_text_embed_size, config.hidden_size)
@@ -222,29 +439,15 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
         self.token_type_embeddings.apply(self._init_weights)
 
-        if torch.distributed.is_initialized():
-            if torch.distributed.get_rank() == 0:
-                if self.is_clip:
-                    build_model(
-                        config.vit,
-                        resolution_after=resolution_after,
-                        model_type=config.model_type,
-                        stop_gradient=config.stop_gradient,
-                        vit_layernorm_shared=config.vit_layernorm_shared,
-                        vit_remove_last=config.vit_remove_last,
-                    )
-
-                if "roberta" in config.tokenizer:
-                    RobertaModel.from_pretrained(config.tokenizer, cache_dir=f"{config.cache_dir}/{config.tokenizer}")
-                else:
-                    raise ValueError("Incorrect value of tokenizer. Currently roberta tokenizer is supported")
-            torch.distributed.barrier()
-
         if self.is_clip:
-            self.vit_model = build_model(
-                config.vit,
-                resolution_after=resolution_after,
-                model_type=config.model_type,
+            self.vit_model = BridgeTowerCLIP(
+                config.vit_embed_dim,
+                config.resolution_before,
+                config.vit_layers,
+                config.vit_width,
+                config.vit_patch_size,
+                config.vit_transformer_width,
+                resolution_after=config.image_size,
                 stop_gradient=config.stop_gradient,
                 vit_layernorm_shared=config.vit_layernorm_shared,
                 vit_remove_last=config.vit_remove_last,
@@ -919,7 +1122,7 @@ class BridgeTowerITMHead(nn.Module):
 @add_start_docstrings(
     """
     BridgeTower Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the
-    [CLS] token) for image-to-text or text-to-image retrieval, e.g. MSCOCO and F30K.
+    [CLS] token) for image-to-text matching.
     """,
     BRIDGETOWER_START_DOCSTRING,
 )

@@ -39,10 +39,6 @@ class BridgeTowerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        cache_dir (`str`, *optional*, defaults to `"/tmp"`):
-            Path to the cache directory.
-        classifier_drop_rate (`float`, *optional*, defaults to 0.1):
-            The drop out probability for classifier's Dropout layer.
         cross_modal_transform_shared (`bool`, *optional*, defaults to `True`):
             Whether cross modal transformer layers are shared.
         drop_rate (`float`, *optional*, defaults to 0.1):
@@ -75,34 +71,18 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether the bride/link tower layers are shared.
         link_tower_type (`str`, *optional*, defaults to `"add"`):
             Type of the bridge/link layer.
-        log_dir (`str`, *optional*, defaults to `"log_dir"`):
-            Path to the log directory.
         max_text_len (`int`, *optional*, defaults to 50):
             Maximum text length.
         mlp_ratio (`int`, *optional*, defaults to 4):
             Ratio of MLP hidden dim to embedding dim.
-        model_type (`str`, *optional*, defaults to `"bridgetower"`):
-            Model type.
-        nlvr2_head_format (`str`, *optional*, defaults to `"pair"`):
-            Head format for nlvr2.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
-        num_nodes (`int`, *optional*, defaults to 1):
-            Number of nodes for multi-node training.
-        only_load_cross_modal_from_meter (`bool`, *optional*, defaults to `False`):
-            Whether to load cross modal transformer from meter.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
         resolution_before (`int`, *optional*, defaults to 224):
             Prior resolution.
         stop_gradient (`bool`, *optional*, defaults to `False`):
             Whether to stop gradient for training.
-        task_head_layers (`int`, *optional*, defaults to 2):
-            Number of task head layers.
-        test_only (`bool`, *optional*, defaults to `False`):
-            Whether model is used only for test.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether embedding weights are tied with the decoder
         tokenizer (`str`, *optional*, defaults to `"roberta-base"`):
@@ -119,14 +99,20 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether to unfreeze ViT's attention.
         unfreeze_ViT_layernorm (`bool`, *optional*, defaults to `False`):
             Whether to unfreeze ViT's LayerNorm.
-        vit (`str`, *optional*, defaults to `"ViT-B/16"`):
-            ViT model configuration.
+        vit_embed_dim (`str`, *optional*, defaults to `"ViT-B/16"`):
+            Dimension size of embeddings in ViT model.
+        vit_layers (`str`, *optional*, defaults to `"ViT-B/16"`):
+            Number of layers in ViT model.
         vit_layernorm_init_from_vit (`bool`, *optional*, defaults to `False`):
             Whether to init ViT LayerNorm from ViT.
         vit_layernorm_shared (`bool`, *optional*, defaults to `True`):
             Whether ViT's LayerNorm layers are shared.
+        vit_patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch in ViT.
         vit_remove_last (`bool`, *optional*, defaults to `False`):
             Whether to remove ViT's last layer.
+        vit_transformer_width (`bool`, *optional*, defaults to `False`):
+            Dimension size of transformer in ViT model.
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the text part of the model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
@@ -149,8 +135,6 @@ class BridgeTowerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        cache_dir="/tmp",
-        classifier_drop_rate=0.1,
         cross_modal_transform_shared=True,
         drop_rate=0.1,
         freeze_RoBERTa=False,
@@ -167,20 +151,12 @@ class BridgeTowerConfig(PretrainedConfig):
         layer_norm_eps=1e-05,
         link_tower_shared=False,
         link_tower_type="add",
-        log_dir="log_dir",
         max_text_len=50,
         mlp_ratio=4,
-        model_type="bridgetower",
-        nlvr2_head_format="pair",
         num_attention_heads=12,
         num_hidden_layers=6,
-        num_nodes=1,
-        only_load_cross_modal_from_meter=False,
-        patch_size=16,
         resolution_before=224,
         stop_gradient=False,
-        task_head_layers=2,
-        test_only=False,
         tie_word_embeddings=False,
         tokenizer="roberta-base",
         unfreeze_RoBERTa_attention=False,
@@ -189,16 +165,18 @@ class BridgeTowerConfig(PretrainedConfig):
         unfreeze_RoBERTa_layernorm=False,
         unfreeze_ViT_attention=False,
         unfreeze_ViT_layernorm=False,
-        vit="ViT-B/16",
+        vit_embed_dim=512,
+        vit_layers=12,
         vit_layernorm_init_from_vit=False,
         vit_layernorm_shared=True,
+        vit_patch_size=16,
         vit_remove_last=False,
+        vit_transformer_width=512,
+        vit_width=768,
         vocab_size=50265,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.cache_dir = cache_dir
-        self.classifier_drop_rate = classifier_drop_rate
         self.cross_modal_transform_shared = cross_modal_transform_shared
         self.drop_rate = drop_rate
         self.freeze_RoBERTa = freeze_RoBERTa
@@ -215,20 +193,12 @@ class BridgeTowerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.link_tower_shared = link_tower_shared
         self.link_tower_type = link_tower_type
-        self.log_dir = log_dir
         self.max_text_len = max_text_len
         self.mlp_ratio = mlp_ratio
-        self.model_type = model_type
-        self.nlvr2_head_format = nlvr2_head_format
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
-        self.num_nodes = num_nodes
-        self.only_load_cross_modal_from_meter = only_load_cross_modal_from_meter
-        self.patch_size = patch_size
         self.resolution_before = resolution_before
         self.stop_gradient = stop_gradient
-        self.task_head_layers = task_head_layers
-        self.test_only = test_only
         self.tie_word_embeddings = tie_word_embeddings
         self.tokenizer = tokenizer
         self.unfreeze_RoBERTa_attention = unfreeze_RoBERTa_attention
@@ -237,8 +207,12 @@ class BridgeTowerConfig(PretrainedConfig):
         self.unfreeze_RoBERTa_layernorm = unfreeze_RoBERTa_layernorm
         self.unfreeze_ViT_attention = unfreeze_ViT_attention
         self.unfreeze_ViT_layernorm = unfreeze_ViT_layernorm
-        self.vit = vit
+        self.vit_embed_dim = vit_embed_dim
+        self.vit_layers = vit_layers
         self.vit_layernorm_init_from_vit = vit_layernorm_init_from_vit
         self.vit_layernorm_shared = vit_layernorm_shared
+        self.vit_patch_size = vit_patch_size
         self.vit_remove_last = vit_remove_last
+        self.vit_transformer_width = vit_transformer_width
+        self.vit_width = vit_width
         self.vocab_size = vocab_size
