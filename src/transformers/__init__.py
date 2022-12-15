@@ -400,8 +400,8 @@ _import_structure = {
         "TrOCRProcessor",
     ],
     "models.tvlt": [
-        "TvltAudioFeatureExtractor",
         "TvltConfig",
+        "TvltAudioFeatureExtractor",
         "TvltPixelFeatureExtractor",
         "Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TvltProcessor",
@@ -2176,10 +2176,11 @@ else:
     _import_structure["models.tvlt"].extend(
         [
             "Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TvltForPreTraining",
-            "TvltForSequenceClassification",
-            "TvltForVisionAndAudioRetrieval",
             "TvltModel",
+            "TvltForPreTraining",
+            "TvltForQuestionAnswering",
+            "TvltForSequenceClassification",
+            
         ]
     )
     _import_structure["models.unispeech"].extend(
@@ -5132,9 +5133,9 @@ if TYPE_CHECKING:
         from .models.tvlt import (
             Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST,
             TvltForPreTraining,
-            TvltForSequenceClassification,
-            TvltForVisionAndAudioRetrieval,
             TvltModel,
+            TvltForQuestionAnswering,
+            TvltForSequenceClassification,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
