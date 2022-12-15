@@ -203,6 +203,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
         with self.assertRaises(ValueError):
             outputs = text_generator("test", return_full_text=True, return_text=True)
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_full_text=True, return_tensors=True)
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_text=True, return_tensors=True)
 
         # Empty prompt is slighly special
         # it requires BOS token to exist.
