@@ -221,7 +221,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("t5", "T5ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
-        ("tvlt", "TVLTForPreTraining"),
+        ("tvlt", "TvltForPreTraining"),
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("videomae", "VideoMAEForPreTraining"),
@@ -616,7 +616,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForSequenceClassification"),
         ("tapas", "TapasForSequenceClassification"),
         ("transfo-xl", "TransfoXLForSequenceClassification"),
-        ("tvlt", "TVLTForSequenceClassification"),
+        ("tvlt", "TvltForSequenceClassification"),
         ("xlm", "XLMForSequenceClassification"),
         ("xlm-roberta", "XLMRobertaForSequenceClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
@@ -1186,9 +1186,11 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
     def from_config(cls, config):
         warnings.warn(
-            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and "
-            "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
+            (
+                "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use"
+                " `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models"
+                " and `AutoModelForSeq2SeqLM` for encoder-decoder models."
+            ),
             FutureWarning,
         )
         return super().from_config(config)
@@ -1196,9 +1198,11 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         warnings.warn(
-            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and "
-            "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
+            (
+                "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use"
+                " `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models"
+                " and `AutoModelForSeq2SeqLM` for encoder-decoder models."
+            ),
             FutureWarning,
         )
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
