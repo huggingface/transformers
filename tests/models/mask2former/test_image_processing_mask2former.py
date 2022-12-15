@@ -28,14 +28,13 @@ if is_torch_available():
     import torch
 
     if is_vision_available():
-        from transformers import Mask2FormerFeatureExtractor
-        from transformers.models.mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentationOutput
+        from transformers import Mask2FormerForUniversalSegmentationOutput, Mask2FormerImageProcessor
 
 if is_vision_available():
     from PIL import Image
 
 
-class Mask2FormerFeatureExtractionTester(unittest.TestCase):
+class Mask2FormerImageProcessorTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -91,7 +90,7 @@ class Mask2FormerFeatureExtractionTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to Mask2FormerFeatureExtractor,
+        This function computes the expected height and width when providing images to Mask2FormerImageProcessor,
         assuming do_resize is set to True with a scalar size.
         """
         if not batched:
@@ -130,14 +129,12 @@ class Mask2FormerFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class Mask2FormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class Mask2FormerImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = (
-        Mask2FormerFeatureExtractor if (is_vision_available() and is_torch_available()) else None
-    )
+    feature_extraction_class = Mask2FormerImageProcessor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
-        self.feature_extract_tester = Mask2FormerFeatureExtractionTester(self)
+        self.feature_extract_tester = Mask2FormerImageProcessorTester(self)
 
     @property
     def feat_extract_dict(self):

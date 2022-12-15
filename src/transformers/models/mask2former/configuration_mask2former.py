@@ -46,25 +46,18 @@ class Mask2FormerConfig(PretrainedConfig):
     Currently, Mask2Former only supports the [Swin Transformer](swin) as backbone.
 
     Args:
-        mask_feature_size (`int`, *optional*, defaults to 256):
-            The masks' features size, this value will also be used to specify the Feature Pyramid Network features'
-            size.
-        no_object_weight (`float`, *optional*, defaults to 0.1):
-            Weight to apply to the null (no object) class.
-        use_auxiliary_loss(`bool`, *optional*, defaults to `False`):
-            If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
-            the logits from each decoder's stage.
+        general_config (`Dict`, *optional*):
+            General configuration settings for model initialization and loss terms computations.
         backbone_config (`Dict`, *optional*, defaults to `swin-tiny-patch4-window7-224`):
             The configuration passed to the backbone, if unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
         decoder_config (`Dict`, *optional*):
-            The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
-            will be used.
+            The configuration passed to the pixel decoder and transformer decoder models. Includes the number of
+            layers, hidden state dimensions, normalization settings, etc.
 
     Raises:
         `ValueError`:
-            Raised if the backbone model type selected is not in `["swin"]` or the decoder model type selected is not
-            in `["detr"]`.
+            Raised if the backbone model type selected is not in `["swin"]`.
 
     Examples:
 
@@ -170,13 +163,11 @@ class Mask2FormerConfig(PretrainedConfig):
             decoder_config["norm"] = "GN"
             decoder_config["encoder_layers"] = 6
             decoder_config["decoder_layers"] = 10
-            decoder_config["use_task_norm"] = True
             decoder_config["num_heads"] = 8
             decoder_config["dropout"] = 0.1
             decoder_config["dim_feedforward"] = 2048
             decoder_config["pre_norm"] = False
             decoder_config["enforce_input_proj"] = False
-            decoder_config["query_dec_layers"] = 2
             decoder_config["common_stride"] = 4
 
         return general_config, backbone_config, decoder_config

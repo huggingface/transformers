@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Mask2FormerConfig"
 _CHECKPOINT_FOR_DOC = "shivi/mask2former-instance-swin-small-coco"
-_FEAT_EXTRACTOR_FOR_DOC = "Mask2FormerFeatureExtractor"
+_IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
 
 MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "shivi/mask2former-instance-swin-small-coco",

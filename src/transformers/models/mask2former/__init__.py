@@ -22,7 +22,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_mask2former": ["MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "Mask2FormerConfig"],
-    "configuration_mask2former_swin": ["Mask2FormerSwinConfig"],
 }
 
 try:
@@ -31,7 +30,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_mask2former"] = ["Mask2FormerFeatureExtractor"]
     _import_structure["image_processing_mask2former"] = ["Mask2FormerImageProcessor"]
 
 
@@ -47,15 +45,9 @@ else:
         "Mask2FormerModel",
         "Mask2FormerPreTrainedModel",
     ]
-    _import_structure["modeling_mask2former_swin"] = [
-        "Mask2FormerSwinBackbone",
-        "Mask2FormerSwinModel",
-        "Mask2FormerSwinPreTrainedModel",
-    ]
 
 if TYPE_CHECKING:
     from .configuration_mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
-    from .configuration_mask2former_swin import Mask2FormerSwinConfig
 
     try:
         if not is_vision_available():
@@ -63,7 +55,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_mask2former import Mask2FormerFeatureExtractor
         from .image_processing_mask2former import Mask2FormerImageProcessor
     try:
         if not is_torch_available():
@@ -76,11 +67,6 @@ if TYPE_CHECKING:
             Mask2FormerForUniversalSegmentation,
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,
-        )
-        from .modeling_mask2former_swin import (
-            Mask2FormerSwinBackbone,
-            Mask2FormerSwinModel,
-            Mask2FormerSwinPreTrainedModel,
         )
 
 

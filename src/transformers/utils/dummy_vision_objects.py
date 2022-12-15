@@ -255,13 +255,6 @@ class LevitImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class Mask2FormerFeatureExtractor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class Mask2FormerImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
