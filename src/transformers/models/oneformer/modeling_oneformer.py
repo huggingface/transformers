@@ -54,8 +54,6 @@ ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all OneFormer models at https://huggingface.co/models?filter=oneformer
 ]
 
-# Utilities #
-
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
@@ -65,9 +63,9 @@ def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations, attention_weights):
-    # for debug and test only,
-    # need to use cuda version instead
+def multiscale_deform_attn_core_pytorch(
+    value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
+) -> Tensor:
     N_, S_, M_, D_ = value.shape
     _, Lq_, M_, L_, P_, _ = sampling_locations.shape
     value_list = value.split([H_ * W_ for H_, W_ in value_spatial_shapes], dim=1)
@@ -190,7 +188,7 @@ def pair_wise_sigmoid_ce_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     return loss / hw
 
 
-def calculate_uncertainty(logits):
+def calculate_uncertainty(logits: Tensor) -> Tensor:
     """
     We estimate uncerainty as L1 distance between 0.0 and the logit prediction in 'logits' for the
         foreground class in `classes`.
@@ -209,33 +207,41 @@ def calculate_uncertainty(logits):
     return -(torch.abs(gt_class_logits))
 
 
-def point_sample(input, point_coords, **kwargs):
+def point_sample(input: Tensor, point_coords: Tensor, **kwargs) -> Tensor:
     """
     A wrapper around :function:`torch.nn.functional.grid_sample` to support 3D point_coords tensors. Unlike
     `nn.functional.grid_sample` it assumes `point_coords` to lie inside [0, 1] x [0, 1] square.
 
     Args:
-        input (Tensor): A tensor of shape (N, C, H, W) that contains features map on a H x W grid. point_coords
-        (Tensor): A tensor of shape (N, P, 2) or (N, Hgrid, Wgrid, 2) that contains [0, 1] x [0, 1] normalized point
+        input (Tensor): A tensor of shape (N, C, H, W) that contains features map on a H x W grid.
+        point_coords (Tensor):
+            A tensor of shape (N, P, 2) or (N, Hgrid, Wgrid, 2) that contains [0, 1] x [0, 1] normalized point
         coordinates.
     Returns:
-        output (Tensor): A tensor of shape (N, C, P) or (N, C, Hgrid, Wgrid) that contains
+         output (Tensor): A tensor of shape (batch_size, num_channels, points) or (batch_size, num_channels,height,
+         width) that contains
             features for points in `point_coords`. The features are obtained via bilinear interplation from `input` the
-            same way as :function:`torch.nn.functional.grid_sample`.
+            same way as `torch.nn.functional.grid_sample`.
     """
     add_dim = False
     if point_coords.dim() == 3:
         add_dim = True
         point_coords = point_coords.unsqueeze(2)
     output = nn.functional.grid_sample(input, 2.0 * point_coords - 1.0, **kwargs)
+
     if add_dim:
         output = output.squeeze(3)
     return output
 
 
+# Refactored from https://github.com/facebookresearch/detectron2/blob/9f8d35e653674932fbe7a579feee36ed9dc8e8c5/projects/PointRend/point_rend/point_features.py#L63
 def get_uncertain_point_coords_with_randomness(
-    coarse_logits, uncertainty_func, num_points, oversample_ratio, importance_sample_ratio
-):
+    coarse_logits: Tensor,
+    uncertainty_func: Tensor,
+    num_points: int,
+    oversample_ratio: float,
+    importance_sample_ratio: float,
+) -> Tensor:
     """
     Sample points in [0, 1] x [0, 1] coordinate space based on their uncertainty. The unceratinties
         are calculated for each point using 'uncertainty_func' function that takes point's logit prediction as input.
@@ -260,46 +266,31 @@ def get_uncertain_point_coords_with_randomness(
     num_sampled = int(num_points * oversample_ratio)
     point_coords = torch.rand(num_boxes, num_sampled, 2, device=coarse_logits.device)
     point_logits = point_sample(coarse_logits, point_coords, align_corners=False)
-    # It is crucial to calculate uncertainty based on the sampled prediction value for the points.
-    # Calculating uncertainties of the coarse predictions first and sampling them for points leads
-    # to incorrect results.
-    # To illustrate this: assume uncertainty_func(logits)=-abs(logits), a sampled point between
-    # two coarse predictions with -1 and 1 logits has 0 logits, and therefore 0 uncertainty value.
-    # However, if we calculate uncertainties for the coarse predictions first,
-    # both will have -1 uncertainty, and the sampled point will get -1 uncertainty.
     point_uncertainties = uncertainty_func(point_logits)
     num_uncertain_points = int(importance_sample_ratio * num_points)
     num_random_points = num_points - num_uncertain_points
+
+    # Sample points
     idx = torch.topk(point_uncertainties[:, 0, :], k=num_uncertain_points, dim=1)[1]
     shift = num_sampled * torch.arange(num_boxes, dtype=torch.long, device=coarse_logits.device)
     idx += shift[:, None]
     point_coords = point_coords.view(-1, 2)[idx.view(-1), :].view(num_boxes, num_uncertain_points, 2)
     if num_random_points > 0:
-        point_coords = torch.cat(
-            [
-                point_coords,
-                torch.rand(num_boxes, num_random_points, 2, device=coarse_logits.device),
-            ],
-            dim=1,
-        )
+        random_coords = torch.rand(num_boxes, num_random_points, 2, device=coarse_logits.device)
+        point_coords = torch.cat([point_coords, random_coords], dim=1)
     return point_coords
 
 
-# Loss and Matcher Classes #
-
-# refactored from original implementation
+# Refactored from https://github.com/SHI-Labs/OneFormer/blob/33ebb56ed34f970a30ae103e786c0cb64c653d9a/oneformer/modeling/matcher.py#L93
 class OneFormerHungarianMatcher(nn.Module):
-    """This class computes an assignment between the labels and the predictions of the network.
-
-    For efficiency reasons, the labels don't include the no_object. Because of this, in general, there are more
-    predictions than labels. In this case, we do a 1-to-1 matching of the best predictions, while the others are
-    un-matched (and thus treated as non-objects).
-    """
-
     def __init__(
         self, cost_class: float = 1.0, cost_mask: float = 1.0, cost_dice: float = 1.0, num_points: int = 12544
     ):
-        """Creates the matcher
+        """This class computes an assignment between the labels and the predictions of the network.
+
+        For efficiency reasons, the labels don't include the no_object. Because of this, in general, there are more
+        predictions than labels. In this case, we do a 1-to-1 matching of the best predictions, while the others are
+        un-matched (and thus treated as non-objects).
 
         Params:
             cost_class (float, *optional*, defaults to 1.0):
@@ -365,7 +356,7 @@ class OneFormerHungarianMatcher(nn.Module):
             # all masks share the same set of points for efficient matching!
             point_coords = torch.rand(1, self.num_points, 2, device=pred_mask.device)
 
-            # get gt labels
+            # get ground truth labels
             target_mask = point_sample(
                 target_mask,
                 point_coords.repeat(target_mask.shape[0], 1, 1),
@@ -399,19 +390,7 @@ class OneFormerHungarianMatcher(nn.Module):
         ]
         return matched_indices
 
-    def __repr__(self):
-        head = "Matcher " + self.__class__.__name__
-        body = [
-            f"cost_class: {self.cost_class}",
-            f"cost_mask: {self.cost_mask}",
-            f"cost_dice: {self.cost_dice}",
-        ]
-        _repr_indent = 4
-        lines = [head] + [" " * _repr_indent + line for line in body]
-        return "\n".join(lines)
 
-
-# copied and adapted from original implementation
 class OneFormerLoss(nn.Module):
     def __init__(
         self,
@@ -425,7 +404,11 @@ class OneFormerLoss(nn.Module):
         contrastive_temperature: float = None,
     ):
         """
-        The OneFormer Loss.
+        This class computes the losses using the class predictions, mask predictions and the contrastive queries.
+
+        Oneformer calculates the classification CE loss on the class predictions. Mask predictions are used for
+        calculating the binary CE loss and dice loss. The contrastive queries are used for calculating the contrastive
+        loss.
 
         Args:
             num_labels (`int`):
@@ -445,9 +428,8 @@ class OneFormerLoss(nn.Module):
             contrastive_temperature (`float`):
                 Temperature for scaling the contrastive logits.
         """
-
-        super().__init__()
         requires_backends(self, ["scipy"])
+        super().__init__()
         self.num_classes = num_classes
         self.matcher = matcher
         self.weight_dict = weight_dict
@@ -544,11 +526,11 @@ class OneFormerLoss(nn.Module):
             `Dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
             - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
         """
-
         pred_logits = class_queries_logits
         batch_size, num_queries, _ = pred_logits.shape
         criterion = nn.CrossEntropyLoss(weight=self.empty_weight)
         idx = self._get_predictions_permutation_indices(indices)
+
         # shape = (batch_size, num_queries)
         target_classes_o = torch.cat([target[j] for target, (_, j) in zip(class_labels, indices)])
         # shape = (batch_size, num_queries)
@@ -556,7 +538,7 @@ class OneFormerLoss(nn.Module):
             (batch_size, num_queries), fill_value=self.num_classes, dtype=torch.int64, device=pred_logits.device
         )
         target_classes[idx] = target_classes_o
-        # target_classes is a (batch_size, num_labels, num_queries), we need to permute pred_logits "b q c -> b c q"
+        # permute pred_logits (batch_size, num_queries, num_labels) -> (batch_size, num_labels, num_queries)
         pred_logits_transposed = pred_logits.transpose(1, 2)
         loss_ce = criterion(pred_logits_transposed, target_classes)
         losses = {"loss_cross_entropy": loss_ce}
@@ -723,15 +705,13 @@ class OneFormerLoss(nn.Module):
         return num_masks_pt
 
 
-# Data Classes #
-
-
 @dataclass
 class OneFormerTransformerDecoderOutput(BaseModelOutput):
     """
-    Args:
     Base class for outputs of the Transformer decoder. This class adds attributes for class predictions, mask
     predictions and contrastive logits to BaseModelOutputWithCrossAttentions.
+
+    Args:
         object_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
             Queries representation for the region proposals.
         contrastive_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
@@ -754,8 +734,8 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
 @dataclass
 class OneFormerPixelDecoderOutput(ModelOutput):
     """
-    OneFormer's pixel decoder module output, practically a MSDeformAttn based decoder. It returns the mask features and
-    the multiscale features.
+    OneFormer's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
+    the mask features and the multiscale features.
 
     Args:
         multi_scale_features (List of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -776,8 +756,8 @@ class OneFormerPixelDecoderOutput(ModelOutput):
 class OneFormerPixelLevelModuleOutput(ModelOutput):
     """
     OneFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
-    `encoder` and `decoder`. By default, the `encoder` is a Swin/Dinat Backbone and the `decoder` is a MSDeformAttn
-    based decoder.
+    `encoder` and `decoder`. By default, the `encoder` is a Swin/Dinat Backbone and the `decoder` is a Multi-Scale
+    Deformable Attention based decoder.
 
     Args:
         encoder_features (List of `(torch.FloatTensor)`):
@@ -914,9 +894,7 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
-# Pixel Decoder Classes #
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
+# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
 class OneFormerPixelDecoderFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -944,8 +922,6 @@ class OneFormerPixelDecoderFrozenBatchNorm2d(nn.Module):
         )
 
     def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
         weight = self.weight.reshape(1, -1, 1, 1)
         bias = self.bias.reshape(1, -1, 1, 1)
         running_var = self.running_var.reshape(1, -1, 1, 1)
@@ -1044,7 +1020,7 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
         # CPU
-        output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+        output = multiscale_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -3117,7 +3093,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ... )
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> ######## Semantic Segmentation ########
+        >>> # Semantic Segmentation
         >>> inputs = processor(image, ["semantic"], return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -3134,7 +3110,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> f"👉 Semantic Predictions Shape: {list(predicted_semantic_map.shape)}"
         '👉 Semantic Predictions Shape: [512, 683]'
 
-        >>> ######## Instance Segmentation ########
+        >>> # Instance Segmentation
         >>> inputs = processor(image, ["instance"], return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -3151,7 +3127,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> f"👉 Instance Predictions Shape: {list(predicted_instance_map.shape)}"
         '👉 Instance Predictions Shape: [512, 683]'
 
-        >>> ######## Panoptic Segmentation ########
+        >>> # Panoptic Segmentation
         >>> inputs = processor(image, ["panoptic"], return_tensors="pt")
 
         >>> with torch.no_grad():
