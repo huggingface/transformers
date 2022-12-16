@@ -266,6 +266,17 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             293, 25730, 311, 454, 34152, 4496, 904, 50724
         ]
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
-        EXCPECTED_OUTPUT = []
-
-        self.assertEqual(output, EXCPECTED_OUTPUT)
+        self.assertEqual(
+            output,
+            {
+                "offsets": [
+                    {
+                        "text": (
+                            " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles"
+                        ),
+                        "timestamp": (0.0, 7.2),
+                    }
+                ],
+                "text": " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles",
+            },
+        )

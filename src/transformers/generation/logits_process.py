@@ -778,7 +778,6 @@ class TimeStampLogitsProcessor(LogitsProcessor):
         if self.no_timestamps_token_id is not None:
             scores[:, self.no_timestamps_token_id] = -float("inf")
 
-
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):
             seq = [t for t in input_ids[k, self.begin_index :].tolist()]

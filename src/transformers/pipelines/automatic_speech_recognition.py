@@ -78,15 +78,13 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
             yield {"is_last": is_last, "stride": stride, **processed}
 
 
-
-
 class SuffixTrie:
     """
     Trie in Python. Creates a Trie out of a list of words. The trie is used to split on `added_tokens` in one pass
     Loose reference https://en.wikipedia.org/wiki/Trie
     """
 
-    def __init__(self, list = None):
+    def __init__(self, list=None):
         self.data = {}
         sub_lists = [list[i:] for i in range(len(list))]
         for curr_list in sub_lists:
@@ -113,7 +111,7 @@ class SuffixTrie:
             if char not in ref:
                 return res
             start_idx = list(self.data.keys()).index(char)
-            res += [(start_idx,char)]
+            res += [(start_idx, char)]
             ref = ref[char]
         return res
 
@@ -134,61 +132,56 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
         sequence = sequence.squeeze(0)
         sequence = sequence[begin_idx:]
         if seq_idx != 0:
-            time += (chunk_len-stride_left)/100
+            time += (chunk_len - stride_left) / 100
             # lets only take the beginning tokens
             timestamp_tokens = np.where(sequence >= timestamp_begin)[0][0::2]
 
             previous_tokens = items[-1][1:-1]
             # lets merge
             if len(timestamp_tokens) > 1:
-                current_slice = sequence[:timestamp_tokens[1]]
+                current_slice = sequence[: timestamp_tokens[1]]
 
                 trie = SuffixTrie(current_slice)
                 longest_common_sequence = trie.search(previous_tokens)
                 if len(longest_common_sequence) == len(previous_tokens):
                     idx = longest_common_sequence[0][0]
-                    sliced_sequence =  sequence[idx:timestamp_tokens[1]]
+                    sliced_sequence = sequence[idx : timestamp_tokens[1]]
 
                     # Now tricky part : compute the correct timing
-                    actual_offset = int(time /time_precision) + timestamp_begin
+                    actual_offset = int(time / time_precision) + timestamp_begin
                     sliced_sequence[-1] += actual_offset
                     # sliced_sequence[-1] = items[-1][-1]
                     items[-1][1:] = sliced_sequence
                     # items[-1] = np.concatenate([items[-1][:-1],sliced_sequence])
-                    sequence = sequence[timestamp_tokens[1] : ]
+                    sequence = sequence[timestamp_tokens[1] :]
 
         timestamp_tokens = sequence >= timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
         if len(consecutive) > 0:  # if the output contains two consecutive timestamp tokens
             last_slice = 0
             # take the last timestamp of the previous chunk
-            offset = items[-1][-1] if len(items) > 0 else timestamp_begin
-            actual_offset = int(time /time_precision) + timestamp_begin
-            offset = actual_offset
+            offset = int(time / time_precision) + timestamp_begin
             for current_slice in consecutive:
                 sliced_tokens = sequence[last_slice:current_slice]
                 # set correct timestamps
-                sliced_tokens[0]  += offset - timestamp_begin
+                sliced_tokens[0] += offset - timestamp_begin
                 sliced_tokens[-1] += offset - timestamp_begin
-                items.append(sliced_tokens) #correct final sequence
-                # start_times.append(timestamp_offset + start_timestamp_position * time_precision)
+                items.append(sliced_tokens)  # correct final sequence
                 last_slice = current_slice
-            if np.where(timestamp_tokens)[0][-1] != current_slice: # we probably have a timestamp at the end
+            if np.where(timestamp_tokens)[0][-1] != current_slice:  # we probably have a timestamp at the end
                 # offset = items[-1][-1] if len(items) > 0 else timestamp_begin
-                sliced_tokens = sequence[current_slice:np.where(timestamp_tokens)[0][-1] + 1]
-                actual_offset = int(time /time_precision) + timestamp_begin
-                sliced_tokens[0]  += offset - timestamp_begin
+                sliced_tokens = sequence[current_slice : np.where(timestamp_tokens)[0][-1] + 1]
+                sliced_tokens[0] += offset - timestamp_begin
                 sliced_tokens[-1] += offset - timestamp_begin
-                items.append(sliced_tokens) #correct final sequence
+                items.append(sliced_tokens)  # correct final sequence
         else:
             timestamps = sequence[timestamp_tokens.nonzero()[0].flatten()]
             offset = items[-2][-1] if len(items) > 0 else timestamp_begin
             if len(timestamps) > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 # single timestamp at the end means no speech after the last timestamp.
-                items.append(sequence[timestamps[-1]])
+                items.append(sequence[np.where(timestamps[-1])])
                 start_times.append(timestamps[-1] + offset - timestamp_begin)
-
 
     result = []
     for i in range(len(items)):
@@ -487,13 +480,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # it here.
             attention_mask = model_inputs.pop("attention_mask", None)
             if "Whisper" in self.model.__class__.__name__:
-                # logits_processor = self.model._get_logits_processor()
-                logits_processor = []
-                logits_processor.append(TimeStampLogitsProcessor(5))
+
                 tokens = self.model.generate(
                     encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                     attention_mask=attention_mask,
-                    logits_processor=logits_processor
+                    logits_processor=[TimeStampLogitsProcessor(5)],
                 )
             else:
                 tokens = self.model.generate(
@@ -578,7 +569,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             skip_special_tokens = self.type != "ctc"
             text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens)
             if return_timestamps and "Whisper" in self.model.__class__.__name__:
-                offsets = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens, output_offsets=True)["offsets"]
+                offsets = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens, output_offsets=True)[
+                    "offsets"
+                ]
             elif return_timestamps:
                 char_offsets = self.tokenizer.decode(
                     items, skip_special_tokens=skip_special_tokens, output_char_offsets=True
