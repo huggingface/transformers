@@ -18,7 +18,6 @@ import unittest
 
 import numpy as np
 
-from transformers.models.upernet.image_processing_upernet import rescale_size
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -32,6 +31,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import UperNetImageProcessor
+    from transformers.models.upernet.image_processing_upernet import rescale_size
 
 
 class UperNetImageProcessingTester(unittest.TestCase):
