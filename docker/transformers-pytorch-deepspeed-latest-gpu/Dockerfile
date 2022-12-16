@@ -20,7 +20,7 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
 RUN python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
-RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing,sentencepiece]
 
 RUN python3 -m pip install torch-tensorrt==1.3.0 --find-links https://github.com/pytorch/TensorRT/releases/expanded_assets/v1.3.0
 
