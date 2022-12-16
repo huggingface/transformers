@@ -229,12 +229,12 @@ class PipelineTestCaseMeta(type):
                     # If the required packages (like `Pillow`) are not installed, this will fail.
                     try:
                         processor = processor_class.from_pretrained(repo_id)
-                    except:
+                    except Exception:
                         self.skipTest(f"Ignore {model_architecture.__name__}: could not load the model from {repo_id}")
 
                 try:
                     model = model_architecture.from_pretrained(repo_id)
-                except:
+                except Exception:
                     self.skipTest(f"Ignore {model_architecture.__name__}: could not load the model from {repo_id}")
 
                 # validate
