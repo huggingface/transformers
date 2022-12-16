@@ -31,10 +31,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BridgeTowerFeatureExtractor
+    from transformers import BridgeTowerImageProcessor
 
 
-class BridgeTowerFeatureExtractionTester(unittest.TestCase):
+class BridgeTowerImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -81,7 +81,7 @@ class BridgeTowerFeatureExtractionTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to BridgeTowerFeatureExtractor,
+        This function computes the expected height and width when providing images to BridgeTowerImageProcessor,
         assuming do_resize is set to True with a scalar size and size_divisor.
         """
         if not batched:
@@ -122,11 +122,11 @@ class BridgeTowerFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class BridgeTowerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-    feature_extraction_class = BridgeTowerFeatureExtractor if is_vision_available() else None
+class BridgeTowerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+    feature_extraction_class = BridgeTowerImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = BridgeTowerFeatureExtractionTester(self)
+        self.feature_extract_tester = BridgeTowerImageProcessingTester(self)
 
     @property
     def feat_extract_dict(self):

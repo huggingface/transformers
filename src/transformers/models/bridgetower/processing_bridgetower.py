@@ -28,17 +28,17 @@ class BridgeTowerProcessor(ProcessorMixin):
     Constructs a BridgeTower processor which wraps a Roberta tokenizer and BridgeTower feature extractor into a single
     processor.
 
-    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerFeatureExtractor`] and
+    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerImageProcessor`] and
     [`RobertaTokenizerFast`]. See the docstring of [`~BridgeTowerProcessor.__call__`] and
     [`~BridgeTowerProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (`BridgeTowerFeatureExtractor`):
-            An instance of [`BridgeTowerFeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor (`BridgeTowerImageProcessor`):
+            An instance of [`BridgeTowerImageProcessor`]. The feature extractor is a required input.
         tokenizer (`RobertaTokenizerFast`):
             An instance of ['RobertaTokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "BridgeTowerFeatureExtractor"
+    feature_extractor_class = "BridgeTowerImageProcessor"
     tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
@@ -66,7 +66,7 @@ class BridgeTowerProcessor(ProcessorMixin):
         **kwargs
     ) -> BatchEncoding:
         """
-        This method uses [`BridgeTowerFeatureExtractor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`BridgeTowerImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`RobertaTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
