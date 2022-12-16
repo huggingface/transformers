@@ -278,14 +278,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         self.assertEqual(
             output,
             {
-                "offsets": [
-                    {
-                        "text": (
-                            " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles"
-                        ),
-                        "timestamp": (0.0, 7.2),
-                    }
-                ],
                 "text": " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles",
+                "timestamp": (0.0, 7.2),
             },
         )
