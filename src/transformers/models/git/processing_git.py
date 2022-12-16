@@ -15,6 +15,7 @@
 """
 Image/Text processor class for GIT
 """
+
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
@@ -27,14 +28,14 @@ class GitProcessor(ProcessorMixin):
     [`~GitProcessor.__call__`] and [`~GitProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`BertTokenizerFast`]):
+        tokenizer ([`AutoTokenizer`]):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("CLIPImageProcessor", "VideoMAEImageProcessor")
-    tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
