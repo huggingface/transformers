@@ -638,16 +638,16 @@ class FlaxWhisperEncoder(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
+        if input_features.shape[1:] != (self.config.num_mel_bins, self.config.max_source_positions * 2):
+            raise ValueError(
+                "input_features.shape[1:], must be equal to (self.config.num_mel_bins, self.config.max_source_positions * 2) (got"
+                f" {input_features.shape[1:]}, but should be ({self.config.num_mel_bins},"
+                f" {self.config.max_source_positions * 2}))"
+            )
+
         input_features = input_features.transpose(0, 2, 1)
         hidden_states = jax.nn.gelu(self.conv1(input_features), approximate=False)
         hidden_states = jax.nn.gelu(self.conv2(hidden_states), approximate=False)
-
-        if hidden_states.shape[1:] != (self.config.max_source_positions, self.config.d_model):
-            raise ValueError(
-                "hidden_states.shape[1:] must be equal to (self.config.max_source_positions, self.config.d_model)(got"
-                f" {hidden_states.shape[1:]}, but should be ({self.config.max_source_positions},"
-                f" {self.config.d_model}))"
-            )
 
         embed_positions = self.embed_positions(jnp.arange(self.config.max_source_positions))
         hidden_states = hidden_states + embed_positions
