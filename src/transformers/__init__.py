@@ -235,6 +235,7 @@ _import_structure = {
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
+    "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
@@ -841,6 +842,14 @@ else:
             "DeformableDetrForObjectDetection",
             "DeformableDetrModel",
             "DeformableDetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deta"].extend(
+        [
+            "DETA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DetaForObjectDetection",
+            "DetaModel",
+            "DetaPreTrainedModel",
         ]
     )
     _import_structure["models.detr"].extend(
@@ -3680,6 +3689,7 @@ if TYPE_CHECKING:
         DecisionTransformerConfig,
     )
     from .models.deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
+    from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
@@ -4214,6 +4224,12 @@ if TYPE_CHECKING:
             DeformableDetrForObjectDetection,
             DeformableDetrModel,
             DeformableDetrPreTrainedModel,
+        )
+        from .models.deta import (
+            DETA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DetaForObjectDetection,
+            DetaModel,
+            DetaPreTrainedModel,
         )
         from .models.detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,

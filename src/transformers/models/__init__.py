@@ -57,6 +57,7 @@ from . import (
     deberta_v2,
     decision_transformer,
     deformable_detr,
+    deta,
     deit,
     detr,
     dialogpt,
