@@ -89,6 +89,9 @@ def rename_key(name, config):
     if name == "norm.bias":
         name = "layernorm.bias"
 
+    if "conv_first" in name:
+        name = name.replace("conv_first", "first_convolution")
+
     if (
         "upsample" in name
         or "conv_before_upsample" in name
@@ -259,8 +262,8 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"caidas/{model_name}")
+        processor.push_to_hub(f"caidas/{model_name}")
 
 
 if __name__ == "__main__":

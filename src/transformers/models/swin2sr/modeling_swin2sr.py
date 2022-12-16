@@ -51,8 +51,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 64, 768]
 
 
 SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO update to appropriate organization
-    "nielsr/swin2SR-classical-sr-x2-64",
+    "caidas/swin2SR-classical-sr-x2-64",
     # See all Swin2SR models at https://huggingface.co/models?filter=swin2sr
 ]
 
@@ -855,7 +854,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
             self.mean = torch.zeros(1, 1, 1, 1)
         self.img_range = config.img_range
 
-        self.conv_first = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
+        self.first_convolution = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
         self.embeddings = Swin2SREmbeddings(config)
         self.encoder = Swin2SREncoder(config, grid_size=self.embeddings.patch_embeddings.patches_resolution)
 
@@ -927,7 +926,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         # some preprocessing: padding + normalization
         pixel_values = self.pad_and_normalize(pixel_values)
 
-        embeddings = self.conv_first(pixel_values)
+        embeddings = self.first_convolution(pixel_values)
         embedding_output, input_dimensions = self.embeddings(embeddings)
 
         encoder_outputs = self.encoder(

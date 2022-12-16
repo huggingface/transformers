@@ -299,12 +299,11 @@ class Swin2SRModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_vision
 @require_torch
+@slow
 class Swin2SRModelIntegrationTest(unittest.TestCase):
-    @slow
     def test_inference_image_super_resolution_head(self):
-        # TODO update to appropriate organization
         processor = Swin2SRImageProcessor()
-        model = Swin2SRForImageSuperResolution.from_pretrained("nielsr/swin2SR-classical-sr-x2-64").to(torch_device)
+        model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64").to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = processor(images=image, return_tensors="pt").to(torch_device)

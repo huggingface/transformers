@@ -32,8 +32,7 @@ class Swin2SRConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Swin2SRModel`]. It is used to instantiate a Swin
     Transformer v2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Swin Transformer v2
-    [microsoft/swin2sr_tiny_patch4_windows8_256](https://huggingface.co/microsoft/swin2sr_tiny_patch4_windows8_256)
-    architecture.
+    [caidas/swin2sr-classicalsr-x2-64](https://huggingface.co/caidas/swin2sr-classicalsr-x2-64) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -89,10 +88,10 @@ class Swin2SRConfig(PretrainedConfig):
     ```python
     >>> from transformers import Swin2SRConfig, Swin2SRModel
 
-    >>> # Initializing a Swin2SR microsoft/swin2sr_tiny_patch4_windows8_256 style configuration
+    >>> # Initializing a Swin2SR caidas/swin2sr-classicalsr-x2-64 style configuration
     >>> configuration = Swin2SRConfig()
 
-    >>> # Initializing a model (with random weights) from the microsoft/swin2sr_tiny_patch4_windows8_256 style configuration
+    >>> # Initializing a model (with random weights) from the caidas/swin2sr-classicalsr-x2-64 style configuration
     >>> model = Swin2SRModel(configuration)
 
     >>> # Accessing the model configuration

@@ -18,6 +18,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_transforms import get_image_size
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -43,7 +44,7 @@ class Swin2SRImageProcessingTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_rescale=True,
-        rescale_factor=1/255,
+        rescale_factor=1 / 255,
         do_pad=True,
         pad_size=8,
     ):
@@ -121,7 +122,12 @@ class Swin2SRImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Test
         pass
 
     def calculate_expected_size(self, image):
-        return -1, -1
+        old_height, old_width = get_image_size(image)
+        size = self.feature_extract_tester.pad_size
+
+        pad_height = (old_height // size + 1) * size - old_height
+        pad_width = (old_width // size + 1) * size - old_width
+        return old_height + pad_height, old_width + pad_width
 
     def test_call_pil(self):
         # Initialize feature_extractor
