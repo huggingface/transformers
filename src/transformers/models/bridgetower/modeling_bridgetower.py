@@ -106,8 +106,8 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
             [What are token type IDs?](../glossary#token-type-ids)
 
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`BridgeTowerFeatureExtractor`]. See
-            [`BridgeTowerFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`BridgeTowerImageProcessor`]. See
+            [`BridgeTowerImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -632,7 +632,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             cls_feats_image = self.cross_modal_image_pooler(avg_image_feats)
         return torch.cat([cls_feats_text, cls_feats_image], dim=-1)
 
-    def freeze_layers(self,):
+    def freeze_layers(
+        self,
+    ):
         if self.config.freeze_ViT:
             self.vit_model.requires_grad_(False)
             if self.config.unfreeze_ViT_attention:
@@ -679,6 +681,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 # module.requires_grad_(False)
                 for param in module.parameters():
                     param.requires_grad = False
+
 
 class LinkTower(nn.Module):
     def __init__(self, config, tokenizer_config):

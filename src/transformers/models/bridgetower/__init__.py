@@ -29,7 +29,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_bridgetower"] = ["BridgeTowerFeatureExtractor"]
     _import_structure["image_processing_bridgetower"] = ["BridgeTowerImageProcessor"]
     _import_structure["processing_bridgetower"] = ["BridgeTowerProcessor"]
 
@@ -57,7 +56,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_bridgetower import BridgeTowerFeatureExtractor
         from .image_processing_bridgetower import BridgeTowerImageProcessor
         from .processing_bridgetower import BridgeTowerProcessor
 

@@ -394,7 +394,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         warnings.warn(
             "This method is deprecated and will be removed in v4.26.0. Please use pad instead.", FutureWarning
         )
-        # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
+        # pad expects a list of np.ndarray, but the previous image processors expected torch tensors
         images = [to_numpy_array(image) for image in pixel_values_list]
         return self.pad(
             images=images,
