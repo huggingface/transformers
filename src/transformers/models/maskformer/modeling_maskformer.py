@@ -16,7 +16,6 @@
 
 import math
 import random
-import warnings
 from dataclasses import dataclass
 from numbers import Number
 from typing import Dict, List, Optional, Tuple
@@ -1846,13 +1845,3 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             if loss is not None:
                 output = ((loss)) + output
         return output
-
-
-class MaskFormerForInstanceSegmentation(MaskFormerForInstanceSegmentation):
-    def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
-            "The class MaskFormerForInstanceSegmentation is deprecated and will be removed in version 5 of"
-            " Transformers. Please use MaskFormerForInstanceSegmentation instead.",
-            FutureWarning,
-        )
-        super().__init__(*args, **kwargs)
