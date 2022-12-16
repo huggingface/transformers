@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
@@ -21,9 +20,9 @@ from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
 import torch
+import torchvision.transforms as T
 from PIL import Image
 from torch import Tensor, nn
-import torchvision.transforms as T
 
 import requests
 from detectron2.checkpoint import DetectionCheckpointer
@@ -94,6 +93,7 @@ def prepare_img():
 @dataclass
 class Args:
     """Fake command line arguments needed by mask2former/detectron implementation"""
+
     config_file: str
 
 
@@ -634,7 +634,9 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
             ), "The pixel decoder feature are not the same"
 
         # Let's test the full model
-        tr_complete = T.Compose([T.Resize((384, 384)), T.ToTensor()],)
+        tr_complete = T.Compose(
+            [T.Resize((384, 384)), T.ToTensor()],
+        )
         y = (tr_complete(im) * 255.0).to(torch.int).float()
 
         original_class_logits, original_mask_logits = original_model([{"image": y.clone().squeeze(0)}])

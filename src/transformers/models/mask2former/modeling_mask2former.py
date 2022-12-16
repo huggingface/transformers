@@ -146,6 +146,8 @@ class Mask2FormerModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
+        transformer_decoder_last_hidden_state (`tuple(torch.FloatTensor)`):
+            Final output of the transformer decoder `(batch_size, sequence_length, hidden_size)`.
         transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
             Mask Predictions from the last layer in the transformer decoder.
         transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
@@ -160,6 +162,7 @@ class Mask2FormerModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
+    transformer_decoder_last_hidden_state: torch.FloatTensor = None
     transformer_decoder_mask_predictions: torch.FloatTensor = None
     transformer_decoder_class_predictions: torch.FloatTensor = None
     transformer_decoder_auxiliary_predictions: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
@@ -199,6 +202,8 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
+        transformer_decoder_last_hidden_state (`tuple(torch.FloatTensor)`):
+            Final output of the transformer decoder `(batch_size, sequence_length, hidden_size)`.
         transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
             Mask Predictions from the last layer in the transformer decoder.
         transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
@@ -217,6 +222,7 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[List[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
+    transformer_decoder_last_hidden_state: torch.FloatTensor = None
     transformer_decoder_mask_predictions: torch.FloatTensor = None
     transformer_decoder_class_predictions: torch.FloatTensor = None
     transformer_decoder_auxiliary_predictions: Optional[List[Dict[str, torch.FloatTensor]]] = None
@@ -1296,7 +1302,7 @@ class Mask2FormerPixelDecoder(nn.Module):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
+        # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         input_embeds = []
         position_embeddings = []
         for level, x in enumerate(features[::-1][: self.num_feature_levels]):
@@ -1393,10 +1399,10 @@ class Mask2FormerPixelLevelModule(nn.Module):
         """
         super().__init__()
         backbone_config = config.backbone_config
-        if backbone_config.model_type == "swin":
-            # for backwards compatibility
-            backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
-            backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
+
+        # For backwards compatibility
+        backbone_config = MaskFormerSwinConfig.from_dict(backbone_config[0].to_dict())
+        backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
 
         self.encoder = AutoBackbone.from_config(backbone_config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
@@ -2144,7 +2150,7 @@ class Mask2FormerTransformerModule(nn.Module):
     MASK2FORMER_START_DOCSTRING,
 )
 class Mask2FormerModel(Mask2FormerPreTrainedModel):
-    main_input_name = ["pixel_values"]
+    main_input_name = "pixel_values"
 
     def __init__(self, config: Mask2FormerConfig):
         super().__init__(config)
@@ -2181,9 +2187,9 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> # load feature extractor for preprocessing the inputs
-        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("FILL")
-        >>> model = Mask2FormerModel.from_pretrained("FILL")
+        >>> # Load image preprocessor and Mask2FormerModel trained on ADE20K instance segmentation dataset
+        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("facebook/mask2former-instance-swin-small-ade")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-instance-swin-small-ade")
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2222,6 +2228,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         encoder_hidden_states = None
         pixel_decoder_hidden_states = None
         transformer_decoder_hidden_states = None
+        transformer_decoder_last_hidden_state = None
 
         if output_hidden_states:
             encoder_hidden_states = pixel_level_module_output.encoder_hidden_states
@@ -2232,6 +2239,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
+            transformer_decoder_last_hidden_state=transformer_decoder_last_hidden_state,
             transformer_decoder_mask_predictions=transformer_module_output.prediction_masks,
             transformer_decoder_class_predictions=transformer_module_output.prediction_class,
             transformer_decoder_auxiliary_predictions=transformer_module_output.auxiliary_predictions,
@@ -2245,7 +2253,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
 
 
 class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
-    main_input_name = ["pixel_values"]
+    main_input_name = "pixel_values"
 
     def __init__(self, config: Mask2FormerConfig):
         super().__init__(config)
@@ -2273,7 +2281,6 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         class_queries_logits: Tensor,
         mask_labels: Tensor,
         class_labels: Tensor,
-        text_queries: Tensor,
         auxiliary_predictions: Dict[str, Tensor],
     ) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(
@@ -2281,7 +2288,6 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             class_queries_logits=class_queries_logits,
             mask_labels=mask_labels,
             class_labels=class_labels,
-            text_queries=text_queries,
             auxiliary_predictions=auxiliary_predictions,
         )
 
@@ -2326,9 +2332,9 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> import requests
         >>> import torch
 
-        >>> # Load Mask2Former trained on ADE20k
-        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("FILL")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("FILL")
+        >>> # Load Mask2Former trained on ADE20K instance segmentation dataset
+        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("facebook/mask2former-instance-swin-small-ade")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-instance-swin-small-ade")
 
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
@@ -2344,8 +2350,14 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> class_queries_logits = outputs.class_queries_logits
         >>> masks_queries_logits = outputs.masks_queries_logits
 
-        >>> # Perform post-processing to get panoptic segmentation maps
-        >>> predicted_panoptic_map = feature_extractor.post_process_panoptic_segmentation(
+        >>> # Perform post-processing to get semantic, instance or panoptic segmentation maps
+        >>> pred_semantic_map = feature_extractor.post_process_instance_segmentation(
+        ...     outputs, target_sizes=[image.size[::-1]]
+        ... )[0]
+        >>> pred_instance_map = feature_extractor.post_process_instance_segmentation(
+        ...     outputs, target_sizes=[image.size[::-1]]
+        ... )[0]["segmentation"]
+        >>> pred_panoptic_map = feature_extractor.post_process_panoptic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
         ```

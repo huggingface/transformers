@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -51,6 +51,10 @@ from transformers.utils import (
 
 
 logger = logging.get_logger(__name__)
+
+
+if TYPE_CHECKING:
+    from transformers import Mask2FormerForUniversalSegmentationOutput
 
 
 if is_torch_available():
@@ -883,8 +887,8 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             `torch.Tensor`:
                 A tensor of shape (`batch_size, num_class_labels, height, width`).
         """
-        class_queries_logits = outputs.class_queries_logits # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits # [batch_size, num_queries, height, width]
+        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
         if target_size is not None:
             masks_queries_logits = torch.nn.functional.interpolate(
@@ -921,7 +925,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 `torch.Tensor` correspond to a semantic class id.
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits[-1]  # [batch_size, num_queries, height, width]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
         # Remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
@@ -991,7 +995,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 - **score** -- Prediction score of segment with `segment_id`.
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits[-1]  # [batch_size, num_queries, height, width]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
@@ -1019,12 +1023,13 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None
             segmentation, segments = compute_segments(
-                mask_probs_item,
-                pred_scores_item,
-                pred_labels_item,
-                mask_threshold,
-                overlap_mask_area_threshold,
-                target_size,
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=[],
+                target_size=target_size,
             )
 
             # Return segmentation map in run-length encoding (RLE) format
@@ -1084,7 +1089,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             label_ids_to_fuse = set()
 
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits[-1]  # [batch_size, num_queries, height, width]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
@@ -1112,13 +1117,13 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None
             segmentation, segments = compute_segments(
-                mask_probs_item,
-                pred_scores_item,
-                pred_labels_item,
-                mask_threshold,
-                overlap_mask_area_threshold,
-                label_ids_to_fuse,
-                target_size,
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=label_ids_to_fuse,
+                target_size=target_size,
             )
 
             results.append({"segmentation": segmentation, "segments_info": segments})

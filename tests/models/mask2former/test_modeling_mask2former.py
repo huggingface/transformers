@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
-from transformers import DetrConfig, Mask2FormerConfig, SwinConfig, is_torch_available, is_vision_available
+from transformers import Mask2FormerConfig, SwinConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -81,21 +81,26 @@ class Mask2FormerModelTester:
         return config, pixel_values, pixel_mask, mask_labels, class_labels
 
     def get_config(self):
-        return Mask2FormerConfig.from_backbone_and_decoder_configs(
-            backbone_config=SwinConfig(
+        config = Mask2FormerConfig()
+        config.num_labels = self.num_labels
+        config.backbone_config = (
+            SwinConfig(
                 depths=[1, 1, 1, 1],
             ),
-            decoder_config=DetrConfig(
-                decoder_ffn_dim=128,
-                num_queries=self.num_queries,
-                decoder_attention_heads=2,
-                d_model=self.mask_feature_size,
-            ),
-            mask_feature_size=self.mask_feature_size,
-            fpn_feature_size=self.mask_feature_size,
-            num_channels=self.num_channels,
-            num_labels=self.num_labels,
         )
+        config.general_config["num_classes"] = self.num_labels
+        config.general_config["num_queries"] = self.num_queries
+        config.general_config["feature_strides"] = [2, 4, 8, 16]
+        config.decoder_config["feature_size"] = 64
+        config.decoder_config["mask_feature_size"] = self.mask_feature_size
+        config.decoder_config["hidden_dim"] = 16
+        config.decoder_config["encoder_feedforward_dim"] = 32
+        config.decoder_config["encoder_layers"] = 2
+        config.decoder_config["decoder_layers"] = 3
+        config.decoder_config["num_heads"] = 4
+        config.decoder_config["dim_feedforward"] = 16
+        config.decoder_config["common_stride"] = 4
+        return config
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, _, _ = self.prepare_config_and_inputs()
