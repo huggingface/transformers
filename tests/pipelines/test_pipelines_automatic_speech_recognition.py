@@ -87,7 +87,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         if speech_recognizer.type == "ctc":
             outputs = speech_recognizer(audio)
             self.assertEqual(outputs, {"text": ANY(str)})
-
+        elif "Whisper" in speech_recognizer.model.__class__.__name__:
+            outputs = speech_recognizer(audio)
+            self.assertEqual(outputs, {"text": ANY(str)})
         else:
             # Non CTC models cannot use striding.
             with self.assertRaises(ValueError):
@@ -117,6 +119,21 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                     "chunks": [{"text": ANY(str), "timestamp": (ANY(float), ANY(float))} for i in range(n)],
                 },
             )
+        elif "Whisper" in speech_recognizer.model.__class__.__name__:
+            outputs = speech_recognizer(audio, return_timestamps=True)
+            self.assertIsInstance(outputs["chunks"], list)
+            nb_chunks = len(outputs["chunks"])
+            self.assertEqual(
+                outputs,
+                {
+                    "text": ANY(str),
+                    "chunks": [{"text": ANY(str), "timestamp": (ANY(float), ANY(float))} for i in range(nb_chunks)],
+                },
+            )
+        else:
+            # Non CTC models cannot use return_timestamps
+            with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
+                outputs = speech_recognizer(audio, return_timestamps="char")
 
     @require_torch
     @slow
@@ -281,7 +298,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             forced_bos_token_id=None,
             max_new_tokens=448,
         )
-        output = pipe(array, return_timestamps=True, chunk_length_s=30, stride_length_s=[15, 0], device=0)
+        output = pipe(array, return_timestamps=True, chunk_length_s=30, stride_length_s=[15, 0])
         # fmt: off
         EXPECTED_OUTPUT = {
             "text": (

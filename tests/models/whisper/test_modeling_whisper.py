@@ -19,6 +19,7 @@ import inspect
 import os
 import tempfile
 import unittest
+
 import numpy as np
 
 from transformers import WhisperConfig
@@ -1070,7 +1071,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
-
     @slow
     def test_tiny_timestamp_generation(self):
         torch_device = "cuda"
@@ -1083,12 +1083,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
         )
-        model.config.forced_decoder_ids = [(1,50259), (2,50359), (3,50364)]
+        model.config.forced_decoder_ids = [(1, 50259), (2, 50359), (3, 50364)]
         timestamp_processor = [TimeStampLogitsProcessor(len(model.config.forced_decoder_ids))]
         generated_ids = model.generate(input_features, max_length=448, logits_processor=timestamp_processor).to("cpu")
 
         # fmt: off
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364,  2221,    13,  2326,   388,   391,   307,264, 50244,   295,   264,  2808,  5359,   293,   321,   366,  5404])
+        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404])
         # fmt: on
 
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
@@ -1096,7 +1096,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_TRANSCRIPT = [
             {
-                'text': " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Layton's work is really Greek after all,", 
+                'text': " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Layton's work is really Greek after all,",
                 'offsets': [
                     {'text': ' Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.', 'timestamp': (0.0, 5.62)},
                     {'text': " Nor is Mr. Quilter's manner less interesting than his matter.", 'timestamp': (5.62, 10.36)},
@@ -1109,5 +1109,5 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ]
         # fmt: on
 
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets = True)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
