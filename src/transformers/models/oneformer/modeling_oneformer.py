@@ -663,7 +663,7 @@ class OneFormerLoss(nn.Module):
             text_queries (`torch.Tensor`):
                 A tensor of shape `batch_size, num_queries, hidden_dim`
             auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
-                if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], then it contains the logits from the
+                if `use_auxiliary_loss` was set to `true` in [`OneFormerConfig`], then it contains the logits from the
                 inner layers of the Detr's Decoder.
             calculate_contrastive_loss (`bool`, *optional*, defaults to `True`):
                 Whether or not to calculate the contrastive loss.
@@ -2304,7 +2304,7 @@ class OneFormerTransformerDecoder(nn.Module):
             intermediate_mask_predictions.append(outputs_mask)
 
         if not len(intermediate_mask_predictions) == len(self.layers) + 1:
-            raise ValueError(f"Intermediate predictions in the transformer decoder must have the same number of elements as number of layers")
+            raise ValueError("Intermediate predictions in the transformer decoder must have the same number of elements as number of layers")
 
         object_queries = layer_outputs[0].permute(1, 0, 2)
 
@@ -2543,7 +2543,7 @@ class OneFormerTextTransformerDecoderLayer(nn.Module):
 
     def forward(self, hidden_state, mem):
         q = k = v = self.norm1(hidden_state)
-        x = hidden_state + self.self_attn(q, k, v)
+        hidden_state = hidden_state + self.self_attn(q, k, v)
         q = self.norm2(hidden_state)
         hidden_state = hidden_state + self.cross_attn(q, mem, mem)
         hidden_state = hidden_state + self.dropout(self.mlp(self.norm3(hidden_state)))

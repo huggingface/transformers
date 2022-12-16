@@ -158,7 +158,6 @@ class OriginalOneFormerConfigToOursConverter:
             num_classes=model.SEM_SEG_HEAD.NUM_CLASSES,
             num_queries=model.ONE_FORMER.NUM_OBJECT_QUERIES,
             no_object_weight=model.ONE_FORMER.NO_OBJECT_WEIGHT,
-            deep_supervision=model.ONE_FORMER.DEEP_SUPERVISION,
             class_weight=model.ONE_FORMER.CLASS_WEIGHT,
             mask_weight=model.ONE_FORMER.MASK_WEIGHT,
             dice_weight=model.ONE_FORMER.DICE_WEIGHT,
