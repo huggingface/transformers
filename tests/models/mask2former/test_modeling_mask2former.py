@@ -52,7 +52,10 @@ class Mask2FormerModelTester:
         min_size=32 * 4,
         max_size=32 * 6,
         num_labels=4,
+        hidden_dim=16,
         mask_feature_size=32,
+        feature_strides=[2, 4, 8, 16],
+        feature_size=64,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -63,7 +66,10 @@ class Mask2FormerModelTester:
         self.min_size = min_size
         self.max_size = max_size
         self.num_labels = num_labels
+        self.hidden_dim = hidden_dim
         self.mask_feature_size = mask_feature_size
+        self.feature_strides = feature_strides
+        self.feature_size = feature_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -88,17 +94,18 @@ class Mask2FormerModelTester:
                 depths=[1, 1, 1, 1],
             ),
         )
-        config.num_queries = self.num_queries
-        config.feature_strides = [2, 4, 8, 16]
-        config.decoder_config.feature_size = 64
-        config.decoder_config.mask_feature_size = self.mask_feature_size
-        config.decoder_config.hidden_dim = 16
-        config.decoder_config.encoder_feedforward_dim = 32
-        config.decoder_config.encoder_layers = 2
-        config.decoder_config.decoder_layers = 3
-        config.decoder_config.num_heads = 4
-        config.decoder_config.dim_feedforward = 16
-        config.decoder_config.common_stride = 4
+        config.general_config["num_classes"] = self.num_labels
+        config.general_config["num_queries"] = self.num_queries
+        config.general_config["feature_strides"] = self.feature_strides
+        config.decoder_config["feature_size"] = self.feature_size
+        config.decoder_config["mask_feature_size"] = self.mask_feature_size
+        config.decoder_config["hidden_dim"] = self.hidden_dim
+        config.decoder_config["encoder_feedforward_dim"] = 32
+        config.decoder_config["encoder_layers"] = 2
+        config.decoder_config["decoder_layers"] = 3
+        config.decoder_config["num_heads"] = 4
+        config.decoder_config["dim_feedforward"] = 16
+        config.decoder_config["common_stride"] = 4
         return config
 
     def prepare_config_and_inputs_for_common(self):
@@ -123,11 +130,10 @@ class Mask2FormerModelTester:
 
             output = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
             output = model(pixel_values, output_hidden_states=True)
-        # the correct shape of output.transformer_decoder_hidden_states ensure the correcteness of the
-        # encoder and pixel decoder
+
         self.parent.assertEqual(
             output.transformer_decoder_last_hidden_state.shape,
-            (self.batch_size, self.num_queries, self.mask_feature_size),
+            (self.batch_size, self.num_queries, self.mask_feature_size // 2),
         )
         # let's ensure the other two hidden state exists
         self.parent.assertTrue(output.pixel_decoder_last_hidden_state is not None)
@@ -152,7 +158,7 @@ class Mask2FormerModelTester:
             # due to the encoder compression, masks have a //4 spatial size
             self.parent.assertEqual(
                 result.masks_queries_logits.shape,
-                (self.batch_size, self.num_queries, self.min_size // 4, self.max_size // 4),
+                (self.batch_size, self.num_queries, self.min_size // 8, self.max_size // 8),
             )
             # + 1 for null class
             self.parent.assertEqual(

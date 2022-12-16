@@ -35,7 +35,6 @@ logger = logging.get_logger(__name__)
 
 class Mask2FormerDecoderConfig(PretrainedConfig):
     r"""
-    Args:
     This is the configuration class to store the configuration of pixel decoder and transformer decoder modules of
     [`Mask2FormerModel`]. It is used to instantiate an Mask2Former model according to the specified arguments, defining
     the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that
@@ -43,6 +42,8 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
     [shivi/mask2former-instance-swin-small-coco](https://huggingface.co/shivi/mask2former-instance-swin-small-coco)
     architecture. Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
     Read the documentation from [`PretrainedConfig`] for more information.
+
+    Args:
         feature_size (`int`, *optional*, defaults to 256):
             The features (channels) of the resulting feature maps.
         mask_feature_size (`int`, *optional*, defaults to 256):
@@ -217,7 +218,6 @@ class Mask2FormerConfig(PretrainedConfig):
         self,
         backbone_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
-        # General configuration settings for model initialization and loss terms computations.
         ignore_value=255,
         num_queries=150,
         no_object_weight=0.1,
@@ -300,8 +300,10 @@ class Mask2FormerConfig(PretrainedConfig):
     def from_backbone_decoder_configs(
         cls, backbone_config: PretrainedConfig, decoder_config: Mask2FormerDecoderConfig, **kwargs
     ):
-        """Instantiate a [`Mask2FormerConfig`] (or a derived class) from a pre-trained backbone model configuration and
-Mask2FormerDecoder configuration
+        """
+        Instantiate a [`Mask2FormerConfig`] (or a derived class) from a pre-trained backbone model configuration and
+        Mask2FormerDecoder configuration.
+
         Args:
             backbone_config ([`PretrainedConfig`]):
                 The backbone configuration to be used for Mask2Former model.
