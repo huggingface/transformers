@@ -216,7 +216,7 @@ class UperNetHead(nn.Module):
         return output
 
 
-class FCNHead(nn.Module):
+class UperNetFCNHead(nn.Module):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is the implementation of
     [FCNNet](https://arxiv.org/abs/1411.4038>).
@@ -304,7 +304,7 @@ class UperNetPreTrainedModel(PreTrainedModel):
             module.init_weights()
         elif isinstance(module, UperNetHead):
             module.init_weights()
-        elif isinstance(module, FCNHead):
+        elif isinstance(module, UperNetFCNHead):
             module.init_weights()
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -320,7 +320,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
         # Semantic segmentation head(s)
         self.decode_head = UperNetHead(config, in_channels=self.backbone.channels)
-        self.auxiliary_head = FCNHead(config) if config.use_auxiliary_head else None
+        self.auxiliary_head = UperNetFCNHead(config) if config.use_auxiliary_head else None
 
         # Initialize weights and apply final processing
         self.post_init()
