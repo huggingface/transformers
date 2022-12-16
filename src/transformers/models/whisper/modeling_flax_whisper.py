@@ -640,9 +640,9 @@ class FlaxWhisperEncoder(nn.Module):
     ) -> Tuple[jnp.ndarray]:
         if input_features.shape[1:] != (self.config.num_mel_bins, self.config.max_source_positions * 2):
             raise ValueError(
-                "input_features.shape[1:], must be equal to (self.config.num_mel_bins, self.config.max_source_positions * 2) (got"
-                f" {input_features.shape[1:]}, but should be ({self.config.num_mel_bins},"
-                f" {self.config.max_source_positions * 2}))"
+                "input_features.shape[1:], must be equal to (self.config.num_mel_bins,"
+                f" self.config.max_source_positions * 2) (got {input_features.shape[1:]}, but should be"
+                f" ({self.config.num_mel_bins}, {self.config.max_source_positions * 2}))"
             )
 
         input_features = input_features.transpose(0, 2, 1)
