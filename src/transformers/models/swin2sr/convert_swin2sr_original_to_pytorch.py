@@ -169,9 +169,6 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     new_state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
 
-    print("Missing:", missing_keys)
-    print("Unexpected:", unexpected_keys)
-
     if len(missing_keys) > 0:
         raise ValueError("Missing keys when converting: {}".format(missing_keys))
     for key in unexpected_keys:
@@ -226,9 +223,6 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
         expected_slice = torch.tensor(
             [[-0.5238, -0.5557, -0.6321], [-0.6016, -0.5903, -0.6391], [-0.6244, -0.6334, -0.6889]]
         )
-
-    print("Shape of reconstruction:", outputs.reconstruction.shape)
-    print("Actual values of the reconstruction:", outputs.reconstruction[0, 0, :3, :3])
 
     assert (
         outputs.reconstruction.shape == expected_shape
