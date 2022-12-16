@@ -34,7 +34,9 @@ class GitProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
         image_processor = CLIPImageProcessor()
-        tokenizer = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
+        tokenizer = BertTokenizer.from_pretrained(
+            "hf-internal-testing/tiny-random-BertModel", model_input_names=["input_ids", "attention_mask"]
+        )
 
         processor = GitProcessor(image_processor, tokenizer)
 
