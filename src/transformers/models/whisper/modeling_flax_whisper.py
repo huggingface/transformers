@@ -885,7 +885,6 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
             init_cache=True,
             method=_decoder_forward,  # we only need to call the decoder to init the cache
         )
-
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings(WHISPER_ENCODE_INPUTS_DOCSTRING)
