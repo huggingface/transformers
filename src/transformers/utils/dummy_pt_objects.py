@@ -446,6 +446,9 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING = None
+
+
 MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING = None
 
 
@@ -633,6 +636,13 @@ class AutoModelForTableQuestionAnswering(metaclass=DummyObject):
 
 
 class AutoModelForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForUniversalSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
