@@ -104,8 +104,8 @@ class BlipTextSelfAttention(nn.Module):
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         if is_cross_attention:
-            self.key = nn.Linear(config.hidden_size, self.all_head_size)
-            self.value = nn.Linear(config.hidden_size, self.all_head_size)
+            self.key = nn.Linear(config.encoder_hidden_size, self.all_head_size)
+            self.value = nn.Linear(config.encoder_hidden_size, self.all_head_size)
         else:
             self.key = nn.Linear(config.hidden_size, self.all_head_size)
             self.value = nn.Linear(config.hidden_size, self.all_head_size)

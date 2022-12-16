@@ -61,6 +61,8 @@ class BlipTextConfig(PretrainedConfig):
             the `inputs_ids` passed when calling [`BlipModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
+        encoder_hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers from the vision model.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -116,6 +118,7 @@ class BlipTextConfig(PretrainedConfig):
         self,
         vocab_size=30524,
         hidden_size=768,
+        encoder_hidden_size=768,
         intermediate_size=3072,
         projection_dim=768,
         num_hidden_layers=12,
@@ -145,6 +148,7 @@ class BlipTextConfig(PretrainedConfig):
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.encoder_hidden_size = encoder_hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -364,6 +368,8 @@ class BlipConfig(PretrainedConfig):
 
         self.text_config = BlipTextConfig(**text_config)
         self.vision_config = BlipVisionConfig(**vision_config)
+
+        self.text_config.encoder_hidden_size = self.vision_config.hidden_size
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
