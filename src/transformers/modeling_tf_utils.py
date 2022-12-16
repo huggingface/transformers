@@ -2733,12 +2733,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # we might need to extend the variable scope for composite models
         if load_weight_prefix is not None:
-            with tf.python.keras.backend.get_graph().as_default():
-                with tf.name_scope(load_weight_prefix):
-                    # Using keras.Input does not work in a name_scope() context, so we have to do things the old way
-                    # model._set_save_spec(dummy_spec)
-                    # model(model.dummy_inputs)
-                    model.build_with_dummies(dummy_spec)  # build the network with dummy inputs
+            with tf.name_scope(load_weight_prefix):
+                print("Load weight prefix: ", load_weight_prefix)
+                # Using keras.Input does not work in a name_scope() context, so we have to do things the old way
+                model._set_save_spec(dummy_spec)
+                model(model.dummy_inputs)
+                # model.build_with_dummies(dummy_spec)  # build the network with dummy inputs
         else:
             model.build_with_dummies(dummy_spec)  # build the network with dummy inputs
 
