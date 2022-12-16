@@ -407,6 +407,7 @@ class BridgeTowerModelOutput(ModelOutput):
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        self.config = config
         self.is_clip = True if config.vit_layers > 0 else False
 
         if "roberta" in config.tokenizer:
@@ -492,55 +493,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 [LinkTower(config, self.tokenizer_config) for _ in range(config.num_hidden_layers - 1)]
             )
 
-        # ===================== Freeze specified modules ===================== #
-
-        if config.freeze_ViT:
-            self.vit_model.requires_grad_(False)
-            if config.unfreeze_ViT_attention:
-                for name, param in self.vit_model.named_parameters():
-                    if "attn" in name:
-                        param.requires_grad_(True)
-            if config.unfreeze_ViT_layernorm:
-                for name, param in self.vit_model.named_parameters():
-                    if "ln_" in name:
-                        param.requires_grad_(True)
-
-        if config.freeze_RoBERTa:
-            self.text_transformer.requires_grad_(False)
-
-            if config.unfreeze_RoBERTa_embeddings:
-                self.text_transformer.embeddings.requires_grad_(True)
-
-            if config.unfreeze_RoBERTa_encoder:
-                self.text_transformer.encoder.requires_grad_(True)
-
-            if config.unfreeze_RoBERTa_attention:
-                for name, param in self.text_transformer.named_parameters():
-                    if "attention" in name:
-                        param.requires_grad_(True)
-
-            if config.unfreeze_RoBERTa_layernorm:
-                for name, param in self.text_transformer.named_parameters():
-                    if "LayerNorm" in name:
-                        param.requires_grad_(True)
-
-        if config.freeze_layer_count_roberta > 0:
-            modules = [
-                self.text_transformer.embeddings,
-                *self.text_transformer.encoder.layer[: config.freeze_layer_count_roberta],
-            ]  # Replace 5 by what you want
-            for module in modules:
-                for param in module.parameters():
-                    param.requires_grad = False
-
-        if config.freeze_layer_count_vit > 0:
-            modules = [*self.vit_model.visual.transformer.resblocks[: config.freeze_layer_count_vit]]
-            self.vit_model.visual.class_embedding.requires_grad = False
-            for module in modules:
-                # module.requires_grad_(False)
-                for param in module.parameters():
-                    param.requires_grad = False
-        
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
@@ -680,6 +632,53 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             cls_feats_image = self.cross_modal_image_pooler(avg_image_feats)
         return torch.cat([cls_feats_text, cls_feats_image], dim=-1)
 
+    def freeze_layers(self,):
+        if self.config.freeze_ViT:
+            self.vit_model.requires_grad_(False)
+            if self.config.unfreeze_ViT_attention:
+                for name, param in self.vit_model.named_parameters():
+                    if "attn" in name:
+                        param.requires_grad_(True)
+            if self.config.unfreeze_ViT_layernorm:
+                for name, param in self.vit_model.named_parameters():
+                    if "ln_" in name:
+                        param.requires_grad_(True)
+
+        if self.config.freeze_RoBERTa:
+            self.text_transformer.requires_grad_(False)
+
+            if self.config.unfreeze_RoBERTa_embeddings:
+                self.text_transformer.embeddings.requires_grad_(True)
+
+            if self.config.unfreeze_RoBERTa_encoder:
+                self.text_transformer.encoder.requires_grad_(True)
+
+            if self.config.unfreeze_RoBERTa_attention:
+                for name, param in self.text_transformer.named_parameters():
+                    if "attention" in name:
+                        param.requires_grad_(True)
+
+            if self.config.unfreeze_RoBERTa_layernorm:
+                for name, param in self.text_transformer.named_parameters():
+                    if "LayerNorm" in name:
+                        param.requires_grad_(True)
+
+        if self.config.freeze_layer_count_roberta > 0:
+            modules = [
+                self.text_transformer.embeddings,
+                *self.text_transformer.encoder.layer[: self.config.freeze_layer_count_roberta],
+            ]  # Replace 5 by what you want
+            for module in modules:
+                for param in module.parameters():
+                    param.requires_grad = False
+
+        if self.config.freeze_layer_count_vit > 0:
+            modules = [*self.vit_model.visual.transformer.resblocks[: self.config.freeze_layer_count_vit]]
+            self.vit_model.visual.class_embedding.requires_grad = False
+            for module in modules:
+                # module.requires_grad_(False)
+                for param in module.parameters():
+                    param.requires_grad = False
 
 class LinkTower(nn.Module):
     def __init__(self, config, tokenizer_config):
