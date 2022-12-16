@@ -243,28 +243,37 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         ]
         # fmt: on
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
-        EXCPECTED_OUTPUT = [
-            {
-                "text": " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles",
-                "timestamp": (0.0, 7.2),
-            },
-            {
-                "text": " are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the",
-                "timestamp": (7.2, 15.16),
-            },
-            {
-                "text": " same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his",
-                "timestamp": (15.16, 21.7),
-            },
-        ]
 
-        self.assertEqual(output, EXCPECTED_OUTPUT)
+        self.assertEqual(
+            output,
+            [
+                {
+                    "text": (
+                        " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles"
+                    ),
+                    "timestamp": (0.0, 7.2),
+                },
+                {
+                    "text": (
+                        " are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the"
+                    ),
+                    "timestamp": (7.2, 15.16),
+                },
+                {
+                    "text": " same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his",
+                    "timestamp": (15.16, 21.7),
+                },
+            ],
+        )
 
+        # fmt: off
         INPUT_TOKENS = [
             50364, 441, 1857, 4174, 11, 5242, 366,
             257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
             293, 25730, 311, 454, 34152, 4496, 904, 50724
         ]
+        # fmt: on
+
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
         self.assertEqual(
             output,
