@@ -989,28 +989,6 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * math.pi / self.n_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (
-            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-            .view(self.n_heads, 1, 1, 2)
-            .repeat(1, self.n_levels, self.n_points, 1)
-        )
-        for i in range(self.n_points):
-            grid_init[:, :, i, :] *= i + 1
-        with torch.no_grad():
-            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-        nn.init.constant_(self.attention_weights.weight.data, 0.0)
-        nn.init.constant_(self.attention_weights.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.value_proj.weight.data)
-        nn.init.constant_(self.value_proj.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.output_proj.weight.data)
-        nn.init.constant_(self.output_proj.bias.data, 0.0)
-
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
@@ -1181,13 +1159,6 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         self.config = config
         self.dropout = config.dropout
         self.layers = nn.ModuleList([OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)])
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
 
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
@@ -1379,14 +1350,6 @@ class OneFormerPixelDecoder(nn.Module):
         # to make the top-down computation in forward clearer.
         self.lateral_convs = lateral_convs[::-1]
         self.output_convs = output_convs[::-1]
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-        nn.init.normal_(self.level_embed, std=0)
 
     def get_valid_ratio(self, mask):
         """Get the valid ratio of all feature maps."""
@@ -1680,13 +1643,6 @@ class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
         self.activation = ACT2FN[activation]
         self.normalize_before = normalize_before
 
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
 
@@ -1742,13 +1698,6 @@ class OneFormerTransformerDecoderCrossAttentionLayer(nn.Module):
 
         self.activation = ACT2FN[activation]
         self.normalize_before = normalize_before
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
@@ -1821,13 +1770,6 @@ class OneFormerTransformerDecoderFFNLayer(nn.Module):
 
         self.activation = ACT2FN[activation]
         self.normalize_before = normalize_before
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
@@ -2173,15 +2115,8 @@ class OneFormerTransformerDecoderQueryTransformer(nn.Module):
             return_intermediate=return_intermediate_dec,
         )
 
-        self._reset_parameters()
-
         self.d_model = d_model
         self.nhead = nhead
-
-    def _reset_parameters(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
 
     def forward(self, src, mask, query_embed, pos_embed, task_token=None):
         # flatten NxCxHxW to HWxNxC
@@ -2582,17 +2517,6 @@ class OneFormerTextContextDecoder(nn.Module):
 
         self.out_proj = nn.Sequential(nn.LayerNorm(transformer_width), nn.Linear(transformer_width, visual_dim))
 
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            nn.init.trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-
     def forward(self, text, visual):
         visual = self.memory_proj(visual)
         hidden_state = self.text_proj(text)
@@ -2665,15 +2589,6 @@ class OneFormerTextTransformer(nn.Module):
         self.width = width
         self.num_layers = layers
         self.layers = nn.Sequential(*[OneFormerTextTransformerLayer(width, heads, attn_mask) for _ in range(layers)])
-        proj_std = (self.width**-0.5) * ((2 * self.num_layers) ** -0.5)
-        attn_std = self.width**-0.5
-        fc_std = (2 * self.width) ** -0.5
-        for layer in self.layers:
-            nn.init.normal_(layer.self_attn.in_proj_weight, std=attn_std)
-            nn.init.normal_(layer.self_attn.out_proj.weight, std=proj_std)
-            nn.init.normal_(layer.mlp.fc1.weight, std=fc_std)
-            nn.init.normal_(layer.mlp.fc2.weight, std=proj_std)
-
         self.use_checkpoint = use_checkpoint
 
     def forward(self, hidden_states: torch.Tensor):
@@ -2709,10 +2624,6 @@ class OneFormerTextEncoder(nn.Module):
         self.positional_embedding = nn.Parameter(torch.empty(self.context_length, width))
         self.ln_final = nn.LayerNorm(width)
         self.token_embedding = nn.Embedding(vocab_size, width)
-        nn.init.normal_(self.token_embedding.weight, std=0.02)
-
-        # initialization
-        nn.init.normal_(self.positional_embedding, std=0.01)
 
     def build_attention_mask(self):
         # lazily create causal attention mask, with full attention between the vision tokens
@@ -2863,13 +2774,76 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
             nn.init.constant_(module.query_input_projection.bias, 0)
         elif isinstance(module, OneFormerPixelDecoderEncoderMultiscaleDeformableAttention):
-            module._reset_parameters()
+            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            thetas = torch.arange(module.n_heads, dtype=torch.float32) * (2.0 * math.pi / module.n_heads)
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+            with torch.no_grad():
+                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+            nn.init.constant_(module.attention_weights.weight.data, 0.0)
+            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.value_proj.weight.data)
+            nn.init.constant_(module.value_proj.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.output_proj.weight.data)
+            nn.init.constant_(module.output_proj.bias.data, 0.0)
+        elif isinstance(module, OneFormerPixelDecoderEncoderOnly):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p)
+        elif isinstance(module, OneFormerPixelDecoder):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p)
+            nn.init.normal_(module.level_embed, std=0)
+        elif isinstance(module, OneFormerTransformerDecoderSelfAttentionLayer):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p, gain=xavier_std)
+        elif isinstance(module, OneFormerTransformerDecoderCrossAttentionLayer):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p, gain=xavier_std)
+        elif isinstance(module, OneFormerTransformerDecoderFFNLayer):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p, gain=xavier_std)
+        elif isinstance(module, OneFormerTransformerDecoderQueryTransformer):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p, gain=xavier_std)
         elif isinstance(module, OneFormerPixelLevelModule):
             for submodule in module.modules():
                 if isinstance(submodule, (nn.Conv2d, nn.Linear)):
                     submodule.weight.data.normal_(mean=0.0, std=std)
                     if submodule.bias is not None:
                         submodule.bias.data.zero_()
+        elif isinstance(module, OneFormerTextContextDecoder):
+            for submodule in module.modules():
+                if isinstance(submodule, nn.Linear):
+                    nn.init.trunc_normal_(submodule.weight, std=0.02)
+                    if isinstance(submodule, nn.Linear) and submodule.bias is not None:
+                        nn.init.constant_(submodule.bias, 0)
+                elif isinstance(submodule, nn.LayerNorm):
+                    nn.init.constant_(submodule.bias, 0)
+                    nn.init.constant_(submodule.weight, 1.0)
+        elif isinstance(module, OneFormerTextTransformer):
+            proj_std = (module.width**-0.5) * ((2 * module.num_layers) ** -0.5)
+            attn_std = module.width**-0.5
+            fc_std = (2 * module.width) ** -0.5
+            for layer in module.layers:
+                nn.init.normal_(layer.self_attn.in_proj_weight, std=attn_std)
+                nn.init.normal_(layer.self_attn.out_proj.weight, std=proj_std)
+                nn.init.normal_(layer.mlp.fc1.weight, std=fc_std)
+                nn.init.normal_(layer.mlp.fc2.weight, std=proj_std)
+        elif isinstance(module, OneFormerTextEncoder):
+            nn.init.normal_(module.token_embedding.weight, std=0.02)
+            nn.init.normal_(module.positional_embedding, std=0.01)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
