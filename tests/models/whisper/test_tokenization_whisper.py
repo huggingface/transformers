@@ -266,6 +266,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             ],
         )
 
+        # test a single sequence with timestamps
         # fmt: off
         INPUT_TOKENS = [
             50364, 441, 1857, 4174, 11, 5242, 366,
@@ -276,9 +277,21 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
         self.assertEqual(
-            output,
+            output[0],
             {
                 "text": " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles",
                 "timestamp": (0.0, 7.2),
             },
         )
+
+        # test a sequence without a single timestamps
+        # fmt: off
+        INPUT_TOKENS = [
+            441, 1857, 4174, 11, 5242, 366,
+            257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
+            293, 25730, 311, 454, 34152, 4496, 904, 50724
+        ]
+        # fmt: on
+
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        self.assertEqual(output, [])
