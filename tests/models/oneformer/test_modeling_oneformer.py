@@ -54,7 +54,7 @@ class OneFormerModelTester:
         self,
         parent,
         batch_size=2,
-        training=True,
+        is_training=True,
         use_auxiliary_loss=False,
         num_queries=10,
         num_channels=3,
@@ -67,7 +67,7 @@ class OneFormerModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.training = training
+        self.is_training = is_training
         self.use_auxiliary_loss = use_auxiliary_loss
         self.num_queries = num_queries
         self.num_channels = num_channels
@@ -123,13 +123,6 @@ class OneFormerModelTester:
         config.max_seq_len = self.sequence_length
         config.text_encoder_context_length = self.sequence_length
         config.text_encoder_n_ctx = self.n_ctx
-
-        config.label2id = {}
-        config.id2label = {}
-
-        for i in range(self.num_labels):
-            config.id2label[i] = f"LABEL_{i}"
-            config.label2id[f"LABEL_{i}"] = i
 
         return config
 
@@ -199,7 +192,7 @@ class OneFormerModelTester:
 
             comm_check_on_output(result)
 
-        config.training = True
+        config.is_training = True
         model = OneFormerForUniversalSegmentation(config=config)
         model.to(torch_device)
         model.eval()
@@ -315,7 +308,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
         }
 
         config = OneFormerConfig()
-        config.training = True
+        config.is_training = True
 
         model = OneFormerForUniversalSegmentation(config).to(torch_device)
         outputs = model(**inputs)
@@ -349,7 +342,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
                     )
 
     def test_training(self):
-        if not self.model_tester.training:
+        if not self.model_tester.is_training:
             return
         # only OneFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
@@ -362,7 +355,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
             mask_labels,
             class_labels,
         ) = self.model_tester.prepare_config_and_inputs()
-        config.training = True
+        config.is_training = True
 
         model = model_class(config)
         model.to(torch_device)
@@ -387,7 +380,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
         ) = self.model_tester.prepare_config_and_inputs()
         config.output_hidden_states = True
         config.output_attentions = True
-        config.training = True
+        config.is_training = True
 
         model = model_class(config)
         model.to(torch_device)
@@ -523,11 +516,8 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
     def test_with_segmentation_maps_and_loss(self):
         dummy_model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
         image_processor = self.default_image_processor
-        image_processor.num_text = (
-            dummy_model.config.num_queries
-            - dummy_model.config.text_encoder_n_ctx
-        )
-        dummy_model.config.training = True
+        image_processor.num_text = dummy_model.config.num_queries - dummy_model.config.text_encoder_n_ctx
+        dummy_model.config.is_training = True
         model = OneFormerForUniversalSegmentation(dummy_model.config).to(torch_device).eval()
         del dummy_model
 

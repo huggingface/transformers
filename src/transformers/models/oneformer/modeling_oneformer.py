@@ -515,8 +515,12 @@ class OneFormerLoss(nn.Module):
         logits_per_text = torch.matmul(text_queries, image_queries.t()) * logit_scale
         logits_per_img = logits_per_text.t()
 
-        loss_img = nn.functional.cross_entropy(logits_per_img, torch.arange(len(logits_per_img), device=logits_per_text.device))
-        loss_text = nn.functional.cross_entropy(logits_per_text, torch.arange(len(logits_per_text), device=logits_per_text.device))
+        loss_img = nn.functional.cross_entropy(
+            logits_per_img, torch.arange(len(logits_per_img), device=logits_per_text.device)
+        )
+        loss_text = nn.functional.cross_entropy(
+            logits_per_text, torch.arange(len(logits_per_text), device=logits_per_text.device)
+        )
 
         loss_contrastive = loss_img + loss_text
 
@@ -1087,7 +1091,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_feedforward_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-        self.training = config.training
+        self.is_training = config.is_training
 
     def forward(
         self,
@@ -1132,21 +1136,21 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.is_training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.is_training)
 
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.is_training)
 
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        if self.training:
+        if self.is_training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
@@ -1162,8 +1166,8 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
 # Modified from from transformers.models.detr.modeling_deformable_detr.DeformableDetrEncoder with DeformableDetrEncoder->OneFormerPixelDecoderEncoderOnly
 class OneFormerPixelDecoderEncoderOnly(nn.Module):
     """
-    Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer
-    is a [`OneFormerPixelDecoderEncoderLayer`].
+    Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
+    [`OneFormerPixelDecoderEncoderLayer`].
 
     The encoder updates the flattened multi-scale feature maps through multiple deformable attention layers.
 
@@ -1176,9 +1180,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
 
         self.config = config
         self.dropout = config.dropout
-        self.layers = nn.ModuleList(
-            [OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)]
-        )
+        self.layers = nn.ModuleList([OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)])
 
         self._reset_parameters()
 
@@ -1299,9 +1301,7 @@ class OneFormerPixelDecoder(nn.Module):
         self.config = config
 
         #  positional encoding
-        self.position_embedding = OneFormerSinePositionEmbedding(
-            num_pos_feats=config.conv_dim // 2, normalize=True
-        )
+        self.position_embedding = OneFormerSinePositionEmbedding(num_pos_feats=config.conv_dim // 2, normalize=True)
         self.num_feature_levels = 3
         transformer_in_channels = feature_channels[-self.num_feature_levels :]
         self.transformer_feature_strides = config.strides[-self.num_feature_levels :]
@@ -1486,7 +1486,9 @@ class OneFormerPixelDecoder(nn.Module):
             output_conv = self.output_convs[idx]
             cur_fpn = lateral_conv(x)
             # Following FPN implementation, we use nearest upsampling here
-            y = cur_fpn + nn.functional.interpolate(out[-1], size=cur_fpn.shape[-2:], mode="bilinear", align_corners=False)
+            y = cur_fpn + nn.functional.interpolate(
+                out[-1], size=cur_fpn.shape[-2:], mode="bilinear", align_corners=False
+            )
             y = output_conv(y)
             out.append(y)
 
@@ -2210,7 +2212,7 @@ class OneFormerTransformerDecoder(nn.Module):
 
         self.dropout = config.dropout
         self.num_heads = config.num_attention_heads
-        self.training = config.training
+        self.is_training = config.is_training
         self.use_task_norm = config.use_task_norm
         self.use_auxiliary_loss = config.use_auxiliary_loss
 
@@ -2304,7 +2306,10 @@ class OneFormerTransformerDecoder(nn.Module):
             intermediate_mask_predictions.append(outputs_mask)
 
         if not len(intermediate_mask_predictions) == len(self.layers) + 1:
-            raise ValueError("Intermediate predictions in the transformer decoder must have the same number of elements as number of layers")
+            raise ValueError(
+                "Intermediate predictions in the transformer decoder must have the same number of elements as number"
+                " of layers"
+            )
 
         object_queries = layer_outputs[0].permute(1, 0, 2)
 
@@ -2387,7 +2392,10 @@ class OneFormerTransformerModule(nn.Module):
         output_attentions: bool = False,
     ) -> OneFormerTransformerDecoderOutput:
         if not len(multi_scale_features) == self.num_feature_levels:
-            raise ValueError(f"Number of elements in multi_scale_features ({len(multi_scale_features)}) and num_feature_levels ({self.num_feature_levels}) do not match!")
+            raise ValueError(
+                f"Number of elements in multi_scale_features ({len(multi_scale_features)}) and num_feature_levels"
+                f" ({self.num_feature_levels}) do not match!"
+            )
         multi_stage_features = []
         multi_stage_positional_embeddings = []
         size_list = []
@@ -2905,13 +2913,11 @@ class OneFormerModel(OneFormerPreTrainedModel):
     def __init__(self, config: OneFormerConfig):
         super().__init__(config)
         self.pixel_level_module = OneFormerPixelLevelModule(config)
-        self.transformer_module = OneFormerTransformerModule(
-            in_features=config.conv_dim, config=config
-        )
+        self.transformer_module = OneFormerTransformerModule(in_features=config.conv_dim, config=config)
         self.task_encoder = OneFormerTaskModel(config)
-        self.training = config.training
+        self.is_training = config.is_training
 
-        if self.training:
+        if self.is_training:
             self.text_mapper = OneFormerTextMapper(config)
         else:
             self.text_mapper = None
@@ -2983,7 +2989,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
 
         task_token = self.task_encoder(task_inputs)
 
-        if self.training:
+        if self.is_training:
             text_queries = self.text_mapper(text_inputs)
         else:
             text_queries = None
@@ -3231,9 +3237,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             loss = self.get_loss(loss_dict)
 
         output_auxiliary_logits = (
-            self.config.output_auxiliary_logits
-            if output_auxiliary_logits is None
-            else output_auxiliary_logits
+            self.config.output_auxiliary_logits if output_auxiliary_logits is None else output_auxiliary_logits
         )
         if not output_auxiliary_logits:
             auxiliary_predictions = None

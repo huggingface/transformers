@@ -277,6 +277,43 @@ def compute_segments(
     return segmentation, segments
 
 
+# Copied from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
+def convert_segmentation_map_to_binary_masks(
+    segmentation_map: "np.ndarray",
+    instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+    ignore_index: Optional[int] = None,
+    reduce_labels: bool = False,
+):
+    if reduce_labels and ignore_index is None:
+        raise ValueError("If `reduce_labels` is True, `ignore_index` must be provided.")
+
+    if reduce_labels:
+        segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+
+    # Get unique ids (class or instance ids based on input)
+    all_labels = np.unique(segmentation_map)
+
+    # Drop background label if applicable
+    if ignore_index is not None:
+        all_labels = all_labels[all_labels != ignore_index]
+
+    # Generate a binary mask for each object instance
+    binary_masks = [(segmentation_map == i) for i in all_labels]
+    binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
+
+    # Convert instance ids to class ids
+    if instance_id_to_semantic_id is not None:
+        labels = np.zeros(all_labels.shape[0])
+
+        for label in all_labels:
+            class_id = instance_id_to_semantic_id[label + 1 if reduce_labels else label]
+            labels[all_labels == label] = class_id - 1 if reduce_labels else class_id
+    else:
+        labels = all_labels
+
+    return binary_masks.astype(np.float32), labels.astype(np.int64)
+
+
 def get_oneformer_resize_output_image_size(
     image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
@@ -500,34 +537,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Normalize the image with the given mean and standard deviation.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format)
-
-    def convert_segmentation_map_to_binary_masks(
-        self,
-        segmentation_map: "np.ndarray",
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
-    ):
-        # Get unique ids (class or instance ids based on input)
-        all_labels = np.unique(segmentation_map)
-
-        # Drop background label if applicable
-        if self.reduce_labels:
-            all_labels = all_labels[all_labels != 0]
-
-        # Generate a binary mask for each object instance
-        binary_masks = [(segmentation_map == i) for i in all_labels]
-        binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
-
-        # Convert instance ids to class ids
-        if instance_id_to_semantic_id is not None:
-            labels = np.zeros(all_labels.shape[0])
-
-            for label in all_labels:
-                class_id = instance_id_to_semantic_id[label]
-                labels[all_labels == label] = class_id
-        else:
-            labels = all_labels
-
-        return binary_masks.astype(np.float32), labels.astype(np.int64)
 
     def __call__(self, images, task_inputs, segmentation_maps=None, **kwargs) -> BatchFeature:
         return self.preprocess(images, task_inputs, segmentation_maps=segmentation_maps, **kwargs)
@@ -966,12 +975,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
             for i, segmentation_map in enumerate(segmentation_maps):
                 # Use instance2class_id mapping per image
                 if isinstance(instance_id_to_semantic_id, List):
-                    converted_segmentation_map = self.convert_segmentation_map_to_binary_masks(
-                        segmentation_map, instance_id_to_semantic_id[i]
+                    converted_segmentation_map = convert_segmentation_map_to_binary_masks(
+                        segmentation_map, instance_id_to_semantic_id[i], self.ignore_index, self.reduce_labels
                     )
                 else:
-                    converted_segmentation_map = self.convert_segmentation_map_to_binary_masks(
-                        segmentation_map, instance_id_to_semantic_id
+                    converted_segmentation_map = convert_segmentation_map_to_binary_masks(
+                        segmentation_map, instance_id_to_semantic_id, self.ignore_index, self.reduce_labels
                     )
                 converted_segmentation_maps.append(converted_segmentation_map)
 
@@ -1015,57 +1024,18 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    def post_process_sem_seg_output(
-        self, outputs: "OneFormerForUniversalSegmentationOutput", target_size: Tuple[int, int] = None
-    ) -> "torch.Tensor":
-        """
-        Converts the output of [`OneFormerForUniversalSegmentationOutput`] into image segmentation predictions. Only
-        supports PyTorch.
-
-        Args:
-            outputs ([`OneFormerForUniversalSegmentationOutput`]):
-                The outputs from [`OneFormerForUniversalSegmentationOutput`].
-            target_size (`Tuple[int, int]`, *optional*):
-                If set, the `masks_queries_logits` will be resized to `target_size`.
-        Returns:
-            `torch.Tensor`:
-                A tensor of shape (`batch_size, num_class_labels, height, width`).
-        """
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-        if target_size is not None:
-            masks_queries_logits = torch.nn.functional.interpolate(
-                masks_queries_logits,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-        # remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs = masks_queries_logits.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-
-        return segmentation
-
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_semantic_segmentation
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
-        Converts the output of [`OneFormerForUniversalSegmentationOutput`] into semantic segmentation maps. Only
-        supports PyTorch.
+        Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
+        PyTorch.
 
         Args:
-            outputs ([`OneFormerForUniversalSegmentationOutput`]):
+            outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
+            target_sizes (`List[Tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
@@ -1074,7 +1044,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
         """
-
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
@@ -1224,6 +1193,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_panoptic_segmentation
     def post_process_panoptic_segmentation(
         self,
         outputs,
@@ -1234,12 +1204,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`OneFormerForUniversalSegmentationOutput`] into image panoptic segmentation
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
 
         Args:
-            outputs ([`OneFormerForUniversalSegmentationOutput`]):
-                The outputs from [`OneFormerForUniversalSegmentationOutput`].
+            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
+                The outputs from [`MaskFormerForInstanceSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
             mask_threshold (`float`, *optional*, defaults to 0.5):
@@ -1285,7 +1255,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
-        results: List[Dict[str, torch.Tensor]] = []
+        results: List[Dict[str, TensorType]] = []
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(

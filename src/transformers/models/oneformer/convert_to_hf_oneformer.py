@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert OneFormer checkpoints from the original repository. URL:
-https://github.com/SHI-Labs/OneFormer"""
+"""Convert OneFormer checkpoints from the original repository. URL: https://github.com/SHI-Labs/OneFormer"""
 
 import os
 import sys
@@ -169,7 +168,7 @@ class OriginalOneFormerConfigToOursConverter:
             init_std=0.02,
             init_xavier_std=1.0,
             layer_norm_eps=1e-05,
-            training=False,
+            is_training=False,
             use_auxiliary_loss=model.ONE_FORMER.DEEP_SUPERVISION,
             output_auxiliary_logits=True,
             strides=[4, 8, 16, 32],
@@ -609,7 +608,7 @@ class OriginalOneFormerCheckpointToOursConverter:
         renamed_keys.extend([(f"{src_prefix}.transformer.level_embed", f"{dst_prefix}.level_embed")])
 
         # layers
-        for layer_idx in range(self.config.decoder_config["encoder_layers"]):
+        for layer_idx in range(self.config.encoder_layers):
             renamed_keys.extend(
                 rename_keys_for_encoder_layer(
                     f"{src_prefix}.transformer.encoder.layers.{layer_idx}", f"{dst_prefix}.encoder.layers.{layer_idx}"
@@ -630,7 +629,7 @@ class OriginalOneFormerCheckpointToOursConverter:
     def replace_keys_qkv_transformer_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module.decoder.layers"
         src_prefix: str = "sem_seg_head.predictor"
-        for i in range(self.config.decoder_config["decoder_layers"] - 1):
+        for i in range(self.config.decoder_layers - 1):
             # read in weights + bias of input projection layer of self-attention
             in_proj_weight = src_state_dict.pop(
                 f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_weight"
@@ -797,7 +796,7 @@ class OriginalOneFormerCheckpointToOursConverter:
         )
 
         # transformer to update queries with task tokens
-        for i in range(self.config.decoder_config["query_dec_layers"]):
+        for i in range(self.config.query_dec_layers):
             renamed_keys.extend(
                 rename_keys_for_query_transformer_layer(
                     f"{src_prefix}.class_transformer.decoder.layers.{i}",
@@ -806,7 +805,7 @@ class OriginalOneFormerCheckpointToOursConverter:
             )
 
         # decoder layers
-        for i in range(self.config.decoder_config["decoder_layers"] - 1):
+        for i in range(self.config.decoder_layers - 1):
             renamed_keys.extend(
                 rename_keys_for_transformer_decoder_layer(
                     f"{src_prefix}",
@@ -915,7 +914,7 @@ class OriginalOneFormerCheckpointToOursConverter:
         self.replace_pixel_module(dst_state_dict, src_state_dict, is_swin)
         self.replace_transformer_module(dst_state_dict, src_state_dict)
         self.replace_task_mlp(dst_state_dict, src_state_dict)
-        if self.config.general_config["is_train"]:
+        if self.config.is_training:
             self.replace_text_mapper(dst_state_dict, src_state_dict)
 
         logger.info(f"Missed keys are {pformat(dst_state_dict.diff())}")

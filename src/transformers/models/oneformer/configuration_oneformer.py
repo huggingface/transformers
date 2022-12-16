@@ -52,8 +52,6 @@ class OneFormerConfig(PretrainedConfig):
             The configuration of the backbone model.
         ignore_value (`int`, *optional*, defaults to 255)
             Values to be ignored in GT label while calculating loss.
-        num_labels (`int`, *optional*, defaults to 150)
-            Number of classes in the dataset.
         num_queries (`int`, *optional*, defaults to 150)
             Number of object queries.
         no_object_weight (`float`, *optional*, defaults to 0.1)
@@ -80,7 +78,7 @@ class OneFormerConfig(PretrainedConfig):
             Standard deviation for xavier uniform initialization.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05)
             Epsilon for layer normalization.
-        training (`bool`, *optional*, defaults to False)
+        is_training (`bool`, *optional*, defaults to False)
             Whether to run in training or inference mode.
         use_auxiliary_loss (`bool`, *optional*, defaults to True)
             Whether to calculate loss using intermediate predictions from transformer decoder.
@@ -158,7 +156,6 @@ class OneFormerConfig(PretrainedConfig):
         self,
         backbone_config: Optional[Dict] = None,
         ignore_value: Optional[int] = 255,
-        num_labels: Optional[int] = 150,
         num_queries: Optional[int] = 150,
         no_object_weight: Optional[int] = 0.1,
         class_weight: Optional[float] = 2.0,
@@ -172,7 +169,7 @@ class OneFormerConfig(PretrainedConfig):
         init_std: Optional[float] = 0.02,
         init_xavier_std: Optional[float] = 1.0,
         layer_norm_eps: Optional[float] = 1e-05,
-        training: Optional[bool] = False,
+        is_training: Optional[bool] = False,
         use_auxiliary_loss: Optional[bool] = True,
         output_auxiliary_logits: Optional[bool] = True,
         strides: Optional[list] = [4, 8, 16, 32],
@@ -231,7 +228,6 @@ class OneFormerConfig(PretrainedConfig):
         self.backbone_config = backbone_config
 
         self.ignore_value = ignore_value
-        self.num_labels = num_labels
         self.num_queries = num_queries
         self.no_object_weight = no_object_weight
         self.class_weight = class_weight
@@ -245,7 +241,7 @@ class OneFormerConfig(PretrainedConfig):
         self.init_std = init_std
         self.init_xavier_std = init_xavier_std
         self.layer_norm_eps = layer_norm_eps
-        self.training = training
+        self.is_training = is_training
         self.use_auxiliary_loss = use_auxiliary_loss
         self.output_auxiliary_logits = output_auxiliary_logits
         self.strides = strides
