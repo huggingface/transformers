@@ -524,7 +524,7 @@ class GenerationMixin:
             inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
         # 4. Only encoder-decoder models can have non `input_ids` input format
-        elif not self.config.is_encoder_decoder and input_name != "input_ids":
+        if not self.config.is_encoder_decoder and input_name != "input_ids":
             raise ValueError(
                 f"If {input_name} is passed as model-specific keyword "
                 "input then model has to be an encoder-decoder and not a "
