@@ -250,9 +250,6 @@ def _long_tensor(tok_lst):
     return np.array(tok_lst, dtype=np.int32)
 
 
-TOLERANCE = 1e-4
-
-
 @slow
 @require_flax
 class FlaxWhisperModelIntegrationTest(unittest.TestCase):

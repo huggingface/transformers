@@ -690,25 +690,19 @@ class FlaxWhisperDecoder(nn.Module):
     def __call__(
         self,
         input_ids: jnp.ndarray,
-        encoder_hidden_states: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
-        position_ids: Optional[jnp.ndarray] = None,
+        attention_mask: jnp.ndarray,
+        position_ids: jnp.ndarray,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
-        if attention_mask is not None:
-            if position_ids is None:
-                position_ids = attention_mask.cumsum(-1) - 1
-        if position_ids is None:
-            batch_size, sequence_length = input_ids.shape
-            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+        input_embeds = self.embed_tokens(input_ids)
+        position_embeds = self.embed_positions(position_ids)
 
-        pos_emb = self.embed_positions(position_ids)
-
-        hidden_states = self.embed_tokens(input_ids) + pos_emb
+        hidden_states = input_embeds + position_embeds
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
         outputs = self.layers(
@@ -722,10 +716,18 @@ class FlaxWhisperDecoder(nn.Module):
             return_dict=return_dict,
         )
 
-        hidden_states = self.layer_norm(outputs[0])
+        last_hidden_states = outputs[0]
+        last_hidden_states = self.layer_norm(last_hidden_states)
+
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_states,)
 
         if not return_dict:
-            return (hidden_states,) + outputs[1:]
+            outputs = (last_hidden_states, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -745,10 +747,10 @@ class FlaxWhisperModule(nn.Module):
 
     def __call__(
         self,
-        input_features,
-        decoder_input_ids,
-        decoder_attention_mask: Optional[jnp.ndarray] = None,
-        decoder_position_ids: Optional[jnp.ndarray] = None,
+        input_features: jnp.ndarray,
+        decoder_input_ids: jnp.ndarray,
+        decoder_attention_mask: jnp.ndarray,
+        decoder_position_ids: jnp.ndarray,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -931,7 +933,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            input_features=input_features,
+            input_features=jnp.array(input_features, dtype="f4"),
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1082,7 +1084,6 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
                 decoder_position_ids = decoder_attention_mask.cumsum(-1) - 1
             else:
                 batch_size, sequence_length = decoder_input_ids.shape
-
                 decoder_position_ids = jnp.broadcast_to(
                     jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
                 )
@@ -1094,7 +1095,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            input_features=input_features,
+            input_features=jnp.array(input_features, dtype="f4"),
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
             decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
