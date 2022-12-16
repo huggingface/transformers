@@ -613,7 +613,6 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
-    "MaskFormerForInstanceSegmentation",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
     "SingleSentenceClassificationProcessor",
