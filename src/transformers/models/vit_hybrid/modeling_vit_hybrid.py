@@ -59,10 +59,11 @@ class ViTHybridEmbeddings(nn.Module):
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
     """
 
+    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.__init__ with ViT->ViTHybrid
     def __init__(self, config: ViTHybridConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = ViTHybridPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
