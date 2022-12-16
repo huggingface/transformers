@@ -26,9 +26,9 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
+class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a Trillsson_efficient feature extractor.
+    Constructs a TrillssonEfficientNet feature extractor.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.

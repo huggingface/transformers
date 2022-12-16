@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Trillsson_efficient model configuration"""
+""" TrillssonEfficientNet model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,19 +20,19 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+TRILLSSON_EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "vumichien/nonsemantic-speech-trillsson3": (
         "https://huggingface.co/vumichien/nonsemantic-speech-trillsson3/resolve/main/config.json"
     ),
 }
 
 
-class Trillsson_efficientConfig(PretrainedConfig):
+class TrillssonEfficientNetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [*Trillsson_efficientModel*]. It is used to
-    instantiate an Trillsson_efficient model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [*TrillssonEfficientNet Model*]. It is used to
+    instantiate an TrillssonEfficientNet model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    Trillson_efficient
+    TrillssonEfficientNet
     [vumichien/nonsemantic-speech-trillsson3](https://huggingface.co/vumichien/nonsemantic-speech-trillsson3)
     architecture.
 
@@ -76,19 +76,21 @@ class Trillsson_efficientConfig(PretrainedConfig):
             The FFT length. If None, it will be computed from the window length.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.8):
             The dropout probability for the classifier.
+        block_config (`list`, *optional*, defaults to None):
+            The block configuration for the model.
 
     Example:
     ```python
-    >>> from transformers import Trillsson_efficientConfig, Trillsson_efficientModel
+    >>> from transformers import TrillssonEfficientNetConfig, TrillssonEfficientNetModel
 
     >>> # Initializing a "nonsemantic-speech-trillsson3" style configuration
-    >>> configuration = Trillsson_efficientConfig()
+    >>> configuration = TrillssonEfficientNetConfig()
     >>> # Initializing a model from the "nonsemantic-speech-trillsson3" style configuration
-    >>> model = Trillsson_efficientModel(configuration)
+    >>> model = TrillssonEfficientNetModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "trillsson_efficient"
+    model_type = "trillsson_efficientnet"
 
     def __init__(
         self,
@@ -109,10 +111,20 @@ class Trillsson_efficientConfig(PretrainedConfig):
         f_min=125.0,
         fft_length=None,
         classifier_dropout_prob=0.8,
+        block_configs=None,
         **kwargs
     ):
         super().__init__(**kwargs)
 
+        if block_configs is None:
+            block_configs = [
+                [1, 24, 2, 1, 0, 1],
+                [4, 48, 4, 2, 0, 1],
+                [4, 64, 4, 2, 0, 1],
+                [4, 128, 6, 2, 1, 0],
+                [6, 160, 9, 1, 1, 0],
+                [6, 256, 15, 2, 1, 0],
+            ]
         if depth_multiplier <= 0:
             raise ValueError("depth_multiplier must be greater than zero.")
 
@@ -133,3 +145,4 @@ class Trillsson_efficientConfig(PretrainedConfig):
         self.f_min = f_min
         self.fft_length = fft_length
         self.classifier_dropout_prob = classifier_dropout_prob
+        self.block_configs = block_configs

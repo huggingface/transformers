@@ -391,11 +391,11 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
-    "models.trillsson_efficient": [
-        "TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Trillsson_efficientConfig",
-        "Trillsson_efficientFeatureExtractor",
-        "Trillsson_efficientForSequenceClassification",
+    "models.trillsson_efficientnet": [
+        "TRILLSSON_EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrillssonEfficientNetConfig",
+        "TrillssonEfficientNetFeatureExtractor",
+        "TrillssonEfficientNetForSequenceClassification",
     ],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2146,12 +2146,12 @@ else:
             "load_tf_weights_in_transfo_xl",
         ]
     )
-    _import_structure["models.trillsson_efficient"].extend(
+    _import_structure["models.trillsson_efficientnet"].extend(
         [
-            "TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Trillsson_efficientForSequenceClassification",
-            "Trillsson_efficientModel",
-            "Trillsson_efficientPreTrainedModel",
+            "TRILLSSON_EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TrillssonEfficientNetForSequenceClassification",
+            "TrillssonEfficientNetModel",
+            "TrillssonEfficientNetPreTrainedModel",
         ]
     )
     _import_structure["models.trocr"].extend(
@@ -3632,11 +3632,11 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.trillsson_efficient import (
-        TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Trillsson_efficientConfig,
-        Trillsson_efficientFeatureExtractor,
-        Trillsson_efficientForSequenceClassification,
+    from .models.trillsson_efficientnet import (
+        TRILLSSON_EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TrillssonEfficientNetConfig,
+        TrillssonEfficientNetFeatureExtractor,
+        TrillssonEfficientNetForSequenceClassification,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
@@ -5081,11 +5081,11 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
-        from .models.trillsson_efficient import (
-            TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Trillsson_efficientForSequenceClassification,
-            Trillsson_efficientModel,
-            Trillsson_efficientPreTrainedModel,
+        from .models.trillsson_efficientnet import (
+            TRILLSSON_EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrillssonEfficientNetForSequenceClassification,
+            TrillssonEfficientNetModel,
+            TrillssonEfficientNetPreTrainedModel,
         )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.unispeech import (

@@ -24,12 +24,12 @@ from transformers.testing_utils import is_torch_available, require_torch, slow, 
 if is_torch_available():
     import torch
 
-    from transformers import Trillsson_efficientFeatureExtractor, Trillsson_efficientModel
+    from transformers import TrillssonEfficientNetFeatureExtractor, TrillssonEfficientNetModel
 
 
 @require_torch
 @slow
-class Trillsson_efficientModelTester(unittest.TestCase):
+class TrillssonEfficientNetModelTester(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -41,9 +41,9 @@ class Trillsson_efficientModelTester(unittest.TestCase):
 
     def test_inference_embedding_normal(self):
         checkpoint = "vumichien/nonsemantic-speech-trillsson3"
-        model = Trillsson_efficientModel.from_pretrained(checkpoint)
+        model = TrillssonEfficientNetModel.from_pretrained(checkpoint)
         model.to(torch_device)
-        processor = Trillsson_efficientFeatureExtractor.from_pretrained(checkpoint)
+        processor = TrillssonEfficientNetFeatureExtractor.from_pretrained(checkpoint)
         input_speech = self._load_datasamples(1)
 
         input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
@@ -64,9 +64,9 @@ class Trillsson_efficientModelTester(unittest.TestCase):
     @slow
     def test_inference_embedding_normal_batched(self):
         checkpoint = "vumichien/nonsemantic-speech-trillsson3"
-        model = Trillsson_efficientModel.from_pretrained(checkpoint)
+        model = TrillssonEfficientNetModel.from_pretrained(checkpoint)
         model.to(torch_device)
-        processor = Trillsson_efficientFeatureExtractor.from_pretrained(checkpoint)
+        processor = TrillssonEfficientNetFeatureExtractor.from_pretrained(checkpoint)
         input_speech = self._load_datasamples(2)
 
         input_values = processor(input_speech, return_tensors="pt", padding=True).input_values.to(torch_device)
@@ -87,9 +87,9 @@ class Trillsson_efficientModelTester(unittest.TestCase):
     @slow
     def test_inference_embedding_robust_batched(self):
         checkpoint = "vumichien/nonsemantic-speech-trillsson3"
-        model = Trillsson_efficientModel.from_pretrained(checkpoint)
+        model = TrillssonEfficientNetModel.from_pretrained(checkpoint)
         model.to(torch_device)
-        processor = Trillsson_efficientFeatureExtractor.from_pretrained(checkpoint)
+        processor = TrillssonEfficientNetFeatureExtractor.from_pretrained(checkpoint)
         input_speech = self._load_datasamples(4)
 
         input_values = processor(input_speech, return_tensors="pt", padding=True).input_values.to(torch_device)

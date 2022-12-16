@@ -156,7 +156,7 @@ from . import (
     timesformer,
     trajectory_transformer,
     transfo_xl,
-    trillsson_efficient,
+    trillsson_efficientnet,
     trocr,
     unispeech,
     unispeech_sat,

@@ -21,11 +21,11 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_trillsson_efficient": [
-        "TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Trillsson_efficientConfig",
+    "configuration_trillsson_efficientnet": [
+        "TRILLSSON_EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrillssonEfficientNetConfig",
     ],
-    "feature_extraction_trillsson_efficient": ["Trillsson_efficientFeatureExtractor"],
+    "feature_extraction_trillsson_efficientnet": ["TrillssonEfficientNetFeatureExtractor"],
 }
 
 try:
@@ -34,20 +34,20 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_trillsson_efficient"] = [
-        "TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Trillsson_efficientModel",
-        "Trillsson_efficientPreTrainedModel",
-        "Trillsson_efficientForSequenceClassification",
+    _import_structure["modeling_trillsson_efficientnet"] = [
+        "TRILLSSON_EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TrillssonEfficientNetModel",
+        "TrillssonEfficientNetPreTrainedModel",
+        "TrillssonEfficientNetForSequenceClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_trillsson_efficient import (
-        TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Trillsson_efficientConfig,
+    from .configuration_trillsson_efficientnet import (
+        TRILLSSON_EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TrillssonEfficientNetConfig,
     )
-    from .feature_extraction_trillsson_efficient import Trillsson_efficientFeatureExtractor
+    from .feature_extraction_trillsson_efficientnet import TrillssonEfficientNetFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -55,11 +55,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_trillsson_efficient import (
-            TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Trillsson_efficientForSequenceClassification,
-            Trillsson_efficientModel,
-            Trillsson_efficientPreTrainedModel,
+        from .modeling_trillsson_efficientnet import (
+            TRILLSSON_EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrillssonEfficientNetForSequenceClassification,
+            TrillssonEfficientNetModel,
+            TrillssonEfficientNetPreTrainedModel,
         )
 
 else:

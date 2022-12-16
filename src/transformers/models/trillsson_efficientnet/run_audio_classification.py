@@ -34,9 +34,9 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    Trillsson_efficientFeatureExtractor,
-    Trillsson_efficientForSequenceClassification,
-    Trillsson_efficientModel,
+    TrillssonEfficientNetFeatureExtractor,
+    TrillssonEfficientNetForSequenceClassification,
+    TrillssonEfficientNetModel,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
@@ -278,7 +278,7 @@ def main():
     #     revision=model_args.model_revision,
     #     use_auth_token=True if model_args.use_auth_token else None,
     # )
-    feature_extractor = Trillsson_efficientFeatureExtractor.from_pretrained(
+    feature_extractor = TrillssonEfficientNetFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name or model_args.model_name_or_path,
         return_attention_mask=model_args.attention_mask,
         cache_dir=model_args.cache_dir,
@@ -367,8 +367,8 @@ def main():
     #     ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     # )
 
-    pretrain_model = Trillsson_efficientModel.from_pretrained(model_args.model_name_or_path)
-    model = Trillsson_efficientForSequenceClassification(config)
+    pretrain_model = TrillssonEfficientNetModel.from_pretrained(model_args.model_name_or_path)
+    model = TrillssonEfficientNetForSequenceClassification(config)
     model.trillsson = pretrain_model
 
     # freeze the convolutional waveform encoder
