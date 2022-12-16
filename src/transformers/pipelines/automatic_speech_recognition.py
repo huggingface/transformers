@@ -116,14 +116,12 @@ class SuffixTrie:
         return res
 
 
-def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
+def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source_positions):
     """ """
-    max_source_positions = 1500
-    begin_idx = 3
-    items = []
-    start_times = []
-    # index of the first timestamp token
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
+    begin_idx = np.where(sequences[0][0] == timestamp_begin)[1].item()
+    items = []
+    # index of the first timestamp token
     time_precision = feature_extractor.chunk_length / max_source_positions
     time = 0
     for seq_idx, item in enumerate(sequences):
@@ -181,7 +179,6 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 # single timestamp at the end means no speech after the last timestamp.
                 items.append(sequence[np.where(timestamps[-1])])
-                start_times.append(timestamps[-1] + offset - timestamp_begin)
 
     result = []
     for i in range(len(items)):
@@ -548,7 +545,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if stride and self.type == "seq2seq" and not return_timestamps:
             items = _find_longest_common_sequence(final_items, self.tokenizer)
         elif stride and self.type == "seq2seq" and return_timestamps:
-            items = _find_timestamp_sequence(final_items, self.tokenizer, self.feature_extractor)
+            items = _find_timestamp_sequence(
+                final_items, self.tokenizer, self.feature_extractor, self.model.config.max_source_positions
+            )
         else:
             items = np.concatenate(final_items, axis=1)
             items = items.squeeze(0)
