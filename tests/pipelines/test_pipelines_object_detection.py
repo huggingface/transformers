@@ -247,8 +247,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
     @require_torch
     @slow
     def test_layoutlm(self):
-        model_id = "philschmid/layoutlm-funsd"
-        threshold = 0.998
+        model_id = "Narsil/layoutlmv3-finetuned-funsd"
+        threshold = 0.9993
 
         object_detector = pipeline("object-detection", model=model_id, threshold=threshold)
 
@@ -256,9 +256,9 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             "https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png"
         )
         self.assertEqual(
-            nested_simplify(outputs, decimals=3),
+            nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.998, "label": "B-QUESTION", "box": {"xmin": 462, "ymin": 234, "xmax": 508, "ymax": 249}},
-                {"score": 0.999, "label": "I-QUESTION", "box": {"xmin": 489, "ymin": 286, "xmax": 519, "ymax": 301}},
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
             ],
         )
