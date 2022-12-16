@@ -96,7 +96,6 @@ else:
         "AutoModelForSeq2SeqLM",
         "AutoModelForSequenceClassification",
         "AutoModelForSpeechSeq2Seq",
-        "AutoModelForUniversalSegmentation",
         "AutoModelForTableQuestionAnswering",
         "AutoModelForTokenClassification",
         "AutoModelForUniversalSegmentation",

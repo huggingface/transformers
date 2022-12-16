@@ -20,7 +20,10 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig"]}
+_import_structure = {
+    "configuration_oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig"],
+    "processing_oneformer": ["OneFormerProcessor"],
+}
 
 try:
     if not is_vision_available():
@@ -29,8 +32,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_oneformer"] = ["OneFormerImageProcessor"]
-    _import_structure["processing_oneformer"] = ["OneFormerProcessor"]
-
 
 try:
     if not is_torch_available():
@@ -47,6 +48,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig
+    from .processing_oneformer import OneFormerProcessor
 
     try:
         if not is_vision_available():
@@ -55,7 +57,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_oneformer import OneFormerImageProcessor
-        from .processing_oneformer import OneFormerProcessor
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()

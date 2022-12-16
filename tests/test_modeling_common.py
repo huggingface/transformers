@@ -178,7 +178,6 @@ TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-cl
 
 @require_torch
 class ModelTesterMixin:
-    
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
