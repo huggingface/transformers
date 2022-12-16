@@ -62,6 +62,7 @@ if is_torch_available():
             else:
                 return input_ids
 
+
 class TestTrainerDistributedXLA(TestCasePlus):
     @require_torch_tpu
     def test_trainer(self):

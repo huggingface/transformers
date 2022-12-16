@@ -46,11 +46,13 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_neuroncore_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
     requires_backends,
 )
+
 
 if is_torch_available():
     import torch
@@ -58,10 +60,19 @@ if is_torch_available():
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+if is_torch_neuroncore_available(check_device=False):
+    # Set compiler flag to compile for transformer model type
+    os.environ["NEURON_CC_FLAGS"] = os.environ.get("NEURON_CC_FLAGS", "") + " --model-type=transformer"
+
     # torchrun support
-    import torch_xla.distributed.xla_backend
+    # https://github.com/pytorch/xla/pull/3609
     if os.environ.get("WORLD_SIZE"):
+        import torch_xla.distributed.xla_backend as xbn
+
         torch.distributed.init_process_group(backend="xla")
+        assert isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla)
+
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
