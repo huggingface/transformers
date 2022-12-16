@@ -870,9 +870,9 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
             decoder_module = module._get_decoder_module()
             return decoder_module(
-                input_ids=decoder_input_ids,
-                attention_mask=decoder_attention_mask,
-                position_ids=decoder_position_ids,
+                decoder_input_ids,
+                decoder_attention_mask,
+                decoder_position_ids,
                 **kwargs,
             )
 
