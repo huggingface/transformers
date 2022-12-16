@@ -141,6 +141,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("splinter", "SplinterModel"),
         ("squeezebert", "SqueezeBertModel"),
         ("swin", "SwinModel"),
+        ("swin2sr", "Swin2SRModel"),
         ("swinv2", "Swinv2Model"),
         ("switch_transformers", "SwitchTransformersModel"),
         ("t5", "T5Model"),

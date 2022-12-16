@@ -5288,6 +5288,30 @@ class SwinPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Swin2SRForImageSuperResolution(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Swin2SRModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Swin2SRPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
