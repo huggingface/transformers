@@ -264,8 +264,10 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
             time_duration=time_duration,
             frequency=frequency,
         )
+        input_feature_size = encoder_inputs["input_features"].shape[2]
+
         decoder_inputs = super().generate_dummy_inputs(
-            preprocessor.tokenizer, batch_size, seq_length, is_pair, framework
+            preprocessor.tokenizer, batch_size, input_feature_size // 2, is_pair, framework
         )
 
         dummy_inputs["input_features"] = encoder_inputs.pop("input_features")
