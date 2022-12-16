@@ -433,11 +433,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_image_transform = nn.ModuleList(
                 [nn.Linear(config.input_image_embed_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
             )
-        self.cross_modal_text_transform.apply(self._init_weights)
-        self.cross_modal_image_transform.apply(self._init_weights)
 
         self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
-        self.token_type_embeddings.apply(self._init_weights)
 
         if self.is_clip:
             self.vit_model = BridgeTowerCLIP(
@@ -471,24 +468,18 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.cross_modal_image_layers = nn.ModuleList(
             [BridgeTowerBertCrossLayer(self.tokenizer_config) for _ in range(config.num_hidden_layers)]
         )
-        self.cross_modal_image_layers.apply(self._init_weights)
         self.cross_modal_text_layers = nn.ModuleList(
             [BridgeTowerBertCrossLayer(self.tokenizer_config) for _ in range(config.num_hidden_layers)]
         )
-        self.cross_modal_text_layers.apply(self._init_weights)
 
         # Class token => Linear => Tanh
         self.cross_modal_image_pooler = BridgeTowerPooler(config.hidden_size)
-        self.cross_modal_image_pooler.apply(self._init_weights)
         self.cross_modal_text_pooler = BridgeTowerPooler(config.hidden_size)
-        self.cross_modal_text_pooler.apply(self._init_weights)
 
         # ===================== Initialize BridgeTower Components ===================== #
         # just for first layer
         self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size)
-        self.cross_modal_text_layernorm.apply(self._init_weights)
         self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size)
-        self.cross_modal_image_layernorm.apply(self._init_weights)
 
         if config.link_tower_shared:
             self.cross_modal_text_link_tower = LinkTower(config, self.tokenizer_config)
@@ -500,9 +491,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_image_link_tower = nn.ModuleList(
                 [LinkTower(config, self.tokenizer_config) for _ in range(config.num_hidden_layers - 1)]
             )
-
-        self.cross_modal_text_link_tower.apply(self._init_weights)
-        self.cross_modal_image_link_tower.apply(self._init_weights)
 
         # ===================== Freeze specified modules ===================== #
 
@@ -552,6 +540,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 # module.requires_grad_(False)
                 for param in module.parameters():
                     param.requires_grad = False
+        
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BridgeTowerModelOutput, config_class=_CONFIG_FOR_DOC)
