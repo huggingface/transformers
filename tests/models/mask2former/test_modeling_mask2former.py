@@ -88,18 +88,17 @@ class Mask2FormerModelTester:
                 depths=[1, 1, 1, 1],
             ),
         )
-        config.general_config["num_classes"] = self.num_labels
-        config.general_config["num_queries"] = self.num_queries
-        config.general_config["feature_strides"] = [2, 4, 8, 16]
-        config.decoder_config["feature_size"] = 64
-        config.decoder_config["mask_feature_size"] = self.mask_feature_size
-        config.decoder_config["hidden_dim"] = 16
-        config.decoder_config["encoder_feedforward_dim"] = 32
-        config.decoder_config["encoder_layers"] = 2
-        config.decoder_config["decoder_layers"] = 3
-        config.decoder_config["num_heads"] = 4
-        config.decoder_config["dim_feedforward"] = 16
-        config.decoder_config["common_stride"] = 4
+        config.num_queries = self.num_queries
+        config.feature_strides = [2, 4, 8, 16]
+        config.decoder_config.feature_size = 64
+        config.decoder_config.mask_feature_size = self.mask_feature_size
+        config.decoder_config.hidden_dim = 16
+        config.decoder_config.encoder_feedforward_dim = 32
+        config.decoder_config.encoder_layers = 2
+        config.decoder_config.decoder_layers = 3
+        config.decoder_config.num_heads = 4
+        config.decoder_config.dim_feedforward = 16
+        config.decoder_config.common_stride = 4
         return config
 
     def prepare_config_and_inputs_for_common(self):
