@@ -40,7 +40,6 @@ except ImportError:
     pass
 from transformers import CLIPTokenizer, DinatConfig, SwinConfig
 from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
-from transformers.models.oneformer.processing_oneformer import OneFormerProcessor
 from transformers.models.oneformer.modeling_oneformer import (
     OneFormerConfig,
     OneFormerForUniversalSegmentation,
@@ -48,6 +47,7 @@ from transformers.models.oneformer.modeling_oneformer import (
     OneFormerModel,
     OneFormerModelOutput,
 )
+from transformers.models.oneformer.processing_oneformer import OneFormerProcessor
 from transformers.utils import logging
 
 
@@ -218,7 +218,7 @@ class OriginalOneFormerConfigToProcessorConverter:
         else:
             raise ValueError("Invalid Dataset!")
 
-        image_processor =  OneFormerImageProcessor(
+        image_processor = OneFormerImageProcessor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
@@ -934,32 +934,30 @@ class OriginalOneFormerCheckpointToOursConverter:
             yield config, checkpoint
 
 
-def post_process_sem_seg_output(
-        outputs: "OneFormerForUniversalSegmentationOutput", target_size: Tuple[int, int] = None
-    ) -> "torch.Tensor":
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-        if target_size is not None:
-            masks_queries_logits = torch.nn.functional.interpolate(
-                masks_queries_logits,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-        # remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs = masks_queries_logits.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+def post_process_sem_seg_output(outputs: OneFormerForUniversalSegmentationOutput, target_size: Tuple[int, int]):
+    # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
+    class_queries_logits = outputs.class_queries_logits
+    # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+    masks_queries_logits = outputs.masks_queries_logits
+    if target_size is not None:
+        masks_queries_logits = torch.nn.functional.interpolate(
+            masks_queries_logits,
+            size=target_size,
+            mode="bilinear",
+            align_corners=False,
+        )
+    # remove the null class `[..., :-1]`
+    masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+    # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+    masks_probs = masks_queries_logits.sigmoid()
+    # now we want to sum over the queries,
+    # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
+    # where $ softmax(p) \in R^{q, c} $ is the mask classes
+    # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
+    # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
+    segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        return segmentation            
+    return segmentation
 
 
 def test(

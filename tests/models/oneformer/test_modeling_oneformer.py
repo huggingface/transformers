@@ -35,7 +35,7 @@ if is_torch_available():
     from transformers import OneFormerForUniversalSegmentation, OneFormerModel
 
     if is_vision_available():
-        from transformers import CLIPTokenizer, OneFormerImageProcessor, OneFormerProcessor
+        from transformers import OneFormerProcessor
 
 if is_vision_available():
     from PIL import Image

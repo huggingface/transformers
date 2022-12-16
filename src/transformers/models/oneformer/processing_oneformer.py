@@ -17,6 +17,7 @@ Image/Text processor class for OneFormer
 """
 
 from typing import List, Optional
+
 import torch
 
 from ...processing_utils import ProcessorMixin
@@ -41,9 +42,10 @@ def pad_tokens_to_max_len(tokens, max_len=77):
 
 class OneFormerProcessor(ProcessorMixin):
     r"""
-    Constructs an OneFormer processor which wraps [`OneFormerImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
-    into a single processor that interits both the image processor and tokenizer functionalities. See the
-    [`~OneFormerProcessor.__call__`] and [`~OneFormerProcessor.decode`] for more information.
+    Constructs an OneFormer processor which wraps [`OneFormerImageProcessor`] and
+    [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single processor that interits both the image processor and
+    tokenizer functionalities. See the [`~OneFormerProcessor.__call__`] and [`~OneFormerProcessor.decode`] for more
+    information.
 
     Args:
         image_processor ([`OneFormerImageProcessor`]):
@@ -57,20 +59,21 @@ class OneFormerProcessor(ProcessorMixin):
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "OneFormerImageProcessor"
-    tokenizer_class = ("CLIPTokenizer")
+    tokenizer_class = "CLIPTokenizer"
 
     def __init__(
-        self, 
-        image_processor=None, 
-        tokenizer=None, 
-        max_seq_length: Optional[int] = 77, 
-        task_seq_length: int = 77, 
-        **kwargs):
+        self,
+        image_processor=None,
+        tokenizer=None,
+        max_seq_length: Optional[int] = 77,
+        task_seq_length: int = 77,
+        **kwargs
+    ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
-        
+
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
 
@@ -78,16 +81,16 @@ class OneFormerProcessor(ProcessorMixin):
 
     def __call__(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
         """
-        Main method to prepare for the model one or several task input(s) and image(s). This method forwards the `task_inputs` and
-        `kwargs` arguments to CLIPTokenizer's [`~CLIPTokenizer.__call__`] if `task_inputs` is not `None` to encode. 
-        To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        OneFormerImageProcessor's [`~OneFormerImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
+        Main method to prepare for the model one or several task input(s) and image(s). This method forwards the
+        `task_inputs` and `kwargs` arguments to CLIPTokenizer's [`~CLIPTokenizer.__call__`] if `task_inputs` is not
+        `None` to encode. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        OneFormerImageProcessor's [`~OneFormerImageProcessor.__call__`] if `images` is not `None`. Please refer to the
+        doctsring of the above two methods for more information.
 
         Args:
             task_inputs (`str`, `List[str]`):
-                The sequence or batch of task_inputs sequences to be encoded. Each sequence can be a string or a list of strings
-                of the template "the task is {task}".
+                The sequence or batch of task_inputs sequences to be encoded. Each sequence can be a string or a list
+                of strings of the template "the task is {task}".
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
             `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
@@ -110,13 +113,9 @@ class OneFormerProcessor(ProcessorMixin):
         """
 
         if task_inputs is None:
-            raise ValueError(
-                "You have to specify the task_input. Found None."
-            )
+            raise ValueError("You have to specify the task_input. Found None.")
         elif images is None:
-            raise ValueError(
-                "You have to specify the image. Found None."
-            )
+            raise ValueError("You have to specify the image. Found None.")
 
         encoded_inputs = self.image_processor(images, task_inputs, segmentation_maps, **kwargs)
 
@@ -134,10 +133,10 @@ class OneFormerProcessor(ProcessorMixin):
             encoded_inputs["task_inputs"] = torch.cat(task_token_inputs, dim=0)
         else:
             raise TypeError("Task Inputs should be a string or a list of strings.")
-        
+
         if hasattr(encoded_inputs, "texts_list"):
             texts_list = encoded_inputs.texts_list
-        
+
             text_inputs = []
             for texts in texts_list:
                 text_input_list = [self.tokenizer(texts[i]) for i in range(len(texts))]
@@ -147,11 +146,11 @@ class OneFormerProcessor(ProcessorMixin):
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
 
         return encoded_inputs
-    
+
     def encode_inputs(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
         """
-        This method forwards all its arguments to [`OneFormerImageProcessor.encode_inputs`] and then tokenizes the task_inputs.
-        Please refer to the docstring of this method for more information.
+        This method forwards all its arguments to [`OneFormerImageProcessor.encode_inputs`] and then tokenizes the
+        task_inputs. Please refer to the docstring of this method for more information.
         """
         encoded_inputs = self.image_processor.encode_inputs(images, task_inputs, segmentation_maps, **kwargs)
 
@@ -169,10 +168,10 @@ class OneFormerProcessor(ProcessorMixin):
             encoded_inputs["task_inputs"] = torch.cat(task_token_inputs, dim=0)
         else:
             raise TypeError("Task Inputs should be a string or a list of strings.")
-        
+
         if hasattr(encoded_inputs, "texts_list"):
             texts_list = encoded_inputs.texts_list
-        
+
             text_inputs = []
             for texts in texts_list:
                 text_input_list = [self.tokenizer(texts[i]) for i in range(len(texts))]
@@ -189,14 +188,14 @@ class OneFormerProcessor(ProcessorMixin):
         Please refer to the docstring of this method for more information.
         """
         return self.image_processor.post_process_semantic_segmentation(*args, **kwargs)
-    
+
     def post_process_instance_segmentation(self, *args, **kwargs):
         """
         This method forwards all its arguments to [`OneFormerImageProcessor.post_process_instance_segmentation`].
         Please refer to the docstring of this method for more information.
         """
         return self.image_processor.post_process_instance_segmentation(*args, **kwargs)
-    
+
     def post_process_panoptic_segmentation(self, *args, **kwargs):
         """
         This method forwards all its arguments to [`OneFormerImageProcessor.post_process_panoptic_segmentation`].

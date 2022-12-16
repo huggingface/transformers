@@ -17,12 +17,11 @@
 import json
 import math
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
 from huggingface_hub import hf_hub_download
-from transformers import CLIPTokenizer
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from transformers.image_transforms import (
     PaddingMode,
@@ -266,9 +265,6 @@ def convert_segmentation_map_to_binary_masks(
     if reduce_labels and ignore_index is None:
         raise ValueError("If `reduce_labels` is True, `ignore_index` must be provided.")
 
-    from icecream import ic
-    ic(np.unique(segmentation_map))
-    
     if reduce_labels:
         segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
 
@@ -286,9 +282,6 @@ def convert_segmentation_map_to_binary_masks(
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:
         labels = np.zeros(all_labels.shape[0])
-
-        from icecream import ic
-        ic(instance_id_to_semantic_id.keys(), all_labels)
 
         for label in all_labels:
             class_id = instance_id_to_semantic_id[label + 1 if reduce_labels else label]
@@ -510,7 +503,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Normalize the image with the given mean and standard deviation.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format)
-    
+
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "np.ndarray",
@@ -934,8 +927,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
             - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
               `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
-            - **texts_list** -- Optional list of text string entries to be fed to a model (when
-              `annotations` are provided). They identify the binary masks present in the image.
+            - **texts_list** -- Optional list of text string entries to be fed to a model (when `annotations` are
+              provided). They identify the binary masks present in the image.
         """
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
         reduce_labels = self.reduce_labels if reduce_labels is None else reduce_labels
