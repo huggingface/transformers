@@ -649,7 +649,8 @@ class FlaxWhisperEncoder(nn.Module):
                 f" {self.config.d_model}))"
             )
 
-        hidden_states = hidden_states + self.embed_positions(jnp.arange(self.config.max_source_positions))
+        embed_positions = self.embed_positions(jnp.arange(self.config.max_source_positions))
+        hidden_states = hidden_states + embed_positions
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
