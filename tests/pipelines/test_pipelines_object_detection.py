@@ -257,5 +257,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [{'score': 0.9993, 'label': 'I-ANSWER', 'box': {'xmin': 294, 'ymin': 254, 'xmax': 343, 'ymax': 264}}, {'score': 0.9993, 'label': 'I-ANSWER', 'box': {'xmin': 294, 'ymin': 254, 'xmax': 343, 'ymax': 264}}],
+            [
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
+            ],
         )
