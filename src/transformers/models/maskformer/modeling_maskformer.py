@@ -189,9 +189,9 @@ class MaskFormerModelOutput(ModelOutput):
 
 
 @dataclass
-class MaskFormerForUniversalSegmentationOutput(ModelOutput):
+class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     """
-    Class for outputs of [`MaskFormerForUniversalSegmentation`].
+    Class for outputs of [`MaskFormerForInstanceSegmentation`].
 
     This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or or
     [`~MaskFormerImageProcessor.post_process_instance_segmentation`] or
@@ -1634,7 +1634,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         return output
 
 
-class MaskFormerForUniversalSegmentation(MaskFormerPreTrainedModel):
+class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.model = MaskFormerModel(config)
@@ -1716,7 +1716,7 @@ class MaskFormerForUniversalSegmentation(MaskFormerPreTrainedModel):
         return class_queries_logits, masks_queries_logits, auxiliary_logits
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskFormerForUniversalSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MaskFormerForInstanceSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Tensor,
@@ -1727,7 +1727,7 @@ class MaskFormerForUniversalSegmentation(MaskFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> MaskFormerForUniversalSegmentationOutput:
+    ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
@@ -1742,13 +1742,13 @@ class MaskFormerForUniversalSegmentation(MaskFormerPreTrainedModel):
         Semantic segmentation example:
 
         ```python
-        >>> from transformers import MaskFormerImageProcessor, MaskFormerForUniversalSegmentation
+        >>> from transformers import MaskFormerImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
-        >>> model = MaskFormerForUniversalSegmentation.from_pretrained("facebook/maskformer-swin-base-ade")
+        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade")
 
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
@@ -1775,13 +1775,13 @@ class MaskFormerForUniversalSegmentation(MaskFormerPreTrainedModel):
         Panoptic segmentation example:
 
         ```python
-        >>> from transformers import MaskFormerImageProcessor, MaskFormerForUniversalSegmentation
+        >>> from transformers import MaskFormerImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation
         >>> image_processor = MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-base-coco")
-        >>> model = MaskFormerForUniversalSegmentation.from_pretrained("facebook/maskformer-swin-base-coco")
+        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1833,7 +1833,7 @@ class MaskFormerForUniversalSegmentation(MaskFormerPreTrainedModel):
         if not output_auxiliary_logits:
             auxiliary_logits = None
 
-        output = MaskFormerForUniversalSegmentationOutput(
+        output = MaskFormerForInstanceSegmentationOutput(
             loss=loss,
             **outputs,
             class_queries_logits=class_queries_logits,
@@ -1848,11 +1848,11 @@ class MaskFormerForUniversalSegmentation(MaskFormerPreTrainedModel):
         return output
 
 
-class MaskFormerForInstanceSegmentation(MaskFormerForUniversalSegmentation):
+class MaskFormerForInstanceSegmentation(MaskFormerForInstanceSegmentation):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
             "The class MaskFormerForInstanceSegmentation is deprecated and will be removed in version 5 of"
-            " Transformers. Please use MaskFormerForUniversalSegmentation instead.",
+            " Transformers. Please use MaskFormerForInstanceSegmentation instead.",
             FutureWarning,
         )
         super().__init__(*args, **kwargs)

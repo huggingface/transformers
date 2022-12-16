@@ -44,7 +44,6 @@ else:
     _import_structure["modeling_maskformer"] = [
         "MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MaskFormerForInstanceSegmentation",
-        "MaskFormerForUniversalSegmentation",
         "MaskFormerModel",
         "MaskFormerPreTrainedModel",
     ]
@@ -75,7 +74,6 @@ if TYPE_CHECKING:
         from .modeling_maskformer import (
             MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             MaskFormerForInstanceSegmentation,
-            MaskFormerForUniversalSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
         )

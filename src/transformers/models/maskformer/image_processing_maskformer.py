@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
-    from transformers import MaskFormerForUniversalSegmentationOutput
+    from transformers import MaskFormerForInstanceSegmentationOutput
 
 
 if is_torch_available():
@@ -872,15 +872,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         return encoded_inputs
 
     def post_process_segmentation(
-        self, outputs: "MaskFormerForUniversalSegmentationOutput", target_size: Tuple[int, int] = None
+        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
     ) -> "torch.Tensor":
         """
-        Converts the output of [`MaskFormerForUniversalSegmentationOutput`] into image segmentation predictions. Only
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
         supports PyTorch.
 
         Args:
-            outputs ([`MaskFormerForUniversalSegmentationOutput`]):
-                The outputs from [`MaskFormerForUniversalSegmentation`].
+            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
+                The outputs from [`MaskFormerForInstanceSegmentation`].
 
             target_size (`Tuple[int, int]`, *optional*):
                 If set, the `masks_queries_logits` will be resized to `target_size`.
@@ -923,11 +923,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
-        Converts the output of [`MaskFormerForUniversalSegmentation`] into semantic segmentation maps. Only supports
+        Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
 
         Args:
-            outputs ([`MaskFormerForUniversalSegmentation`]):
+            outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
@@ -979,11 +979,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         return_coco_annotation: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`MaskFormerForUniversalSegmentationOutput`] into instance segmentation predictions.
-        Only supports PyTorch.
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
+        supports PyTorch.
 
         Args:
-            outputs ([`MaskFormerForUniversalSegmentation`]):
+            outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
@@ -1062,12 +1062,12 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`MaskFormerForUniversalSegmentationOutput`] into image panoptic segmentation
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
 
         Args:
-            outputs ([`MaskFormerForUniversalSegmentationOutput`]):
-                The outputs from [`MaskFormerForUniversalSegmentation`].
+            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
+                The outputs from [`MaskFormerForInstanceSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
             mask_threshold (`float`, *optional*, defaults to 0.5):

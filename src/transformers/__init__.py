@@ -1661,7 +1661,6 @@ else:
         [
             "MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "MaskFormerForInstanceSegmentation",
-            "MaskFormerForUniversalSegmentation",
             "MaskFormerModel",
             "MaskFormerPreTrainedModel",
             "MaskFormerSwinBackbone",
@@ -4705,7 +4704,6 @@ if TYPE_CHECKING:
         from .models.maskformer import (
             MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             MaskFormerForInstanceSegmentation,
-            MaskFormerForUniversalSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
             MaskFormerSwinBackbone,
