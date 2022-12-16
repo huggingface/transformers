@@ -54,27 +54,27 @@ class OneFormerModelTester:
         self,
         parent,
         batch_size=2,
-        is_training=True,
+        training=True,
         use_auxiliary_loss=False,
         num_queries=10,
         num_channels=3,
         min_size=32 * 8,
         max_size=32 * 8,
         num_labels=4,
-        mask_feature_size=64,
+        hidden_dim=64,
         sequence_length=77,
         n_ctx=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.is_training = is_training
+        self.training = training
         self.use_auxiliary_loss = use_auxiliary_loss
         self.num_queries = num_queries
         self.num_channels = num_channels
         self.min_size = min_size
         self.max_size = max_size
         self.num_labels = num_labels
-        self.mask_feature_size = mask_feature_size
+        self.hidden_dim = hidden_dim
         self.sequence_length = sequence_length
         self.n_ctx = n_ctx
 
@@ -103,26 +103,26 @@ class OneFormerModelTester:
 
     def get_config(self):
         config = OneFormerConfig(
-            hidden_size=self.mask_feature_size,
+            hidden_size=self.hidden_dim,
         )
 
-        config.general_config["num_queries"] = self.num_queries
-        config.general_config["num_classes"] = self.num_labels
+        config.num_queries = self.num_queries
+        config.num_labels = self.num_labels
 
         config.backbone_config.depths = [1, 1, 1, 1]
         config.backbone_config.num_channels = self.num_channels
 
-        config.decoder_config["encoder_feedforward_dim"] = 64
-        config.decoder_config["dim_feedforward"] = 128
-        config.decoder_config["hidden_dim"] = self.mask_feature_size
-        config.decoder_config["mask_dim"] = self.mask_feature_size
-        config.decoder_config["conv_dim"] = self.mask_feature_size
+        config.encoder_feedforward_dim = 64
+        config.dim_feedforward = 128
+        config.hidden_dim = self.hidden_dim
+        config.mask_dim = self.hidden_dim
+        config.conv_dim = self.hidden_dim
 
-        config.text_encoder_config["text_encoder_width"] = self.mask_feature_size
-        config.text_encoder_config["task_seq_len"] = self.sequence_length
-        config.text_encoder_config["max_seq_len"] = self.sequence_length
-        config.text_encoder_config["text_encoder_context_length"] = self.sequence_length
-        config.text_encoder_config["text_encoder_n_ctx"] = self.n_ctx
+        config.text_encoder_width = self.hidden_dim
+        config.task_seq_len = self.sequence_length
+        config.max_seq_len = self.sequence_length
+        config.text_encoder_context_length = self.sequence_length
+        config.text_encoder_n_ctx = self.n_ctx
 
         config.label2id = {}
         config.id2label = {}
@@ -144,8 +144,8 @@ class OneFormerModelTester:
         transformer_decoder_hidden_states = output.transformer_decoder_hidden_states
 
         self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone_config.depths))
-        self.parent.assertTrue(len(pixel_decoder_hidden_states), config.decoder_config["encoder_layers"])
-        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_config["decoder_layers"] - 1)
+        self.parent.assertTrue(len(pixel_decoder_hidden_states), config.encoder_layers)
+        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_layers - 1)
 
     def create_and_check_oneformer_model(
         self, config, pixel_values, task_inputs, pixel_mask, output_hidden_states=False
@@ -161,7 +161,7 @@ class OneFormerModelTester:
         # encoder and pixel decoder
         self.parent.assertEqual(
             output.transformer_decoder_object_queries.shape,
-            (self.batch_size, self.num_queries, self.mask_feature_size),
+            (self.batch_size, self.num_queries, self.hidden_dim),
         )
         # let's ensure the other two hidden state exists
         self.parent.assertTrue(output.pixel_decoder_hidden_states is not None)
@@ -199,7 +199,7 @@ class OneFormerModelTester:
 
             comm_check_on_output(result)
 
-        config.general_config["is_train"] = True
+        config.training = True
         model = OneFormerForUniversalSegmentation(config=config)
         model.to(torch_device)
         model.eval()
@@ -315,7 +315,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
         }
 
         config = OneFormerConfig()
-        config.general_config["is_train"] = True
+        config.training = True
 
         model = OneFormerForUniversalSegmentation(config).to(torch_device)
         outputs = model(**inputs)
@@ -335,7 +335,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.general_config["contrastive_temperature"] = 1
+        config.contrastive_temperature = 1
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
@@ -349,7 +349,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
                     )
 
     def test_training(self):
-        if not self.model_tester.is_training:
+        if not self.model_tester.training:
             return
         # only OneFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
@@ -362,7 +362,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
             mask_labels,
             class_labels,
         ) = self.model_tester.prepare_config_and_inputs()
-        config.general_config["is_train"] = True
+        config.training = True
 
         model = model_class(config)
         model.to(torch_device)
@@ -387,7 +387,7 @@ class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
         ) = self.model_tester.prepare_config_and_inputs()
         config.output_hidden_states = True
         config.output_attentions = True
-        config.general_config["is_train"] = True
+        config.training = True
 
         model = model_class(config)
         model.to(torch_device)
@@ -504,7 +504,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         masks_queries_logits = outputs.masks_queries_logits
         self.assertEqual(
             masks_queries_logits.shape,
-            (1, model.config.general_config["num_queries"], inputs_shape[-2] // 4, inputs_shape[-1] // 4),
+            (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4),
         )
         expected_slice = [[[2.7239, 3.5821, 3.8680], [2.8230, 3.4890, 3.8843], [2.5708, 2.9101, 3.4645]]]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
@@ -513,7 +513,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         class_queries_logits = outputs.class_queries_logits
         self.assertEqual(
             class_queries_logits.shape,
-            (1, model.config.general_config["num_queries"], model.config.general_config["num_classes"] + 1),
+            (1, model.config.num_queries, model.config.num_labels + 1),
         )
         expected_slice = torch.tensor(
             [[2.7761, -2.1867, -3.6433], [3.4408, -3.3945, -5.5952], [2.2712, -5.0023, -4.6808]]
@@ -524,10 +524,10 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         dummy_model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
         image_processor = self.default_image_processor
         image_processor.num_text = (
-            dummy_model.config.general_config["num_queries"]
-            - dummy_model.config.text_encoder_config["text_encoder_n_ctx"]
+            dummy_model.config.num_queries
+            - dummy_model.config.text_encoder_n_ctx
         )
-        dummy_model.config.general_config["is_train"] = True
+        dummy_model.config.training = True
         model = OneFormerForUniversalSegmentation(dummy_model.config).to(torch_device).eval()
         del dummy_model
 

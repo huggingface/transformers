@@ -375,9 +375,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
-        max_seq_len (`int`, *optional*):
+        max_seq_len (`int`, *optional*, defaults to 77)):
             Sequence length for input text list.
-        task_seq_len (`int`):
+        task_seq_len (`int`, *optional*, defaults to 77):
             Sequence length for input task token.
         repo_path (`str`):
             Model repo on huggingface hub
@@ -409,21 +409,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
         num_text: Optional[int] = None,
         **kwargs
     ):
-        if "size_divisibility" in kwargs:
-            warnings.warn(
-                "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
-                "`size_divisibility` instead.",
-                FutureWarning,
-            )
-            size_divisor = kwargs.pop("size_divisibility")
+        if "size_divisor" in kwargs:
+            size_divisor = kwargs.pop("size_divisor")
         if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` argument is deprecated and will be removed in v4.27. Please use size['longest_edge']"
-                " instead.",
-                FutureWarning,
-            )
-            # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
-            # `size` can still be pass in as an int
             self._max_size = kwargs.pop("max_size")
         else:
             self._max_size = 1333
@@ -449,24 +437,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.metadata = prepare_metadata(class_info_file)
         self.num_text = num_text
         self.repo_path = repo_path
-
-    @property
-    def size_divisibility(self):
-        warnings.warn(
-            "The `size_divisibility` property is deprecated and will be removed in v4.27. Please use "
-            "`size_divisor` instead.",
-            FutureWarning,
-        )
-        return self.size_divisor
-
-    @property
-    def max_size(self):
-        warnings.warn(
-            "The `max_size` property is deprecated and will be removed in v4.27. Please use size['longest_edge']"
-            " instead.",
-            FutureWarning,
-        )
-        return self.size["longest_edge"]
 
     def resize(
         self,
@@ -1049,9 +1019,10 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self, outputs: "OneFormerForUniversalSegmentationOutput", target_size: Tuple[int, int] = None
     ) -> "torch.Tensor":
         """
-        Args:
         Converts the output of [`OneFormerForUniversalSegmentationOutput`] into image segmentation predictions. Only
         supports PyTorch.
+
+        Args:
             outputs ([`OneFormerForUniversalSegmentationOutput`]):
                 The outputs from [`OneFormerForUniversalSegmentationOutput`].
             target_size (`Tuple[int, int]`, *optional*):

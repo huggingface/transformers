@@ -48,16 +48,10 @@ class OneFormerConfig(PretrainedConfig):
     as backbones.
 
     Args:
-        output_attentions (`bool`, *optional*, defaults to `True`):
-            Whether to output attention weights.
-        output_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to output intermediate predictions.
-        return_dict (`bool`, *optional*, defaults to `True`):
-            Whether to return output as tuples or dataclass objects.
         general_config (`dict`, *optional*)
             Dictionary containing general configuration like backbone_type, loss weights, number of classes, etc.
-        backbone_config (`dict`, *optional*, defaults to `swin-tiny-patch4-window7-224`)
-            Dictionary containing configuration for the backbone module like patch size, num_heads, etc.
+        backbone_config (`PretrainedConfig`, *optional*, defaults to `SwinConfig`)
+            The configuration of the backbone model.
         text_encoder_config (`dict`, *optional*, defaults to a dictionary with the following keys)
             Dictionary containing configuration for the text-mapper module and task encoder like sequence length,
             number of linear layers in MLP, etc.
@@ -81,64 +75,59 @@ class OneFormerConfig(PretrainedConfig):
     ```
     """
     model_type = "oneformer"
+    attribute_map = {"hidden_size": "hidden_dim"}
     backbones_supported = ["swin", "dinat"]
 
     def __init__(
         self,
-        general_config: Optional[Dict] = None,
         backbone_config: Optional[Dict] = None,
-        text_encoder_config: Optional[Dict] = None,
-        decoder_config: Optional[Dict] = None,
+        ignore_value: Optional[int] = 255,
+        num_labels: Optional[int] = 150,
+        num_queries: Optional[int] = 150,
+        no_object_weight: Optional[int] = 0.1,
+        deep_supervision: Optional[bool] = True,
+        class_weight: Optional[float] = 2.0,
+        mask_weight: Optional[float] = 5.0,
+        dice_weight: Optional[float] = 5.0,
+        contrastive_weight: Optional[float] = 0.5,
+        contrastive_temperature: Optional[float] = 0.07,
+        train_num_points: Optional[int] = 12544,
+        oversample_ratio: Optional[float] = 3.0,
+        importance_sample_ratio: Optional[float] = 0.75,
+        init_std: Optional[float] = 0.02,
+        init_xavier_std: Optional[float] = 1.0,
+        layer_norm_eps: Optional[float] = 1e-05,
+        training: Optional[bool] = False,
+        use_auxiliary_loss: Optional[bool] = True,
+        output_auxiliary_logits: Optional[bool] = True,
+        strides: Optional[list] = [4, 8, 16, 32],
+        task_seq_len: Optional[int] = 77,
+        max_seq_len: Optional[int] = 77,
+        text_encoder_width: Optional[int] = 256,
+        text_encoder_context_length: Optional[int] = 77,
+        text_encoder_num_layers: Optional[int] = 6,
+        text_encoder_vocab_size: Optional[int] = 49408,
+        text_encoder_proj_layers: Optional[int] = 2,
+        text_encoder_n_ctx: Optional[int] = 16,
+        conv_dim: Optional[int] = 256,
+        mask_dim: Optional[int] = 256,
+        hidden_dim: Optional[int] = 256,
+        encoder_feedforward_dim: Optional[int] = 1024,
+        norm: Optional[str] = "GN",
+        encoder_layers: Optional[int] = 6,
+        decoder_layers: Optional[int] = 10,
+        use_task_norm: Optional[bool] = True,
+        num_attention_heads: Optional[int] = 8,
+        dropout: Optional[float] = 0.1,
+        dim_feedforward: Optional[int] = 2048,
+        pre_norm: Optional[bool] = False,
+        enforce_input_proj: Optional[bool] = False,
+        query_dec_layers: Optional[int] = 2,
+        common_stride: Optional[int] = 4,
         **kwargs,
     ):
-        cfgs = self._setup_cfg(general_config, backbone_config, text_encoder_config, decoder_config)
-
-        general_config, backbone_config, text_encoder_config, decoder_config = cfgs
-
-        self.general_config = general_config
-        self.backbone_config = backbone_config
-        self.text_encoder_config = text_encoder_config
-        self.decoder_config = decoder_config
-
-        self.hidden_size = self.decoder_config["hidden_dim"]
-        self.num_attention_heads = self.decoder_config["num_heads"]
-        self.num_hidden_layers = self.decoder_config["decoder_layers"]
-        self.init_std = self.general_config["init_std"]
-        self.init_xavier_std = self.general_config["init_xavier_std"]
-
-        super().__init__(**kwargs)
-
-    def _setup_cfg(
-        self,
-        general_config: Optional[Dict] = None,
-        backbone_config: Optional[SwinConfig] = None,
-        text_encoder_config: Optional[Dict] = None,
-        decoder_config: Optional[Dict] = None,
-    ) -> Dict[str, any]:
-        if general_config is None:
-            general_config = {}
-            general_config["ignore_value"] = 255
-            general_config["num_classes"] = 150
-            general_config["num_queries"] = 150
-            general_config["no_object_weight"] = 0.1
-            general_config["deep_supervision"] = True
-            general_config["class_weight"] = 2.0
-            general_config["mask_weight"] = 5.0
-            general_config["dice_weight"] = 5.0
-            general_config["contrastive_weight"] = 0.5
-            general_config["contrastive_temperature"] = 0.07
-            general_config["train_num_points"] = 12544
-            general_config["oversample_ratio"] = 3.0
-            general_config["importance_sample_ratio"] = 0.75
-            general_config["init_std"] = 0.02
-            general_config["init_xavier_std"] = 1.0
-            general_config["layer_norm_eps"] = 1e-05
-            general_config["is_train"] = False
-            general_config["use_auxiliary_loss"] = True
-            general_config["output_auxiliary_logits"] = True
-            general_config["strides"] = [4, 8, 16, 32]
-
         if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = SwinConfig(
                 image_size=224,
                 in_channels=3,
@@ -164,36 +153,54 @@ class OneFormerConfig(PretrainedConfig):
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
-        if text_encoder_config is None:
-            text_encoder_config = {}
-            text_encoder_config["task_seq_len"] = 77
-            text_encoder_config["max_seq_len"] = 77
-            text_encoder_config["text_encoder_width"] = 256
-            text_encoder_config["text_encoder_context_length"] = 77
-            text_encoder_config["text_encoder_num_layers"] = 6
-            text_encoder_config["text_encoder_vocab_size"] = 49408
-            text_encoder_config["text_encoder_proj_layers"] = 2
-            text_encoder_config["text_encoder_n_ctx"] = 16
+        self.backbone_config = backbone_config
 
-        if decoder_config is None:
-            decoder_config = {}
-            decoder_config["conv_dim"] = 256
-            decoder_config["mask_dim"] = 256
-            decoder_config["hidden_dim"] = 256
-            decoder_config["encoder_feedforward_dim"] = 1024
-            decoder_config["norm"] = "GN"
-            decoder_config["encoder_layers"] = 6
-            decoder_config["decoder_layers"] = 10
-            decoder_config["use_task_norm"] = True
-            decoder_config["num_heads"] = 8
-            decoder_config["dropout"] = 0.1
-            decoder_config["dim_feedforward"] = 2048
-            decoder_config["pre_norm"] = False
-            decoder_config["enforce_input_proj"] = False
-            decoder_config["query_dec_layers"] = 2
-            decoder_config["common_stride"] = 4
+        self.ignore_value = ignore_value
+        self.num_labels = num_labels
+        self.num_queries = num_queries
+        self.no_object_weight = no_object_weight
+        self.deep_supervision = deep_supervision
+        self.class_weight = class_weight
+        self.mask_weight = mask_weight
+        self.dice_weight = dice_weight
+        self.contrastive_weight = contrastive_weight
+        self.contrastive_temperature = contrastive_temperature
+        self.train_num_points = train_num_points
+        self.oversample_ratio = oversample_ratio
+        self.importance_sample_ratio = importance_sample_ratio
+        self.init_std = init_std
+        self.init_xavier_std = init_xavier_std
+        self.layer_norm_eps = layer_norm_eps
+        self.training = training
+        self.use_auxiliary_loss = use_auxiliary_loss
+        self.output_auxiliary_logits = output_auxiliary_logits
+        self.strides = strides
+        self.task_seq_len = task_seq_len
+        self.max_seq_len = max_seq_len
+        self.text_encoder_width = text_encoder_width
+        self.text_encoder_context_length = text_encoder_context_length
+        self.text_encoder_num_layers = text_encoder_num_layers
+        self.text_encoder_vocab_size = text_encoder_vocab_size
+        self.text_encoder_proj_layers = text_encoder_proj_layers
+        self.text_encoder_n_ctx = text_encoder_n_ctx
+        self.conv_dim = conv_dim
+        self.mask_dim = mask_dim
+        self.hidden_dim = hidden_dim
+        self.encoder_feedforward_dim = encoder_feedforward_dim
+        self.norm = norm
+        self.encoder_layers = encoder_layers
+        self.decoder_layers = decoder_layers
+        self.use_task_norm = use_task_norm
+        self.num_attention_heads = num_attention_heads
+        self.dropout = dropout
+        self.dim_feedforward = dim_feedforward
+        self.pre_norm = pre_norm
+        self.enforce_input_proj = enforce_input_proj
+        self.query_dec_layers = query_dec_layers
+        self.common_stride = common_stride
+        self.num_hidden_layers = decoder_layers
 
-        return general_config, backbone_config, text_encoder_config, decoder_config
+        super().__init__(**kwargs)
 
     def to_dict(self) -> Dict[str, any]:
         """
