@@ -777,9 +777,7 @@ class TimeStampLogitsProcessor(LogitsProcessor):
         # suppress <|notimestamps|> which is handled by without_timestamps
         if self.no_timestamps_token_id is not None:
             scores[:, self.no_timestamps_token_id] = -float("inf")
-        # Make sure that the first token is the begin timestamp
-        if input_ids.shape[-1] == 3:
-            scores[:, self.timestamp_begin] = 0
+
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):

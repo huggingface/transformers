@@ -78,6 +78,46 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
             yield {"is_last": is_last, "stride": stride, **processed}
 
 
+
+
+class SuffixTrie:
+    """
+    Trie in Python. Creates a Trie out of a list of words. The trie is used to split on `added_tokens` in one pass
+    Loose reference https://en.wikipedia.org/wiki/Trie
+    """
+
+    def __init__(self, list = None):
+        self.data = {}
+        sub_lists = [list[i:] for i in range(len(list))]
+        for curr_list in sub_lists:
+            ref = self.data
+            for item in curr_list:
+                ref[item] = item in ref and ref[item] or {}
+                ref = ref[item]
+
+    def add(self, word):
+
+        if not word:
+            # Prevent empty string
+            return
+        ref = self.data
+        for char in word:
+            ref[char] = char in ref and ref[char] or {}
+            ref = ref[char]
+        ref[""] = 1
+
+    def search(self, word):
+        ref = self.data
+        res = []
+        for char in word:
+            if char not in ref:
+                return res
+            start_idx = list(self.data.keys()).index(char)
+            res += [(start_idx,char)]
+            ref = ref[char]
+        return res
+
+
 def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
     """ """
     max_source_positions = 1500
@@ -91,72 +131,64 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor):
     for seq_idx, item in enumerate(sequences):
         sequence, stride = item
         chunk_len, stride_left, stride_right = stride
-
-        # in seconds, should not divide by 2 but use the correct window/stride ratio
-        # timestamp_offset = (items[-1][0]  -timestamp_begin) * 0.02
         sequence = sequence.squeeze(0)
-        # patch the matching sequence with the correct sequence of the previous chunk
         sequence = sequence[begin_idx:]
         if seq_idx != 0:
-
             time += (chunk_len-stride_left)/100
             # lets only take the beginning tokens
             timestamp_tokens = np.where(sequence >= timestamp_begin)[0][0::2]
-            current_times = (sequence[timestamp_tokens] - timestamp_begin) * 0.02 + time
-            merge_time = sorted(set(current_times) & set(start_times))
-            if len(merge_time) > 0:
-                merge_time = merge_time[0]
-            else:
-                if seq_idx == len(sequences) or (start_times >  current_times[0]).sum() == 0:
-                    merge_idx = -1
-                else:
-                    merge_idx = np.where(start_times >  current_times[0])[0][0]+1
-                start_times = start_times[:merge_idx]
-                items = items[:merge_idx]
-                start_times[-1] = current_times[0]
-                merge_time = current_times[0]
 
-            merge_point = np.where(current_times == merge_time)[0][0]
-            # let's set the correct start/end timestamp
-            delete_idx = np.where(np.array(start_times) == merge_time)[0][0]
-            sliced_sequence =  sequence[timestamp_tokens[merge_point] : timestamp_tokens[merge_point+1]]
+            previous_tokens = items[-1][1:-1]
+            # lets merge
+            if len(timestamp_tokens) > 1:
+                current_slice = sequence[:timestamp_tokens[1]]
 
-            sliced_sequence[0] = items[delete_idx][0]
-            sliced_sequence[-1] += (items[delete_idx][0] - timestamp_begin)
-            start_times = start_times[:delete_idx+1]
-            items = items[:delete_idx]
-            items.append(sliced_sequence)
-            sequence = sequence[timestamp_tokens[merge_point + 1] :]
+                trie = SuffixTrie(current_slice)
+                longest_common_sequence = trie.search(previous_tokens)
+                if len(longest_common_sequence) == len(previous_tokens):
+                    idx = longest_common_sequence[0][0]
+                    sliced_sequence =  sequence[idx:timestamp_tokens[1]]
+
+                    # Now tricky part : compute the correct timing
+                    actual_offset = int(time /time_precision) + timestamp_begin
+                    sliced_sequence[-1] += actual_offset
+                    # sliced_sequence[-1] = items[-1][-1]
+                    items[-1][1:] = sliced_sequence
+                    # items[-1] = np.concatenate([items[-1][:-1],sliced_sequence])
+                    sequence = sequence[timestamp_tokens[1] : ]
 
         timestamp_tokens = sequence >= timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
         if len(consecutive) > 0:  # if the output contains two consecutive timestamp tokens
             last_slice = 0
             # take the last timestamp of the previous chunk
-            offset = items[-2][-1] if len(items) > 0 else timestamp_begin
+            offset = items[-1][-1] if len(items) > 0 else timestamp_begin
+            actual_offset = int(time /time_precision) + timestamp_begin
+            offset = actual_offset
             for current_slice in consecutive:
-
                 sliced_tokens = sequence[last_slice:current_slice]
-                start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
-
                 # set correct timestamps
                 sliced_tokens[0]  += offset - timestamp_begin
                 sliced_tokens[-1] += offset - timestamp_begin
                 items.append(sliced_tokens) #correct final sequence
-
-                # append the timestamp
-                start_times.append((sliced_tokens[0] - timestamp_begin )* time_precision)
-
                 # start_times.append(timestamp_offset + start_timestamp_position * time_precision)
                 last_slice = current_slice
+            if np.where(timestamp_tokens)[0][-1] != current_slice: # we probably have a timestamp at the end
+                # offset = items[-1][-1] if len(items) > 0 else timestamp_begin
+                sliced_tokens = sequence[current_slice:np.where(timestamp_tokens)[0][-1] + 1]
+                actual_offset = int(time /time_precision) + timestamp_begin
+                sliced_tokens[0]  += offset - timestamp_begin
+                sliced_tokens[-1] += offset - timestamp_begin
+                items.append(sliced_tokens) #correct final sequence
         else:
             timestamps = sequence[timestamp_tokens.nonzero()[0].flatten()]
+            offset = items[-2][-1] if len(items) > 0 else timestamp_begin
             if len(timestamps) > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 # single timestamp at the end means no speech after the last timestamp.
-                items.append(sliced_tokens.tolist())
-                start_times.append(time)
-        
+                items.append(sequence[timestamps[-1]])
+                start_times.append(timestamps[-1] + offset - timestamp_begin)
+
 
     result = []
     for i in range(len(items)):
@@ -461,7 +493,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 tokens = self.model.generate(
                     encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                     attention_mask=attention_mask,
-                    logits_processor=logits_processor,
+                    logits_processor=logits_processor
                 )
             else:
                 tokens = self.model.generate(

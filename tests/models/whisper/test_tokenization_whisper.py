@@ -259,3 +259,13 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         ]
 
         self.assertEqual(output, EXCPECTED_OUTPUT)
+
+        INPUT_TOKENS = [
+            50364, 441, 1857, 4174, 11, 5242, 366,
+            257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
+            293, 25730, 311, 454, 34152, 4496, 904, 50724
+        ]
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        EXCPECTED_OUTPUT = []
+
+        self.assertEqual(output, EXCPECTED_OUTPUT)
