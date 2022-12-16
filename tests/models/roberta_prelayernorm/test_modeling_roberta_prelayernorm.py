@@ -520,13 +520,6 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
             [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]]
         )
 
-        # huggingface refers to the huggingface directory in https://github.com/princeton-nlp/dinkytrain
-        # it does not relate to any module provided by corporation Hugging Face.
-        # from huggingface.modeling_roberta_prelayernorm import RobertaForMaskedLM
-        # model = RobertaForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
-        # with torch.no_grad():
-        #     EXPECTED_SLICE = model(input_ids)[0][:, :3, :3].detach()
-
         self.assertTrue(torch.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
 
     @slow
@@ -540,10 +533,5 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
         EXPECTED_SLICE = torch.tensor(
             [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]]
         )
-
-        # from huggingface.modeling_roberta_prelayernorm import RobertaModel
-        # model = RobertaForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
-        # with torch.no_grad():
-        #     EXPECTED_SLICE = model(input_ids)[0][:, :3, :3].detach()
 
         self.assertTrue(torch.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
