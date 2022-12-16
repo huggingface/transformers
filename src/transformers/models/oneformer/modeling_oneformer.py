@@ -506,7 +506,7 @@ class OneFormerLoss(nn.Module):
 
         image_queries = contrastive_queries_logits.float()
 
-        # [B, C]
+        # [batch_size, hidden_dim]
         image_queries = nn.functional.normalize(image_queries.flatten(1), dim=-1)
         text_queries = nn.functional.normalize(text_queries.flatten(1), dim=-1)
 
@@ -1416,9 +1416,9 @@ class OneFormerPixelDecoder(nn.Module):
         sources = []
         position_embeddings_list = []
         for level, source in enumerate(features[::-1][: self.num_feature_levels]):
-            x = source.float()
-            sources.append(self.input_projections[level](x))
-            position_embeddings_list.append(self.position_embedding(x))
+            feats = source.float()
+            sources.append(self.input_projections[level](feats))
+            position_embeddings_list.append(self.position_embedding(feats))
 
         masks = [torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in sources]
 
@@ -1480,11 +1480,11 @@ class OneFormerPixelDecoder(nn.Module):
 
         # append `out` with extra FPN levels
         # Reverse feature maps into top-down order (from low to high resolution)
-        for idx, x in enumerate(features[: self.num_fpn_levels][::-1]):
-            x = x.float()
+        for idx, feats in enumerate(features[: self.num_fpn_levels][::-1]):
+            feats = feats.float()
             lateral_conv = self.lateral_convs[idx]
             output_conv = self.output_convs[idx]
-            cur_fpn = lateral_conv(x)
+            cur_fpn = lateral_conv(feats)
             # Following FPN implementation, we use nearest upsampling here
             y = cur_fpn + nn.functional.interpolate(
                 out[-1], size=cur_fpn.shape[-2:], mode="bilinear", align_corners=False
@@ -2335,8 +2335,6 @@ class OneFormerTransformerDecoder(nn.Module):
         mask_embed = self.mask_embed(decoder_output)
         outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed, mask_features)
 
-        # NOTE: prediction is of higher-resolution
-        # [B, Q, H, W] -> [B, Q, H*W] -> [B, h, Q, H*W] -> [B*h, Q, HW]
         attention_mask = nn.functional.interpolate(
             outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False
         )
@@ -2522,11 +2520,11 @@ class OneFormerTextMapperAttention(nn.Module):
 
         attn = attn.softmax(dim=-1)
 
-        x = torch.einsum("bknm,bmkc->bnkc", attn, v).reshape(batch_size, q_sequence_length, num_channels)
+        output = torch.einsum("bknm,bmkc->bnkc", attn, v).reshape(batch_size, q_sequence_length, num_channels)
 
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x
+        output = self.proj(output)
+        output = self.proj_drop(output)
+        return output
 
 
 class OneFormerTextTransformerDecoderLayer(nn.Module):
@@ -2596,14 +2594,13 @@ class OneFormerTextContextDecoder(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def forward(self, text, visual):
-        B, N, C = visual.shape
         visual = self.memory_proj(visual)
-        x = self.text_proj(text)
+        hidden_state = self.text_proj(text)
 
         for layer in self.decoder:
-            x = layer(x, visual)
+            hidden_state = layer(hidden_state, visual)
 
-        return self.out_proj(x)
+        return self.out_proj(hidden_state)
 
 
 class OneFormerTextMLP(nn.Module):
@@ -2826,11 +2823,11 @@ ONEFORMER_START_DOCSTRING = r"""
 ONEFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`OneFormerImageProcessor`]. See
-            [`OneFormerImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`OneFormerProcessor`]. See
+            [`OneFormerProcessor.__call__`] for details.
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Task inputs. Task inputs can be obtained using [`OneFormerImageProcessor`]. See
-            [`OneFormerImageProcessor.__call__`] for details.
+            [`OneFormerProcessor.__call__`] for details.
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 
@@ -2945,16 +2942,16 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPTokenizer, OneFormerImageProcessor, OneFormerModel
+        >>> from transformers import OneFormerProcessor, OneFormerModel
 
         >>> # download texting image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> # load feature extractor for preprocessing the inputs
-        >>> image_processor = OneFormerImageProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+        >>> # load processor for preprocessing the inputs
+        >>> processor = OneFormerProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
         >>> model = OneFormerModel.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
-        >>> inputs = image_processor(image, ["semantic"], return_tensors="pt")
+        >>> inputs = processor(image, ["semantic"], return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -3132,13 +3129,13 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         Universal segmentation example:
 
         ```python
-        >>> from transformers import OneFormerImageProcessor, OneFormerForUniversalSegmentation
+        >>> from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import requests
         >>> import torch
 
         >>> # load OneFormer fine-tuned on ADE20k for universal segmentation
-        >>> image_processor = OneFormerImageProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+        >>> processor = OneFormerProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
         >>> model = OneFormerForUniversalSegmentation.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
 
         >>> url = (
@@ -3147,7 +3144,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> ######## Semantic Segmentation ########
-        >>> inputs = image_processor(image, ["semantic"], return_tensors="pt")
+        >>> inputs = processor(image, ["semantic"], return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -3164,7 +3161,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         '👉 Semantic Predictions Shape: [512, 683]'
 
         >>> ######## Instance Segmentation ########
-        >>> inputs = image_processor(image, ["instance"], return_tensors="pt")
+        >>> inputs = processor(image, ["instance"], return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -3181,7 +3178,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         '👉 Instance Predictions Shape: [512, 683]'
 
         >>> ######## Panoptic Segmentation ########
-        >>> inputs = image_processor(image, ["panoptic"], return_tensors="pt")
+        >>> inputs = processor(image, ["panoptic"], return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

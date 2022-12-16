@@ -56,30 +56,9 @@ from transformers.utils import (
 logger = logging.get_logger(__name__)
 
 
-if TYPE_CHECKING:
-    from transformers import OneFormerForUniversalSegmentationOutput
-
-
 if is_torch_available():
     import torch
     from torch import nn
-
-
-def pad_tokens_to_max_len(tokens, max_len=77):
-    if isinstance(tokens, list):
-        tmp_tokens = []
-        for token in tokens:
-            tmp_tokens.append(token["input_ids"])
-        tokens = tmp_tokens
-        del tmp_tokens
-    else:
-        tokens = tokens["input_ids"]
-
-    padded_tokens = torch.zeros(len(tokens), max_len, dtype=torch.long)
-    for i in range(len(tokens)):
-        token = tokens[i]
-        padded_tokens[i][: len(token)] = torch.tensor(token).long()
-    return padded_tokens
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
@@ -287,6 +266,9 @@ def convert_segmentation_map_to_binary_masks(
     if reduce_labels and ignore_index is None:
         raise ValueError("If `reduce_labels` is True, `ignore_index` must be provided.")
 
+    from icecream import ic
+    ic(np.unique(segmentation_map))
+    
     if reduce_labels:
         segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
 
@@ -304,6 +286,9 @@ def convert_segmentation_map_to_binary_masks(
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:
         labels = np.zeros(all_labels.shape[0])
+
+        from icecream import ic
+        ic(instance_id_to_semantic_id.keys(), all_labels)
 
         for label in all_labels:
             class_id = instance_id_to_semantic_id[label + 1 if reduce_labels else label]
@@ -412,12 +397,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
-        max_seq_len (`int`, *optional*, defaults to 77)):
-            Sequence length for input text list.
-        task_seq_len (`int`, *optional*, defaults to 77):
-            Sequence length for input task token.
-        repo_path (`str`):
-            Model repo on huggingface hub
         class_info_file (`str`):
             JSON file containing class information for the dataset.
         num_text (`int`, *optional*):
@@ -439,9 +418,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
-        max_seq_length: Optional[int] = 77,
-        task_seq_length: int = 77,
-        repo_path: str = None,
         class_info_file: str = None,
         num_text: Optional[int] = None,
         **kwargs
@@ -468,12 +444,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
         self.reduce_labels = reduce_labels
-        self.max_seq_length = max_seq_length
-        self.task_seq_length = task_seq_length
         self.class_info_file = class_info_file
         self.metadata = prepare_metadata(class_info_file)
         self.num_text = num_text
-        self.repo_path = repo_path
 
     def resize(
         self,
@@ -537,6 +510,22 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Normalize the image with the given mean and standard deviation.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format)
+    
+    def convert_segmentation_map_to_binary_masks(
+        self,
+        segmentation_map: "np.ndarray",
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        ignore_index: Optional[int] = None,
+        reduce_labels: bool = False,
+    ):
+        reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+        ignore_index = ignore_index if ignore_index is not None else self.ignore_index
+        return convert_segmentation_map_to_binary_masks(
+            segmentation_map=segmentation_map,
+            instance_id_to_semantic_id=instance_id_to_semantic_id,
+            ignore_index=ignore_index,
+            reduce_labels=reduce_labels,
+        )
 
     def __call__(self, images, task_inputs, segmentation_maps=None, **kwargs) -> BatchFeature:
         return self.preprocess(images, task_inputs, segmentation_maps=segmentation_maps, **kwargs)
@@ -945,10 +934,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
             - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
               `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
+            - **texts_list** -- Optional list of text string entries to be fed to a model (when
+              `annotations` are provided). They identify the binary masks present in the image.
         """
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
         reduce_labels = self.reduce_labels if reduce_labels is None else reduce_labels
-        tokenizer = CLIPTokenizer.from_pretrained(self.repo_path)
 
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
@@ -959,39 +949,26 @@ class OneFormerImageProcessor(BaseImageProcessor):
         pad_size = get_max_height_width(pixel_values_list)
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
-        task_token_inputs = []
-        for idx, task in enumerate(task_inputs):
-            task_input = [f"the task is {task}"]
-            task_token = tokenizer(task_input)
-            task_token = pad_tokens_to_max_len(task_token, max_len=self.task_seq_length)
-            task_token_inputs.append(task_token)
-
-        encoded_inputs["task_inputs"] = torch.cat(task_token_inputs, dim=0)
-
         annotations = None
         if segmentation_maps is not None:
             segmentation_maps = map(np.array, segmentation_maps)
-            converted_segmentation_maps = []
-            for i, segmentation_map in enumerate(segmentation_maps):
-                # Use instance2class_id mapping per image
-                if isinstance(instance_id_to_semantic_id, List):
-                    converted_segmentation_map = convert_segmentation_map_to_binary_masks(
-                        segmentation_map, instance_id_to_semantic_id[i], self.ignore_index, self.reduce_labels
-                    )
-                else:
-                    converted_segmentation_map = convert_segmentation_map_to_binary_masks(
-                        segmentation_map, instance_id_to_semantic_id, self.ignore_index, self.reduce_labels
-                    )
-                converted_segmentation_maps.append(converted_segmentation_map)
-
             annotations = []
-            for mask, classes in converted_segmentation_maps:
-                annotations.append({"masks": mask, "classes": classes})
+            for idx, segmentation_map in enumerate(segmentation_maps):
+                # Use instance2class_id mapping per image
+                if isinstance(instance_id_to_semantic_id, list):
+                    instance_id = instance_id_to_semantic_id[idx]
+                else:
+                    instance_id = instance_id_to_semantic_id
+                # Use instance2class_id mapping per image
+                masks, classes = self.convert_segmentation_map_to_binary_masks(
+                    segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
+                )
+                annotations.append({"masks": masks, "classes": classes})
 
         if annotations:
             mask_labels = []
             class_labels = []
-            text_inputs = []
+            texts_list = []
 
             num_class_obj = {}
             for cls_name in self.metadata["class_names"]:
@@ -1014,13 +991,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 masks = np.concatenate(masks, axis=0)
                 mask_labels.append(torch.from_numpy(masks))
                 class_labels.append(torch.from_numpy(classes).long())
-                text_input_list = [tokenizer(texts[i]) for i in range(len(texts))]
-                text_input_list = pad_tokens_to_max_len(text_input_list, max_len=self.max_seq_length)
-                text_inputs.append(text_input_list.unsqueeze(0))
+                texts_list.append(texts)
 
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
-            encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
+            encoded_inputs["texts_list"] = texts_list
 
         return encoded_inputs
 
@@ -1170,7 +1145,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
-            if "ade20k" in self.repo_path and not is_demo and "instance" in task_type:
+            if "ade20k" in self.class_info_file and not is_demo and "instance" in task_type:
                 for i in range(labels_per_image.shape[0]):
                     labels_per_image[i] = self.metadata["thing_ids"].index(labels_per_image[i].item())
 

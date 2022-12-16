@@ -40,6 +40,7 @@ except ImportError:
     pass
 from transformers import CLIPTokenizer, DinatConfig, SwinConfig
 from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
+from transformers.models.oneformer.processing_oneformer import OneFormerProcessor
 from transformers.models.oneformer.modeling_oneformer import (
     OneFormerConfig,
     OneFormerForUniversalSegmentation,
@@ -202,8 +203,8 @@ class OriginalOneFormerConfigToOursConverter:
         return config
 
 
-class OriginalOneFormerConfigToFeatureExtractorConverter:
-    def __call__(self, original_config: object, model_repo: str) -> OneFormerImageProcessor:
+class OriginalOneFormerConfigToProcessorConverter:
+    def __call__(self, original_config: object, model_repo: str) -> OneFormerProcessor:
         model = original_config.MODEL
         model_input = original_config.INPUT
         dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST_PANOPTIC[0])
@@ -217,7 +218,7 @@ class OriginalOneFormerConfigToFeatureExtractorConverter:
         else:
             raise ValueError("Invalid Dataset!")
 
-        return OneFormerImageProcessor(
+        image_processor =  OneFormerImageProcessor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
@@ -225,10 +226,16 @@ class OriginalOneFormerConfigToFeatureExtractorConverter:
             num_labels=model.SEM_SEG_HEAD.NUM_CLASSES,
             ignore_index=dataset_catalog.ignore_label,
             size_divisibility=32,  # 32 is required by swin
+            class_info_file=class_info_file,
+        )
+
+        tokenizer = CLIPTokenizer.from_pretrained(model_repo)
+
+        return OneFormerProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
             task_seq_length=original_config.INPUT.TASK_SEQ_LEN,
             max_seq_length=original_config.INPUT.MAX_SEQ_LEN,
-            repo_path=model_repo,
-            class_info_file=class_info_file,
         )
 
 
@@ -644,16 +651,6 @@ class OriginalOneFormerCheckpointToOursConverter:
             dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.bias"] = in_proj_bias[256:512]
             dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
             dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.bias"] = in_proj_bias[-256:]
-            # # read in weights + bias of input projection layer of cross-attention
-            # in_proj_weight_cross_attn = src_state_dict.pop(f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.in_proj_weight")
-            # in_proj_bias_cross_attn = src_state_dict.pop(f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.in_proj_bias")
-            # # next, add query, keys and values (in that order) of cross-attention to the state dict
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.q_proj.weight"] = in_proj_weight_cross_attn[:256, :]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.q_proj.bias"] = in_proj_bias_cross_attn[:256]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.k_proj.weight"] = in_proj_weight_cross_attn[256:512, :]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.k_proj.bias"] = in_proj_bias_cross_attn[256:512]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.v_proj.weight"] = in_proj_weight_cross_attn[-256:, :]
-            # dst_state_dict[f"{dst_prefix}.{i}.cross_attn.multihead_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
 
     def replace_transformer_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module"
@@ -937,10 +934,38 @@ class OriginalOneFormerCheckpointToOursConverter:
             yield config, checkpoint
 
 
+def post_process_sem_seg_output(
+        outputs: "OneFormerForUniversalSegmentationOutput", target_size: Tuple[int, int] = None
+    ) -> "torch.Tensor":
+        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
+        class_queries_logits = outputs.class_queries_logits
+        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        masks_queries_logits = outputs.masks_queries_logits
+        if target_size is not None:
+            masks_queries_logits = torch.nn.functional.interpolate(
+                masks_queries_logits,
+                size=target_size,
+                mode="bilinear",
+                align_corners=False,
+            )
+        # remove the null class `[..., :-1]`
+        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        masks_probs = masks_queries_logits.sigmoid()
+        # now we want to sum over the queries,
+        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
+        # where $ softmax(p) \in R^{q, c} $ is the mask classes
+        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
+        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+
+        return segmentation            
+
+
 def test(
     original_model,
     our_model: OneFormerForUniversalSegmentation,
-    feature_extractor: OneFormerImageProcessor,
+    processor: OneFormerProcessor,
     model_repo: str,
 ):
     def pad_tokens_to_max_len(tokens, max_len=77):
@@ -973,7 +998,7 @@ def test(
 
         task_input = ["the task is semantic"]
         task_token = tokenizer(task_input)
-        task_token = pad_tokens_to_max_len(task_token, max_len=feature_extractor.task_seq_length)
+        task_token = pad_tokens_to_max_len(task_token, max_len=processor.task_seq_length)
 
         original_model_backbone_features = original_model.backbone(x.clone())
 
@@ -1019,7 +1044,7 @@ def test(
             x.clone(), task_token, output_hidden_states=True
         )
 
-        our_segmentation = feature_extractor.post_process_sem_seg_output(our_model_out, target_size=(640, 640))[0]
+        our_segmentation = post_process_sem_seg_output(our_model_out, target_size=(640, 640))[0]
 
         assert torch.allclose(
             original_segmentation, our_segmentation, atol=1e-3
@@ -1113,7 +1138,7 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalOneFormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
-        feature_extractor = OriginalOneFormerConfigToFeatureExtractorConverter()(
+        processor = OriginalOneFormerConfigToProcessorConverter()(
             setup_cfg(Args(config_file=config_file)), os.path.join("shi-labs", config_file.stem)
         )
 
@@ -1141,17 +1166,17 @@ if __name__ == "__main__":
         test(
             original_model,
             oneformer_for_universal_segmentation,
-            feature_extractor,
+            processor,
             os.path.join("shi-labs", config_file.stem),
         )
 
         model_name = get_name(checkpoint_file)
         logger.info(f"🪄 Saving {model_name}")
 
-        feature_extractor.save_pretrained(save_directory / model_name)
+        processor.save_pretrained(save_directory / model_name)
         oneformer_for_universal_segmentation.save_pretrained(save_directory / model_name)
 
-        feature_extractor.push_to_hub(
+        processor.push_to_hub(
             repo_id=os.path.join("shi-labs", config_file.stem),
             commit_message="Add configs",
             use_temp_dir=True,

@@ -15,23 +15,27 @@
 
 
 import json
+from typing import Tuple
 import unittest
 
 import numpy as np
 from datasets import load_dataset
 
 from huggingface_hub import hf_hub_download
-from transformers.testing_utils import require_torch, require_vision
+import os
+import tempfile
+
+from transformers.testing_utils import require_torch, require_vision, check_json_file_has_correct_format
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
+from ...test_feature_extraction_common import prepare_image_inputs
 
 
 if is_torch_available():
     import torch
 
     if is_vision_available():
-        from transformers import OneFormerImageProcessor
+        from transformers import CLIPTokenizer, OneFormerImageProcessor, OneFormerProcessor
         from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle
         from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
 
@@ -54,7 +58,7 @@ def prepare_metadata(class_info_file):
     return metadata
 
 
-class OneFormerImageProcessorTester(unittest.TestCase):
+class OneFormerProcessorTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -68,7 +72,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         num_labels=10,
-        reduce_labels=True,
+        reduce_labels=False,
         ignore_index=255,
         max_seq_length=77,
         task_seq_length=77,
@@ -104,8 +108,9 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         self.reduce_labels = reduce_labels
         self.ignore_index = ignore_index
 
-    def prepare_feat_extract_dict(self):
-        return {
+    def prepare_processor_dict(self):
+
+        image_processor_dict = {
             "do_resize": self.do_resize,
             "size": self.size,
             "do_normalize": self.do_normalize,
@@ -115,12 +120,19 @@ class OneFormerImageProcessorTester(unittest.TestCase):
             "num_labels": self.num_labels,
             "reduce_labels": self.reduce_labels,
             "ignore_index": self.ignore_index,
-            "max_seq_length": self.max_seq_length,
-            "task_seq_length": self.task_seq_length,
             "class_info_file": self.class_info_file,
             "metadata": self.metadata,
             "num_text": self.num_text,
-            "repo_path": self.repo_path,
+        }
+        
+        image_processor = OneFormerImageProcessor(**image_processor_dict)
+        tokenizer = CLIPTokenizer.from_pretrained(self.repo_path)
+        
+        return {
+            "image_processor": image_processor,
+            "tokenizer": tokenizer,
+            "max_seq_length": self.max_seq_length,
+            "task_seq_length": self.task_seq_length,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -166,58 +178,49 @@ class OneFormerImageProcessorTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-    image_processing_class = OneFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
+class OneFormerProcessingTest(unittest.TestCase):
+    processing_class = OneFormerProcessor if (is_vision_available() and is_torch_available()) else None
     # only for test_feat_extracttion_common.test_feat_extract_to_json_string
-    feature_extraction_class = image_processing_class
+    feature_extraction_class = processing_class
 
     def setUp(self):
-        self.image_processing_tester = OneFormerImageProcessorTester(self)
+        self.processing_tester = OneFormerProcessorTester(self)
 
     @property
-    def feat_extract_dict(self):
-        return self.image_processing_tester.prepare_feat_extract_dict()
+    def processor_dict(self):
+        return self.processing_tester.prepare_processor_dict()
 
     def test_feat_extract_properties(self):
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(image_processor, "image_mean"))
-        self.assertTrue(hasattr(image_processor, "image_std"))
-        self.assertTrue(hasattr(image_processor, "do_normalize"))
-        self.assertTrue(hasattr(image_processor, "do_resize"))
-        self.assertTrue(hasattr(image_processor, "size"))
-        self.assertTrue(hasattr(image_processor, "max_size"))
-        self.assertTrue(hasattr(image_processor, "ignore_index"))
-        self.assertTrue(hasattr(image_processor, "num_labels"))
-        self.assertTrue(hasattr(image_processor, "max_seq_length"))
-        self.assertTrue(hasattr(image_processor, "task_seq_length"))
-        self.assertTrue(hasattr(image_processor, "class_info_file"))
-        self.assertTrue(hasattr(image_processor, "num_text"))
-        self.assertTrue(hasattr(image_processor, "repo_path"))
+        processor = self.processing_class(**self.processor_dict)
+        self.assertTrue(hasattr(processor, "image_processor"))
+        self.assertTrue(hasattr(processor, "tokenizer"))
+        self.assertTrue(hasattr(processor, "max_seq_length"))
+        self.assertTrue(hasattr(processor, "task_seq_length"))
 
     def test_batch_feature(self):
         pass
 
     def test_call_pil(self):
-        # Initialize image_processor
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+        # Initialize processor
+        processor = self.processing_class(**self.processor_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.image_processing_tester, equal_resolution=False)
+        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
-        encoded_images = image_processor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
+        encoded_images = processor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
 
-        expected_height, expected_width, expected_sequence_length = self.image_processing_tester.get_expected_values(
+        expected_height, expected_width, expected_sequence_length = self.processing_tester.get_expected_values(
             image_inputs
         )
 
         self.assertEqual(
             encoded_images.shape,
-            (1, self.image_processing_tester.num_channels, expected_height, expected_width),
+            (1, self.processing_tester.num_channels, expected_height, expected_width),
         )
 
-        tokenized_task_inputs = image_processor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
+        tokenized_task_inputs = processor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
 
         self.assertEqual(
             tokenized_task_inputs.shape,
@@ -225,53 +228,53 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         )
 
         # Test batched
-        expected_height, expected_width, expected_sequence_length = self.image_processing_tester.get_expected_values(
+        expected_height, expected_width, expected_sequence_length = self.processing_tester.get_expected_values(
             image_inputs, batched=True
         )
 
-        encoded_images = image_processor(
+        encoded_images = processor(
             image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
         ).pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
-                self.image_processing_tester.batch_size,
-                self.image_processing_tester.num_channels,
+                self.processing_tester.batch_size,
+                self.processing_tester.num_channels,
                 expected_height,
                 expected_width,
             ),
         )
 
-        tokenized_task_inputs = image_processor(
+        tokenized_task_inputs = processor(
             image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
         ).task_inputs
 
         self.assertEqual(
             tokenized_task_inputs.shape,
-            (self.image_processing_tester.batch_size, expected_sequence_length),
+            (self.processing_tester.batch_size, expected_sequence_length),
         )
 
     def test_call_numpy(self):
-        # Initialize image_processor
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+        # Initialize processor
+        processor = self.processing_class(**self.processor_dict)
         # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.image_processing_tester, equal_resolution=False, numpify=True)
+        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
         # Test not batched input
-        encoded_images = image_processor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
+        encoded_images = processor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
 
-        expected_height, expected_width, expected_sequence_length = self.image_processing_tester.get_expected_values(
+        expected_height, expected_width, expected_sequence_length = self.processing_tester.get_expected_values(
             image_inputs
         )
 
         self.assertEqual(
             encoded_images.shape,
-            (1, self.image_processing_tester.num_channels, expected_height, expected_width),
+            (1, self.processing_tester.num_channels, expected_height, expected_width),
         )
 
-        tokenized_task_inputs = image_processor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
+        tokenized_task_inputs = processor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
 
         self.assertEqual(
             tokenized_task_inputs.shape,
@@ -279,53 +282,53 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         )
 
         # Test batched
-        expected_height, expected_width, expected_sequence_length = self.image_processing_tester.get_expected_values(
+        expected_height, expected_width, expected_sequence_length = self.processing_tester.get_expected_values(
             image_inputs, batched=True
         )
 
-        encoded_images = image_processor(
+        encoded_images = processor(
             image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
         ).pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
-                self.image_processing_tester.batch_size,
-                self.image_processing_tester.num_channels,
+                self.processing_tester.batch_size,
+                self.processing_tester.num_channels,
                 expected_height,
                 expected_width,
             ),
         )
 
-        tokenized_task_inputs = image_processor(
+        tokenized_task_inputs = processor(
             image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
         ).task_inputs
 
         self.assertEqual(
             tokenized_task_inputs.shape,
-            (self.image_processing_tester.batch_size, expected_sequence_length),
+            (self.processing_tester.batch_size, expected_sequence_length),
         )
 
     def test_call_pytorch(self):
-        # Initialize image_processor
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+        # Initialize processor
+        processor = self.processing_class(**self.processor_dict)
         # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.image_processing_tester, equal_resolution=False, torchify=True)
+        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
-        encoded_images = image_processor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
+        encoded_images = processor(image_inputs[0], ["semantic"], return_tensors="pt").pixel_values
 
-        expected_height, expected_width, expected_sequence_length = self.image_processing_tester.get_expected_values(
+        expected_height, expected_width, expected_sequence_length = self.processing_tester.get_expected_values(
             image_inputs
         )
 
         self.assertEqual(
             encoded_images.shape,
-            (1, self.image_processing_tester.num_channels, expected_height, expected_width),
+            (1, self.processing_tester.num_channels, expected_height, expected_width),
         )
 
-        tokenized_task_inputs = image_processor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
+        tokenized_task_inputs = processor(image_inputs[0], ["semantic"], return_tensors="pt").task_inputs
 
         self.assertEqual(
             tokenized_task_inputs.shape,
@@ -333,56 +336,62 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         )
 
         # Test batched
-        expected_height, expected_width, expected_sequence_length = self.image_processing_tester.get_expected_values(
+        expected_height, expected_width, expected_sequence_length = self.processing_tester.get_expected_values(
             image_inputs, batched=True
         )
 
-        encoded_images = image_processor(
+        encoded_images = processor(
             image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
         ).pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
-                self.image_processing_tester.batch_size,
-                self.image_processing_tester.num_channels,
+                self.processing_tester.batch_size,
+                self.processing_tester.num_channels,
                 expected_height,
                 expected_width,
             ),
         )
 
-        tokenized_task_inputs = image_processor(
+        tokenized_task_inputs = processor(
             image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
         ).task_inputs
 
         self.assertEqual(
             tokenized_task_inputs.shape,
-            (self.image_processing_tester.batch_size, expected_sequence_length),
+            (self.processing_tester.batch_size, expected_sequence_length),
         )
 
     def test_equivalence_pad_and_create_pixel_mask(self):
-        # Initialize image_processors
-        image_processor_1 = self.image_processing_class(**self.feat_extract_dict)
-        image_processor_2 = self.image_processing_class(
+        # Initialize processors
+        processor_1 = self.processing_class(**self.processor_dict)
+        
+        image_processor = OneFormerImageProcessor(
             do_resize=False,
             do_normalize=False,
             do_rescale=False,
-            num_labels=self.image_processing_tester.num_classes,
-            max_seq_length=77,
-            task_seq_length=77,
+            num_labels=self.processing_tester.num_classes,
             class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processing_tester.num_text,
-            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+            num_text=self.processing_tester.num_text,
         )
+        tokenizer = CLIPTokenizer.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+        processor_2 = self.processing_class(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            max_seq_length=77,
+            task_seq_length=77
+        )
+
         # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.image_processing_tester, equal_resolution=False, torchify=True)
+        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
         # Test whether the method "pad_and_return_pixel_mask" and calling the image processor return the same tensors
-        encoded_images_with_method = image_processor_1.encode_inputs(
+        encoded_images_with_method = processor_1.encode_inputs(
             image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt"
         )
-        encoded_images = image_processor_2(image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt")
+        encoded_images = processor_2(image_inputs, ["semantic"] * len(image_inputs), return_tensors="pt")
 
         self.assertTrue(
             torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
@@ -391,15 +400,15 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
         )
 
-    def comm_get_image_processor_inputs(
+    def comm_get_processor_inputs(
         self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"
     ):
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+        processor = self.processing_class(**self.processor_dict)
         # prepare image and target
-        num_labels = self.image_processing_tester.num_labels
+        num_labels = self.processing_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = prepare_image_inputs(self.image_processing_tester, equal_resolution=False)
+        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False)
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
@@ -413,7 +422,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
             if segmentation_type == "pil":
                 annotations = [Image.fromarray(annotation) for annotation in annotations]
 
-        inputs = image_processor(
+        inputs = processor(
             image_inputs,
             ["semantic"] * len(image_inputs),
             annotations,
@@ -427,14 +436,48 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
     def test_init_without_params(self):
         pass
 
+    def test_feat_extract_from_and_save_pretrained(self):
+        feat_extract_first = self.feature_extraction_class(**self.processor_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            feat_extract_first.save_pretrained(tmpdirname)
+            check_json_file_has_correct_format(os.path.join(tmpdirname, "preprocessor_config.json"))
+            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
+
+        self.assertEqual(feat_extract_second.image_processor.to_dict(), feat_extract_first.image_processor.to_dict())
+        self.assertIsInstance(feat_extract_first.image_processor, OneFormerImageProcessor)
+        self.assertIsInstance(feat_extract_first.tokenizer, CLIPTokenizer)
+
     def test_with_size_divisor(self):
         size_divisors = [8, 16, 32]
         weird_input_sizes = [(407, 802), (582, 1094)]
+        image_processor_dict = {
+            "do_resize": self.processing_tester.do_resize,
+            "size": self.processing_tester.size,
+            "do_normalize": self.processing_tester.do_normalize,
+            "image_mean": self.processing_tester.image_mean,
+            "image_std": self.processing_tester.image_std,
+            "size_divisor": self.processing_tester.size_divisor,
+            "num_labels": self.processing_tester.num_labels,
+            "reduce_labels": self.processing_tester.reduce_labels,
+            "ignore_index": self.processing_tester.ignore_index,
+            "class_info_file": self.processing_tester.class_info_file,
+            "metadata": self.processing_tester.metadata,
+            "num_text": self.processing_tester.num_text,
+        }
+        tokenizer = CLIPTokenizer.from_pretrained(self.processing_tester.repo_path)
+
         for size_divisor in size_divisors:
-            feat_extract_dict = {**self.feat_extract_dict, **{"size_divisor": size_divisor}}
-            image_processor = self.image_processing_class(**feat_extract_dict)
+            image_process_dict = {**image_processor_dict, **{"size_divisor": size_divisor}}
+            image_processor = OneFormerImageProcessor(**image_process_dict)
+            processor = self.processing_class(
+                image_processor=image_processor,
+                tokenizer=tokenizer,
+                max_seq_length=self.processing_tester.max_seq_length,
+                task_seq_length=self.processing_tester.task_seq_length,
+            )
             for weird_input_size in weird_input_sizes:
-                inputs = image_processor([np.ones((3, *weird_input_size))], ["semantic"], return_tensors="pt")
+                inputs = processor([np.ones((3, *weird_input_size))], ["semantic"], return_tensors="pt")
                 pixel_values = inputs["pixel_values"]
                 # check if divisible
                 self.assertTrue((pixel_values.shape[-1] % size_divisor) == 0)
@@ -442,7 +485,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
 
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):
-            inputs = self.comm_get_image_processor_inputs(
+            inputs = self.comm_get_processor_inputs(
                 with_segmentation_maps=True, is_instance_map=is_instance_map, segmentation_type=segmentation_type
             )
 
@@ -456,7 +499,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
                 self.assertEqual(mask_label.shape[0], class_label.shape[0])
                 # this ensure padding has happened
                 self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
-                self.assertEqual(text_inputs.shape[1], self.image_processing_tester.num_text)
+                self.assertEqual(text_inputs.shape[1], self.processing_tester.num_text)
 
         common()
         common(is_instance_map=True)
@@ -494,21 +537,26 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         panoptic_map1, inst2class1 = create_panoptic_map(annotation1, segments_info1)
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
-        # create an image processor
         image_processor = OneFormerImageProcessor(
             reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
+            class_info_file="ade20k_panoptic.json",
+            num_text=self.processing_tester.num_text,
+        )
+
+        tokenizer = CLIPTokenizer.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+
+        processor = OneFormerProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processing_tester.num_text,
-            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
 
         # prepare the images and annotations
         pixel_values_list = [np.moveaxis(np.array(image1), -1, 0), np.moveaxis(np.array(image2), -1, 0)]
-        inputs = image_processor.encode_inputs(
+        inputs = processor.encode_inputs(
             pixel_values_list,
             ["semantic", "semantic"],
             [panoptic_map1, panoptic_map2],
@@ -520,7 +568,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 711))
         self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 711))
         self.assertEqual(inputs["task_inputs"].shape, (2, 77))
-        self.assertEqual(inputs["text_inputs"].shape, (2, self.image_processing_tester.num_text, 77))
+        self.assertEqual(inputs["text_inputs"].shape, (2, self.processing_tester.num_text, 77))
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
@@ -581,21 +629,26 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         panoptic_map1, inst2class1 = create_panoptic_map(annotation1, segments_info1)
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
-        # create an image processor
         image_processor = OneFormerImageProcessor(
             reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
+            class_info_file="ade20k_panoptic.json",
+            num_text=self.processing_tester.num_text,
+        )
+
+        tokenizer = CLIPTokenizer.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+
+        processor = OneFormerProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processing_tester.num_text,
-            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
 
         # prepare the images and annotations
         pixel_values_list = [np.moveaxis(np.array(image1), -1, 0), np.moveaxis(np.array(image2), -1, 0)]
-        inputs = image_processor.encode_inputs(
+        inputs = processor.encode_inputs(
             pixel_values_list,
             ["instance", "instance"],
             [panoptic_map1, panoptic_map2],
@@ -607,7 +660,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 711))
         self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 711))
         self.assertEqual(inputs["task_inputs"].shape, (2, 77))
-        self.assertEqual(inputs["text_inputs"].shape, (2, self.image_processing_tester.num_text, 77))
+        self.assertEqual(inputs["text_inputs"].shape, (2, self.processing_tester.num_text, 77))
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
@@ -668,21 +721,26 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         panoptic_map1, inst2class1 = create_panoptic_map(annotation1, segments_info1)
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
-        # create an image processor
         image_processor = OneFormerImageProcessor(
             reduce_labels=True,
             ignore_index=0,
             size=(512, 512),
+            class_info_file="ade20k_panoptic.json",
+            num_text=self.processing_tester.num_text,
+        )
+
+        tokenizer = CLIPTokenizer.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+
+        processor = OneFormerProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processing_tester.num_text,
-            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
 
         # prepare the images and annotations
         pixel_values_list = [np.moveaxis(np.array(image1), -1, 0), np.moveaxis(np.array(image2), -1, 0)]
-        inputs = image_processor.encode_inputs(
+        inputs = processor.encode_inputs(
             pixel_values_list,
             ["panoptic", "panoptic"],
             [panoptic_map1, panoptic_map2],
@@ -694,7 +752,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 711))
         self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 711))
         self.assertEqual(inputs["task_inputs"].shape, (2, 77))
-        self.assertEqual(inputs["text_inputs"].shape, (2, self.image_processing_tester.num_text, 77))
+        self.assertEqual(inputs["text_inputs"].shape, (2, self.processing_tester.num_text, 77))
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
@@ -735,101 +793,92 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         self.assertEqual(rle[0], 21)
         self.assertEqual(rle[1], 45)
 
-    def test_post_process_sem_seg_output(self):
-        fature_extractor = self.image_processing_class(
-            num_labels=self.image_processing_tester.num_classes,
-            max_seq_length=77,
-            task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processing_tester.num_text,
-            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
-        )
-        outputs = self.image_processing_tester.get_fake_oneformer_outputs()
-        segmentation = fature_extractor.post_process_sem_seg_output(outputs)
-
-        self.assertEqual(
-            segmentation.shape,
-            (
-                self.image_processing_tester.batch_size,
-                self.image_processing_tester.num_classes,
-                self.image_processing_tester.height,
-                self.image_processing_tester.width,
-            ),
-        )
-
-        target_size = (1, 4)
-        segmentation = fature_extractor.post_process_sem_seg_output(outputs, target_size=target_size)
-
-        self.assertEqual(
-            segmentation.shape,
-            (self.image_processing_tester.batch_size, self.image_processing_tester.num_classes, *target_size),
-        )
-
     def test_post_process_semantic_segmentation(self):
-        fature_extractor = self.image_processing_class(
-            num_labels=self.image_processing_tester.num_classes,
+        image_processor = OneFormerImageProcessor(
+            reduce_labels=True,
+            ignore_index=0,
+            size=(512, 512),
+            class_info_file="ade20k_panoptic.json",
+            num_text=self.processing_tester.num_text,
+        )
+        tokenizer = CLIPTokenizer.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+        processor = OneFormerProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processing_tester.num_text,
-            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
-        outputs = self.image_processing_tester.get_fake_oneformer_outputs()
 
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
+        outputs = self.processing_tester.get_fake_oneformer_outputs()
 
-        self.assertEqual(len(segmentation), self.image_processing_tester.batch_size)
+        segmentation = processor.post_process_semantic_segmentation(outputs)
+
+        self.assertEqual(len(segmentation), self.processing_tester.batch_size)
         self.assertEqual(
             segmentation[0].shape,
             (
-                self.image_processing_tester.height,
-                self.image_processing_tester.width,
+                self.processing_tester.height,
+                self.processing_tester.width,
             ),
         )
 
-        target_sizes = [(1, 4) for i in range(self.image_processing_tester.batch_size)]
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+        target_sizes = [(1, 4) for i in range(self.processing_tester.batch_size)]
+        segmentation = processor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
 
         self.assertEqual(segmentation[0].shape, target_sizes[0])
 
     def test_post_process_instance_segmentation(self):
-        image_processor = self.image_processing_class(
-            num_labels=self.image_processing_tester.num_classes,
+        image_processor = OneFormerImageProcessor(
+            reduce_labels=True,
+            ignore_index=0,
+            size=(512, 512),
+            class_info_file="ade20k_panoptic.json",
+            num_text=self.processing_tester.num_text,
+        )
+        tokenizer = CLIPTokenizer.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+        processor = OneFormerProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processing_tester.num_text,
-            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
-        outputs = self.image_processing_tester.get_fake_oneformer_outputs()
-        segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
 
-        self.assertTrue(len(segmentation) == self.image_processing_tester.batch_size)
+        outputs = self.processing_tester.get_fake_oneformer_outputs()
+        segmentation = processor.post_process_instance_segmentation(outputs, threshold=0)
+
+        self.assertTrue(len(segmentation) == self.processing_tester.batch_size)
         for el in segmentation:
             self.assertTrue("segmentation" in el)
             self.assertTrue("segments_info" in el)
             self.assertEqual(type(el["segments_info"]), list)
             self.assertEqual(
-                el["segmentation"].shape, (self.image_processing_tester.height, self.image_processing_tester.width)
+                el["segmentation"].shape, (self.processing_tester.height, self.processing_tester.width)
             )
 
     def test_post_process_panoptic_segmentation(self):
-        image_processor = self.image_processing_class(
-            num_labels=self.image_processing_tester.num_classes,
+        image_processor = OneFormerImageProcessor(
+            reduce_labels=True,
+            ignore_index=0,
+            size=(512, 512),
+            class_info_file="ade20k_panoptic.json",
+            num_text=self.processing_tester.num_text,
+        )
+        tokenizer = CLIPTokenizer.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+        processor = OneFormerProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
             max_seq_length=77,
             task_seq_length=77,
-            class_info_file="ade20k_panoptic.json",
-            num_text=self.image_processing_tester.num_text,
-            repo_path="shi-labs/oneformer_ade20k_swin_tiny",
         )
-        outputs = self.image_processing_tester.get_fake_oneformer_outputs()
-        segmentation = image_processor.post_process_panoptic_segmentation(outputs, threshold=0)
+        
+        outputs = self.processing_tester.get_fake_oneformer_outputs()
+        segmentation = processor.post_process_panoptic_segmentation(outputs, threshold=0)
 
-        self.assertTrue(len(segmentation) == self.image_processing_tester.batch_size)
+        self.assertTrue(len(segmentation) == self.processing_tester.batch_size)
         for el in segmentation:
             self.assertTrue("segmentation" in el)
             self.assertTrue("segments_info" in el)
             self.assertEqual(type(el["segments_info"]), list)
             self.assertEqual(
-                el["segmentation"].shape, (self.image_processing_tester.height, self.image_processing_tester.width)
+                el["segmentation"].shape, (self.processing_tester.height, self.processing_tester.width)
             )
