@@ -88,7 +88,7 @@ class ANY:
         return f"ANY({', '.join(_type.__name__ for _type in self._types)})"
 
 
-def test_to_skip(test_casse_name, config_class, model_architecture, tokenizer_name, processor_name):
+def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer_name, processor_name):
     """Some tests are just not working"""
 
     to_skip = False
@@ -303,7 +303,9 @@ class PipelineTestCaseMeta(type):
                         repo_name = f"tiny-random-{model_arch_name}"
                         for tokenizer_name in tokenizer_names:
                             for processor_name in processor_names:
-                                if test_to_skip(name, config_class, model_architecture, tokenizer_name, processor_name):
+                                if is_test_to_skip(
+                                    name, config_class, model_architecture, tokenizer_name, processor_name
+                                ):
                                     continue
                                 test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
                                 dct[test_name] = gen_test(
