@@ -71,7 +71,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_swin2sr import Swin2SRImageProcessor
+        from .image_processing_swin2sr import Swin2SRImageProcessor
 
 
 else:
