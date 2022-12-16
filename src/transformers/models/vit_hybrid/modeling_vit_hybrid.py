@@ -358,7 +358,6 @@ class ViTHybridOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->ViTHybrid
 class ViTHybridLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -387,7 +386,8 @@ class ViTHybridLayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        # We assign to correct device for `accelerate`, check: https://github.com/huggingface/transformers/pull/20705/
+        hidden_states = attention_output + hidden_states.to(attention_output.device)
 
         # in ViTHybrid, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)

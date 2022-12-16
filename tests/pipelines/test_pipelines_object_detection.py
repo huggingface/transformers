@@ -256,17 +256,9 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             "https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png"
         )
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(outputs, decimals=3),
             [
-                {
-                    "score": 0.9982,
-                    "label": "B-QUESTION",
-                    "box": {"xmin": 654, "ymin": 165, "xmax": 719, "ymax": 719},
-                },
-                {
-                    "score": 0.9982,
-                    "label": "I-QUESTION",
-                    "box": {"xmin": 691, "ymin": 202, "xmax": 735, "ymax": 735},
-                },
+                {"score": 0.998, "label": "B-QUESTION", "box": {"xmin": 462, "ymin": 234, "xmax": 508, "ymax": 249}},
+                {"score": 0.999, "label": "I-QUESTION", "box": {"xmin": 489, "ymin": 286, "xmax": 519, "ymax": 301}},
             ],
         )

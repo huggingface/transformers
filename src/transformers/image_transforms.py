@@ -18,25 +18,28 @@ from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import ExplicitEnum, TensorType
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from transformers.image_utils import (
+    ChannelDimension,
+    ImageInput,
+    get_channel_dimension_axis,
+    get_image_size,
+    infer_channel_dimension_format,
+    to_numpy_array,
+)
+from transformers.utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
+from transformers.utils.import_utils import (
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+    requires_backends,
+)
 
 
 if is_vision_available():
     import PIL
 
-    from .image_utils import (
-        ChannelDimension,
-        PILImageResampling,
-        get_channel_dimension_axis,
-        get_image_size,
-        infer_channel_dimension_format,
-        is_jax_tensor,
-        is_tf_tensor,
-        is_torch_tensor,
-        to_numpy_array,
-    )
-
+    from .image_utils import PILImageResampling
 
 if is_torch_available():
     import torch
@@ -116,9 +119,9 @@ def rescale(
 
 
 def to_pil_image(
-    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
+    image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
-) -> PIL.Image.Image:
+) -> "PIL.Image.Image":
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
     needed.
@@ -133,6 +136,8 @@ def to_pil_image(
     Returns:
         `PIL.Image.Image`: The converted image.
     """
+    requires_backends(to_pil_image, ["vision"])
+
     if isinstance(image, PIL.Image.Image):
         return image
 
@@ -226,7 +231,7 @@ def get_resize_output_image_size(
 def resize(
     image,
     size: Tuple[int, int],
-    resample=PILImageResampling.BILINEAR,
+    resample: "PILImageResampling" = None,
     reducing_gap: Optional[int] = None,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
@@ -253,6 +258,10 @@ def resize(
     Returns:
         `np.ndarray`: The resized image.
     """
+    requires_backends(resize, ["vision"])
+
+    resample = resample if resample is not None else PILImageResampling.BILINEAR
+
     if not len(size) == 2:
         raise ValueError("size must have 2 elements")
 
@@ -263,8 +272,6 @@ def resize(
     # To maintain backwards compatibility with the resizing done in previous image feature extractors, we use
     # the pillow library to resize the image and then convert back to numpy
     if not isinstance(image, PIL.Image.Image):
-        # PIL expects image to have channels last
-        image = to_channel_dimension_format(image, ChannelDimension.LAST)
         image = to_pil_image(image)
     height, width = size
     # PIL images are in the format (width, height)
@@ -303,6 +310,8 @@ def normalize(
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If unset, will use the inferred format from the input.
     """
+    requires_backends(normalize, ["vision"])
+
     if isinstance(image, PIL.Image.Image):
         warnings.warn(
             "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
@@ -372,6 +381,8 @@ def center_crop(
     Returns:
         `np.ndarray`: The cropped image.
     """
+    requires_backends(center_crop, ["vision"])
+
     if isinstance(image, PIL.Image.Image):
         warnings.warn(
             "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
@@ -676,4 +687,23 @@ def pad(
         raise ValueError(f"Invalid padding mode: {mode}")
 
     image = to_channel_dimension_format(image, data_format) if data_format is not None else image
+    return image
+
+
+# TODO (Amy): Accept 1/3/4 channel numpy array as input and return np.array as default
+def convert_to_rgb(image: ImageInput) -> ImageInput:
+    """
+    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+    as is.
+
+    Args:
+        image (Image):
+            The image to convert.
+    """
+    requires_backends(convert_to_rgb, ["vision"])
+
+    if not isinstance(image, PIL.Image.Image):
+        return image
+
+    image = image.convert("RGB")
     return image
