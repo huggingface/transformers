@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CPMAnt """
+""" PyTorch CPMAnt"""
 
 
 import math
@@ -44,7 +44,7 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch """
+    """Load tf checkpoints in a pytorch"""
     try:
         import re
 
@@ -278,7 +278,7 @@ class CPMAntAttention(nn.Module):
         self.project_q = CPMAntLinear(self.dim_model, self.num_heads * self.dim_head, dtype=dtype)
         self.project_k = CPMAntLinear(self.dim_model, self.num_heads * self.dim_head, dtype=dtype)
         self.project_v = CPMAntLinear(self.dim_model, self.num_heads * self.dim_head, dtype=dtype)
-        
+
         self.attention_out = CPMAntLinear(self.num_heads * self.dim_head, self.dim_model, dtype=dtype)
 
         self.softmax = torch.nn.Softmax(dim=-1)
@@ -312,11 +312,11 @@ class CPMAntAttention(nn.Module):
         batch_size = hidden_q.size(0)
         len_q = hidden_q.size(1)
         len_k = hidden_kv.size(1)
-        
+
         query = self.project_q(hidden_q)
         key = self.project_k(hidden_kv)
         value = self.project_v(hidden_kv)
-        
+
         query = query.view(batch_size, len_q, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
         key = key.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
         value = value.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
@@ -353,7 +353,7 @@ class CPMAntAttention(nn.Module):
         score = score.contiguous().view(batch_size, len_q, self.num_heads * self.dim_head)
 
         score = self.attention_out(score)
-        
+
         if use_cache:
             return score, (key, value)
 
@@ -431,7 +431,7 @@ class CPMAntSelfAttentionBlock(nn.Module):
 
         if use_cache:
             return hidden_states, current_key_value
-            
+
         return hidden_states
 
 
@@ -650,14 +650,14 @@ class CPMAntTransformerBlock(nn.Module):
     ):
         """
         Args:
-            self_hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`): 
+            self_hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`):
                 Input of transformer block(self-attention block). It can be the raw embedding of a batch of sequences.
             self_attention_mask (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Avoid invalid areas to participate in the calculation of self-attention.
             self_position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
         """  # noqa: E501
-        
+
         current_key_value = None
         if not self.mask_att:
             hidden_states = self.self_att(
@@ -675,10 +675,10 @@ class CPMAntTransformerBlock(nn.Module):
         # (batch, dim_model, len_seq)
         if not self.mask_ffn:
             hidden_states = self.ffn(hidden_states)
-        
+
         if use_cache:
             return hidden_states, current_key_value
-            
+
         return hidden_states
 
 
@@ -752,9 +752,9 @@ class CPMAntEncoder(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.Tensor` of `(batch, seq_enc, dim_model)`): 
+            hidden_states (`torch.Tensor` of `(batch, seq_enc, dim_model)`):
                 Input of encoder, might be the embedding of a batch of sequences.
-            attention_mask (`torch.Tensor` of `(batch, seq_enc, seq_enc)`): 
+            attention_mask (`torch.Tensor` of `(batch, seq_enc, seq_enc)`):
                 Avoid invalid areas to participate in the calculation.
             position_bias (`torch.Tensor` of shape `(num_heads, seq_enc, seq_enc)`):
                 Provides position information to attention mechanism.
@@ -779,10 +779,10 @@ class CPMAntEncoder(nn.Module):
                         current_key_values.append(hidden_states[1])
                         hidden_states = hidden_states[0]
                 hidden_states = self.output_layernorm(hidden_states)
-                
+
                 if use_cache:
                     return hidden_states, current_key_values
-                    
+
                 return hidden_states
 
 
@@ -898,7 +898,6 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
                 absolute_position_bucket[None, :, :],
                 relative_position_bucket,
             )
-            # (batch, len_q, len_k)
 
         # (batch, len_q, len_k, num_heads)
         embeds = F.embedding(relative_position_bucket, self.relative_attention_bias)
@@ -985,7 +984,7 @@ CPMANT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`~CPMAntConfig`]): Model configuration class with all the parameters of the 
+        config ([`~CPMAntConfig`]): Model configuration class with all the parameters of the
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -1146,7 +1145,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         self.input_embedding = CPMAntEmbeddings(vocab_size=config.vocab_size)
         self.position_bias = CPMAntSegmentPositionEmbedding()
         self.prompt_length = config.prompt_length
-       
+
     def forward(
         self,
         input: torch.Tensor,
@@ -1192,8 +1191,8 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
 
         hidden_states = self.encoder(hidden_states, attention_mask, position_bias)
         logits = self.input_embedding.projection(hidden_states)
-        return logits, hidden_states    
-        
+        return logits, hidden_states
+
     def inference(
         self,
         input: torch.Tensor,
@@ -1221,12 +1220,12 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             past_key_values = tuple([None] * self.encoder.num_layers)
             input_prompt = input[:, : self.prompt_length].contiguous()
             input_ids = input[:, self.prompt_length :].contiguous()
-            
+
             prompt_states = self.prompt_embedding(input_prompt)
             hidden_states = self.input_embedding(input_ids)
             segment_states = self.segment_embedding(segment)
             hidden_states = torch.cat([prompt_states, hidden_states], 1) + segment_states
-            
+
         else:
             past_length = past_key_values[0][0].size(-2)
             segment_states = self.segment_embedding(segment)
