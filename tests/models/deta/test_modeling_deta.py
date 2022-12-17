@@ -579,9 +579,9 @@ class DetaModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
 
     def test_inference_object_detection_head_with_box_refine_two_stage(self):
-        model = DetaForObjectDetection.from_pretrained(
-            "SenseTime/deformable-detr-with-box-refine-two-stage"
-        ).to(torch_device)
+        model = DetaForObjectDetection.from_pretrained("SenseTime/deformable-detr-with-box-refine-two-stage").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

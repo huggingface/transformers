@@ -26,8 +26,9 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-
 from torchvision.ops.boxes import batched_nms
+
+from transformers import AutoBackbone
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -35,7 +36,6 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
-    is_timm_available,
     is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
@@ -65,10 +65,10 @@ else:
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+
 def box_cxcywh_to_xyxy(x):
     x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h),
-         (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
     return torch.stack(b, dim=-1)
 
 
@@ -123,9 +123,6 @@ class MultiScaleDeformableAttentionFunction(Function):
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
-if is_timm_available():
-    from timm import create_model
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DetaConfig"
@@ -137,13 +134,12 @@ DETA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderOutput with DeformableDetr->Deta
 class DetaDecoderOutput(ModelOutput):
     """
-    Base class for outputs of the DetaDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
+    Base class for outputs of the DetaDecoder. This class adds two attributes to BaseModelOutputWithCrossAttentions,
+    namely:
     - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
     - a stacked tensor of intermediate reference points.
 
@@ -383,10 +379,9 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrTimmConvEncoder with DeformableDetr->Deta
-class DetaTimmConvEncoder(nn.Module):
+class DetrConvolutionalBackbone(nn.Module):
     """
-    Convolutional encoder (backbone) from the timm library.
+    Convolutional encoder (backbone).
 
     nn.BatchNorm2d layers are replaced by DetaFrozenBatchNorm2d as defined above.
     """
@@ -394,24 +389,15 @@ class DetaTimmConvEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        kwargs = {}
-        if config.dilation:
-            kwargs["output_stride"] = 16
-
-        requires_backends(self, ["timm"])
-
-        out_indices = (2, 3, 4) if config.num_feature_levels > 1 else (4,)
-        backbone = create_model(
-            config.backbone, pretrained=True, features_only=True, out_indices=out_indices, **kwargs
-        )
-        # replace batch norm by frozen batch norm
-        with torch.no_grad():
-            replace_batch_norm(backbone)
+        backbone = AutoBackbone.from_config(config.backbone_config)
+        # TODO replace batch norm by frozen batch norm
+        # with torch.no_grad():
+        #     replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.feature_info.channels()
-        self.strides = self.model.feature_info.reduction()
+        self.intermediate_channel_sizes = self.model.channels
 
-        if "resnet" in config.backbone:
+        # TODO fix this
+        if config.backbone_config.model_type == "resnet":
             for name, parameter in self.model.named_parameters():
                 if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                     parameter.requires_grad_(False)
@@ -1449,8 +1435,8 @@ class DetaDecoder(DetaPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The bare DETA Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
-    hidden-states without any specific head on top.
+    The bare DETA Model (consisting of a backbone and encoder-decoder Transformer) outputting raw hidden-states without
+    any specific head on top.
     """,
     DETA_START_DOCSTRING,
 )
@@ -1459,13 +1445,13 @@ class DetaModel(DetaPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetaTimmConvEncoder(config)
+        backbone = DetrConvolutionalBackbone(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetaConvModel(backbone, position_embeddings)
 
         # Create input projection layers
         if config.num_feature_levels > 1:
-            num_backbone_outs = len(backbone.strides)
+            num_backbone_outs = len(backbone.intermediate_channel_sizes)
             input_proj_list = []
             for _ in range(num_backbone_outs):
                 in_channels = backbone.intermediate_channel_sizes[_]
@@ -1608,7 +1594,7 @@ class DetaModel(DetaPreTrainedModel):
         output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse sigmoid
         output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
         output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
-        
+
         # assign each pixel as an object query
         object_query = enc_output
         object_query = object_query.masked_fill(padding_mask.unsqueeze(-1), float(0))
@@ -1769,7 +1755,7 @@ class DetaModel(DetaPreTrainedModel):
             # only keep top scoring `config.two_stage_num_proposals` proposals
             topk = self.two_stage_num_proposals
             proposal_logit = enc_outputs_class[..., 0]
-            
+
             if self.assign_first_stage:
                 proposal_boxes = box_cxcywh_to_xyxy(enc_outputs_coord_logits.sigmoid().float()).clamp(0, 1)
                 topk_proposals = []
@@ -1786,16 +1772,24 @@ class DetaModel(DetaPreTrainedModel):
                     pre_nms_inds = torch.cat(pre_nms_inds)
 
                     # nms on topk indices
-                    post_nms_inds = batched_nms(prop_boxes_b[pre_nms_inds], prop_logits_b[pre_nms_inds], level_ids[pre_nms_inds], 0.9)
+                    post_nms_inds = batched_nms(
+                        prop_boxes_b[pre_nms_inds], prop_logits_b[pre_nms_inds], level_ids[pre_nms_inds], 0.9
+                    )
                     keep_inds = pre_nms_inds[post_nms_inds]
 
                     if len(keep_inds) < self.two_stage_num_proposals:
-                        print(f'[WARNING] nms proposals ({len(keep_inds)}) < {self.two_stage_num_proposals}, running naive topk')
+                        print(
+                            f"[WARNING] nms proposals ({len(keep_inds)}) < {self.two_stage_num_proposals}, running"
+                            " naive topk"
+                        )
                         keep_inds = torch.topk(proposal_logit[b], topk)[1]
 
                     # keep top Q/L indices for L levels
                     q_per_l = topk // len(spatial_shapes)
-                    is_level_ordered = level_ids[keep_inds][None] == torch.arange(len(spatial_shapes), device=level_ids.device)[:,None]  # LS
+                    is_level_ordered = (
+                        level_ids[keep_inds][None]
+                        == torch.arange(len(spatial_shapes), device=level_ids.device)[:, None]
+                    )  # LS
                     keep_inds_mask = is_level_ordered & (is_level_ordered.cumsum(1) <= q_per_l)  # LS
                     keep_inds_mask = keep_inds_mask.any(0)  # S
 
@@ -1808,10 +1802,10 @@ class DetaModel(DetaPreTrainedModel):
                     # index
                     keep_inds_topk = keep_inds[keep_inds_mask]
                     topk_proposals.append(keep_inds_topk)
-                topk_proposals = torch.stack(topk_proposals) 
+                topk_proposals = torch.stack(topk_proposals)
             else:
                 topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
-            
+
             topk_coords_logits = torch.gather(
                 enc_outputs_coord_logits, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
             )
@@ -1865,8 +1859,8 @@ class DetaModel(DetaPreTrainedModel):
 
 @add_start_docstrings(
     """
-    DETA Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
-    top, for tasks such as COCO detection.
+    DETA Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top, for tasks
+    such as COCO detection.
     """,
     DETA_START_DOCSTRING,
 )
@@ -2153,9 +2147,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss with DeformableDetr->Deta
 class DetaLoss(nn.Module):
     """
-    This class computes the losses for `DetaForObjectDetection`. The process happens in two steps: 1) we
-    compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of
-    matched ground-truth / prediction (supervise class and box).
+    This class computes the losses for `DetaForObjectDetection`. The process happens in two steps: 1) we compute
+    hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched
+    ground-truth / prediction (supervise class and box).
 
     Args:
         matcher (`DetaHungarianMatcher`):

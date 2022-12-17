@@ -16,6 +16,8 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import CONFIG_MAPPING
+from ..resnet import ResNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -25,22 +27,22 @@ DETA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class DetaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DetaModel`]. It is used to instantiate
-    a DETA model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the DETA
+    This is the configuration class to store the configuration of a [`DetaModel`]. It is used to instantiate a DETA
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the DETA
     [SenseTime/deformable-detr](https://huggingface.co/SenseTime/deformable-detr) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+            The configuration of the backbone model.
         num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DetaModel`] can detect in a single image. In case `two_stage` is set to `True`, we use
-            `two_stage_num_proposals` instead.
+            Number of object queries, i.e. detection slots. This is the maximal number of objects [`DetaModel`] can
+            detect in a single image. In case `two_stage` is set to `True`, we use `two_stage_num_proposals` instead.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
         encoder_layers (`int`, *optional*, defaults to 6):
@@ -139,6 +141,7 @@ class DetaConfig(PretrainedConfig):
 
     def __init__(
         self,
+        backbone_config=None,
         num_queries=300,
         max_position_embeddings=1024,
         encoder_layers=6,
@@ -180,6 +183,16 @@ class DetaConfig(PretrainedConfig):
         focal_alpha=0.25,
         **kwargs
     ):
+        if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+            backbone_config = ResNetConfig()
+        else:
+            if isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.pop("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
+
+        self.backbone_config = backbone_config
         self.num_queries = num_queries
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
