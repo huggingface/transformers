@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,25 +25,26 @@ from ...utils import TensorType
 
 class BridgeTowerProcessor(ProcessorMixin):
     r"""
-    Constructs a BridgeTower processor which wraps a Roberta tokenizer and BridgeTower feature extractor into a single
+    Constructs a BridgeTower processor which wraps a Roberta tokenizer and BridgeTower image processor into a single
     processor.
 
-    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerFeatureExtractor`] and
+    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerImageProcessor`] and
     [`RobertaTokenizerFast`]. See the docstring of [`~BridgeTowerProcessor.__call__`] and
     [`~BridgeTowerProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (`BridgeTowerFeatureExtractor`):
-            An instance of [`BridgeTowerFeatureExtractor`]. The feature extractor is a required input.
+        image_processor (`BridgeTowerImageProcessor`):
+            An instance of [`BridgeTowerImageProcessor`]. The image processor is a required input.
         tokenizer (`RobertaTokenizerFast`):
             An instance of ['RobertaTokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "BridgeTowerFeatureExtractor"
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "BridgeTowerImageProcessor"
     tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
+    def __init__(self, image_processor, tokenizer):
+        super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
 
     def __call__(
         self,
@@ -66,7 +67,7 @@ class BridgeTowerProcessor(ProcessorMixin):
         **kwargs
     ) -> BatchEncoding:
         """
-        This method uses [`BridgeTowerFeatureExtractor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`BridgeTowerImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`RobertaTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
@@ -90,7 +91,7 @@ class BridgeTowerProcessor(ProcessorMixin):
             **kwargs,
         )
         # add pixel_values + pixel_mask
-        encoding_feature_extractor = self.feature_extractor(
+        encoding_image_processor = self.image_processor(
             images,
             return_tensors=return_tensors,
             do_normalize=True,
@@ -98,7 +99,7 @@ class BridgeTowerProcessor(ProcessorMixin):
             image_mean=[0.48145466, 0.4578275, 0.40821073],
             image_std=[0.26862954, 0.26130258, 0.27577711],
         )
-        encoding.update(encoding_feature_extractor)
+        encoding.update(encoding_image_processor)
 
         return encoding
 
@@ -119,5 +120,5 @@ class BridgeTowerProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))

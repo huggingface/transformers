@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 HuggingFace Inc.
+# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,10 +31,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BridgeTowerFeatureExtractor
+    from transformers import BridgeTowerImageProcessor
 
 
-class BridgeTowerFeatureExtractionTester(unittest.TestCase):
+class BridgeTowerImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -81,7 +81,7 @@ class BridgeTowerFeatureExtractionTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to BridgeTowerFeatureExtractor,
+        This function computes the expected height and width when providing images to BridgeTowerImageProcessor,
         assuming do_resize is set to True with a scalar size and size_divisor.
         """
         if not batched:
@@ -122,11 +122,11 @@ class BridgeTowerFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class BridgeTowerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-    feature_extraction_class = BridgeTowerFeatureExtractor if is_vision_available() else None
+class BridgeTowerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+    feature_extraction_class = BridgeTowerImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = BridgeTowerFeatureExtractionTester(self)
+        self.feature_extract_tester = BridgeTowerImageProcessingTester(self)
 
     @property
     def feat_extract_dict(self):
@@ -246,7 +246,7 @@ class BridgeTowerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
-        # Test whether the method "pad_and_return_pixel_mask" and calling the feature extractor return the same tensors
+        # Test whether the method "pad_and_return_pixel_mask" and calling the image processor return the same tensors
         encoded_images_with_method = feature_extractor_1.pad_and_create_pixel_mask(image_inputs, return_tensors="pt")
         encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")
 
