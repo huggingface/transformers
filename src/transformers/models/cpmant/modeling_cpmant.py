@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The OpenBMB Team The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CPMAnt model."""
+""" PyTorch CPMAnt """
 
 
 import math
@@ -44,7 +44,7 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
+    """Load tf checkpoints in a pytorch """
     try:
         import re
 
@@ -208,7 +208,7 @@ class CPMAntLayerNorm(nn.Module):
     def __init__(
         self,
         dim_norm: int,
-        dtype: torch.dtype = torch.half,
+        dtype: torch.dtype = torch.float,
         eps: float = 1e-6,
         init_var: float = 1.0,
     ):
@@ -222,11 +222,7 @@ class CPMAntLayerNorm(nn.Module):
     def forward(self, x: torch.Tensor):
         """
         Args:
-            x (:
-                obj:*torch.Tensor* of shape `(batch_size, seq_len, dim_norm)`): Input tensor that need to be
-                normalized.
-        Return:
-            `torch.Tensor` of shape `(batch_size, seq_len, dim_norm)`: The layernorm output.
+            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
         """  # noqa: E501
         # assert x.size(-1) == self.dim_norm
         if x.size(-1) != self.dim_norm:
@@ -239,9 +235,7 @@ class CPMAntLinear(nn.Module):
         self,
         dim_in: int,
         dim_out: int,
-        dtype: torch.dtype = torch.half,
-        init_mean: float = 0.0,
-        init_std: float = 1,
+        dtype: torch.dtype = torch.float,
         scale_before: bool = False,
     ):
         super().__init__()
@@ -254,9 +248,7 @@ class CPMAntLinear(nn.Module):
     def forward(self, x: torch.Tensor):
         """
         Args:
-            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`): The input of linear layer
-        Returns:
-            `torch.Tensor` of shape `(batch, seq_len, dim_out)`: The output of the linear transform y.
+            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`).
         """  # noqa: E501
         if self.scale_before:
             x = x / math.sqrt(self.dim_in)
@@ -273,7 +265,7 @@ class CPMAntAttention(nn.Module):
         dim_model: int,
         num_heads: int,
         dim_head: int,
-        dtype: torch.dtype = torch.half,
+        dtype: torch.dtype = torch.float,
         dropout_p: Optional[float] = None,
     ) -> None:
 
@@ -286,7 +278,7 @@ class CPMAntAttention(nn.Module):
         self.project_q = CPMAntLinear(self.dim_model, self.num_heads * self.dim_head, dtype=dtype)
         self.project_k = CPMAntLinear(self.dim_model, self.num_heads * self.dim_head, dtype=dtype)
         self.project_v = CPMAntLinear(self.dim_model, self.num_heads * self.dim_head, dtype=dtype)
-
+        
         self.attention_out = CPMAntLinear(self.num_heads * self.dim_head, self.dim_model, dtype=dtype)
 
         self.softmax = torch.nn.Softmax(dim=-1)
@@ -307,40 +299,35 @@ class CPMAntAttention(nn.Module):
     ):
         """
         Args:
-            hidden_q (:
-                obj:*torch.Tensor* of shape `(batch, len_q, dim_model)`): Indices of input sequence tokens. It will be
-                embedded by model's internal embedding lookup matrix.
-            hidden_kv (:
+            hidden_q (`torch.Tensor` of shape `(batch, len_q, dim_model)`))
+                Indices of input sequence tokens. It will be embedded by model's internal embedding lookup matrix.
+            hidden_kv (`torch.Tensor` of shape `(batch, len_k, dim_model)`))
                 obj:*torch.Tensor* of shape `(batch, len_k, dim_model)`): Length of input sequence before padding.
-            attention_mask (:
-                obj:*torch.Tensor* of shape `(batch, len_q, len_k)`): Used to avoid performing attention on padding
-                token indices.
-            position_bias(:
-                obj:*torch.Tensor* of shape `(num_heads, len_q, len_k)` or `(1, num_heads, len_k, len_q)`): Provide
-                positional information about tensor *key_value* and *query*.
-        Return:
-            out (`torch.Tensor` of shape `(batch, len_q, dim_model)`): The attention output.
+            attention_mask (`torch.Tensor` of shape `(batch, len_q, len_k)`))
+                Used to avoid performing attention on padding token indices.
+            position_bias (`torch.Tensor` of shape `(num_heads, len_q, len_k)`))
+                Provide positional information about tensor *key_value* and *query*.
         """  # noqa: E501
 
         batch_size = hidden_q.size(0)
         len_q = hidden_q.size(1)
         len_k = hidden_kv.size(1)
-
-        h_q = self.project_q(hidden_q)
-        h_k = self.project_k(hidden_kv)
-        h_v = self.project_v(hidden_kv)
-
-        h_q = h_q.view(batch_size, len_q, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
-        h_k = h_k.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
-        h_v = h_v.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
+        
+        query = self.project_q(hidden_q)
+        key = self.project_k(hidden_kv)
+        value = self.project_v(hidden_kv)
+        
+        query = query.view(batch_size, len_q, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
+        key = key.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
+        value = value.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
 
         if past_kv is not None:
-            h_k = torch.cat([past_kv[0], h_k], dim=-2)
-            h_v = torch.cat([past_kv[1], h_v], dim=-2)
-            len_k = h_k.size(-2)
+            key = torch.cat([past_kv[0], key], dim=-2)
+            value = torch.cat([past_kv[1], value], dim=-2)
+            len_k = key.size(-2)
 
         # (b, n_h, len_q, d_h) @ (b, n_h, d_h, len_k) -> (b, n_h, len_q, len_k)
-        score = torch.matmul(h_q, h_k.transpose(-1, -2)) / math.sqrt(self.dim_head)
+        score = torch.matmul(query, key.transpose(-1, -2)) / math.sqrt(self.dim_head)
         score = score + position_bias
 
         score = torch.masked_fill(
@@ -360,16 +347,17 @@ class CPMAntAttention(nn.Module):
             score = self.dropout(score)
 
         # (b, n_h, len_q, len_k) @ (b, n_h, len_k, d_h) -> (b, n_h, len_q, d_h)
-        score = torch.matmul(score, h_v)
+        score = torch.matmul(score, value)
 
         score = score.view(batch_size, self.num_heads, len_q, self.dim_head).permute(0, 2, 1, 3)
         score = score.contiguous().view(batch_size, len_q, self.num_heads * self.dim_head)
 
         score = self.attention_out(score)
+        
         if use_cache:
-            return score, (h_k, h_v)
-        else:
-            return score
+            return score, (key, value)
+
+        return score
 
 
 class CPMAntSelfAttentionBlock(nn.Module):
@@ -377,11 +365,11 @@ class CPMAntSelfAttentionBlock(nn.Module):
     connection.
 
         Args:
-            dim_model (int): main dimension of modules in transformer blocks.
-            num_heads (int): num_heads used in :py[`model_center.layer.Attention`].
-            dim_head (int): dim_head used in :py[`model_center.layer.Attention`].
-            dtype (optional): Defaults to torch.half.
-            eps (float, optional): eps used in :py[`model_center.layer.LayerNorm`]. Defaults to 1e-5.
+            dim_model (int): Main dimension of modules in transformer blocks.
+            num_heads (int): Number of attention heads in the Transformer encoder.
+            dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
+            dtype (optional): Defaults to torch.float.
+            eps (float, optional): The epsilon used by the layer normalization layers.
             dropout_p (float, optional): Defaults to 0.
     """  # noqa: E501
 
@@ -390,7 +378,7 @@ class CPMAntSelfAttentionBlock(nn.Module):
         dim_model: int,
         num_heads: int,
         dim_head: int,
-        dtype=torch.half,
+        dtype=torch.float,
         eps: float = 1e-6,
         dropout_p: Optional[float] = None,
     ):
@@ -423,19 +411,12 @@ class CPMAntSelfAttentionBlock(nn.Module):
     ):
         """
         Args:
-            hidden_states (:
-                obj:*torch.Tensor* of shape `(batch, seq_self, dim_model)`): Input of self-attention block. It can be
-                the embedding of a batch of sequences.
-            attention_mask (:
-                obj:*torch.Tensor* of shape `(batch, seq_self, seq_self)`): Avoid invalid areas to participate in the
-                calculation.
-            position_bias (:
-                obj:*torch.Tensor* of shape `(num_heads, seq_self, seq_self)`): Provide positional information to
-                self-attention block.
-
-        Return:
-            `torch.Tensor` of shape `(batch, seq_self, dim_model)`: The output of attention block.
-
+            hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`):
+                Input of self-attention block. It can be the embedding of a batch of sequences.
+            attention_mask (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
+                Avoid invalid areas to participate in the calculation.
+            position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
+                Provide positional information to self-attention block.
         """  # noqa: E501
         x = self.layernorm_before_attention(hidden_states)
         x = self.self_attention(x, x, attention_mask, position_bias, use_cache, past_key_value)
@@ -450,8 +431,8 @@ class CPMAntSelfAttentionBlock(nn.Module):
 
         if use_cache:
             return hidden_states, current_key_value
-        else:
-            return hidden_states
+            
+        return hidden_states
 
 
 class DenseGatedACT(nn.Module):
@@ -459,7 +440,7 @@ class DenseGatedACT(nn.Module):
         self,
         dim_in: int,
         dim_ff: int,
-        dtype=torch.half,
+        dtype=torch.float,
     ):
         super().__init__()
 
@@ -482,13 +463,7 @@ class DenseGatedACT(nn.Module):
         """Transform an input tensor from one feature space to another via a nonlinear operation
 
         Args:
-            x (:
-                obj:*torch.Tensor* of shape `(batch, seq_len, dim_in)`): Tensor that will be subject to nonlinear
-                operations.
-
-        Return:
-            out (`torch.Tensor` of shape `(batch, seq_len, dim_ff)`)
-
+            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
         """  # noqa: E501
         gate_score = self.act(self.w_0(x))
         x = self.w_1(x)
@@ -504,7 +479,7 @@ class CPMAntFeedForward(nn.Module):
         dim_in (int): input dimension.
         dim_ff (int): middle dimension.
         dim_out (int, optional): output dimension. Defaults to None, which means dim_in = dim_out.
-        dtype (optional): Defaults to torch.half.
+        dtype (optional): Defaults to torch.float.
         init_mean (float, optional):
             mean of :math:`\mathbf{W}\sim\mathcal{N}(\text{mean}, \text{std}^2)` for fully-connected module used in
             feed-forward layer. Defaults to 0.
@@ -521,7 +496,7 @@ class CPMAntFeedForward(nn.Module):
         self,
         dim_model: int,
         dim_ff: int,
-        dtype=torch.half,
+        dtype=torch.float,
         dropout_p: Optional[float] = None,
     ):
 
@@ -548,10 +523,7 @@ class CPMAntFeedForward(nn.Module):
     def forward(self, x: torch.Tensor):
         """
         Args:
-            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`): The input of feed-forward module.
-
-        Return:
-            `torch.Tensor` of shape `(batch, seq_len, dim_out)`: The output of feed-forward module.
+            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
         """  # noqa: E501
         x = self.w_in(x)
 
@@ -567,10 +539,10 @@ class CPMAntFFNBlock(nn.Module):
     """The whole feed-forward block. A sequence of operation. Consists of layernorm, feed-forward and residual connection.
 
     Args:
-        dim_model (int): main dimension of modules in transformer blocks.
-        dim_ff (int): dim_ff used in :py[`model_center.layer.FeedForward`].
-        dtype (optional): Defaults to torch.half.
-        eps (float, optional): eps used in :py[`model_center.layer.LayerNorm`]. Defaults to 1e-5.
+        dim_model (int): Main dimension of modules in transformer blocks.
+        dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        dtype (optional): Defaults to torch.float.
+        eps (float, optional): The epsilon used by the layer normalization layers.
         dropout_p (float, optional): Defaults to 0.
     """  # noqa: E501
 
@@ -578,7 +550,7 @@ class CPMAntFFNBlock(nn.Module):
         self,
         dim_model: int,
         dim_ff: int,
-        dtype=torch.half,
+        dtype=torch.float,
         eps: float = 1e-6,
         dropout_p: Optional[float] = 0,
     ):
@@ -608,12 +580,8 @@ class CPMAntFFNBlock(nn.Module):
     ):
         """
         Args:
-            hidden_states (:
-                obj:*torch.Tensor* of shape `(batch, seq_self, dim_model)`): Hidden states before feed forward layer.
-
-        Return:
-            `torch.Tensor` of shape `(batch, seq_self, dim_model)`: The output of feed-forward block
-
+            hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`):
+                Hidden states before feed forward layer.
         """  # noqa: E501
         x = self.layernorm_before_ffn(hidden_states)
         x = self.ffn(x)
@@ -628,12 +596,12 @@ class CPMAntTransformerBlock(nn.Module):
     feed-forward block.
 
         Args:
-            dim_model (int): main dimension of modules in transformer blocks.
-            dim_ff (int): dim_ff used in :py[`model_center.layer.FeedForward`].
-            num_heads (int): num_heads used in :py[`model_center.layer.Attention`].
-            dim_head (int): dim_head used in :py[`model_center.layer.Attention`].
-            dtype (optional): Defaults to torch.half.
-            eps (float, optional): eps used in :py[`model_center.layer.LayerNorm`]. Defaults to 1e-5.
+            dim_model (int): Main dimension of modules in transformer blocks.
+            dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            num_heads (int): Number of attention heads in the Transformer encoder.
+            dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
+            dtype (optional): Defaults to torch.float.
+            eps (float, optional): The epsilon used by the layer normalization layers.
             dropout_p (float, optional): Defaults to 0.
     """  # noqa: E501
 
@@ -643,7 +611,7 @@ class CPMAntTransformerBlock(nn.Module):
         dim_ff: int,
         num_heads: int,
         dim_head: int,
-        dtype=torch.half,
+        dtype=torch.float,
         eps: float = 1e-6,
         dropout_p: Optional[float] = None,
         mask_att: bool = False,
@@ -682,21 +650,14 @@ class CPMAntTransformerBlock(nn.Module):
     ):
         """
         Args:
-            self_hidden_states (:
-                obj:*torch.Tensor* of shape `(batch, seq_self, dim_model)`): Input of transformer block(self-attention
-                block). It can be the raw embedding of a batch of sequences.
-            self_attention_mask (:
-                obj:*torch.Tensor* of shape `(batch, seq_self, seq_self)`): Avoid invalid areas to participate in the
-                calculation of self-attention.
-            self_position_bias (:
-                obj:*torch.Tensor* of shape `(num_heads, seq_self, seq_self)`): Provide positional information to
-                self-attention block.
-
-        Return:
-            `torch.Tensor` of shape `(batch, seq_self, dim_model)`: The output of transformer block.
-
+            self_hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`): 
+                Input of transformer block(self-attention block). It can be the raw embedding of a batch of sequences.
+            self_attention_mask (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
+                Avoid invalid areas to participate in the calculation of self-attention.
+            self_position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
+                Provide positional information to self-attention block.
         """  # noqa: E501
-        # (batch, dim_model, seq_self)
+        
         current_key_value = None
         if not self.mask_att:
             hidden_states = self.self_att(
@@ -711,40 +672,40 @@ class CPMAntTransformerBlock(nn.Module):
         else:
             hidden_states = self_hidden_states
 
-        # (batch, dim_model, seq_self)
+        # (batch, dim_model, len_seq)
         if not self.mask_ffn:
             hidden_states = self.ffn(hidden_states)
-
+        
         if use_cache:
             return hidden_states, current_key_value
-        else:
-            return hidden_states
+            
+        return hidden_states
 
 
 class CPMAntEncoder(nn.Module):
     """Layers of encoder transformer blocks plus an final layernorm.
 
     Args:
-        num_layers (int): number of layers.
-        dim_model (int): main dimension of modules in transformer blocks.
-        dim_ff (int): dim_ff used in :py[`model_center.layer.FeedForward`].
-        num_heads (int): num_heads used in :py[`model_center.layer.Attention`].
-        dim_head (int): dim_head used in :py[`model_center.layer.Attention`].
-        dtype (optional): Defaults to torch.half.
-        eps (float, optional): eps used in :py[`model_center.layer.LayerNorm`]. Defaults to 1e-6.
+        num_layers (int): Number of layers.
+        dim_model (int): Main dimension of modules in transformer blocks.
+        dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_heads (int): Number of attention heads in the Transformer encoder.
+        dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
+        dtype (optional): Defaults to torch.float.
+        eps (float, optional): The epsilon used by the layer normalization layers.
         dropout_p (float, optional): Defaults to 0.
     """  # noqa: E501
 
     def __init__(
         self,
-        num_layers: int,
-        dim_model: int,
-        dim_ff: int,
-        num_heads: int,
-        dim_head: int,
-        dtype: torch.dtype = torch.half,
+        num_layers: int = 48,
+        dim_model: int = 4096,
+        dim_ff: int = 10240,
+        num_heads: int = 32,
+        dim_head: int = 128,
+        dtype: torch.dtype = torch.float,
         eps: float = 1e-6,
-        dropout_p: Optional[float] = None,
+        dropout_p: Optional[float] = 0.0,
         mask_modules: Optional[List[Tuple[bool, bool]]] = None,
     ):
 
@@ -791,19 +752,12 @@ class CPMAntEncoder(nn.Module):
     ):
         """
         Args:
-            hidden-states (:
-                obj:*torch.Tensor* of shape `(batch, seq_enc, dim_model)`): Input of encoder, might be the embedding of
-                a batch of sequences.
-            attention_mask (:
-                obj:*torch.Tensor* of shape `(batch, seq_enc, seq_enc)`): Avoid invalid areas to participate in the
-                calculation
-            position_bias(:
-                obj:*torch.Tensor* of shape `(num_heads, seq_enc, seq_enc)`) Provides position information to attention
-                mechanism.
-
-        Return:
-            `torch.Tensor` of shape `(batch, seq_enc, dim_model)`: The encoder output.
-
+            hidden_states (`torch.Tensor` of `(batch, seq_enc, dim_model)`): 
+                Input of encoder, might be the embedding of a batch of sequences.
+            attention_mask (`torch.Tensor` of `(batch, seq_enc, seq_enc)`): 
+                Avoid invalid areas to participate in the calculation.
+            position_bias (`torch.Tensor` of shape `(num_heads, seq_enc, seq_enc)`):
+                Provides position information to attention mechanism.
         """  # noqa: E501
         if not use_cache:
             for layer in self.layers:
@@ -825,20 +779,19 @@ class CPMAntEncoder(nn.Module):
                         current_key_values.append(hidden_states[1])
                         hidden_states = hidden_states[0]
                 hidden_states = self.output_layernorm(hidden_states)
+                
                 if use_cache:
                     return hidden_states, current_key_values
-                else:
-                    return hidden_states
+                    
+                return hidden_states
 
 
 class CPMAntEmbeddings(nn.Module):
     def __init__(
         self,
-        vocab_size: int,
-        embedding_size: int,
-        dtype: torch.dtype = torch.half,
-        init_mean: float = 0.0,
-        init_std: float = 1,
+        vocab_size: int = 1024,
+        embedding_size: int = 4096,
+        dtype: torch.dtype = torch.float,
     ):
 
         super().__init__()
@@ -849,9 +802,7 @@ class CPMAntEmbeddings(nn.Module):
     def forward(self, ids: torch.Tensor):
         """
         Args:
-            ids (`torch.Tensor` of shape `(batch_size, seq_len)`): Indices of input sequence tokens.
-        Return:
-            `torch.Tensor` of shape `(batch_size, seq_len, embedding_size)`: The embedding output.
+            ids (`torch.Tensor`): Indices of input sequence tokens of shape (batch_size, seq_len).
         """  # noqa: E501
 
         embeds = F.embedding(ids, self.weight) / math.sqrt(self.dim_model)
@@ -862,9 +813,7 @@ class CPMAntEmbeddings(nn.Module):
         Args:
         Projection based on embedding's weight. For example, embedding map vocab_size to embed_size, than projection
         map embed_size back to vocab_size.
-            x (`torch.Tensor` of shape `(batch, seq_len, dim_model)`): Input of projection
-        Returns:
-            `torch.Tensor` of shape `(batch, seq_len, vocab_output_size)`: The projection output.
+            x (`torch.Tensor`): Input of projection of shape (batch, seq_len, dim_model)
         """  # noqa: E501
         logits = F.linear(x / math.sqrt(self.dim_model), self.weight)
         return logits
@@ -888,14 +837,12 @@ class CPMAntIntermediate(nn.Module):
 class CPMAntSegmentPositionEmbedding(nn.Module):
     def __init__(
         self,
-        num_heads,
-        num_segments=1,
-        num_buckets=32,
-        max_distance=128,
-        bidirectional=False,
-        dtype=torch.half,
-        init_mean: float = 0.0,
-        init_std: float = 1,
+        num_heads: int = 32,
+        num_segments: int = 32,
+        num_buckets: int = 512,
+        max_distance: int = 2048,
+        bidirectional: bool = True,
+        dtype: torch.dtype = torch.float,
     ):
 
         super().__init__()
@@ -1038,7 +985,7 @@ CPMANT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`~CPMAntConfig`]): Model configuration class with all the parameters of the model.
+        config ([`~CPMAntConfig`]): Model configuration class with all the parameters of the 
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -1113,55 +1060,14 @@ class CPMAntModel(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
 
         super().__init__(config)
-        self.encoder = CPMAntEncoder(
-            num_layers=config.num_layers,
-            dim_model=config.dim_model,
-            dim_ff=config.dim_ff,
-            num_heads=config.num_heads,
-            dim_head=config.dim_head,
-            dtype=getattr(torch, "float"),
-            eps=config.eps,
-            dropout_p=config.dropout_p,
-            mask_modules=config.mask_modules,
-        )
-
-        self.prompt_embedding = CPMAntEmbeddings(
-            vocab_size=config.prompt_types * config.prompt_length,
-            embedding_size=config.dim_model,
-            dtype=getattr(torch, "float"),
-            init_std=0.02,
-        )
-
-        self.segment_embedding = CPMAntEmbeddings(
-            vocab_size=config.segment_types,
-            embedding_size=config.dim_model,
-            dtype=getattr(torch, "float"),
-            init_std=0.02,
-        )
-
-        self.input_embedding = CPMAntEmbeddings(
-            vocab_size=config.vocab_size,
-            embedding_size=config.dim_model,
-            dtype=getattr(torch, "float"),
-            init_std=0.02,
-        )
-
-        self.position_bias = CPMAntSegmentPositionEmbedding(
-            num_heads=config.num_heads,
-            num_segments=config.segment_types,
-            num_buckets=config.position_bias_num_buckets,
-            max_distance=config.position_bias_max_distance,
-            bidirectional=True,
-            dtype=getattr(torch, "float"),
-        )
-
+        self.encoder = CPMAntEncoder()
+        self.prompt_embedding = CPMAntEmbeddings()
+        self.segment_embedding = CPMAntEmbeddings(vocab_size=config.segment_types)
+        self.input_embedding = CPMAntEmbeddings(vocab_size=config.vocab_size)
+        self.position_bias = CPMAntSegmentPositionEmbedding()
         self.prompt_length = config.prompt_length
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
     def get_input_embeddings(self):
-
         embeddings = {
             "prompt": self.prompt_embedding,
             "segment": self.segment_embedding,
@@ -1231,11 +1137,63 @@ class CPMAntModel(CPMAntPreTrainedModel):
         return logits, hidden_states
 
 
-class CPMAntForCausalLM(CPMAntModel):
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.post_init()
+class CPMAntForCausalLM(CPMAntPreTrainedModel):
+    def __init__(self, config: CPMAntConfig):
+        super().__init__(config)
+        self.encoder = CPMAntEncoder()
+        self.prompt_embedding = CPMAntEmbeddings()
+        self.segment_embedding = CPMAntEmbeddings(vocab_size=config.segment_types)
+        self.input_embedding = CPMAntEmbeddings(vocab_size=config.vocab_size)
+        self.position_bias = CPMAntSegmentPositionEmbedding()
+        self.prompt_length = config.prompt_length
+       
+    def forward(
+        self,
+        input: torch.Tensor,
+        length: torch.Tensor,
+        context: torch.Tensor,
+        position: torch.Tensor,
+        segment: torch.Tensor,
+        span: torch.Tensor,
+    ):
+        """
+        Args:
+            input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
+            length (`torch.Tensor`): length of input, shape = `(batch)`
+            context (`torch.Tensor`): context determines whether model predicts, shape = `(batch, seq_len)`
+            position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
+            segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
+            span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+        """
+        batch = input.size(0)
+        seqlen = input.size(1)
+        input_prompt = input[:, : self.prompt_length].contiguous()
+        input_ids = input[:, self.prompt_length :].contiguous()
 
+        prompt_states = self.prompt_embedding(input_prompt)
+        hidden_states = self.input_embedding(input_ids)
+        segment_states = self.segment_embedding(segment)
+        hidden_states = torch.cat([prompt_states, hidden_states], 1) + segment_states
+
+        with torch.no_grad():
+            device = input.device
+            directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(
+                -1, 1
+            )
+            attention_mask = context[:, None, :] | (
+                context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
+            )
+            attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
+            mask_1d = torch.arange(seqlen, device=device)[None, :].repeat(batch, 1) < length[:, None]
+            attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
+
+        position_bias = self.position_bias(position, position, segment, segment)
+
+        hidden_states = self.encoder(hidden_states, attention_mask, position_bias)
+        logits = self.input_embedding.projection(hidden_states)
+        return logits, hidden_states    
+        
     def inference(
         self,
         input: torch.Tensor,
@@ -1263,12 +1221,12 @@ class CPMAntForCausalLM(CPMAntModel):
             past_key_values = tuple([None] * self.encoder.num_layers)
             input_prompt = input[:, : self.prompt_length].contiguous()
             input_ids = input[:, self.prompt_length :].contiguous()
-
+            
             prompt_states = self.prompt_embedding(input_prompt)
             hidden_states = self.input_embedding(input_ids)
             segment_states = self.segment_embedding(segment)
             hidden_states = torch.cat([prompt_states, hidden_states], 1) + segment_states
-
+            
         else:
             past_length = past_key_values[0][0].size(-2)
             segment_states = self.segment_embedding(segment)
@@ -1301,6 +1259,21 @@ class CPMAntForCausalLM(CPMAntModel):
         )
         logits = self.input_embedding.projection(hidden_states)
         return logits, hidden_states, present_key_values
+
+    def get_input_embeddings(self):
+        embeddings = {
+            "prompt": self.prompt_embedding,
+            "segment": self.segment_embedding,
+            "input": self.input_embedding,
+            "position": self.position_bias,
+        }
+        return embeddings
+
+    def set_input_embeddings(self, embeddings, **kwargs):
+        self.prompt_embedding = embeddings["prompt"]
+        self.segment_embedding = embeddings["segment"]
+        self.input_embedding = embeddings["input"]
+        self.position_bias = embeddings["position"]
 
     def _convert_to_tensors(self, input_ids, task_id=2):
         model_inputs = {}
@@ -1597,11 +1570,7 @@ class CPMAntForCausalLM(CPMAntModel):
             best_hyp = max(hypotheses.hyp, key=lambda x: x[0])[1]
             results.append(best_hyp)
 
-        # input_ids = model_inputs["input"].detach().tolist()
-        # input_ids = [input_id[self.prompt_length + 1 :] for input_id in input_ids]
-        # output_ids = [input_id + result for input_id, result in zip(input_ids, results)]
         return results
-        # return torch.tensor(output_ids)
 
     def apply_repetition_penalty(
         self,

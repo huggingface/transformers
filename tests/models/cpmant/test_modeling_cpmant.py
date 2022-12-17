@@ -127,7 +127,7 @@ class CPMAntModelTester:
         model = CPMAntForCausalLM(config)
         model.to(torch_device)
         model.eval()
-
+        
         logits, hidden_states = model(**input_ids)
         self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
         self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
@@ -185,9 +185,7 @@ class CPMAntModelTest(unittest.TestCase):
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
         texts = "昨天多云转阴，"
-        expected_output = [
-            "昨天多云转阴，今天又是艳阳高照的好天气。\n上午，我和同事们一起来到了位于北京西郊昌平区南口镇的中国农业机械化科学研究院(以下简称“农机院”)进行参观学习。在这里，",
-        ]
+        expected_output = "昨天多云转阴，今天又是艳阳高照的好天气。\n上午，我和同事们一起来到了位于北京西郊昌平区南口镇的中国农业机械化科学研究院(以下简称“农机院”)进行参观学习。在这里，"
         model_inputs = tokenizer.encode(texts)
         token_ids = model.generate(model_inputs)
         output_texts = tokenizer.decode(token_ids)

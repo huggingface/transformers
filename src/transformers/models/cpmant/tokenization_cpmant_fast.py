@@ -23,8 +23,6 @@ from transformers import is_torch_available
 
 if is_torch_available():
     import torch
-else:
-    raise RuntimeError("missing torch!")
 
 if find_spec("jieba") is not None:
     import jieba
