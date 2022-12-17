@@ -401,11 +401,9 @@ _import_structure = {
         "TrOCRProcessor",
     ],
     "models.tvlt": [
+        "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TvltConfig",
         "TvltAudioFeatureExtractor",
-        "TvltPixelFeatureExtractor",
-        "Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TvltProcessor",
     ],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -787,7 +785,7 @@ else:
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
-    _import_structure["models.tvlt"].extend(["TvltAudioFeatureExtractor", "TvltImageProcessor", "TvltProcessor"])
+    _import_structure["models.tvlt"].extend(["TvltImageProcessor", "TvltProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
@@ -2185,7 +2183,7 @@ else:
     )
     _import_structure["models.tvlt"].extend(
         [
-            "Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TVLT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TvltModel",
             "TvltForPreTraining",
             "TvltForQuestionAnswering",
@@ -3681,7 +3679,7 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
-    from .models.tvlt import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
+    from .models.tvlt import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltAudioFeatureExtractor, TvltConfig
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
@@ -4009,7 +4007,7 @@ if TYPE_CHECKING:
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
-        from .models.tvlt import TvltImageProcessor, TvltAudioFeatureExtractor, TvltProcessor
+        from .models.tvlt import TvltImageProcessor, TvltProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
