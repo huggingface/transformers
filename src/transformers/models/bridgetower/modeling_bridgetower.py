@@ -24,7 +24,7 @@ from torch import nn
 
 from transformers import RobertaConfig, RobertaModel
 from transformers.modeling_utils import PreTrainedModel, apply_chunking_to_forward
-from transformers.models.bert.modeling_bert import BertAttention, BertIntermediate, BertOutput
+from transformers.models.bert.modeling_bert import BertAttention, BertIntermediate, BertOutput, BertPooler
 
 from ...activations import ACT2FN, QuickGELUActivation
 from ...modeling_outputs import MaskedLMOutput, ModelOutput, SequenceClassifierOutput
@@ -465,8 +465,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         )
 
         # Class token => Linear => Tanh
-        self.cross_modal_image_pooler = BridgeTowerPooler(config.hidden_size)
-        self.cross_modal_text_pooler = BridgeTowerPooler(config.hidden_size)
+        self.cross_modal_image_pooler = BertPooler(config)
+        self.cross_modal_text_pooler = BertPooler(config)
 
         # ===================== Initialize BridgeTower Components ===================== #
         # just for first layer
@@ -571,10 +571,16 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         )
 
         cross_text_feats = self.cross_modal_text_layers[0](
-            cross_modal_text, cross_modal_image, extend_text_masks, extend_image_masks
+            cross_modal_text, 
+            cross_modal_image, 
+            attention_mask=extend_text_masks, 
+            encoder_attention_mask=extend_image_masks,
         )[0]
         cross_image_feats = self.cross_modal_image_layers[0](
-            cross_modal_image, cross_modal_text, extend_image_masks, extend_text_masks
+            cross_modal_image, 
+            cross_modal_text, 
+            attention_mask=extend_image_masks, 
+            encoder_attention_mask=extend_text_masks,
         )[0]
 
         link_layer_index = 0
@@ -606,10 +612,16 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 cross_image_feats_ = image_link_tower(image_embeds_with_ln, cross_image_feats, extend_image_masks)
 
             cross_text_feats = self.cross_modal_text_layers[link_layer_index + 1](
-                cross_text_feats_, cross_image_feats_, extend_text_masks, extend_image_masks
+                cross_text_feats_, 
+                cross_image_feats_, 
+                attention_mask=extend_text_masks, 
+                encoder_attention_mask=extend_image_masks,
             )[0]
             cross_image_feats = self.cross_modal_image_layers[link_layer_index + 1](
-                cross_image_feats_, cross_text_feats_, extend_image_masks, extend_text_masks
+                cross_image_feats_, 
+                cross_text_feats_, 
+                attention_mask=extend_image_masks, 
+                encoder_attention_mask=extend_text_masks,
             )[0]
 
             link_layer_index += 1
@@ -711,19 +723,6 @@ class LinkTower(nn.Module):
             raise NotImplementedError(f"link_tower_type {self.link_tower_type} is not implemented")
 
 
-class BridgeTowerPooler(nn.Module):
-    def __init__(self, hidden_size):
-        super().__init__()
-        self.dense = nn.Linear(hidden_size, hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
-
-
 class BridgeTowerBertCrossLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -749,7 +748,7 @@ class BridgeTowerBertCrossLayer(nn.Module):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attention_outputs = self.attention(
             hidden_states,
-            attention_mask,
+            attention_mask=attention_mask,
             head_mask=None,
             output_attentions=output_attentions,
             past_key_value=None,
@@ -761,12 +760,12 @@ class BridgeTowerBertCrossLayer(nn.Module):
 
         cross_attention_outputs = self.crossattention(
             attention_output,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
         )
         attention_output = cross_attention_outputs[0]
         outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
