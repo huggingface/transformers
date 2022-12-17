@@ -21,7 +21,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
-    require_torch_tpu,
+    require_torch_neuroncore,
 )
 from transformers.utils import logging
 
@@ -63,8 +63,8 @@ if is_torch_available():
                 return input_ids
 
 
-class TestTrainerDistributedXLA(TestCasePlus):
-    @require_torch_tpu
+class TestTrainerDistributedNeuronCore(TestCasePlus):
+    @require_torch_neuroncore
     def test_trainer(self):
 
         distributed_args = f"""

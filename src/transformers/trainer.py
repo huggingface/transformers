@@ -145,7 +145,6 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
-    is_torch_neuroncore_available,
     is_torch_tpu_available,
     logging,
 )
