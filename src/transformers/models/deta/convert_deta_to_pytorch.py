@@ -36,7 +36,13 @@ logger = logging.get_logger(__name__)
 
 def get_deta_config():
     config = DetaConfig(
-        num_queries=900, encoder_ffn_dim=2048, decoder_ffn_dim=2048, num_feature_levels=5, assign_first_stage=True, with_box_refine=True, two_stage=True
+        num_queries=900,
+        encoder_ffn_dim=2048,
+        decoder_ffn_dim=2048,
+        num_feature_levels=5,
+        assign_first_stage=True,
+        with_box_refine=True,
+        two_stage=True,
     )
 
     # set labels
@@ -144,10 +150,9 @@ def create_rename_keys(config):
         rename_keys.append((f"transformer.encoder.layers.{i}.linear1.weight", f"model.encoder.layers.{i}.fc1.weight"))
         rename_keys.append((f"transformer.encoder.layers.{i}.linear1.bias", f"model.encoder.layers.{i}.fc1.bias"))
         rename_keys.append((f"transformer.encoder.layers.{i}.linear2.weight", f"model.encoder.layers.{i}.fc2.weight"))
-        rename_keys.append((f"transformer.encoder.layers.{i}.linear2.bias",f"model.encoder.layers.{i}.fc2.bias"))
+        rename_keys.append((f"transformer.encoder.layers.{i}.linear2.bias", f"model.encoder.layers.{i}.fc2.bias"))
         rename_keys.append((f"transformer.encoder.layers.{i}.norm2.weight", f"model.encoder.layers.{i}.final_layer_norm.weight"))
         rename_keys.append((f"transformer.encoder.layers.{i}.norm2.bias", f"model.encoder.layers.{i}.final_layer_norm.bias"))
-
 
     # transformer decoder
     for i in range(config.decoder_layers):
@@ -192,8 +197,10 @@ def read_in_decoder_q_k_v(state_dict, config):
         # next, add query, keys and values (in that order) to the state dict
         state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:hidden_size, :]
         state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:hidden_size]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[hidden_size:hidden_size*2, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[hidden_size:hidden_size*2]
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[
+            hidden_size : hidden_size * 2, :
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
         state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-hidden_size:, :]
         state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-hidden_size:]
 
@@ -219,11 +226,11 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     filename = "adet_checkpoint0011.pth" if model_name == "deta" else ""
     checkpoint_path = hf_hub_download(repo_id="nielsr/deta-checkpoints", filename=filename)
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
-    
+
     # original state dict
     for name, param in state_dict.items():
         print(name, param.shape)
-    
+
     # rename keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
