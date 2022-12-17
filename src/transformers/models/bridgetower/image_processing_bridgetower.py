@@ -498,9 +498,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         if do_resize and size is None or resample is None:
             raise ValueError("Size and resample must be specified if do_resize is True.")
 
-        if do_center_crop:
-            images = [self.center_crop(image=image, size=size) for image in images]
-
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
@@ -514,6 +511,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             images = [
                 self.resize(image=image, size=size, size_divisor=size_divisor, resample=resample) for image in images
             ]
+
+        if do_center_crop:
+            images = [self.center_crop(image=image, size=size) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
