@@ -127,7 +127,7 @@ class CPMAntModelTester:
         model = CPMAntForCausalLM(config)
         model.to(torch_device)
         model.eval()
-        
+
         logits, hidden_states = model(**input_ids)
         self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
         self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
