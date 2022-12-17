@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.max_across_indices
 def max_across_indices(values: Iterable[Any]) -> List[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
@@ -52,6 +53,7 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.pad
 def pad(
     image: np.ndarray,
     output_size: Tuple[int, int],
@@ -92,6 +94,7 @@ def pad(
     return padded_image
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.make_pixel_mask
 def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -108,6 +111,7 @@ def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarr
     return mask
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.get_max_dimensions
 def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -123,6 +127,7 @@ def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
     return (max_height, max_width)
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: np.ndarray, shorter: int = 800, longer: int = 1333, size_divisor: int = 32
 ) -> Tuple[int, int]:
@@ -169,29 +174,30 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to center crop the image. Can be overridden by the `do_center_crop` parameter in the `preprocess`
-            method.
+            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
+            overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to center crop the image. Can be overridden by the `do_center_crop` parameter in the `preprocess`
+            method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
         image_size (`int`, *optional*, defaults to 288):
             Size of the image. Defaults to 288. Can be overriden if set with image_size in the configuration.
-
     """
 
     model_input_names = ["pixel_values"]
@@ -209,7 +215,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        image_size=288,
+        image_size = 288,
         **kwargs
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -226,11 +232,11 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.do_center_crop = do_center_crop
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
+        self.do_center_crop = do_center_crop
 
     def resize(
         self,
@@ -298,7 +304,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         """
         Center crop an image to (size["height"], size["width"]). If the input size is smaller than `size` along any
         edge, the image is padded with 0's and then center cropped.
-
         Args:
             image (`np.ndarray`):
                 Image to center crop.
@@ -394,7 +399,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         warnings.warn(
             "This method is deprecated and will be removed in v4.26.0. Please use pad instead.", FutureWarning
         )
-        # pad expects a list of np.ndarray, but the previous image processors expected torch tensors
+        # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
         images = [to_numpy_array(image) for image in pixel_values_list]
         return self.pad(
             images=images,
@@ -476,6 +481,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_center_crop if do_center_crop is not None else self.do_center_crop
+
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
@@ -491,6 +497,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         if do_resize and size is None or resample is None:
             raise ValueError("Size and resample must be specified if do_resize is True.")
 
+        if do_center_crop:
+            images = [self.center_crop(image=image, size=size) for image in images]
+
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
@@ -499,14 +508,15 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
         if do_resize:
             images = [
                 self.resize(image=image, size=size, size_divisor=size_divisor, resample=resample) for image in images
             ]
-        if do_center_crop:
-            images = [self.center_crop(image=image, size=size) for image in images]
+
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 

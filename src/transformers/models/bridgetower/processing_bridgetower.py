@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ class BridgeTowerProcessor(ProcessorMixin):
         tokenizer (`RobertaTokenizerFast`):
             An instance of ['RobertaTokenizerFast`]. The tokenizer is a required input.
     """
+    attributes = ["image_processor", "tokenizer"]
     image_processor_class = "BridgeTowerImageProcessor"
     tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
 

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License=, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -101,7 +101,7 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether to unfreeze ViT's LayerNorm.
         vit_embed_dim (`str`, *optional*, defaults to `"ViT-B/16"`):
             Dimension size of embeddings in ViT model.
-        vit_layers (`str`, *optional*, defaults to `"ViT-B/16"`):
+        vit_layers (`int`, *optional*, defaults to 12):
             Number of layers in ViT model.
         vit_layernorm_init_from_vit (`bool`, *optional*, defaults to `False`):
             Whether to init ViT LayerNorm from ViT.

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 NAVER AI Labs and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ from transformers import RobertaConfig, RobertaModel
 from transformers.modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from transformers.models.bert.modeling_bert import BertAttention, BertIntermediate, BertOutput
 
-from ...activations import ACT2FN
+from ...activations import ACT2FN, QuickGELUActivation
 from ...modeling_outputs import MaskedLMOutput, ModelOutput, SequenceClassifierOutput
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_10
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -50,28 +50,6 @@ BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "BridgeTower/bridgetower-base-itm-mlm"
     # See all bridgetower models at https://huggingface.co/BridgeTower
 ]
-
-
-class BridgeTowerPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = BridgeTowerConfig
-    base_model_prefix = "bridgetower"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["BridgeTowerSelfAttention"]
-
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 BRIDGETOWER_START_DOCSTRING = r"""
@@ -154,11 +132,6 @@ class BridgeTowerLayerNorm(nn.LayerNorm):
         return ret.type(orig_type)
 
 
-class BridgeTowerQuickGELU(nn.Module):
-    def forward(self, x: torch.Tensor):
-        return x * torch.sigmoid(1.702 * x)
-
-
 class BridgeTowerResidualAttention(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
         super().__init__()
@@ -169,7 +142,7 @@ class BridgeTowerResidualAttention(nn.Module):
             OrderedDict(
                 [
                     ("c_fc", nn.Linear(d_model, d_model * 4)),
-                    ("gelu", BridgeTowerQuickGELU()),
+                    ("gelu", QuickGELUActivation()),
                     ("c_proj", nn.Linear(d_model * 4, d_model)),
                 ]
             )
@@ -399,6 +372,28 @@ class BridgeTowerModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+class BridgeTowerPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = BridgeTowerConfig
+    base_model_prefix = "bridgetower"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["BridgeTowerSelfAttention"]
+
+    def _init_weights(self, module):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
+
 @add_start_docstrings(
     "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
     " top.",
@@ -408,21 +403,17 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.is_clip = True if config.vit_layers > 0 else False
 
-        if "roberta" in config.tokenizer:
-            self.tokenizer_config = RobertaConfig(
-                vocab_size=config.vocab_size,
-                hidden_size=config.hidden_size,
-                num_hidden_layers=config.num_hidden_layers,
-                num_attention_heads=config.num_attention_heads,
-                intermediate_size=config.hidden_size * config.mlp_ratio,
-                max_position_embeddings=config.max_text_len,
-                hidden_dropout_prob=config.drop_rate,
-                attention_probs_dropout_prob=config.drop_rate,
-            )
-        else:
-            raise ValueError("Incorrect value of tokenizer. Currently roberta tokenizer is supported")
+        self.tokenizer_config = RobertaConfig(
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            num_hidden_layers=config.num_hidden_layers,
+            num_attention_heads=config.num_attention_heads,
+            intermediate_size=config.hidden_size * config.mlp_ratio,
+            max_position_embeddings=config.max_text_len,
+            hidden_dropout_prob=config.drop_rate,
+            attention_probs_dropout_prob=config.drop_rate,
+        )
 
         if config.cross_modal_transform_shared:
             self.cross_modal_text_transform = nn.Linear(config.input_text_embed_size, config.hidden_size)
@@ -437,29 +428,21 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
 
-        if self.is_clip:
-            self.vit_model = BridgeTowerCLIP(
-                config.vit_embed_dim,
-                config.resolution_before,
-                config.vit_layers,
-                config.vit_width,
-                config.vit_patch_size,
-                config.vit_transformer_width,
-                resolution_after=config.image_size,
-                stop_gradient=config.stop_gradient,
-                vit_layernorm_shared=config.vit_layernorm_shared,
-                vit_remove_last=config.vit_remove_last,
-            )
-        else:
-            raise ValueError(
-                "Incorrect value of visual encoder. Currently ViT-B/32, ViT-B/16 or ViT-L/14 are supported."
-            )
+        self.vit_model = BridgeTowerCLIP(
+            config.vit_embed_dim,
+            config.resolution_before,
+            config.vit_layers,
+            config.vit_width,
+            config.vit_patch_size,
+            config.vit_transformer_width,
+            resolution_after=config.image_size,
+            stop_gradient=config.stop_gradient,
+            vit_layernorm_shared=config.vit_layernorm_shared,
+            vit_remove_last=config.vit_remove_last,
+        )
 
-        if "roberta" in config.tokenizer:
-            roberta_config = RobertaConfig.from_pretrained(config.tokenizer)
-            self.text_transformer = RobertaModel(roberta_config)
-        else:
-            raise ValueError("Incorrect value of tokenizer. Currently roberta tokenizer is supported")
+        roberta_config = RobertaConfig.from_pretrained(config.tokenizer)
+        self.text_transformer = RobertaModel(roberta_config)
 
         if not config.vit_layernorm_shared and config.vit_layernorm_init_from_vit:
             for ln in self.vit_model.visual.cross_modal_ln_separate:
@@ -483,14 +466,14 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size)
 
         if config.link_tower_shared:
-            self.cross_modal_text_link_tower = LinkTower(config, self.tokenizer_config)
-            self.cross_modal_image_link_tower = LinkTower(config, self.tokenizer_config)
+            self.cross_modal_text_link_tower = LinkTower(config)
+            self.cross_modal_image_link_tower = LinkTower(config)
         else:
             self.cross_modal_text_link_tower = nn.ModuleList(
-                [LinkTower(config, self.tokenizer_config) for _ in range(config.num_hidden_layers - 1)]
+                [LinkTower(config) for _ in range(config.num_hidden_layers - 1)]
             )
             self.cross_modal_image_link_tower = nn.ModuleList(
-                [LinkTower(config, self.tokenizer_config) for _ in range(config.num_hidden_layers - 1)]
+                [LinkTower(config) for _ in range(config.num_hidden_layers - 1)]
             )
 
         self.post_init()
@@ -625,11 +608,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
     def get_cls_feats(self, text_feats, image_feats):
         cls_feats_text = self.cross_modal_text_pooler(text_feats)
-        if self.is_clip:
-            cls_feats_image = self.cross_modal_image_pooler(image_feats)
-        else:
-            avg_image_feats = self.avgpool(image_feats.transpose(1, 2)).view(image_feats.size(0), 1, -1)
-            cls_feats_image = self.cross_modal_image_pooler(avg_image_feats)
+        cls_feats_image = self.cross_modal_image_pooler(image_feats)
         return torch.cat([cls_feats_text, cls_feats_image], dim=-1)
 
     def freeze_layers(
@@ -684,177 +663,32 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
 
 class LinkTower(nn.Module):
-    def __init__(self, config, tokenizer_config):
+    def __init__(self, config):
         super(LinkTower, self).__init__()
         self.link_tower_type = config.link_tower_type
         self.hidden_size = config.hidden_size
         if config.link_tower_type in [
             "add",
             "scaled_add",
-            "scaled_add_tensor",
             "interpolate",
-            "interpolate_tensor",
-            "gated_interpolate",
-            "elementwise_product",
-            "elementwise_product_residual",
-            "linear_add_fpn",
-            "linear_concat",
-            "linear_add",
-            "linear_concat_residual",
-            "linear_add_residual",
-            "mlp_concat",
-            "mlp_add",
-            "mlp_concat_residual",
-            "mlp_add_residual",
         ]:
             if config.link_tower_type == "scaled_add":
                 self.scaled_factor = nn.Parameter(torch.tensor(1.0))
-            elif config.link_tower_type == "scaled_add_tensor":
-                self.scaled_factor = nn.Parameter(torch.ones(self.hidden_size))
             elif config.link_tower_type == "interpolate":
                 self.beta = nn.Parameter(torch.tensor(0.5))
-            elif config.link_tower_type == "interpolate_tensor":
-                self.beta = nn.Parameter(torch.ones(self.hidden_size))
-                self.beta.data.fill_(0.5)
-            elif config.link_tower_type == "gated_interpolate":
-                self.gate = nn.Sequential(nn.Linear(self.hidden_size * 2, self.hidden_size), nn.Sigmoid())
-            elif config.link_tower_type == "linear_add_fpn":
-                self.dense1 = nn.Linear(self.hidden_size, self.hidden_size)
-                self.dense2 = nn.Linear(self.hidden_size, self.hidden_size)
-            elif config.link_tower_type in [
-                "linear_concat",
-                "linear_add",
-                "linear_concat_residual",
-                "linear_add_residual",
-            ]:
-                count = 2 if "concat" in config.link_tower_type else 1
-                self.dense = nn.Linear(self.hidden_size * count, self.hidden_size)
-            elif config.link_tower_type in ["mlp_concat", "mlp_add", "mlp_concat_residual", "mlp_add_residual"]:
-                count = 2 if "concat" in config.link_tower_type else 1
-                self.dense = nn.Sequential(
-                    nn.Linear(self.hidden_size * count, self.hidden_size * count),
-                    nn.LayerNorm(self.hidden_size * count),
-                    nn.GELU(),
-                    nn.Linear(self.hidden_size * count, self.hidden_size),
-                )
             self.LayerNorm = nn.LayerNorm(self.hidden_size)
-        elif config.link_tower_type in ["cross_attention", "cross_attention_ffn"]:
-            self.dense = BridgeTowerBertLinkLayer(tokenizer_config, self.link_tower_type)
         else:
             raise NotImplementedError(f"link_tower_type {config.link_tower_type} is not implemented")
 
     def forward(self, hidden_states, cross_modal_hidden_states, attention_mask):
         if self.link_tower_type == "add":
             return self.LayerNorm(hidden_states + cross_modal_hidden_states)
-        elif self.link_tower_type in ["scaled_add", "scaled_add_tensor"]:
+        elif self.link_tower_type == "scaled_add":
             return self.LayerNorm(hidden_states * self.scaled_factor + cross_modal_hidden_states)
-        elif self.link_tower_type in ["interpolate", "interpolate_tensor"]:
+        elif self.link_tower_type == "interpolate":
             return self.LayerNorm(hidden_states * (1 - self.beta) + cross_modal_hidden_states * self.beta)
-        elif self.link_tower_type == "gated_interpolate":
-            scaled_gate = self.gate(torch.cat([hidden_states, cross_modal_hidden_states], dim=-1))
-            return self.LayerNorm(hidden_states * (1 - scaled_gate) + cross_modal_hidden_states * scaled_gate)
-        elif self.link_tower_type in ["elementwise_product", "elementwise_product_residual"]:
-            if "residual" in self.link_tower_type:
-                return self.LayerNorm(cross_modal_hidden_states + hidden_states * cross_modal_hidden_states)
-            else:
-                return self.LayerNorm(hidden_states * cross_modal_hidden_states)
-        elif self.link_tower_type in ["linear_add_fpn"]:
-            return self.LayerNorm(self.dense1(hidden_states) + self.dense2(cross_modal_hidden_states))
-        elif self.link_tower_type in ["linear_concat", "linear_concat_residual", "mlp_concat", "mlp_concat_residual"]:
-            if "residual" in self.link_tower_type:
-                return self.LayerNorm(
-                    cross_modal_hidden_states
-                    + self.dense(torch.cat([hidden_states, cross_modal_hidden_states], dim=-1))
-                )
-            else:
-                return self.LayerNorm(self.dense(torch.cat([hidden_states, cross_modal_hidden_states], dim=-1)))
-        elif self.link_tower_type in ["linear_add", "linear_add_residual", "mlp_add", "mlp_add_residual"]:
-            if "residual" in self.link_tower_type:
-                return self.LayerNorm(
-                    cross_modal_hidden_states + self.dense(hidden_states + cross_modal_hidden_states)
-                )
-            else:
-                return self.LayerNorm(self.dense(hidden_states + cross_modal_hidden_states))
-        elif self.link_tower_type in ["cross_attention", "cross_attention_ffn"]:
-            return self.dense(cross_modal_hidden_states, hidden_states, attention_mask)
         else:
             raise NotImplementedError(f"link_tower_type {self.link_tower_type} is not implemented")
-
-
-class FusionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.downstream_fusion_layers = config.downstream_fusion_layers
-        self.downstream_fusion_method = config.downstream_fusion_method
-        self.hidden_size = config.hidden_size
-
-        if self.downstream_fusion_method in ["max_mean_pooling", "lstm_bi"]:
-            self.LayerNorm = nn.LayerNorm(self.hidden_size * 2 * 2)
-        elif self.downstream_fusion_method in [
-            "elmo",
-            "elmo_tensor",
-            "gated",
-            "gated_meter",
-            "max_pooling",
-            "mean_pooling",
-            "lstm_uni",
-        ]:
-            self.LayerNorm = nn.LayerNorm(self.hidden_size * 2)
-
-        if self.downstream_fusion_method == "elmo":
-            self.learned_layer_weights = nn.Parameter(
-                torch.zeros(
-                    self.downstream_fusion_layers,
-                )
-            )
-        elif self.downstream_fusion_method == "elmo_tensor":
-            self.learned_layer_weights = nn.Parameter(torch.zeros(self.downstream_fusion_layers, self.hidden_size * 2))
-        elif self.downstream_fusion_method in ["gated", "gated_meter"]:
-            self.gate = nn.Linear(self.hidden_size * 2, self.hidden_size * 2)
-        elif self.downstream_fusion_method in ["lstm_uni", "lstm_bi"]:
-            if "uni" in self.downstream_fusion_method:
-                bidirectional = False
-            elif "bi" in self.downstream_fusion_method:
-                bidirectional = True
-            self.lstmpooler = nn.LSTM(
-                self.hidden_size * 2, self.hidden_size * 2, batch_first=True, bidirectional=bidirectional
-            )
-            self.lstmpooler_dropout = nn.Dropout(config.drop_rate)
-
-    def forward(self, feats):
-        if self.downstream_fusion_method == "concat":
-            return torch.cat(feats, dim=-1)
-        else:
-            feats = torch.stack(feats, dim=0)
-
-        if self.downstream_fusion_method == "ensemble":
-            return feats
-
-        if self.downstream_fusion_method in ["elmo", "elmo_tensor"]:
-            layer_weights = F.softmax(self.learned_layer_weights, dim=0)
-            if self.downstream_fusion_method == "elmo":
-                feats = torch.sum(layer_weights.view(-1, 1, 1) * feats, dim=0)
-            else:
-                feats = torch.sum(layer_weights.view(-1, 1, self.hidden_size * 2) * feats, dim=0)
-        elif self.downstream_fusion_method in ["gated", "gated_meter"]:
-            if self.downstream_fusion_method == "gated":
-                layer_gate = F.softmax(self.gate(feats), dim=0)
-                feats = torch.sum(layer_gate * feats, dim=0)
-            else:
-                layer_gate = F.softmax(self.gate(feats[:-1]), dim=0)
-                feats = feats[-1] + torch.sum(layer_gate * feats[:-1], dim=0)
-        elif self.downstream_fusion_method == "max_pooling":
-            feats = torch.max(feats, dim=0)[0]
-        elif self.downstream_fusion_method == "mean_pooling":
-            feats = torch.mean(feats, dim=0)
-        elif self.downstream_fusion_method == "max_mean_pooling":
-            max_feats = torch.max(feats, dim=0)[0]
-            mean_feats = torch.mean(feats, dim=0)
-            feats = torch.cat([max_feats, mean_feats], dim=-1)
-        elif self.downstream_fusion_method in ["lstm_uni", "lstm_bi"]:
-            feats = self.lstmpooler_dropout(self.lstmpooler(feats)[0][-1])
-
-        return self.LayerNorm(feats)
 
 
 class BridgeTowerPooler(nn.Module):
@@ -868,55 +702,6 @@ class BridgeTowerPooler(nn.Module):
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
-
-
-class BridgeTowerBertLinkLayer(nn.Module):
-    def __init__(self, config, link_tower_type):
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.link_tower_type = link_tower_type
-        # Like ViL-BERT and LXMERT, we don't use the self-attention and just use the cross-attention instead (optional with ffn).
-        self.crossattention = BertAttention(config)
-        if self.link_tower_type == "cross_attention_ffn":
-            self.intermediate = BertIntermediate(config)
-            self.output = BertOutput(config)
-
-    def forward(
-        self,
-        hidden_states,
-        encoder_hidden_states,
-        attention_mask=None,
-        encoder_attention_mask=None,
-        output_attentions=False,
-    ):
-        cross_attention_outputs = self.crossattention(
-            hidden_states,
-            attention_mask,
-            None,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            None,
-            output_attentions,
-        )
-
-        attention_output = cross_attention_outputs[0]
-        outputs = cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-        if self.link_tower_type == "cross_attention_ffn":
-            layer_output = apply_chunking_to_forward(
-                self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-            )
-            outputs = (layer_output,) + outputs
-
-            return layer_output
-        else:
-            return attention_output
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
 
 
 class BridgeTowerBertCrossLayer(nn.Module):
@@ -936,7 +721,9 @@ class BridgeTowerBertCrossLayer(nn.Module):
         hidden_states,
         encoder_hidden_states,
         attention_mask=None,
+        head_mask=None,
         encoder_attention_mask=None,
+        past_key_value=None,
         output_attentions=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -955,10 +742,10 @@ class BridgeTowerBertCrossLayer(nn.Module):
         cross_attention_outputs = self.crossattention(
             attention_output,
             attention_mask,
-            None,
+            head_mask,
             encoder_hidden_states,
             encoder_attention_mask,
-            None,
+            past_key_value,
             output_attentions,
         )
         attention_output = cross_attention_outputs[0]
