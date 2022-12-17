@@ -256,7 +256,7 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 inputs_dict["output_hidden_states"] = False
                 config.return_dict = True
                 model = model_class(config)
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
                 attentions = outputs.attentions
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
@@ -264,7 +264,7 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 del inputs_dict["output_attentions"]
                 config.output_attentions = True
                 model = model_class(config)
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
                 attentions = outputs.attentions
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
@@ -293,7 +293,7 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.hidden_states
             expected_num_layers = self.model_tester.num_hidden_layers + 1

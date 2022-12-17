@@ -791,7 +791,7 @@ class TFVideoMAEDecoder(tf.keras.layers.Layer):
         self.decoder_layers = [
             [
                 TFVideoMAELayer(decoder_config, name=f"decoder_layers.{j}")
-                for _ in range(config.decoder_num_hidden_layers)
+                for j in range(config.decoder_num_hidden_layers)
             ]
         ]
 
