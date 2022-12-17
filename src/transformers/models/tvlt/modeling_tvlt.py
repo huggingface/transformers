@@ -233,10 +233,10 @@ class TvltAudioEmbeddings(nn.Module):
         sequence: [batch_size, seq_len, hidden_dim], sequence
         """
 
-        batch_size, seq_len, hidden_dim = sequence.shape  # batch, length, dim
-        freq_len, time_len = self.num_freq_patches, seq_len // self.num_freq_patches  # frequency, time
+        batch_size, seq_len, hidden_dim = sequence.shape
+        freq_len, time_len = self.num_freq_patches, seq_len // self.num_freq_patches
 
-        len_keep = int(seq_length * (1 - mask_ratio))
+        len_keep = int(seq_len * (1 - mask_ratio))
         noise = (
             torch.rand(batch_size, time_len, device=sequence.device)
             .unsqueeze(-1)
@@ -250,7 +250,7 @@ class TvltAudioEmbeddings(nn.Module):
 
         # keep the first subset
         ids_keep = ids_shuffle[:, :len_keep]
-        sequence_masked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, hidden_size))
+        sequence_masked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, hidden_dim))
 
         # generate the binary mask: 0 is keep, 1 is remove
         label_masks = torch.ones([batch_size, seq_len], device=sequence.device)
@@ -950,7 +950,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         self.tvlt = TvltModel(config)
 
-        self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=False)
+        self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
 
         if self.task_matching:
             self.matching_head = TvltMatchingHead(config)

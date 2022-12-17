@@ -21,7 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_tvlt": ["Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP", "TvltConfig"],
+    "configuration_tvlt": ["TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TvltConfig"],
 }
 
 try:
@@ -31,7 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tvlt"] = [
-        "Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TVLT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TvltModel",
         "TvltForPreTraining",
         "TvltForQuestionAnswering",
@@ -46,8 +46,10 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_tvlt"] = [
-        "TvltPixelFeatureExtractor",
         "TvltAudioFeatureExtractor",
+    ]
+    _import_structure["image_processing_tvlt"] = [
+        "TvltImageProcessor",
     ]
     _import_structure["processing_tvlt"] = [
         "TvltProcessor",
@@ -64,7 +66,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tvlt import (
-            Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TvltModel,
             TvltForPreTraining,
             TvltForQuestionAnswering,
@@ -78,7 +80,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_tvlt import TvltAudioFeatureExtractor, TvltPixelFeatureExtractor
+        from .feature_extraction_tvlt import TvltAudioFeatureExtractor
+        from .image_processing_tvlt import TvltImageProcessor
         from .processing_tvlt import TvltProcessor
 
 else:

@@ -19,217 +19,19 @@ from typing import List, Optional, Union
 import numpy as np
 from numpy.fft import fft
 
-from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, ImageInput, PILImageResampling, is_torch_tensor
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...image_utils import is_torch_tensor
 from ...utils import TensorType, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
 
-if is_vision_available():
-    from PIL import Image
+if is_speech_available():
+    import torchaudio
 
-
-class TvltPixelFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
-    r"""
-    Constructs a TVLT pixel feature extractor. This feature extractor can be used to prepare videos/images for the model.
-
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
-    should refer to this superclass for more information regarding those methods.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the shorter edge of the input to a certain `size`.
-        size (`int`, *optional*, defaults to 224):
-            Resize the shorter edge of the input to the given size. Only has an effect if `do_resize` is set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
-            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
-            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
-            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
-            to `True`.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to center crop the input to a certain `size`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with mean and standard deviation.
-        image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
-            The sequence of means for each channel, to be used when normalizing images.
-        image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
-            The sequence of standard deviations for each channel, to be used when normalizing images.
-    """
-
-    model_input_names = ["pixel_values", "pixel_masks"]
-
-    def __init__(
-        self,
-        do_resize=True,
-        pixel_size=224,
-        pixel_patch_size=16,
-        num_frames=8,
-        resample=PILImageResampling.BILINEAR,
-        do_center_crop=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        padding_value=0.0,
-        return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        **kwargs
-    ):
-        self.do_resize = do_resize
-        self.pixel_size = pixel_size
-        self.pixel_patch_size = pixel_patch_size
-        self.num_frames = num_frames
-        self.resample = resample
-        self.do_center_crop = do_center_crop
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-    def resize_pixel(self, video, size, resample="bilinear"):
-        return [self.resize(frame, size, resample, default_to_square=False) for frame in video]
-
-    def crop_pixel(self, video, size):
-        return [self.center_crop(frame, size) for frame in video]
-
-    def normalize_pixel(self, video, mean, std):
-        # video can be a list of PIL images, list of NumPy arrays or list of PyTorch tensors
-        # first: convert to list of NumPy arrays
-        video = [self.to_numpy_array(frame) for frame in video]
-
-        # second: stack to get (num_frames, num_channels, height, width)
-        video = np.stack(video, axis=0)
-
-        # third: normalize
-        if not isinstance(mean, np.ndarray):
-            mean = np.array(mean).astype(video.dtype)
-        if not isinstance(std, np.ndarray):
-            std = np.array(std).astype(video.dtype)
-
-        return (video - mean[None, :, None, None]) / std[None, :, None, None]
-
-    def __call__(
-        self,
-        pixel_features: ImageInput,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "max_length",
-        max_length: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
-        **kwargs
-    ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several video(s) or image(s) and audio(s).
-
-        <Tip warning={true}>
-
-        NumPy arrays are converted to PIL images when resizing, so the most efficient is to pass PIL images.
-
-        </Tip>
-
-        Args:
-            pixel_features (`List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, `List[List[PIL.Image.Image]]`, `List[List[np.ndarrray]]`,:
-                `List[List[torch.Tensor]]`): The video/image or batch of videos/images to be prepared. Each video/image should be a list
-                of frames, which can be either PIL images or NumPy arrays. In case of NumPy arrays/PyTorch tensors,
-                each frame should be of shape (H, W, C), where H and W are frame height and width, and C is a number of
-                channels.
-            truncation (`bool`, *optional*, default to `True`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*, defaults to None):
-                If set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
-                [What are attention masks?](../glossary#attention-mask)
-                <Tip>
-                For WhisperTransoformer models, `attention_mask` should alwys be passed for batched inference, to avoid
-                subtle bugs.
-                </Tip>
-            padding_value (`float`, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_frames, num_channels,
-              height, width).
-
-            - **pixel_masks** -- Pixel masks to be fed to a model, of shape (batch_size, num_pixel_patch).
-
-        Main method to featurize and prepare for the model one or several sequence(s).
-        Args:
-
-        """
-        # Input type checking for clearer error
-        valid_pixels = False
-        is_batched = False
-
-        # Check that videos have a valid type
-        if isinstance(pixel_features, (list, tuple)):
-            if isinstance(pixel_features[0], (Image.Image, np.ndarray)) or is_torch_tensor(pixel_features[0]):
-                valid_pixels = True
-            elif isinstance(pixel_features[0], (list, tuple)) and (
-                isinstance(pixel_features[0][0], (Image.Image, np.ndarray)) or is_torch_tensor(pixel_features[0][0])
-            ):
-                valid_pixels = True
-                is_batched = True
-
-        if not valid_pixels:
-            raise ValueError(
-                "Videos must of type `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]` (single"
-                " example), `List[List[PIL.Image.Image]]`, `List[List[np.ndarray]]`, `List[List[torch.Tensor]]` (batch"
-                " of examples)."
-            )
-
-        if not is_batched:
-            pixel_features = [pixel_features]
-
-        # transformations (resizing + center cropping + normalization)
-        if self.do_resize and self.pixel_size is not None:
-            pixel_features = [
-                self.resize_pixel(pixel_feature, size=self.pixel_size, resample=self.resample)
-                for pixel_feature in pixel_features
-            ]
-        if self.do_center_crop and self.pixel_size is not None:
-            pixel_features = [self.crop_pixel(pixel_feature, size=self.pixel_size) for pixel_feature in pixel_features]
-        if self.do_normalize:
-            pixel_features = [
-                self.normalize_pixel(pixel_feature, mean=self.image_mean, std=self.image_std)
-                for pixel_feature in pixel_features
-            ]
-
-        pixel_masks = [
-            len(pixel_feature) * (self.pixel_size // self.pixel_patch_size) ** 2 * [1]
-            + (self.num_frames - len(pixel_feature)) * (self.pixel_size // self.pixel_patch_size) ** 2 * [0]
-            for pixel_feature in pixel_features
-        ]
-        pixel_masks = np.array(pixel_masks)
-
-        padded_pixel_features = np.zeros(
-            [len(pixel_features), self.num_frames, 3, self.pixel_size, self.pixel_size]
-        ).astype(np.float32)
-        for i in range(len(pixel_features)):
-            pixel_feature = pixel_features[i]
-            padded_pixel_features[i, : pixel_feature.shape[0], :, :, :] = pixel_feature
-
-        # return as BatchFeature
-        data = {"pixel_values": padded_pixel_features, "pixel_masks": pixel_masks}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
-        return encoded_inputs
-
-
-class TvltAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+    
+ # Copied from whisper
+class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TVLT audio feature extractor. This feature extractor can be used to prepare audios for the model.
 
@@ -267,7 +69,7 @@ class TvltAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         self.audio_size = audio_size
         self.num_channels = num_channels
         self.audio_patch_size = audio_patch_size
-        self.frequency_length = feature_size // self.audio_patch_size[1]
+        self.freq_len = feature_size // self.audio_patch_size[1]
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.chunk_length = chunk_length
@@ -514,17 +316,19 @@ class TvltAudioFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         ]
         if isinstance(audio_features[0], List):
             audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
-
-        max_length = max([feature.shape[0] for feature in audio_features])
+        max_patch_len = max([feature.shape[0] // self.audio_patch_size[0] * self.freq_len for feature in audio_features])
+        # Pad to multiple of audio patch size
+        max_patch_len = (max_patch_len // 16 + 1) * 16 if max_patch_len % 16 > 0 else max_patch_len
+        max_time_len = max([feature.shape[0] for feature in audio_features])
         audio_masks = [
-            feature.shape[0] // self.audio_patch_size[0] * self.frequency_length * [1]
-            + (max_length - feature.shape[0]) // self.audio_patch_size[0] ** self.frequency_length * [0]
+            (feature.shape[0] // self.audio_patch_size[0] * self.freq_len) * [1]
+            + (max_patch_len - feature.shape[0] // self.audio_patch_size[0] * self.freq_len) * [0]
             for feature in audio_features
         ]
         audio_masks = np.array(audio_masks).astype(np.float32)
 
         # convert into correct format for padding
-        padded_audio_features = np.zeros([len(audio_features), 1, max_length, 128]).astype(np.float32)
+        padded_audio_features = np.zeros([len(audio_features), 1, max_time_len, 128]).astype(np.float32)
         for i in range(len(audio_features)):
             feature = audio_features[i]
             padded_audio_features[i, :, : feature.shape[0], :] = feature
