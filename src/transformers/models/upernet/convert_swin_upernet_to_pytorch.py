@@ -33,6 +33,7 @@ from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentati
 
 
 def get_upernet_config(model_name):
+    auxiliary_in_channels = 384
     if "tiny" in model_name:
         embed_dim = 96
         depths = (2, 2, 6, 2)
@@ -41,14 +42,29 @@ def get_upernet_config(model_name):
         embed_dim = 96
         depths = (2, 2, 18, 2)
         num_heads = (3, 6, 12, 24)
+    elif "base" in model_name:
+        embed_dim = 128
+        depths = (2, 2, 18, 2)
+        num_heads = (4, 8, 16, 32)
+        window_size = 12
+        auxiliary_in_channels = 512
+    elif "large" in model_name:
+        embed_dim = 192
+        depths = (2, 2, 18, 2)
+        num_heads = (6, 12, 24, 48)
+        window_size = 12
+        auxiliary_in_channels = 768
 
     backbone_config = SwinConfig(
         embed_dim=embed_dim,
         depths=depths,
         num_heads=num_heads,
+        window_size=window_size,
         out_features=["stage1", "stage2", "stage3", "stage4"],
     )
-    config = UperNetConfig(backbone_config=backbone_config, num_labels=150)
+    config = UperNetConfig(
+        backbone_config=backbone_config, auxiliary_in_channels=auxiliary_in_channels, num_labels=150
+    )
 
     return config
 
@@ -164,6 +180,8 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     model_name_to_url = {
         "upernet-swin-tiny": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210531_112542-e380ad3e.pth",
         "upernet-swin-small": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210526_192015-ee2fff1c.pth",
+        "upernet-swin-base": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_base_patch4_window12_512x512_160k_ade20k_pretrain_384x384_22K/upernet_swin_base_patch4_window12_512x512_160k_ade20k_pretrain_384x384_22K_20210531_125459-429057bf.pth",
+        "upernet-swin-large": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_large_patch4_window12_512x512_pretrain_384x384_22K_160k_ade20k/upernet_swin_large_patch4_window12_512x512_pretrain_384x384_22K_160k_ade20k_20220318_091743-9ba68901.pth",
     }
     checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[
@@ -222,9 +240,22 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     print(logits.shape)
     print("First values of logits:", logits[0, 0, :3, :3])
     # assert values
-    expected_slice = torch.tensor(
-        [[-7.6034, -7.6034, -7.4257], [-7.6034, -7.6034, -7.4257], [-7.4655, -7.4655, -7.2804]]
-    )
+    if model_name == "upernet-swin-tiny":
+        expected_slice = torch.tensor(
+            [[-7.6034, -7.6034, -7.4257], [-7.6034, -7.6034, -7.4257], [-7.4655, -7.4655, -7.2804]]
+        )
+    elif model_name == "upernet-swin-small":
+        expected_slice = torch.tensor(
+            [[-7.0189, -7.0189, -6.7604], [-7.0189, -7.0189, -6.7604], [-6.9016, -6.9016, -6.6415]]
+        )
+    elif model_name == "upernet-swin-base":
+        expected_slice = torch.tensor(
+            [[-6.5961, -6.5961, -6.4133], [-6.5961, -6.5961, -6.4133], [-6.4834, -6.4834, -6.2972]]
+        )
+    elif model_name == "upernet-swin-large":
+        expected_slice = torch.tensor(
+            [[-7.3338, -7.3338, -7.1665], [-7.3338, -7.3338, -7.1665], [-7.1914, -7.1914, -7.0264]]
+        )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
@@ -237,8 +268,8 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to hub")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"facebook/{model_name}")
+        processor.push_to_hub(f"facebook/{model_name}")
 
 
 if __name__ == "__main__":
@@ -248,7 +279,7 @@ if __name__ == "__main__":
         "--model_name",
         default="upernet-swin-tiny",
         type=str,
-        choices=["upernet-swin-tiny", "upernet-swin-small"],
+        choices=[f"upernet-swin-{size}" for size in ["tiny", "small", "base", "large"]],
         help="Name of the Swin + UperNet model you'd like to convert.",
     )
     parser.add_argument(

@@ -91,13 +91,11 @@ class UperNetConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
             backbone_config = ResNetConfig()
         else:
-            # verify that the backbone is supported
-            backbone_model_type = (
-                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
-            )
             if isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.pop("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
