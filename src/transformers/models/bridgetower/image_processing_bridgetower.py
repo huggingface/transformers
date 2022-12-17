@@ -174,8 +174,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
@@ -215,7 +215,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        image_size = 288,
+        image_size: int = 288,
         **kwargs
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -304,6 +304,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         """
         Center crop an image to (size["height"], size["width"]). If the input size is smaller than `size` along any
         edge, the image is padded with 0's and then center cropped.
+
         Args:
             image (`np.ndarray`):
                 Image to center crop.

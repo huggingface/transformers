@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
@@ -241,9 +240,13 @@ class BridgeTowerVisualTransformer(nn.Module):
 
     def forward(self, x: torch.Tensor, x_mask):
         visual_output = self.conv1(x)  # shape = [*, width, grid, grid]
-        visual_output = visual_output.reshape(visual_output.shape[0], visual_output.shape[1], -1)  # shape = [*, width, grid ** 2]
+        visual_output = visual_output.reshape(
+            visual_output.shape[0], visual_output.shape[1], -1
+        )  # shape = [*, width, grid ** 2]
         visual_output = visual_output.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-        t = self.class_embedding.to(visual_output.dtype) + torch.zeros(visual_output.shape[0], 1, visual_output.shape[-1], dtype=visual_output.dtype, device=visual_output.device)
+        t = self.class_embedding.to(visual_output.dtype) + torch.zeros(
+            visual_output.shape[0], 1, visual_output.shape[-1], dtype=visual_output.dtype, device=visual_output.device
+        )
         visual_output = torch.cat([t, visual_output], dim=1)  # shape = [*, grid ** 2 + 1, width]
         visual_output = visual_output + self.positional_embedding.to(visual_output.dtype)
         visual_output = self.ln_pre(visual_output)
@@ -262,12 +265,19 @@ class BridgeTowerVisualTransformer(nn.Module):
             visual_outputs = torch.stack(visual_outputs_stack, dim=0)  # shape = [layers, *, width, grid ** 2]
         return visual_outputs
 
-
     def forward_pre(self, x: torch.Tensor):
         visual_outputs_pre = self.conv1(x)  # shape = [*, width, grid, grid]
-        visual_outputs_pre = visual_outputs_pre.reshape(visual_outputs_pre.shape[0], visual_outputs_pre.shape[1], -1)  # shape = [*, width, grid ** 2]
+        visual_outputs_pre = visual_outputs_pre.reshape(
+            visual_outputs_pre.shape[0], visual_outputs_pre.shape[1], -1
+        )  # shape = [*, width, grid ** 2]
         visual_outputs_pre = visual_outputs_pre.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-        embeddings_to = self.class_embedding.to(visual_outputs_pre.dtype) + torch.zeros(visual_outputs_pre.shape[0], 1, visual_outputs_pre.shape[-1], dtype=visual_outputs_pre.dtype, device=visual_outputs_pre.device)
+        embeddings_to = self.class_embedding.to(visual_outputs_pre.dtype) + torch.zeros(
+            visual_outputs_pre.shape[0],
+            1,
+            visual_outputs_pre.shape[-1],
+            dtype=visual_outputs_pre.dtype,
+            device=visual_outputs_pre.device,
+        )
         visual_outputs_pre = torch.cat([embeddings_to, visual_outputs_pre], dim=1)  # shape = [*, grid ** 2 + 1, width]
         visual_outputs_pre = visual_outputs_pre + self.positional_embedding.to(visual_outputs_pre.dtype)
         visual_outputs_pre = self.ln_pre(visual_outputs_pre)
@@ -391,8 +401,10 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-    " top.",
+    (
+        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+        " top."
+    ),
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -537,7 +549,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         # first layer
         cross_modal_text = self.cross_modal_text_transform(text_embeds)
-        text_token_type_embeddings = self.token_type_embeddings(torch.zeros(1).long().to(self.device)).expand_as(cross_modal_text)
+        text_token_type_embeddings = self.token_type_embeddings(torch.zeros(1).long().to(self.device)).expand_as(
+            cross_modal_text
+        )
         cross_modal_text = self.cross_modal_text_layernorm(cross_modal_text + text_token_type_embeddings)
 
         image_embeds_with_ln = self.cross_modal_image_transform(image_embeds_with_ln)
@@ -549,13 +563,19 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         if irtr_len > 0:
             _bs, _L, _D = image_embeds_with_ln.size()
             cross_modal_image = cross_modal_image.unsqueeze(1).expand(_bs, irtr_len, _L, _D).reshape(-1, _L, _D)
-        pixel_mask = torch.ones((cross_modal_image.size(0), cross_modal_image.size(1)), dtype=torch.long, device=self.device)
+        pixel_mask = torch.ones(
+            (cross_modal_image.size(0), cross_modal_image.size(1)), dtype=torch.long, device=self.device
+        )
         extend_image_masks = self.text_transformer.get_extended_attention_mask(
             pixel_mask, pixel_mask.size(), self.device
         )
 
-        cross_text_feats = self.cross_modal_text_layers[0](cross_modal_text, cross_modal_image, extend_text_masks, extend_image_masks)[0]
-        cross_image_feats = self.cross_modal_image_layers[0](cross_modal_image, cross_modal_text, extend_image_masks, extend_text_masks)[0]
+        cross_text_feats = self.cross_modal_text_layers[0](
+            cross_modal_text, cross_modal_image, extend_text_masks, extend_image_masks
+        )[0]
+        cross_image_feats = self.cross_modal_image_layers[0](
+            cross_modal_image, cross_modal_text, extend_image_masks, extend_text_masks
+        )[0]
 
         link_layer_index = 0
 
@@ -572,7 +592,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             image_link_tower = self.cross_modal_image_link_tower[link_layer_index]
 
             cross_text_feats_ = text_link_tower(
-                self.cross_modal_text_transform(text_embeds) + text_token_type_embeddings, cross_text_feats, extend_text_masks
+                self.cross_modal_text_transform(text_embeds) + text_token_type_embeddings,
+                cross_text_feats,
+                extend_text_masks,
             )
             if irtr_len > 0:
                 cross_image_feats_ = image_link_tower(
@@ -583,10 +605,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             else:
                 cross_image_feats_ = image_link_tower(image_embeds_with_ln, cross_image_feats, extend_image_masks)
 
-            cross_text_feats = self.cross_modal_text_layers[link_layer_index + 1](cross_text_feats_, cross_image_feats_, extend_text_masks, extend_image_masks)[0]
-            cross_image_feats = self.cross_modal_image_layers[link_layer_index + 1](cross_image_feats_, cross_text_feats_, extend_image_masks, extend_text_masks)[
-                0
-            ]
+            cross_text_feats = self.cross_modal_text_layers[link_layer_index + 1](
+                cross_text_feats_, cross_image_feats_, extend_text_masks, extend_image_masks
+            )[0]
+            cross_image_feats = self.cross_modal_image_layers[link_layer_index + 1](
+                cross_image_feats_, cross_text_feats_, extend_image_masks, extend_text_masks
+            )[0]
 
             link_layer_index += 1
 
