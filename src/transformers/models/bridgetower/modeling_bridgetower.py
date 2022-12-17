@@ -571,15 +571,15 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         )
 
         cross_text_feats = self.cross_modal_text_layers[0](
-            cross_modal_text, 
-            cross_modal_image, 
-            attention_mask=extend_text_masks, 
+            cross_modal_text,
+            cross_modal_image,
+            attention_mask=extend_text_masks,
             encoder_attention_mask=extend_image_masks,
         )[0]
         cross_image_feats = self.cross_modal_image_layers[0](
-            cross_modal_image, 
-            cross_modal_text, 
-            attention_mask=extend_image_masks, 
+            cross_modal_image,
+            cross_modal_text,
+            attention_mask=extend_image_masks,
             encoder_attention_mask=extend_text_masks,
         )[0]
 
@@ -612,15 +612,15 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 cross_image_feats_ = image_link_tower(image_embeds_with_ln, cross_image_feats, extend_image_masks)
 
             cross_text_feats = self.cross_modal_text_layers[link_layer_index + 1](
-                cross_text_feats_, 
-                cross_image_feats_, 
-                attention_mask=extend_text_masks, 
+                cross_text_feats_,
+                cross_image_feats_,
+                attention_mask=extend_text_masks,
                 encoder_attention_mask=extend_image_masks,
             )[0]
             cross_image_feats = self.cross_modal_image_layers[link_layer_index + 1](
-                cross_image_feats_, 
-                cross_text_feats_, 
-                attention_mask=extend_image_masks, 
+                cross_image_feats_,
+                cross_text_feats_,
+                attention_mask=extend_image_masks,
                 encoder_attention_mask=extend_text_masks,
             )[0]
 
