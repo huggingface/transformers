@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("rwkv4neo", "Rwkv4NeoConfig"),
         ("albert", "AlbertConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
         ("bart", "BartConfig"),
@@ -187,6 +188,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
+        ("rwkv4neo", "RWKV4NEO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -328,6 +330,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("rwkv4neo", "Rwkv4Neo"),
         ("albert", "ALBERT"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
         ("bart", "BART"),

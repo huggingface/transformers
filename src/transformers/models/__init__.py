@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    rwkv4neo,
     albert,
     audio_spectrogram_transformer,
     auto,
