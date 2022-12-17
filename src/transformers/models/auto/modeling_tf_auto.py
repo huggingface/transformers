@@ -113,7 +113,8 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("t5", "TFT5ForConditionalGeneration"),
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
-        ("videomae", "TFVideoMAEForPreTraining")("vit_mae", "TFViTMAEForPreTraining"),
+        ("videomae", "TFVideoMAEForPreTraining"),
+        ("vit_mae", "TFViTMAEForPreTraining"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
         ("xlnet", "TFXLNetLMHeadModel"),
@@ -440,6 +441,9 @@ TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 )
+TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
+)
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES
 )
@@ -571,6 +575,15 @@ class TFAutoModelForTokenClassification(_BaseAutoModelClass):
 
 TFAutoModelForTokenClassification = auto_class_update(
     TFAutoModelForTokenClassification, head_doc="token classification"
+)
+
+
+class TFAutoModelForVideoClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
+
+
+TF_AutoModelForrVideoClassification = auto_class_update(
+    TFAutoModelForVideoClassification, head_doc="video classification"
 )
 
 

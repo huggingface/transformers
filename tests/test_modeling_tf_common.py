@@ -77,6 +77,7 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
         BertConfig,
         PushToHubCallback,
         RagRetriever,
@@ -183,6 +184,7 @@ class TFModelTesterMixin:
             elif model_class in [
                 *get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
                 *get_values(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                *get_values(TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
             ]:
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):

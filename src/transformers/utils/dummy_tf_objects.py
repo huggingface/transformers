@@ -313,6 +313,7 @@ TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
+TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING = None
 
 TF_MODEL_FOR_VISION_2_SEQ_MAPPING = None
 
@@ -422,6 +423,13 @@ class TFAutoModelForTableQuestionAnswering(metaclass=DummyObject):
 
 
 class TFAutoModelForTokenClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForVideoClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
