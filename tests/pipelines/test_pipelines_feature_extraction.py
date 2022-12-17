@@ -18,6 +18,7 @@ import numpy as np
 
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
     TF_MODEL_MAPPING,
     FeatureExtractionPipeline,
@@ -178,7 +179,11 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         if tokenizer is None:
             self.skipTest("No tokenizer")
             return
-        elif type(model.config) in FEATURE_EXTRACTOR_MAPPING or isinstance(model.config, LxmertConfig):
+        elif (
+            type(model.config) in FEATURE_EXTRACTOR_MAPPING
+            or isinstance(model.config, LxmertConfig)
+            or type(model.config) in IMAGE_PROCESSOR_MAPPING
+        ):
             self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
             return
         elif model.config.is_encoder_decoder:

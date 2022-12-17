@@ -119,13 +119,28 @@ class ResNetModelTester:
         model.eval()
         result = model(pixel_values)
 
-        # verify hidden states
+        # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
         self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = ResNetBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -141,7 +156,15 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ResNetModel, ResNetForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            ResNetModel,
+            ResNetForImageClassification,
+            ResNetBackbone,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     fx_compatible = True
     test_pruning = False
@@ -164,10 +187,6 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     def create_and_test_config_common_properties(self):
         return
-
-    @unittest.skip(reason="ResNet does not output attentions")
-    def test_attention_outputs(self):
-        pass
 
     @unittest.skip(reason="ResNet does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -246,6 +265,10 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
                 config.output_hidden_states = True
 
                 check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip(reason="ResNet does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

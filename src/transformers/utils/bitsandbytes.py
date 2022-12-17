@@ -150,7 +150,7 @@ def get_keys_to_not_convert(model):
 
     # Ignore this for base models (BertModel, GPT2Model, etc.)
     if (not has_tied_params) and is_base_model:
-        return ""
+        return []
 
     # otherwise they have an attached head
     list_modules = list(model.named_parameters())
