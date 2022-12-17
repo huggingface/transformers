@@ -408,7 +408,7 @@ class DetrConvolutionalBackbone(nn.Module):
         outputs feature maps of C_5.
         """
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values)
+        features = self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -1452,6 +1452,7 @@ class DetaModel(DetaPreTrainedModel):
         # Create input projection layers
         if config.num_feature_levels > 1:
             num_backbone_outs = len(backbone.intermediate_channel_sizes)
+            print("Backbone intermediate channels:", backbone.intermediate_channel_sizes)
             input_proj_list = []
             for _ in range(num_backbone_outs):
                 in_channels = backbone.intermediate_channel_sizes[_]
