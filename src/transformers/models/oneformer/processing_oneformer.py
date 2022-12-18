@@ -48,8 +48,7 @@ class OneFormerProcessor(ProcessorMixin):
     r"""
     Constructs an OneFormer processor which wraps [`OneFormerImageProcessor`] and
     [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single processor that interits both the image processor and
-    tokenizer functionalities. See the [`~OneFormerProcessor.__call__`] and [`~OneFormerProcessor.decode`] for more
-    information.
+    tokenizer functionalities.
 
     Args:
         image_processor ([`OneFormerImageProcessor`]):
@@ -63,7 +62,7 @@ class OneFormerProcessor(ProcessorMixin):
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "OneFormerImageProcessor"
-    tokenizer_class = "CLIPTokenizer"
+    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(
         self,
@@ -87,7 +86,7 @@ class OneFormerProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several task input(s) and image(s). This method forwards the
         `task_inputs` and `kwargs` arguments to CLIPTokenizer's [`~CLIPTokenizer.__call__`] if `task_inputs` is not
-        `None` to encode. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        `None` to encode. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         OneFormerImageProcessor's [`~OneFormerImageProcessor.__call__`] if `images` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
 
