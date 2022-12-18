@@ -426,9 +426,7 @@ class CPMAntSelfAttentionBlock(nn.Module):
         x = self.self_attention(x, x, attention_mask, position_bias, use_cache, past_key_value)
         if use_cache:
             x, current_key_value = x
-        else:
-            current_key_value = None
-
+            
         if self.dropout is not None:
             x = self.dropout(x)
         hidden_states = hidden_states + x
@@ -772,26 +770,20 @@ class CPMAntEncoder(nn.Module):
                 hidden_states = layer(hidden_states, attention_mask, position_bias)
             hidden_states = self.output_layernorm(hidden_states)
             return hidden_states
-        else:
-            with torch.no_grad():
-                current_key_values = []
-                for i, module in enumerate(self.layers):
-                    hidden_states = module(
-                        hidden_states,
-                        attention_mask,
-                        position_bias,
-                        past_key_value=past_key_values[i] if past_key_values else None,
-                        use_cache=use_cache,
-                    )
-                    if use_cache:
-                        current_key_values.append(hidden_states[1])
-                        hidden_states = hidden_states[0]
-                hidden_states = self.output_layernorm(hidden_states)
-
-                if use_cache:
-                    return hidden_states, current_key_values
-
-                return hidden_states
+        with torch.no_grad():
+            current_key_values = []
+            for i, module in enumerate(self.layers):
+                hidden_states = module(
+                    hidden_states,
+                    attention_mask,
+                    position_bias,
+                    past_key_value=past_key_values[i] if past_key_values else None,
+                    use_cache=use_cache,
+                )
+                current_key_values.append(hidden_states[1])
+                hidden_states = hidden_states[0]
+            hidden_states = self.output_layernorm(hidden_states)
+            return hidden_states, current_key_values
 
 
 class CPMAntEmbeddings(nn.Module):
