@@ -95,8 +95,7 @@ class CLIPSegProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-
-        if text is not None and visual_prompt is not None and images is not None:
+        if text is None and visual_prompt is None and images is None:
             raise ValueError("You have to specify either text, visual prompt or images.")
 
         if text is not None and visual_prompt is not None:
