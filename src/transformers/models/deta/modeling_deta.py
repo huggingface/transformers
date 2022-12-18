@@ -176,7 +176,7 @@ class DetaDecoderOutput(ModelOutput):
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModelOutput with DeformableDetr->Deta,Deformable DETR->DETA
 class DetaModelOutput(ModelOutput):
     """
-    Base class for outputs of the DETA encoder-decoder model.
+    Base class for outputs of the Deformable DETR encoder-decoder model.
 
     Args:
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -559,7 +559,7 @@ def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations,
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->Deta,Deformable DETR->DETA
 class DetaMultiscaleDeformableAttention(nn.Module):
     """
-    Multiscale deformable attention as proposed in DETA.
+    Multiscale deformable attention as proposed in Deformable DETR.
     """
 
     def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
@@ -688,7 +688,7 @@ class DetaMultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
-    Here, we add position embeddings to the queries and keys (as explained in the DETA paper).
+    Here, we add position embeddings to the queries and keys (as explained in the Deformable DETR paper).
     """
 
     def __init__(
@@ -1250,7 +1250,7 @@ class DetaDecoder(DetaPreTrainedModel):
 
     The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
 
-    Some tweaks for DETA:
+    Some tweaks for Deformable DETR:
 
     - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
     - it also returns a stack of intermediate outputs and reference points from all decoding layers.
@@ -1266,7 +1266,7 @@ class DetaDecoder(DetaPreTrainedModel):
         self.layers = nn.ModuleList([DetaDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.gradient_checkpointing = False
 
-        # hack implementation for iterative bounding box refinement and two-stage DETA
+        # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
         self.class_embed = None
 
@@ -1504,25 +1504,25 @@ class DetaModel(DetaPreTrainedModel):
 
         self.post_init()
 
-    # Copied from transformers.models.deformable_detr.DeformableDetrModel.get_encoder
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.get_encoder
     def get_encoder(self):
         return self.encoder
 
-    # Copied from transformers.models.deformable_detr.DeformableDetrModel.get_decoder
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.get_decoder
     def get_decoder(self):
         return self.decoder
 
-    # Copied from transformers.models.deformable_detr.DeformableDetrModel.freeze_backbone
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.freeze_backbone
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(False)
 
-    # Copied from transformers.models.deformable_detr.DeformableDetrModel.unfreeze_backbone
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.unfreeze_backbone
     def unfreeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
 
-    # Copied from transformers.models.deformable_detr.DeformableDetrModel.get_valid_ratio
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.get_valid_ratio
     def get_valid_ratio(self, mask):
         """Get the valid ratio of all feature maps."""
 
@@ -1534,7 +1534,7 @@ class DetaModel(DetaPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
         return valid_ratio
 
-    # Copied from transformers.models.deformable_detr.DeformableDetrModel.get_proposal_pos_embed
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.get_proposal_pos_embed
     def get_proposal_pos_embed(self, proposals):
         """Get the position embedding of the proposals."""
 
@@ -1873,7 +1873,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
     def __init__(self, config: DetaConfig):
         super().__init__(config)
 
-        # DETA encoder-decoder model
+        # Deformable DETR encoder-decoder model
         self.model = DetaModel(config)
 
         # Detection heads on top
@@ -2205,6 +2205,7 @@ class DetaLoss(nn.Module):
         return losses
 
     @torch.no_grad()
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_cardinality
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """
         Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
@@ -2220,6 +2221,7 @@ class DetaLoss(nn.Module):
         losses = {"cardinality_error": card_err}
         return losses
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_boxes
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -2244,12 +2246,14 @@ class DetaLoss(nn.Module):
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_source_permutation_idx
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_target_permutation_idx
     def _get_target_permutation_idx(self, indices):
         # permute targets following indices
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])

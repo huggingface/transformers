@@ -266,15 +266,15 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values.to(device))
 
-    # TODO verify logits
+    # verify logits
     print("Logits:", outputs.logits[0, :3, :3])
-    # expected_logits = torch.tensor(
-    #     [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
-    # )
-    # expected_boxes = torch.tensor([[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]])
-    # assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
-    # assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
-    # print("Everything ok!")
+    expected_logits = torch.tensor(
+        [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
+    )
+    expected_boxes = torch.tensor([[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]])
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
+    print("Everything ok!")
 
     if pytorch_dump_folder_path:
         # Save model and processor
