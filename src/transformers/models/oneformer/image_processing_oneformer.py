@@ -1115,7 +1115,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             # mask_pred = mask_pred.unsqueeze(1).repeat(1, self.sem_seg_head.num_classes, 1).flatten(0, 1)
             mask_pred = masks_queries_logits[i][topk_indices]
 
-            # Only consider scores with confidence over [self.object_mask_threshold] for demo
+            # Only consider scores with confidence over [threshold] for demo
             if is_demo:
                 keep = scores_per_image > threshold
                 scores_per_image = scores_per_image[keep]
