@@ -1,9 +1,8 @@
 from transformers import DetaConfig, DetaForObjectDetection, SwinConfig
 
-backbone_config = SwinConfig(embed_dim = 192,
-                                 depths = (2, 2, 18, 2),
-                                 num_heads = (6, 12, 24, 48),
-                                 out_features=["stage2", "stage3", "stage4"]
+
+backbone_config = SwinConfig(
+    embed_dim=192, depths=(2, 2, 18, 2), num_heads=(6, 12, 24, 48), out_features=["stage2", "stage3", "stage4"]
 )
 
 config = DetaConfig(

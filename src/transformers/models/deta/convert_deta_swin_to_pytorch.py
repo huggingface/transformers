@@ -35,11 +35,12 @@ logger = logging.get_logger(__name__)
 
 
 def get_deta_config():
-    backbone_config = SwinConfig(embed_dim = 192,
-                                 depths = (2, 2, 18, 2),
-                                 num_heads = (6, 12, 24, 48),
-                                 window_size=12,
-                                 out_features=["stage2", "stage3", "stage4"]
+    backbone_config = SwinConfig(
+        embed_dim=192,
+        depths=(2, 2, 18, 2),
+        num_heads=(6, 12, 24, 48),
+        window_size=12,
+        out_features=["stage2", "stage3", "stage4"],
     )
 
     config = DetaConfig(
@@ -264,14 +265,18 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values.to(device))
 
-    # TODO verify logits
+    # verify logits
     print("Logits:", outputs.logits[0, :3, :3])
-    # expected_logits = torch.tensor(
-    #     [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
-    # )
-    # expected_boxes = torch.tensor([[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]])
-    # assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
-    # assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
+    expected_logits = torch.tensor(
+        [[-7.6308, -2.8485, -5.3737],
+        [-7.2037, -4.5505, -4.8027],
+        [-7.2943, -4.2611, -4.6617]]
+    )
+    expected_boxes = torch.tensor([[0.4987, 0.4969, 0.9999],
+        [0.2549, 0.5498, 0.4805],
+        [0.5498, 0.2757, 0.0569]])
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
     print("Everything ok!")
 
     if pytorch_dump_folder_path:
