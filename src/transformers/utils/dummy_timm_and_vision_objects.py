@@ -58,30 +58,6 @@ class DeformableDetrPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["timm", "vision"])
 
 
-DETA_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class DetaForObjectDetection(metaclass=DummyObject):
-    _backends = ["timm", "vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["timm", "vision"])
-
-
-class DetaModel(metaclass=DummyObject):
-    _backends = ["timm", "vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["timm", "vision"])
-
-
-class DetaPreTrainedModel(metaclass=DummyObject):
-    _backends = ["timm", "vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["timm", "vision"])
-
-
 DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
