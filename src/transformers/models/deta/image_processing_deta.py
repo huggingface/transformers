@@ -271,10 +271,10 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
     return masks
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->DeformableDetr
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->DETA
 def prepare_coco_detection_annotation(image, target, return_segmentation_masks: bool = False):
     """
-    Convert the target in COCO format into the format expected by DeformableDetr.
+    Convert the target in COCO format into the format expected by DETA.
     """
     image_height, image_width = get_image_size(image)
 
@@ -359,12 +359,12 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->DeformableDetr
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->DETA
 def prepare_coco_panoptic_annotation(
     image: np.ndarray, target: Dict, masks_path: Union[str, pathlib.Path], return_masks: bool = True
 ) -> Dict:
     """
-    Prepare a coco panoptic annotation for DeformableDetr.
+    Prepare a coco panoptic annotation for DETA.
     """
     image_height, image_width = get_image_size(image)
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
@@ -734,7 +734,7 @@ def compute_segments(
     return segmentation, segments
 
 
-class DeformableDetrImageProcessor(BaseImageProcessor):
+class DetaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Deformable DETR image processor.
 
@@ -814,7 +814,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DeformableDetr
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DETA
     def prepare_annotation(
         self,
         image: np.ndarray,
@@ -824,7 +824,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
     ) -> Dict:
         """
-        Prepare an annotation for feeding into DeformableDetr model.
+        Prepare an annotation for feeding into DETA model.
         """
         format = format if format is not None else self.format
 
@@ -1253,8 +1253,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
-        Converts the output of [`DeformableDetrForObjectDetection`] into the format expected by the COCO api. Only
-        supports PyTorch.
+        Converts the output of [`DetaForObjectDetection`] into the format expected by the COCO api. Only supports
+        PyTorch.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
