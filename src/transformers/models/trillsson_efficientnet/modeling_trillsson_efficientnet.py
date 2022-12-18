@@ -30,8 +30,8 @@ from .configuration_trillsson_efficientnet import TrillssonEfficientNetConfig
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "Trillsson_efficientConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "Trillsson_efficientFeatureExtractor"
+_CONFIG_FOR_DOC = "TrillssonEfficientNetConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "TrillssonEfficientNetFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "vumichien/nonsemantic-speech-trillsson3"
@@ -183,7 +183,7 @@ class Conv2DSamePadding(nn.Conv2d):
         )
 
 
-class SELayer(nn.Module):
+class TrillssonSqueezeExcitation(nn.Module):
     def __init__(
         self, config: TrillssonEfficientNetConfig, in_channels: int, out_channels: int, reduction: int = 4
     ) -> None:
@@ -211,15 +211,13 @@ class SELayer(nn.Module):
         return hidden_states
 
 
-class StemLayer(nn.Module):
+class TrillssonStem(nn.Module):
     def __init__(
         self,
         config: TrillssonEfficientNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int,
-        # norm_eps: float,
-        # norm_momentum: float,
     ) -> None:
         super().__init__()
         self.config = config
@@ -230,6 +228,7 @@ class StemLayer(nn.Module):
             num_features=out_channels, eps=self.config.norm_eps, momentum=self.config.norm_momentum
         )
         self.activation = ACT2FN[config.hidden_act]
+        self.gradient_checkpointing = False
 
     def forward(self, input_features):
         hidden_states = self.stem_conv(input_features)
@@ -238,14 +237,12 @@ class StemLayer(nn.Module):
         return hidden_states
 
 
-class TopLayer(nn.Module):
+class TrillssonTop(nn.Module):
     def __init__(
         self,
         config: TrillssonEfficientNetConfig,
         in_channels: int,
         out_channels: int,
-        # norm_eps: float,
-        # norm_momentum: float,
     ) -> None:
         super().__init__()
         self.config = config
@@ -256,6 +253,7 @@ class TopLayer(nn.Module):
             num_features=out_channels, eps=self.config.norm_eps, momentum=self.config.norm_momentum
         )
         self.activation = ACT2FN[config.hidden_act]
+        self.gradient_checkpointing = False
 
     def forward(self, input_features):
         hidden_states = self.top_conv(input_features)
@@ -264,7 +262,7 @@ class TopLayer(nn.Module):
         return hidden_states
 
 
-class MBConvBlock(nn.Module):
+class TrillssonInvertedResidual(nn.Module):
     def __init__(
         self,
         config: TrillssonEfficientNetConfig,
@@ -274,10 +272,8 @@ class MBConvBlock(nn.Module):
         expand_ratio: int,
         use_se: int,
         survival_probability: int,
-        # norm_eps: float,
-        # norm_momentum: float,
     ) -> None:
-        """MBConv block: Mobile Inverted Residual Bottleneck."""
+        """TrillssonInvertedResidual block: Inverted Residual Bottleneck."""
         super().__init__()
         hidden_dim = round(in_channels * expand_ratio)
         self.config = config
@@ -305,13 +301,14 @@ class MBConvBlock(nn.Module):
         )
         self.bn = nn.BatchNorm2d(num_features=hidden_dim, eps=self.config.norm_eps, momentum=self.config.norm_momentum)
         if self.use_se:
-            self.se = SELayer(config=self.config, in_channels=in_channels, out_channels=hidden_dim)
+            self.se = TrillssonSqueezeExcitation(config=self.config, in_channels=in_channels, out_channels=hidden_dim)
             self.project_conv = Conv2DSamePadding(
                 in_channels=hidden_dim, out_channels=out_channels, kernel_size=1, stride=1, padding=0, bias=False
             )
             self.project_bn = nn.BatchNorm2d(
                 num_features=out_channels, eps=self.config.norm_eps, momentum=self.config.norm_momentum
             )
+        self.gradient_checkpointing = False
 
     def forward(self, input_features):
         if self.expand_ratio != 1:
@@ -334,7 +331,7 @@ class MBConvBlock(nn.Module):
         return hidden_states
 
 
-class FusedMBConvBlock(nn.Module):
+class TrillssonFusedInvertedResiduals(nn.Module):
     def __init__(
         self,
         config: TrillssonEfficientNetConfig,
@@ -344,10 +341,8 @@ class FusedMBConvBlock(nn.Module):
         expand_ratio: int,
         use_se: int,
         survival_probability: float,
-        # norm_eps: float,
-        # norm_momentum: float,
     ) -> None:
-        """Fused MBConv Block: Fusing the proj conv1x1 and depthwise_conv into a conv2d."""
+        """TrillssonFusedInvertedResiduals: Fusing the proj conv1x1 and depthwise_conv into a conv2d."""
         super().__init__()
         hidden_dim = round(in_channels * expand_ratio)
         self.config = config
@@ -380,7 +375,8 @@ class FusedMBConvBlock(nn.Module):
             )
 
         if self.use_se:
-            self.se = SELayer(config=self.config, in_channels=in_channels, out_channels=hidden_dim)
+            self.se = TrillssonSqueezeExcitation(config=self.config, in_channels=in_channels, out_channels=hidden_dim)
+        self.gradient_checkpointing = False
 
     def forward(self, input_features):
         if self.expand_ratio != 1:
@@ -413,7 +409,7 @@ class TrillssonEfficientNetPreTrainedModel(PreTrainedModel):
     config_class = TrillssonEfficientNetConfig
     load_tf_weights = loaf_tf_weights_in_trillsson_efficientnet
     base_model_prefix = "trillsson_efficientnet"
-    supports_gradient_checkpointing = False
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
         """Initialize the weights"""
@@ -424,6 +420,12 @@ class TrillssonEfficientNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.BatchNorm2d):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(
+            module, (TrillssonStem, TrillssonInvertedResidual, TrillssonFusedInvertedResiduals, TrillssonTop)
+        ):
+            module.gradient_checkpointing = value
 
 
 TRILLSSON_EFFICIENTNET_START_DOCSTRING = r"""
@@ -466,27 +468,16 @@ class TrillssonEfficientNetModel(TrillssonEfficientNetPreTrainedModel):
         super().__init__(config)
 
         self.config = config
-        # block efficientnetv3 info expand_ratio, output_filters, num_repeat, strides, use_se, conv_type
-        # block_configs = [
-        #     [1, 24, 2, 1, 0, 1],
-        #     [4, 48, 4, 2, 0, 1],
-        #     [4, 64, 4, 2, 0, 1],
-        #     [4, 128, 6, 2, 1, 0],
-        #     [6, 160, 9, 1, 1, 0],
-        #     [6, 256, 15, 2, 1, 0],
-        # ]
         # building first layer
         input_channel = make_divisible(
             24 * self.config.depth_multiplier, self.config.depth_divisible_by, self.config.min_depth
         )
 
-        self.stem = StemLayer(
+        self.stem = TrillssonStem(
             config=self.config,
             in_channels=1,
             out_channels=input_channel,
             stride=2,
-            # norm_eps=self.config.norm_eps,
-            # norm_momentum=self.config.norm_momentum,
         )
 
         # building inverted residual blocks
@@ -497,7 +488,7 @@ class TrillssonEfficientNetModel(TrillssonEfficientNetPreTrainedModel):
             output_channel = make_divisible(
                 output_filters * config.depth_multiplier, self.config.depth_divisible_by, self.config.min_depth
             )
-            conv_block = MBConvBlock if conv_type == 0 else FusedMBConvBlock
+            conv_block = TrillssonInvertedResidual if conv_type == 0 else TrillssonFusedInvertedResiduals
             for i in range(num_repeat):
                 if i > 0:
                     stride = 1
@@ -511,8 +502,6 @@ class TrillssonEfficientNetModel(TrillssonEfficientNetPreTrainedModel):
                         expand_ratio=expand_ratio,
                         use_se=use_se,
                         survival_probability=survival_probability,
-                        # norm_eps=config.norm_eps,
-                        # norm_momentum=config.norm_momentum,
                     )
                 )
                 input_channel = output_channel
@@ -526,12 +515,10 @@ class TrillssonEfficientNetModel(TrillssonEfficientNetPreTrainedModel):
         else:
             output_channel = 1280
 
-        self.top = TopLayer(
+        self.top = TrillssonTop(
             config=self.config,
             in_channels=input_channel,
             out_channels=output_channel,
-            # norm_eps=self.config.norm_eps,
-            # norm_momentum=self.config.norm_momentum,
         )
         self.pooler = nn.AdaptiveAvgPool2d((1, 1)) if add_pooling_layer else None
         self.dense = nn.Linear(output_channel, config.output_size)

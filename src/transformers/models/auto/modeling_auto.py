@@ -798,6 +798,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),
         ("sew-d", "SEWDForSequenceClassification"),
+        ("trillsson_efficientnet", "TrillssonEfficientNetForSequenceClassification"),
         ("unispeech", "UniSpeechForSequenceClassification"),
         ("unispeech-sat", "UniSpeechSatForSequenceClassification"),
         ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
