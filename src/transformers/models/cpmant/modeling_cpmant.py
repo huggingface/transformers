@@ -426,7 +426,7 @@ class CPMAntSelfAttentionBlock(nn.Module):
         x = self.self_attention(x, x, attention_mask, position_bias, use_cache, past_key_value)
         if use_cache:
             x, current_key_value = x
-            
+
         if self.dropout is not None:
             x = self.dropout(x)
         hidden_states = hidden_states + x
