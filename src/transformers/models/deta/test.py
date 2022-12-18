@@ -1,7 +1,13 @@
-from transformers import DetaConfig, DetaForObjectDetection
+from transformers import DetaConfig, DetaForObjectDetection, SwinConfig
 
+backbone_config = SwinConfig(embed_dim = 192,
+                                 depths = (2, 2, 18, 2),
+                                 num_heads = (6, 12, 24, 48),
+                                 out_features=["stage2", "stage3", "stage4"]
+)
 
 config = DetaConfig(
+    backbone_config=backbone_config,
     num_queries=900,
     encoder_ffn_dim=2048,
     decoder_ffn_dim=2048,

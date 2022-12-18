@@ -26,7 +26,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_download, hf_hub_url
-from transformers import DeformableDetrImageProcessor, DetaConfig, DetaForObjectDetection
+from transformers import DeformableDetrImageProcessor, DetaConfig, DetaForObjectDetection, SwinConfig
 from transformers.utils import logging
 
 
@@ -35,7 +35,15 @@ logger = logging.get_logger(__name__)
 
 
 def get_deta_config():
+    backbone_config = SwinConfig(embed_dim = 192,
+                                 depths = (2, 2, 18, 2),
+                                 num_heads = (6, 12, 24, 48),
+                                 window_size=12,
+                                 out_features=["stage2", "stage3", "stage4"]
+    )
+
     config = DetaConfig(
+        backbone_config=backbone_config,
         num_queries=900,
         encoder_ffn_dim=2048,
         decoder_ffn_dim=2048,
@@ -63,78 +71,38 @@ def create_rename_keys(config):
 
     # stem
     # fmt: off
-    rename_keys.append(("backbone.0.body.conv1.weight", "model.backbone.conv_encoder.model.embedder.embedder.convolution.weight"))
-    rename_keys.append(("backbone.0.body.bn1.weight", "model.backbone.conv_encoder.model.embedder.embedder.normalization.weight"))
-    rename_keys.append(("backbone.0.body.bn1.bias", "model.backbone.conv_encoder.model.embedder.embedder.normalization.bias"))
-    rename_keys.append(("backbone.0.body.bn1.running_mean", "model.backbone.conv_encoder.model.embedder.embedder.normalization.running_mean"))
-    rename_keys.append(("backbone.0.body.bn1.running_var", "model.backbone.conv_encoder.model.embedder.embedder.normalization.running_var"))
+    rename_keys.append(("backbone.0.body.patch_embed.proj.weight", "model.backbone.conv_encoder.model.embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("backbone.0.body.patch_embed.proj.bias", "model.backbone.conv_encoder.model.embeddings.patch_embeddings.projection.bias"))
+    rename_keys.append(("backbone.0.body.patch_embed.norm.weight", "model.backbone.conv_encoder.model.embeddings.norm.weight"))
+    rename_keys.append(("backbone.0.body.patch_embed.norm.bias", "model.backbone.conv_encoder.model.embeddings.norm.bias"))
     # stages
-    for stage_idx in range(len(config.backbone_config.depths)):
-        for layer_idx in range(config.backbone_config.depths[stage_idx]):
-            # shortcut
-            if layer_idx == 0:
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.0.weight",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.convolution.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.weight",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.bias",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.bias",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.running_mean",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.running_var",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var",
-                    )
-                )
-            # 3 convs
-            for i in range(3):
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.conv{i+1}.weight",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.weight",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.bias",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_mean",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_var",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
-                    )
-                )
+    for i in range(len(config.backbone_config.depths)):
+        for j in range(config.backbone_config.depths[i]):
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.norm1.weight", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.layernorm_before.weight"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.norm1.bias", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.layernorm_before.bias"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.attn.relative_position_bias_table", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_bias_table"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.attn.relative_position_index", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_index"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.attn.proj.weight", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.output.dense.weight"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.attn.proj.bias", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.output.dense.bias"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.norm2.weight", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.layernorm_after.weight"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.norm2.bias", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.layernorm_after.bias"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.mlp.fc1.weight", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.intermediate.dense.weight"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.mlp.fc1.bias", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.intermediate.dense.bias"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.mlp.fc2.weight", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.output.dense.weight"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.blocks.{j}.mlp.fc2.bias", f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.output.dense.bias"))
+
+        if i < 3:
+            rename_keys.append((f"backbone.0.body.layers.{i}.downsample.reduction.weight", f"model.backbone.conv_encoder.model.encoder.layers.{i}.downsample.reduction.weight"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.downsample.norm.weight", f"model.backbone.conv_encoder.model.encoder.layers.{i}.downsample.norm.weight"))
+            rename_keys.append((f"backbone.0.body.layers.{i}.downsample.norm.bias", f"model.backbone.conv_encoder.model.encoder.layers.{i}.downsample.norm.bias"))
+        
+    rename_keys.append(("backbone.0.body.norm1.weight", "model.backbone.conv_encoder.model.hidden_states_norms.stage2.weight"))
+    rename_keys.append(("backbone.0.body.norm1.bias", "model.backbone.conv_encoder.model.hidden_states_norms.stage2.bias"))
+    rename_keys.append(("backbone.0.body.norm2.weight", "model.backbone.conv_encoder.model.hidden_states_norms.stage3.weight"))
+    rename_keys.append(("backbone.0.body.norm2.bias", "model.backbone.conv_encoder.model.hidden_states_norms.stage3.bias"))
+    rename_keys.append(("backbone.0.body.norm3.weight", "model.backbone.conv_encoder.model.hidden_states_norms.stage4.weight"))
+    rename_keys.append(("backbone.0.body.norm3.bias", "model.backbone.conv_encoder.model.hidden_states_norms.stage4.bias"))
+
     # transformer encoder
     for i in range(config.encoder_layers):
         rename_keys.append((f"transformer.encoder.layers.{i}.self_attn.sampling_offsets.weight", f"model.encoder.layers.{i}.self_attn.sampling_offsets.weight"))
@@ -187,6 +155,32 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
+# we split up the matrix of each encoder layer into queries, keys and values
+def read_in_swin_q_k_v(state_dict, backbone_config):
+    num_features = [int(backbone_config.embed_dim * 2**i) for i in range(len(backbone_config.depths))]
+    for i in range(len(backbone_config.depths)):
+        dim = num_features[i]
+        for j in range(backbone_config.depths[i]):
+            # fmt: off
+            # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+            in_proj_weight = state_dict.pop(f"backbone.0.body.layers.{i}.blocks.{j}.attn.qkv.weight")
+            in_proj_bias = state_dict.pop(f"backbone.0.body.layers.{i}.blocks.{j}.attn.qkv.bias")
+            # next, add query, keys and values (in that order) to the state dict
+            state_dict[f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.self.query.weight"] = in_proj_weight[:dim, :]
+            state_dict[f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.self.query.bias"] = in_proj_bias[: dim]
+            state_dict[f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.self.key.weight"] = in_proj_weight[
+                dim : dim * 2, :
+            ]
+            state_dict[f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.self.key.bias"] = in_proj_bias[
+                dim : dim * 2
+            ]
+            state_dict[f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"] = in_proj_weight[
+                -dim :, :
+            ]
+            state_dict[f"model.backbone.conv_encoder.model.encoder.layers.{i}.blocks.{j}.attention.self.value.bias"] = in_proj_bias[-dim :]
+            # fmt: on
+
+
 def read_in_decoder_q_k_v(state_dict, config):
     # transformer decoder self-attention layers
     hidden_size = config.d_model
@@ -223,7 +217,10 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     config = get_deta_config()
 
     # load original state dict
-    filename = "adet_checkpoint0011.pth" if model_name == "deta" else ""
+    if model_name == "deta-swin-large":
+        filename = "adet_swin_ft.pth"
+    else:
+        raise ValueError(f"Model name {model_name} not supported")
     checkpoint_path = hf_hub_download(repo_id="nielsr/deta-checkpoints", filename=filename)
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
 
@@ -235,6 +232,7 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
+    read_in_swin_q_k_v(state_dict, config.backbone_config)
     read_in_decoder_q_k_v(state_dict, config)
 
     # fix some prefixes
@@ -266,14 +264,14 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values.to(device))
 
-    # verify logits
+    # TODO verify logits
     print("Logits:", outputs.logits[0, :3, :3])
-    expected_logits = torch.tensor(
-        [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
-    )
-    expected_boxes = torch.tensor([[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]])
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
+    # expected_logits = torch.tensor(
+    #     [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
+    # )
+    # expected_boxes = torch.tensor([[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]])
+    # assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
+    # assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
     print("Everything ok!")
 
     if pytorch_dump_folder_path:
@@ -286,7 +284,7 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # Push to hub
     if push_to_hub:
         print("Pushing model to hub...")
-        model.push_to_hub("nielsr/deta-test")
+        model.push_to_hub("nielsr/deta-swin-large")
 
 
 if __name__ == "__main__":
@@ -295,7 +293,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         type=str,
-        default="deta",
+        default="deta-swin-large",
+        choices=["deta-swin-large"],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
