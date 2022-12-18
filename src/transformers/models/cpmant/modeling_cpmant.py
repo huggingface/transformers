@@ -307,6 +307,8 @@ class CPMAntAttention(nn.Module):
                 Used to avoid performing attention on padding token indices.
             position_bias (`torch.Tensor` of shape `(num_heads, len_q, len_k)`))
                 Provide positional information about tensor *key_value* and *query*.
+            use_cache (`bool`): Whether use cache.
+            past_kv (`Tuple[torch.Tensor, torch.Tensor]`): The past key value.
         """  # noqa: E501
 
         batch_size = hidden_q.size(0)
@@ -417,6 +419,8 @@ class CPMAntSelfAttentionBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
+            use_cache (`bool`): Whether use cache.
+            past_key_value (`Tuple[torch.Tensor, torch.Tensor]`): The past key value.
         """  # noqa: E501
         x = self.layernorm_before_attention(hidden_states)
         x = self.self_attention(x, x, attention_mask, position_bias, use_cache, past_key_value)
@@ -656,6 +660,8 @@ class CPMAntTransformerBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation of self-attention.
             self_position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
+            use_cache (`bool`): Whether use cache.
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
         """  # noqa: E501
 
         current_key_value = None
@@ -758,6 +764,8 @@ class CPMAntEncoder(nn.Module):
                 Avoid invalid areas to participate in the calculation.
             position_bias (`torch.Tensor` of shape `(num_heads, seq_enc, seq_enc)`):
                 Provides position information to attention mechanism.
+            use_cache (`bool`): Whether use cache.
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
         """  # noqa: E501
         if not use_cache:
             for layer in self.layers:
@@ -1105,7 +1113,6 @@ class CPMAntModel(CPMAntPreTrainedModel):
             position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
             segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
             span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
         batch = input.size(0)
         seqlen = input.size(1)
@@ -1163,7 +1170,6 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
             segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
             span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
         batch = input.size(0)
         seqlen = input.size(1)
