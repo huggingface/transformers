@@ -60,10 +60,6 @@ class TvltModelOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Tensor indicating which patches are masked (1) and which are not (0).
-        ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Tensor containing the original index of the (shuffled) masked patches.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -72,6 +68,14 @@ class TvltModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
+        pixel_label_masks (`torch.FloatTensor` of shape `(batch_size, pixel_patch_length)`):
+            Tensor indicating which pixel patches are masked (1) and which are not (0).
+        audio_label_masks (`torch.FloatTensor` of shape `(batch_size, audio_patch_length)`):
+            Tensor indicating which audio patches are masked (1) and which are not (0).
+        pixel_ids_restore (`torch.LongTensor` of shape `(batch_size, pixel_patch_length)`):
+            Tensor containing the ids permutation of pixel masking.
+        audio_ids_restore (`torch.LongTensor` of shape `(batch_size, audio_patch_length)`):
+            Tensor containing the ids permutation of audio masking.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -141,7 +145,7 @@ class TvltPixelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.patch_embeddings = PixelPatchEmbeddings(config)
+        self.patch_embeddings = TvltPixelPatchEmbeddings(config)
         self.num_patches = self.patch_embeddings.num_patches
         self.num_patches_per_frame = self.patch_embeddings.num_patches // config.num_frames
 
@@ -215,7 +219,7 @@ class TvltAudioEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.patch_embeddings = AudioPatchEmbeddings(config)
+        self.patch_embeddings = TvltAudioPatchEmbeddings(config)
         self.num_patches = self.patch_embeddings.num_patches
 
         self.type_embed_a = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
@@ -282,8 +286,9 @@ class TvltAudioEmbeddings(nn.Module):
 
         return embeddings, attention_masks, label_masks, ids_restore
 
-
-class PixelPatchEmbeddings(nn.Module):
+    
+# Copied from transformers.models.beit.modeling_beit.BeitPatchEmbeddings with BeitPatchEmbedding->TvltPixelPatchEmbeddings
+class TvltPixelPatchEmbeddings(nn.Module):
     """
     Video/Image to Patch Embedding. This module turns a batch of videos/images of shape (batch_size, num_frames, num_channels,
     height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
@@ -333,7 +338,8 @@ class PixelPatchEmbeddings(nn.Module):
         return embeddings
 
 
-class AudioPatchEmbeddings(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitPatchEmbeddings with BeitPatchEmbedding->TvltAudioPatchEmbeddings
+class TvltAudioPatchEmbeddings(nn.Module):
     """
     Audio to Patch Embedding. This module turns a batch of audios of shape (batch_size, num_frames, num_channels,
     height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
@@ -380,7 +386,8 @@ class AudioPatchEmbeddings(nn.Module):
         embeddings = self.projection(audio_values).flatten(2).transpose(1, 2)
         return embeddings
 
-
+    
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Tvlt
 class TvltSelfAttention(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
         super().__init__()
@@ -1409,3 +1416,4 @@ class TvltForSequenceClassification(TvltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    ]
