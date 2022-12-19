@@ -330,8 +330,8 @@ def get_oneformer_resize_output_image_size(
     return output_size
 
 
-def prepare_metadata(class_info_file):
-    class_info = json.load(open(hf_hub_download("shi-labs/oneformer_demo", class_info_file, repo_type="dataset"), "r"))
+def prepare_metadata(repo_path, class_info_file):
+    class_info = json.load(open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r"))
     metadata = {}
     class_names = []
     thing_ids = []
@@ -390,8 +390,10 @@ class OneFormerImageProcessor(BaseImageProcessor):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
+        repo_path (`str`, defaults to `shi-labs/oneformer_demo`):
+            Dataset repository on huggingface hub containing the JSON file with class information for the dataset.
         class_info_file (`str`):
-            JSON file containing class information for the dataset.
+            JSON file containing class information for the dataset. It is stored inside on the `repo_path` dataset repository.
         num_text (`int`, *optional*):
             Number of text entries in the text input list.
     """
@@ -411,6 +413,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
+        repo_path: str = "shi-labs/oneformer_demo",
         class_info_file: str = None,
         num_text: Optional[int] = None,
         **kwargs
@@ -438,7 +441,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.ignore_index = ignore_index
         self.reduce_labels = reduce_labels
         self.class_info_file = class_info_file
-        self.metadata = prepare_metadata(class_info_file)
+        self.repo_path = repo_path
+        self.metadata = prepare_metadata(repo_path, class_info_file)
         self.num_text = num_text
 
     def resize(
@@ -484,6 +488,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
         self, image: np.ndarray, rescale_factor: float, data_format: Optional[ChannelDimension] = None
     ) -> np.ndarray:
@@ -492,6 +497,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         """
         return rescale(image, rescale_factor, data_format=data_format)
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
     def normalize(
         self,
         image: np.ndarray,
@@ -504,6 +510,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format)
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.convert_segmentation_map_to_binary_masks
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "np.ndarray",
@@ -523,6 +530,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
     def __call__(self, images, task_inputs, segmentation_maps=None, **kwargs) -> BatchFeature:
         return self.preprocess(images, task_inputs, segmentation_maps=segmentation_maps, **kwargs)
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor._preprocess
     def _preprocess(
         self,
         image: ImageInput,
@@ -544,6 +552,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             image = self.normalize(image, mean=image_mean, std=image_std)
         return image
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor._preprocess_image
     def _preprocess_image(
         self,
         image: ImageInput,
@@ -577,6 +586,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             image = to_channel_dimension_format(image, data_format)
         return image
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor._preprocess_mask
     def _preprocess_mask(
         self,
         segmentation_map: ImageInput,
@@ -958,7 +968,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 )
                 annotations.append({"masks": masks, "classes": classes})
 
-        if annotations:
+        if annotations is not None:
             mask_labels = []
             class_labels = []
             texts_list = []

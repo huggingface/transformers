@@ -44,9 +44,6 @@ class OneFormerConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    Currently, OneFormer supports the [Swin Transformer](swin) and [Dilated Neighborhood Attention Transformer](dinat)
-    as backbones.
-
     Args:
         backbone_config (`PretrainedConfig`, *optional*, defaults to `SwinConfig`)
             The configuration of the backbone model.
@@ -133,9 +130,6 @@ class OneFormerConfig(PretrainedConfig):
         common_stride (`int`, *optional*, defaults to 4)
             Common stride used for features in pixel decoder.
 
-    Raises:
-        `ValueError`:
-            Raised if the backbone model type selected is not in `["swin", "dinat"]`
     Examples:
     ```python
     >>> from transformers import OneFormerConfig, OneFormerModel
@@ -150,7 +144,6 @@ class OneFormerConfig(PretrainedConfig):
     """
     model_type = "oneformer"
     attribute_map = {"hidden_size": "hidden_dim"}
-    backbones_supported = ["swin", "dinat"]
 
     def __init__(
         self,
@@ -216,11 +209,6 @@ class OneFormerConfig(PretrainedConfig):
             backbone_model_type = (
                 backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
             )
-            if backbone_model_type not in self.backbones_supported:
-                raise ValueError(
-                    f"Backbone {backbone_model_type} not supported, please use one of"
-                    f" {','.join(self.backbones_supported)}"
-                )
             if isinstance(backbone_config, dict):
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
