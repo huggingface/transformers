@@ -90,7 +90,6 @@ class OneFormerProcessorTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.size_divisor = 0
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
         self.class_info_file = class_info_file
@@ -115,7 +114,6 @@ class OneFormerProcessorTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "size_divisor": self.size_divisor,
             "num_labels": self.num_labels,
             "reduce_labels": self.reduce_labels,
             "ignore_index": self.ignore_index,
@@ -435,41 +433,6 @@ class OneFormerProcessingTest(unittest.TestCase):
         self.assertEqual(feat_extract_second.image_processor.to_dict(), feat_extract_first.image_processor.to_dict())
         self.assertIsInstance(feat_extract_first.image_processor, OneFormerImageProcessor)
         self.assertIsInstance(feat_extract_first.tokenizer, CLIPTokenizer)
-
-    def test_with_size_divisor(self):
-        size_divisors = [8, 16, 32]
-        weird_input_sizes = [(407, 802), (582, 1094)]
-        image_processor_dict = {
-            "do_resize": self.processing_tester.do_resize,
-            "size": self.processing_tester.size,
-            "do_normalize": self.processing_tester.do_normalize,
-            "image_mean": self.processing_tester.image_mean,
-            "image_std": self.processing_tester.image_std,
-            "size_divisor": self.processing_tester.size_divisor,
-            "num_labels": self.processing_tester.num_labels,
-            "reduce_labels": self.processing_tester.reduce_labels,
-            "ignore_index": self.processing_tester.ignore_index,
-            "class_info_file": self.processing_tester.class_info_file,
-            "metadata": self.processing_tester.metadata,
-            "num_text": self.processing_tester.num_text,
-        }
-        tokenizer = CLIPTokenizer.from_pretrained(self.processing_tester.repo_path)
-
-        for size_divisor in size_divisors:
-            image_process_dict = {**image_processor_dict, **{"size_divisor": size_divisor}}
-            image_processor = OneFormerImageProcessor(**image_process_dict)
-            processor = self.processing_class(
-                image_processor=image_processor,
-                tokenizer=tokenizer,
-                max_seq_length=self.processing_tester.max_seq_length,
-                task_seq_length=self.processing_tester.task_seq_length,
-            )
-            for weird_input_size in weird_input_sizes:
-                inputs = processor([np.ones((3, *weird_input_size))], ["semantic"], return_tensors="pt")
-                pixel_values = inputs["pixel_values"]
-                # check if divisible
-                self.assertTrue((pixel_values.shape[-1] % size_divisor) == 0)
-                self.assertTrue((pixel_values.shape[-2] % size_divisor) == 0)
 
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):

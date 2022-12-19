@@ -296,7 +296,6 @@ def get_oneformer_resize_output_image_size(
     image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     max_size: Optional[int] = None,
-    size_divisor: int = 0,
     default_to_square: bool = True,
 ) -> tuple:
     """
@@ -311,8 +310,6 @@ def get_oneformer_resize_output_image_size(
             Whether to default to square if no size is provided.
         max_size (`int`, *optional*):
             The maximum size of the output image.
-        size_divisible (`int`, *optional*, defaults to `0`):
-            If size_divisible is given, the output image size will be divisible by the number.
 
     Returns:
         `Tuple[int, int]`: The output size.
@@ -320,13 +317,6 @@ def get_oneformer_resize_output_image_size(
     output_size = get_resize_output_image_size(
         input_image=image, size=size, default_to_square=default_to_square, max_size=max_size
     )
-
-    if size_divisor > 0:
-        height, width = output_size
-        height = int(math.ceil(height / size_divisor) * size_divisor)
-        width = int(math.ceil(width / size_divisor) * size_divisor)
-        output_size = (height, width)
-
     return output_size
 
 
@@ -369,9 +359,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
             `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
             `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
             to `True`.
-        size_divisor (`int`, *optional*, defaults to 32):
-            Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-            Swin Transformer.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the input to a certain `scale`.
         rescale_factor (`float`, *optional*, defaults to 1/ 255):
@@ -404,7 +391,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -418,8 +404,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         num_text: Optional[int] = None,
         **kwargs
     ):
-        if "size_divisor" in kwargs:
-            size_divisor = kwargs.pop("size_divisor")
         if "max_size" in kwargs:
             self._max_size = kwargs.pop("max_size")
         else:
@@ -432,7 +416,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
-        self.size_divisor = size_divisor
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
@@ -449,7 +432,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        size_divisor: int = 0,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format=None,
         **kwargs
@@ -482,7 +464,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
             image=image,
             size=size,
             max_size=max_size,
-            size_divisor=size_divisor,
             default_to_square=False,
         )
         image = resize(image, size=size, resample=resample, data_format=data_format)
@@ -530,13 +511,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
     def __call__(self, images, task_inputs, segmentation_maps=None, **kwargs) -> BatchFeature:
         return self.preprocess(images, task_inputs, segmentation_maps=segmentation_maps, **kwargs)
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor._preprocess
     def _preprocess(
         self,
         image: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        size_divisor: int = None,
         resample: PILImageResampling = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
@@ -545,20 +524,18 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
     ):
         if do_resize:
-            image = self.resize(image, size=size, size_divisor=size_divisor, resample=resample)
+            image = self.resize(image, size=size, resample=resample)
         if do_rescale:
             image = self.rescale(image, rescale_factor=rescale_factor)
         if do_normalize:
             image = self.normalize(image, mean=image_mean, std=image_std)
         return image
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor._preprocess_image
     def _preprocess_image(
         self,
         image: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        size_divisor: int = None,
         resample: PILImageResampling = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
@@ -574,7 +551,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
             image=image,
             do_resize=do_resize,
             size=size,
-            size_divisor=size_divisor,
             resample=resample,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -586,13 +562,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
             image = to_channel_dimension_format(image, data_format)
         return image
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor._preprocess_mask
     def _preprocess_mask(
         self,
         segmentation_map: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        size_divisor: int = 0,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
         segmentation_map = to_numpy_array(segmentation_map)
@@ -609,7 +583,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
             do_resize=do_resize,
             resample=PILImageResampling.NEAREST,
             size=size,
-            size_divisor=size_divisor,
             do_rescale=False,
             do_normalize=False,
         )
@@ -626,7 +599,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -648,7 +620,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False, max_size=self._max_size)
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
@@ -658,8 +629,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
 
-        if do_resize is not None and size is None or size_divisor is None:
-            raise ValueError("If `do_resize` is True, `size` and `size_divisor` must be provided.")
+        if do_resize is not None and size is None:
+            raise ValueError("If `do_resize` is True, `size` must be provided.")
 
         if do_rescale is not None and rescale_factor is None:
             raise ValueError("If `do_rescale` is True, `rescale_factor` must be provided.")
@@ -691,7 +662,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 image,
                 do_resize=do_resize,
                 size=size,
-                size_divisor=size_divisor,
                 resample=resample,
                 do_rescale=do_rescale,
                 rescale_factor=rescale_factor,
@@ -705,8 +675,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
         if segmentation_maps is not None:
             segmentation_maps = [
-                self._preprocess_mask(segmentation_map, do_resize, size, size_divisor)
-                for segmentation_map in segmentation_maps
+                self._preprocess_mask(segmentation_map, do_resize, size) for segmentation_map in segmentation_maps
             ]
         encoded_inputs = self.encode_inputs(
             images,

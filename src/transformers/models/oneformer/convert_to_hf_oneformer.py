@@ -225,7 +225,6 @@ class OriginalOneFormerConfigToProcessorConverter:
             max_size=model_input.MAX_SIZE_TEST,
             num_labels=model.SEM_SEG_HEAD.NUM_CLASSES,
             ignore_index=dataset_catalog.ignore_label,
-            size_divisibility=32,  # 32 is required by swin
             class_info_file=class_info_file,
         )
 
