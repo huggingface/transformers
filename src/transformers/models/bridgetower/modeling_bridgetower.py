@@ -834,7 +834,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         >>> text = "a <mask> looking out of the window"
 
-        >>> processor = BridgeTowerProcessor.from_pretrained(("BridgeTower/bridgetower-base-itm-mlm"))
+        >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
         >>> model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
 
         >>> # prepare inputs
