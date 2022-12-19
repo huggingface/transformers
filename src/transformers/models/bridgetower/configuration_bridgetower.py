@@ -43,14 +43,14 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether cross modal transformer layers are shared.
         drop_rate (`float`, *optional*, defaults to 0.1):
             Drop out probability.
-        freeze_RoBERTa (`bool`, *optional*, defaults to `False`):
-            Whether to freeze RoBERTa.
-        freeze_ViT (`bool`, *optional*, defaults to `False`):
-            Whether to freeze ViT.
+        freeze_roberta (`bool`, *optional*, defaults to `False`):
+            Whether to freeze roberta.
+        freeze_vit (`bool`, *optional*, defaults to `False`):
+            Whether to freeze vit.
         freeze_layer_count_roberta (`bool`, *optional*, defaults to `False`):
             Whether to freeze layer count for RobERTa.
         freeze_layer_count_vit (`bool`, *optional*, defaults to `False`):
-            Whether to freeze layer count for ViT.
+            Whether to freeze layer count for vit.
         head_hidden_scale (`int`, *optional*, defaults to 2):
             Scale of hidden layers head.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -87,32 +87,34 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether embedding weights are tied with the decoder
         tokenizer (`str`, *optional*, defaults to `"roberta-base"`):
             Choice of the text tokenizer.
-        unfreeze_RoBERTa_attention (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze RoBERTa's LayerNorm.
-        unfreeze_RoBERTa_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze RoBERTa's embeddings.
-        unfreeze_RoBERTa_encoder (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze RoBERTa's encoder.
-        unfreeze_RoBERTa_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze RoBERTa's LayerNorm.
-        unfreeze_ViT_attention (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze ViT's attention.
-        unfreeze_ViT_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze ViT's LayerNorm.
-        vit_embed_dim (`str`, *optional*, defaults to `"ViT-B/16"`):
-            Dimension size of embeddings in ViT model.
-        vit_layers (`int`, *optional*, defaults to 12):
-            Number of layers in ViT model.
+        unfreeze_roberta_attention (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze roberta's LayerNorm.
+        unfreeze_roberta_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze roberta's embeddings.
+        unfreeze_roberta_encoder (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze roberta's encoder.
+        unfreeze_roberta_layernorm (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze roberta's LayerNorm.
+        unfreeze_vit_attention (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze vit's attention.
+        unfreeze_vit_layernorm (`bool`, *optional*, defaults to `False`):
+            Whether to unfreeze vit's LayerNorm.
+        vit_embed_dim (`int`, *optional*, defaults to 512):
+            Dimension size of embeddings in vit model.
+        vit_hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        vit_num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in vit model.
         vit_layernorm_init_from_vit (`bool`, *optional*, defaults to `False`):
-            Whether to init ViT LayerNorm from ViT.
+            Whether to init vit LayerNorm from vit.
         vit_layernorm_shared (`bool`, *optional*, defaults to `True`):
-            Whether ViT's LayerNorm layers are shared.
+            Whether vit's LayerNorm layers are shared.
         vit_patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch in ViT.
+            The size (resolution) of each patch in vit.
         vit_remove_last (`bool`, *optional*, defaults to `False`):
-            Whether to remove ViT's last layer.
-        vit_transformer_width (`bool`, *optional*, defaults to `False`):
-            Dimension size of transformer in ViT model.
+            Whether to remove vit's last layer.
+        vit_intermediate_size (`int`, *optional*, defaults to 512):
+            Dimension of vit's transformer intermediate layer.
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the text part of the model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
@@ -137,8 +139,8 @@ class BridgeTowerConfig(PretrainedConfig):
         self,
         cross_modal_transform_shared=True,
         drop_rate=0.1,
-        freeze_RoBERTa=False,
-        freeze_ViT=False,
+        freeze_roberta=False,
+        freeze_vit=False,
         freeze_layer_count_roberta=False,
         freeze_layer_count_vit=False,
         head_hidden_scale=2,
@@ -159,28 +161,28 @@ class BridgeTowerConfig(PretrainedConfig):
         stop_gradient=False,
         tie_word_embeddings=False,
         tokenizer="roberta-base",
-        unfreeze_RoBERTa_attention=False,
-        unfreeze_RoBERTa_embeddings=False,
-        unfreeze_RoBERTa_encoder=False,
-        unfreeze_RoBERTa_layernorm=False,
-        unfreeze_ViT_attention=False,
-        unfreeze_ViT_layernorm=False,
+        unfreeze_roberta_attention=False,
+        unfreeze_roberta_embeddings=False,
+        unfreeze_roberta_encoder=False,
+        unfreeze_roberta_layernorm=False,
+        unfreeze_vit_attention=False,
+        unfreeze_vit_layernorm=False,
         vit_embed_dim=512,
-        vit_layers=12,
+        vit_num_hidden_layers=12,
         vit_layernorm_init_from_vit=False,
         vit_layernorm_shared=True,
         vit_patch_size=16,
         vit_remove_last=False,
-        vit_transformer_width=512,
-        vit_width=768,
+        vit_intermediate_size=512,
+        vit_hidden_size=768,
         vocab_size=50265,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.cross_modal_transform_shared = cross_modal_transform_shared
         self.drop_rate = drop_rate
-        self.freeze_RoBERTa = freeze_RoBERTa
-        self.freeze_ViT = freeze_ViT
+        self.freeze_roberta = freeze_roberta
+        self.freeze_vit = freeze_vit
         self.freeze_layer_count_roberta = freeze_layer_count_roberta
         self.freeze_layer_count_vit = freeze_layer_count_vit
         self.head_hidden_scale = head_hidden_scale
@@ -201,18 +203,18 @@ class BridgeTowerConfig(PretrainedConfig):
         self.stop_gradient = stop_gradient
         self.tie_word_embeddings = tie_word_embeddings
         self.tokenizer = tokenizer
-        self.unfreeze_RoBERTa_attention = unfreeze_RoBERTa_attention
-        self.unfreeze_RoBERTa_embeddings = unfreeze_RoBERTa_embeddings
-        self.unfreeze_RoBERTa_encoder = unfreeze_RoBERTa_encoder
-        self.unfreeze_RoBERTa_layernorm = unfreeze_RoBERTa_layernorm
-        self.unfreeze_ViT_attention = unfreeze_ViT_attention
-        self.unfreeze_ViT_layernorm = unfreeze_ViT_layernorm
+        self.unfreeze_roberta_attention = unfreeze_roberta_attention
+        self.unfreeze_roberta_embeddings = unfreeze_roberta_embeddings
+        self.unfreeze_roberta_encoder = unfreeze_roberta_encoder
+        self.unfreeze_roberta_layernorm = unfreeze_roberta_layernorm
+        self.unfreeze_vit_attention = unfreeze_vit_attention
+        self.unfreeze_vit_layernorm = unfreeze_vit_layernorm
         self.vit_embed_dim = vit_embed_dim
-        self.vit_layers = vit_layers
+        self.vit_num_hidden_layers = vit_num_hidden_layers
         self.vit_layernorm_init_from_vit = vit_layernorm_init_from_vit
         self.vit_layernorm_shared = vit_layernorm_shared
         self.vit_patch_size = vit_patch_size
         self.vit_remove_last = vit_remove_last
-        self.vit_transformer_width = vit_transformer_width
-        self.vit_width = vit_width
+        self.vit_intermediate_size = vit_intermediate_size
+        self.vit_hidden_size = vit_hidden_size
         self.vocab_size = vocab_size

@@ -63,7 +63,6 @@ The following example shows how to run image-text retrieval using [`BridgeTowerP
 ...     encoding = processor(image, text, return_tensors="pt")
 ...     outputs = model(**encoding)
 ...     scores[text] = outputs.logits[0, 1].item()
-```"""
 
 The following example shows how to run masked language modeling using [`BridgeTowerProcessor`] and [`BridgeTowerForMaskedLM`].
 
@@ -76,7 +75,7 @@ The following example shows how to run masked language modeling using [`BridgeTo
 >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 >>> text = "a <mask> looking out of the window"
 
->>> processor = BridgeTowerProcessor.from_pretrained(("BridgeTower/bridgetower-base-itm-mlm"))
+>>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
 >>> model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
 
 >>> # prepare inputs
