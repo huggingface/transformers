@@ -252,6 +252,10 @@ else:
             ),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "roberta-prelayernorm",
+                ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None),
+            ),
             ("roc_bert", ("RoCBertTokenizer", None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
