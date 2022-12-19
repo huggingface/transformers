@@ -88,8 +88,8 @@ class DetrConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of convolutional backbone to use. Supports any convolutional backbone from the timm package. For a
-            list of all available models, see [this
+            Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
+            backbone from the timm package. For a list of all available models, see [this
             page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use pretrained weights for the backbone.
@@ -181,7 +181,7 @@ class DetrConfig(PretrainedConfig):
                     backbone_model_type = backbone_config.pop("model_type")
                     config_class = CONFIG_MAPPING[backbone_model_type]
                     backbone_config = config_class.from_dict(backbone_config)
-            
+
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
