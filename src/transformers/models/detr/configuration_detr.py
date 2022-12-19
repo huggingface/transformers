@@ -45,6 +45,11 @@ class DetrConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        use_timm_backbone (`int`, *optional*, defaults to 3):
+            Whether or not to use the timm library as the backbone. If set to `False`, will use the [`AutoBackbone`]
+            API.
+        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False`.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 100):
@@ -92,9 +97,10 @@ class DetrConfig(PretrainedConfig):
             backbone from the timm package. For a list of all available models, see [this
             page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone.
+            Whether to use pretrained weights for the backbone. Only supported when `use_timm_backbone` = `True`.
         dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5).
+            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
+            `use_timm_backbone` = `True`.
         class_cost (`float`, *optional*, defaults to 1):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
