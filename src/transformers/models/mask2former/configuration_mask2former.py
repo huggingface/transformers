@@ -153,7 +153,7 @@ class Mask2FormerConfig(PretrainedConfig):
 
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `SwinConfig()`):
-            The configuration of the backbone model. if unset, the configuration corresponding to
+            The configuration of the backbone model. If unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
         decoder_config (`dict`, *optional*):
             The configuration passed to the pixel decoder and transformer decoder models. Includes the number of
