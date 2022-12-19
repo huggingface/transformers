@@ -354,6 +354,7 @@ _import_structure = {
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
+    "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
@@ -1986,6 +1987,19 @@ else:
             "RobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roberta_prelayernorm"].extend(
+        [
+            "ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RobertaPreLayerNormForCausalLM",
+            "RobertaPreLayerNormForMaskedLM",
+            "RobertaPreLayerNormForMultipleChoice",
+            "RobertaPreLayerNormForQuestionAnswering",
+            "RobertaPreLayerNormForSequenceClassification",
+            "RobertaPreLayerNormForTokenClassification",
+            "RobertaPreLayerNormModel",
+            "RobertaPreLayerNormPreTrainedModel",
+        ]
+    )
     _import_structure["models.roc_bert"].extend(
         [
             "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2931,6 +2945,20 @@ else:
             "TFRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roberta_prelayernorm"].extend(
+        [
+            "TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRobertaPreLayerNormForCausalLM",
+            "TFRobertaPreLayerNormForMaskedLM",
+            "TFRobertaPreLayerNormForMultipleChoice",
+            "TFRobertaPreLayerNormForQuestionAnswering",
+            "TFRobertaPreLayerNormForSequenceClassification",
+            "TFRobertaPreLayerNormForTokenClassification",
+            "TFRobertaPreLayerNormMainLayer",
+            "TFRobertaPreLayerNormModel",
+            "TFRobertaPreLayerNormPreTrainedModel",
+        ]
+    )
     _import_structure["models.roformer"].extend(
         [
             "TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3297,6 +3325,18 @@ else:
             "FlaxRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roberta_prelayernorm"].extend(
+        [
+            "FlaxRobertaPreLayerNormForCausalLM",
+            "FlaxRobertaPreLayerNormForMaskedLM",
+            "FlaxRobertaPreLayerNormForMultipleChoice",
+            "FlaxRobertaPreLayerNormForQuestionAnswering",
+            "FlaxRobertaPreLayerNormForSequenceClassification",
+            "FlaxRobertaPreLayerNormForTokenClassification",
+            "FlaxRobertaPreLayerNormModel",
+            "FlaxRobertaPreLayerNormPreTrainedModel",
+        ]
+    )
     _import_structure["models.roformer"].extend(
         [
             "FlaxRoFormerForMaskedLM",
@@ -3624,6 +3664,10 @@ if TYPE_CHECKING:
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.roberta_prelayernorm import (
+        ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RobertaPreLayerNormConfig,
+    )
     from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
@@ -4979,6 +5023,17 @@ if TYPE_CHECKING:
             RobertaModel,
             RobertaPreTrainedModel,
         )
+        from .models.roberta_prelayernorm import (
+            ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RobertaPreLayerNormForCausalLM,
+            RobertaPreLayerNormForMaskedLM,
+            RobertaPreLayerNormForMultipleChoice,
+            RobertaPreLayerNormForQuestionAnswering,
+            RobertaPreLayerNormForSequenceClassification,
+            RobertaPreLayerNormForTokenClassification,
+            RobertaPreLayerNormModel,
+            RobertaPreLayerNormPreTrainedModel,
+        )
         from .models.roc_bert import (
             ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             RoCBertForCausalLM,
@@ -5745,6 +5800,18 @@ if TYPE_CHECKING:
             TFRobertaModel,
             TFRobertaPreTrainedModel,
         )
+        from .models.roberta_prelayernorm import (
+            TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRobertaPreLayerNormForCausalLM,
+            TFRobertaPreLayerNormForMaskedLM,
+            TFRobertaPreLayerNormForMultipleChoice,
+            TFRobertaPreLayerNormForQuestionAnswering,
+            TFRobertaPreLayerNormForSequenceClassification,
+            TFRobertaPreLayerNormForTokenClassification,
+            TFRobertaPreLayerNormMainLayer,
+            TFRobertaPreLayerNormModel,
+            TFRobertaPreLayerNormPreTrainedModel,
+        )
         from .models.roformer import (
             TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRoFormerForCausalLM,
@@ -6021,6 +6088,16 @@ if TYPE_CHECKING:
             FlaxRobertaForTokenClassification,
             FlaxRobertaModel,
             FlaxRobertaPreTrainedModel,
+        )
+        from .models.roberta_prelayernorm import (
+            FlaxRobertaPreLayerNormForCausalLM,
+            FlaxRobertaPreLayerNormForMaskedLM,
+            FlaxRobertaPreLayerNormForMultipleChoice,
+            FlaxRobertaPreLayerNormForQuestionAnswering,
+            FlaxRobertaPreLayerNormForSequenceClassification,
+            FlaxRobertaPreLayerNormForTokenClassification,
+            FlaxRobertaPreLayerNormModel,
+            FlaxRobertaPreLayerNormPreTrainedModel,
         )
         from .models.roformer import (
             FlaxRoFormerForMaskedLM,
