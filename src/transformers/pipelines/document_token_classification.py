@@ -113,6 +113,8 @@ class DocumentTokenClassificationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING)
+        self.image_processor = self.feature_extractor
+        self.image_processor.apply_ocr = False
         if self.model.config.model_type=="layoutlmv3":
             self.model_type = ModelType.LayoutLMv3
 
@@ -209,9 +211,10 @@ class DocumentTokenClassificationPipeline(Pipeline):
             }
         else:
             inputs = image
+            self.image_processor.apply_ocr = True
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, input, lang=None, tesseract_config=""):
+    def preprocess(self, input, lang=None, tesseract_config="", **kwargs):
         image = None
         if input.get("image", None) is not None:
             image = load_image(input["image"])
@@ -223,29 +226,32 @@ class DocumentTokenClassificationPipeline(Pipeline):
         elif "word_boxes" in input:
             words = [x[0] for x in input["word_boxes"]]
             boxes = [x[1] for x in input["word_boxes"]]
-        elif image is not None:
-            if not TESSERACT_LOADED:
+        elif image is not None and not TESSERACT_LOADED:
                 raise ValueError(
                     "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract,"
                     " but pytesseract is not available"
                 )
-            if TESSERACT_LOADED:
-                words, boxes = apply_tesseract(image, lang=lang, tesseract_config=tesseract_config)
-        else:
-            raise ValueError(
-                "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically"
-                " run OCR to derive words and boxes"
-            )
         
-        encoding = None
-        if self.model_type == ModelType.LayoutLMv3:
-            from ..models.layoutlmv3.processing_layoutlmv3 import LayoutLMv3Processor as processor
-            images = image
-            words = words
-            boxes = boxes
-            encoding = processor(images, words, boxes=boxes,truncation=True, padding="max_length")
+        # first, apply the image processor
+        features = self.image_processor(images=image, return_tensors=self.framework, **kwargs,)
 
-        return encoding
+        # second, apply the tokenizer
+        # if text is not None and self.image_processor.apply_ocr:
+        #     if isinstance(text, str):
+        #         text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
+
+        encoded_inputs = self.tokenizer(
+            text=words if words is not None else features["words"],
+            boxes=boxes if boxes is not None else features["boxes"],
+            return_tensors=self.framework,
+            **kwargs,
+        )
+
+        # add pixel values
+        images = features.pop("pixel_values")
+        encoded_inputs["pixel_values"] = images
+
+        return encoded_inputs
 
     def _forward(self, model_inputs):
         word_ids = model_inputs.pop("word_ids", None)
