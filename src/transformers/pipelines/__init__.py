@@ -246,6 +246,12 @@ SUPPORTED_TASKS = {
         "impl": DocumentTokenClassificationPipeline,
         "pt": (AutoModelForDocumentTokenClassification,) if is_torch_available() else (),
         "tf": (),
+        "default": {
+            "model": {
+                "pt": ("microsoft/layoutlmv3-base", "07c9b08"),
+                "tf": ("microsoft/layoutlmv3-base", "07c9b08"),
+            },
+        },
         "type": "multimodal",
     },
     "fill-mask": {
