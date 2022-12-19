@@ -33,9 +33,11 @@ from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
+    PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
     AutoModelForSequenceClassification,
+    AutoProcessor,
     AutoTokenizer,
     DistilBertForSequenceClassification,
     ImageSegmentationPipeline,
@@ -147,7 +149,11 @@ def get_tiny_tokenizer_from_checkpoint(checkpoint):
 
 def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_extractor_class):
     try:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
+        # Feature Extractor is Deprecated for newer models
+        if feature_extractor_class.__name__ == "OneFormerProcessor":
+            feature_extractor = AutoProcessor.from_pretrained(checkpoint)
+        else:
+            feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
     except Exception:
         try:
             if feature_extractor_class is not None:
@@ -290,7 +296,11 @@ class PipelineTestCaseMeta(type):
                         checkpoint = get_checkpoint_from_architecture(model_architecture)
                         tiny_config = get_tiny_config_from_class(configuration)
                         tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
-                        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
+                        # Feature Extractor is Deprecated for newer models
+                        if model_architecture.__name__ == "OneFormerForUniversalSegmentation":
+                            feature_extractor_class = PROCESSOR_MAPPING.get(configuration, None)
+                        else:
+                            feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
                         feature_extractor_name = (
                             feature_extractor_class.__name__ if feature_extractor_class else "nofeature_extractor"
                         )

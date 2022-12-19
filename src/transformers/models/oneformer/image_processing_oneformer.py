@@ -380,7 +380,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
         repo_path (`str`, defaults to `shi-labs/oneformer_demo`):
             Dataset repository on huggingface hub containing the JSON file with class information for the dataset.
         class_info_file (`str`):
-            JSON file containing class information for the dataset. It is stored inside on the `repo_path` dataset repository.
+            JSON file containing class information for the dataset. It is stored inside on the `repo_path` dataset
+            repository.
         num_text (`int`, *optional*):
             Number of text entries in the text input list.
     """
