@@ -44,12 +44,27 @@ The original code can be found [here](https://github.com/snap-research/Efficient
 
 [[autodoc]] EfficientFormerConfig
 
-## EfficientFormerrFeatureExtractor
+## EfficientFormerFeatureExtractor
 
 [[autodoc]] EfficientFormerFeatureExtractor
-    - forward
+    - __call__
+
+## EfficientFormerImageProcessor
+
+[[autodoc]] EfficientFormerImageProcessor
+    - preprocess
 
 ## EfficientFormerModel
 
 [[autodoc]] EfficientFormerModel
+    - forward
+
+## EfficientFormerForImageClassification
+
+[[autodoc]] EfficientFormerForImageClassification
+    - forward
+
+## EfficientFormerForImageClassificationWithTeacher
+
+[[autodoc]] EfficientFormerForImageClassificationWithTeacher
     - forward

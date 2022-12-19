@@ -59,6 +59,15 @@ if TYPE_CHECKING:
     )
 
     try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_efficientformer import EFficientFormerFeatureExtractor
+        from .image_processing_efficientformer import EfficientFormerImageProcessor
+
+    try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:

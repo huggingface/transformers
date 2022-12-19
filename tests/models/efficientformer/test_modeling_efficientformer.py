@@ -417,7 +417,7 @@ def prepare_img():
 @require_vision
 class EfficientFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self) -> Union[EfficientFormerFeatureExtractor, None]:
+    def default_feature_extractor(self)
         return (
             EfficientFormerFeatureExtractor.from_pretrained("snap-research/efficientformer-l1")
             if is_vision_available()
