@@ -569,11 +569,16 @@ class GenerationMixin:
         self,
         inputs: torch.Tensor,
         pad_token_id: Optional[int],
-        eos_token_id: Optional[int],
+        eos_token_id: Optional[Union[int, List[int]]],
     ) -> torch.LongTensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
+        if isinstance(eos_token_id, int):
+            is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
+        elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
+            is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id in eos_token_id)
+        else:
+            raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
@@ -768,8 +773,9 @@ class GenerationMixin:
         bad_words_ids: List[List[int]],
         min_length: int,
         max_length: int,
-        eos_token_id: int,
+        eos_token_id: Union[int, List[int]],
         forced_bos_token_id: int,
+        # TODO: This should be optionally List[int]
         forced_eos_token_id: int,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         num_beams: int,
@@ -919,7 +925,7 @@ class GenerationMixin:
         sequences: torch.Tensor,
         scores: Tuple[torch.Tensor],
         beam_indices: torch.Tensor,
-        eos_token_id: int = None,
+        eos_token_id: Union[int, List[int]] = None,
     ):
         """compute the transition probabilities of sequences given generation
         scores and beam indices"""
@@ -1022,7 +1028,7 @@ class GenerationMixin:
         force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
         bos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         length_penalty: Optional[float] = None,
         no_repeat_ngram_size: Optional[int] = None,
         encoder_no_repeat_ngram_size: Optional[int] = None,
@@ -1332,7 +1338,13 @@ class GenerationMixin:
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
-            pad_token_id = eos_token_id
+            if isinstance(eos_token_id, int):
+                pad_token_id = eos_token_id
+            elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
+                # Setting the first eos_token_id
+                pad_token_id = eos_token_id[0]
+            else:
+                raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
 
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1816,7 +1828,7 @@ class GenerationMixin:
         logits_warper: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2118,7 +2130,12 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
+                if isinstance(eos_token_id, int):
+                    unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
+                elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
+                    unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
+                else:
+                    raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2155,7 +2172,7 @@ class GenerationMixin:
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2346,7 +2363,12 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
+                if isinstance(eos_token_id, int):
+                    unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
+                elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
+                    unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
+                else:
+                    raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2384,7 +2406,7 @@ class GenerationMixin:
         logits_warper: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2597,7 +2619,12 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
+                if isinstance(eos_token_id, int):
+                    unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
+                elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
+                    unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
+                else:
+                    raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2635,7 +2662,7 @@ class GenerationMixin:
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2945,7 +2972,7 @@ class GenerationMixin:
         logits_warper: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -3260,7 +3287,7 @@ class GenerationMixin:
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -3622,7 +3649,7 @@ class GenerationMixin:
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
