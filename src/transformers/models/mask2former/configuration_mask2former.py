@@ -163,7 +163,7 @@ class Mask2FormerConfig(PretrainedConfig):
         num_queries (`int`, *optional*, defaults to 150):
             Number of queries for the decoder.
         no_object_weight (`int`, *optional*, defaults to 0.1):
-            Weight to apply to the null (no object) class.
+            The weight to apply to the null (no object) class.
         class_weight (`int`, *optional*, defaults to 2.0):
             The weight for the cross entropy loss.
         mask_weight (`int`, *optional*, defaults to 5.0):
