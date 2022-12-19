@@ -137,6 +137,7 @@ from . import (
     resnet,
     retribert,
     roberta,
+    roberta_prelayernorm,
     roc_bert,
     roformer,
     segformer,
