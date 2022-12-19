@@ -171,7 +171,6 @@ class EfficientFormerConvStem(nn.Module):
         return features
 
 
-# Copied from transformers.models.poolformer.modeling_poolformer.PoolFormerPooling
 class EfficientFormerPooling(nn.Module):
     def __init__(self, pool_size: int):
         super().__init__()
@@ -531,7 +530,6 @@ EFFICIENTFORMER_INPUTS_DOCSTRING = r"""
     "The bare EfficientFormer Model transformer outputting raw hidden-states without any specific head on top.",
     EFFICIENTFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->EFFICIENTFORMER,ViT->EfficientFormer
 class EfficientFormerModel(EfficientFormerPreTrainedModel):
     def __init__(self, config: EfficientFormerConfig) -> None:
         super().__init__(config)
