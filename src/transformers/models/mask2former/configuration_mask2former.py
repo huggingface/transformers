@@ -161,7 +161,7 @@ class Mask2FormerConfig(PretrainedConfig):
         ignore_value (`int`, *optional*, defaults to 255):
             Category id to be ignored during training.
         num_queries (`int`, *optional*, defaults to 150):
-            Number of queries
+            Number of queries for the decoder.
         no_object_weight (`int`, *optional*, defaults to 0.1):
             Weight to apply to the null (no object) class.
         class_weight (`int`, *optional*, defaults to 2.0):
