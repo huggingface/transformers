@@ -74,6 +74,7 @@ ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS = [
     "LongformerConfig",
     "MarkupLMConfig",
     "RobertaConfig",
+    "RobertaPreLayerNormConfig",
     "XLMRobertaConfig",
 ]
 

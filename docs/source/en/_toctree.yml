@@ -349,6 +349,8 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roberta-prelayernorm
+        title: RoBERTa-PreLayerNorm
       - local: model_doc/roc_bert
         title: RoCBert
       - local: model_doc/roformer
