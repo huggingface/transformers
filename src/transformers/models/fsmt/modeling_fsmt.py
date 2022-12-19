@@ -1089,7 +1089,11 @@ class FSMTModel(PretrainedFSMTModel):
         else:
             decoder_padding_mask, causal_mask = None, None
 
-        assert decoder_input_ids is not None
+        if decoder_input_ids is None and decoder_inputs_embeds and decoder_inputs_position_embeds is None:
+            raise ValueError(
+                "Make sure that `decoder_input_ids` or `decoder_inputs_embeds` and `decoder_inputs_position_embeds`"
+                " are passed."
+            )
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
