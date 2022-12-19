@@ -469,7 +469,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.rescale
     def rescale(
         self, image: np.ndarray, rescale_factor: float, data_format: Optional[ChannelDimension] = None
     ) -> np.ndarray:
