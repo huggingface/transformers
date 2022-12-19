@@ -14,14 +14,17 @@
 # limitations under the License.
 """ Testing suite for the PyTorch TVLT model. """
 
+import copy
 import unittest
 
+import numpy as np
 from datasets import load_dataset
 from packaging import version
 
-from transformers import TvltConfig, is_torch_available, is_vision_available
+from huggingface_hub import hf_hub_download
+from transformers import TvltConfig, is_torch_available, is_vision_available, is_datasets_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, torch_device
 from transformers.utils import cached_property
 
 from test_configuration_common import ConfigTester
@@ -33,21 +36,26 @@ if is_torch_available():
 
     from transformers import (
         MODEL_MAPPING,
-        TvltForPreTraining,
         TvltModel,
-        TvltForVisionAndAudioRetrieval,
+        TvltForPreTraining,
+        TvltForQuestionAnswering,
         TvltForSequenceClassification
     )
-    from transformers.models.tvlt.modeling_tvlt import Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.tvlt.modeling_tvlt import TVLT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 else:
     is_torch_greater_or_equal_than_1_10 = False
 
+    
+if is_datasets_available():
+    import datasets
+    from datasets import load_dataset
+    
 if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import TvltProcessor
+    from transformers import TvltAudioFeatureExtractor
 
 
 class TvltModelTester:
@@ -83,7 +91,8 @@ class TvltModelTester:
         audio_mask_ratio=0.15,
         task_matching=True,
         task_mae=True,
-        num_labels=1,
+        num_question_answering_labels=300,
+        num_labels=2,
         is_training=True,
     ):
         self.parent = parent
@@ -119,6 +128,7 @@ class TvltModelTester:
         
         self.task_matching = task_matching
         self.task_mae = task_mae
+        self.num_question_answering_labels = num_question_answering_labels
         self.num_labels = num_labels
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
@@ -188,6 +198,7 @@ class TvltModelTester:
             audio_mask_ratio=self.audio_mask_ratio,
             task_matching=self.task_matching,
             task_mae=self.task_mae,
+            num_question_answering_labels=self.num_question_answering_labels,
             num_labels=self.num_labels
         )
 
@@ -208,7 +219,7 @@ class TvltModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
         )
 
-    def create_and_check_for_visionandaudio_retrieval(
+    def create_and_check_for_question_answering(
         self,
         config,
         pixel_values, 
@@ -216,12 +227,12 @@ class TvltModelTester:
         pixel_masks,
         audio_masks
     ):
-        model = TvltForVisionAndAudioRetrieval(config=config)
+        model = TvltForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, audio_values, pixel_masks=pixel_masks, audio_masks=audio_masks)
         result = model(pixel_values, audio_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
         
     def create_and_check_for_sequence_classification(
         self,
@@ -283,13 +294,13 @@ class TvltModelTester:
 
 
 @require_torch
-@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "Tvlt is only available in torch v1.10+")
+@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "TVLT is only available in torch v1.10+")
 class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TvltModel,
             TvltForPreTraining,
-            TvltForVisionAndAudioRetrieval,
+            TvltForQuestionAnswering,
             TvltForSequenceClassification
         )
         if is_torch_available()
@@ -300,19 +311,19 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
 
-    # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
+    # TvltForQuestionAnswering, TvltForSequenceClassification and TvltForPreTraining require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            if model_class.__name__ == "TvltForSequenceClassification":
+            
+            if model_class.__name__ == "TvltForQuestionAnswering":
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.num_labels), 
-                    dtype=torch.float, device=torch_device
+                    (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
                 )
-            elif model_class.__name__ == "TvltForVisionAndAudioRetrieval":
+            elif model_class.__name__ == "TvltForSequenceClassification":
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size,), dtype=torch.float, device=torch_device
+                    (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
                 )
             elif model_class.__name__ == "TvltForPreTraining":
                 inputs_dict["labels"] = torch.zeros(
@@ -341,9 +352,9 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_visionandaudio_retrieval(self):
+    def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_visionandaudio_retrieval(*config_and_inputs)
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
         
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -353,7 +364,6 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pretraining()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
-    @slow
     def test_model_from_pretrained(self):
         for model_name in TVLT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TvltModel.from_pretrained(model_name)
@@ -401,8 +411,8 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            for model_class in self.all_model_classes:
-                seq_len = self.model_tester.seq_length
+            for model_class in self.all_model_classes[2:]:
+                seq_len = self.model_tester.expected_seq_len
 
                 inputs_dict["output_attentions"] = True
                 inputs_dict["output_hidden_states"] = False
@@ -464,7 +474,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
             expected_num_layers = self.model_tester.num_hidden_layers + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = self.model_tester.seq_length
+            seq_length = self.model_tester.expected_seq_len
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -473,7 +483,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[2:]:
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
 
@@ -486,12 +496,19 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on a video of eating spaghetti
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
-def prepare_video():
+def prepare_video(num_frames=8):
     file = hf_hub_download(
         repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type="dataset"
     )
-    video = np.load(file)
+    video = np.load(file)[:num_frames]
     return list(video)
+
+def prepare_audio(num_samples=1):
+    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    # automatic decoding with librispeech
+    speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+    print(np.mean(speech_samples[0]["array"]))
+    return [x["array"] for x in speech_samples]
 
 
 @require_torch
@@ -501,86 +518,81 @@ class TvltModelIntegrationTest(unittest.TestCase):
     def default_feature_extractor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
-            TvltPixelFeatureExtractor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            TvltImageProcessor()
             if is_vision_available()
-            else None
+            else None,
+            TvltAudioFeatureExtractor()
         )
 
-    @slow
-    def test_inference_for_sequence_classification(self):
-        model = TvltForSequenceClassification.from_pretrained("tvlt/tvlt-base").to(
+    def test_inference_for_question_answering(self):
+        model = TvltForQuestionAnswering.from_pretrained("TVLT/tvlt-base").to(
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
-
+        audio = prepare_audio()
+        video_inputs = image_processor(video, return_tensors="pt").to(torch_device)
+        audio_inputs = audio_feature_extractor(audio, return_tensors="pt").to(torch_device)
+        inputs = dict()
+        inputs.update(video_inputs)
+        inputs.update(audio_inputs)
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 400))
+        expected_shape = torch.Size((1, 1))
         self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([0.3669, -0.0688, -0.2421]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_for_visionandaudio_retrieval(self):
-        model = TvltForVisionAndAudioRetrieval.from_pretrained("tvlt/tvlt-base").to(
-            torch_device
-        )
-
-        feature_extractor = self.default_feature_extractor
-        video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 400))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([0.3669, -0.0688, -0.2421]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
         
-    @slow
-    def test_inference_for_pretraining(self):
-        model = TvltForPreTraining.from_pretrained("tvlt/tvlt-base").to(torch_device)
+    def test_inference_for_sequence_classification(self):
+        model = TvltForSequenceClassification.from_pretrained("TVLT/tvlt-base").to(
+            torch_device
+        )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        audio = prepare_audio()
+        video_inputs = image_processor(video, return_tensors="pt").to(torch_device)
+        audio_inputs = audio_feature_extractor(audio, return_tensors="pt").to(torch_device)
+        inputs = dict()
+        inputs.update(video_inputs)
+        inputs.update(audio_inputs)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor(
-            [[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]], device=torch_device
-        )
+        expected_shape = torch.Size((1, 1))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        
+    def test_inference_for_pretraining(self):
+        model = TvltForPreTraining.from_pretrained("TVLT/tvlt-base").to(torch_device)
 
-        # verify the loss (`config.norm_pix_loss` = `True`)
-        expected_loss = torch.tensor([0.5142], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
-
-        # verify the loss (`config.norm_pix_loss` = `False`)
-        model = TvltForPreTraining.from_pretrained("tvlt/tvlt-base", norm_pix_loss=False).to(
-            torch_device
-        )
-
+        image_processor, audio_feature_extractor = self.default_feature_extractor
+        video = prepare_video()
+        video_mixed = prepare_video()
+        audio = prepare_audio()
+        video_inputs = image_processor(video, return_tensors="pt").to(torch_device)
+        video_mixed_inputs = image_processor(video_mixed, is_mixed=True, return_tensors="pt").to(torch_device)
+        audio_inputs = audio_feature_extractor(audio, return_tensors="pt").to(torch_device)
+        labels = torch.tensor([[0.0]], device=torch_device)
+        inputs = dict()
+        inputs.update(video_inputs)
+        inputs.update(video_mixed_inputs)
+        inputs.update(audio_inputs)
+        inputs.update({'labels': labels})
+        
+        # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+        # verify the logits
+        expected_pixel_logits_shape = torch.Size([1, 1568, 768])
+        expected_audio_logits_shape = torch.Size([1, 96, 256])
+        expected_matching_logits = torch.tensor([[-1.0161]], device=torch_device)
+        
+        self.assertEqual(outputs.pixel_logits.shape, expected_pixel_logits_shape)
+        self.assertEqual(outputs.audio_logits.shape, expected_audio_logits_shape)
+        self.assertTrue(torch.allclose(outputs.matching_logits, expected_matching_logits, atol=1e-4))
