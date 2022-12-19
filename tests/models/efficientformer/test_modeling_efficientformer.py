@@ -18,7 +18,7 @@
 import inspect
 import unittest
 import warnings
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple
 
 from transformers import EfficientFormerConfig
 from transformers.models.auto import get_values

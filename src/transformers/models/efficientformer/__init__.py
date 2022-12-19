@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_efficientformer import EFficientFormerFeatureExtractor
+        from .feature_extraction_efficientformer import EfficientFormerFeatureExtractor
         from .image_processing_efficientformer import EfficientFormerImageProcessor
 
     try:
