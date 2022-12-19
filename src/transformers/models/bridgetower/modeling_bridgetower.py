@@ -468,7 +468,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.cross_modal_image_pooler = BertPooler(config)
         self.cross_modal_text_pooler = BertPooler(config)
 
-        # ===================== Initialize BridgeTower Components ===================== #
         # just for first layer
         self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size)
         self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size)
