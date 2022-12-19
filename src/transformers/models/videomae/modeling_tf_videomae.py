@@ -192,7 +192,12 @@ class TFVideoMAEPatchEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
-        batch_size, _, num_channels, height, width = tf.shape(pixel_values)
+        batch_size, num_channels, height, width = (
+            tf.shape(pixel_values)[0],
+            tf.shape(pixel_values)[2],
+            tf.shape(pixel_values)[3],
+            tf.shape(pixel_values)[4],
+        )
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."

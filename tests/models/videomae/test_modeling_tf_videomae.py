@@ -203,6 +203,10 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip("Test was written for TF 1.x and isn't really relevant here")
+    def test_compile_tf_model(self):
+        pass
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
