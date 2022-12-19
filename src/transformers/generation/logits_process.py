@@ -752,26 +752,36 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 
 
 class TimeStampLogitsProcessor(LogitsProcessor):
-    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
-    are sampled at their corresponding index."""
+    r"""
+    This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
+    are sampled at their corresponding index.
+
+    Args:
+        begin_index (`int`, *optional*, defaults to 5 ):
+            This indicates to the processor where the first tokens are generated. This is used to differentiate between
+            the `prompt` tokens and the `generated` tokens. When generating with `WhisperForConditionalGeneration` the
+            `prompt` tokens are the first 4 tokens.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
+        no_timestamps_token_id (`int`):
+            The id of the `"<|notimestamps|>"` token.
+        max_initial_timestamp (`int`):
+            Used to set the maximum value of the initial timestamp. This is used to prevent the model from predicting
+            timestamps that are too far in the future.
+    """
 
     def __init__(
         self,
-        begin_index,
-        timestamp_begin=50364,
+        begin_index=5,
         eos_token_id=50257,
         no_timestamps_token_id=50363,
-        n_audio_ctx=1500,
         max_initial_timestamp=1,
-        chunk_length=30,
     ):
-        self.begin_index = begin_index
-        self.timestamp_begin = timestamp_begin
         self.eos_token_id = eos_token_id
         self.no_timestamps_token_id = no_timestamps_token_id
-
-        precision = chunk_length / n_audio_ctx  # usually 0.02 seconds
-        self.max_initial_timestamp_index = round(max_initial_timestamp / precision)
+        self.timestamp_begin = no_timestamps_token_id + 1
+        self.begin_index = begin_index
+        self.max_initial_timestamp_index = max_initial_timestamp
 
     def __call__(self, input_ids, scores):
         # suppress <|notimestamps|> which is handled by without_timestamps

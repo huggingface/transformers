@@ -118,12 +118,11 @@ class SuffixTrie:
 
 def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source_positions):
     """
-    Computes the final sequences by merging the end of the nth sequence with the beginning of the n+1th sequence.
-    Since `WhisperForConditionalGeneration` produces the timestamps pairwise, we filter the consecutive timestamps
-    and only itereate over them. We keep track of the `time` which indicates the actual starting time of the chunk
-    that is processed.
-    We need to make sure to offset the timestamps tokens by the `time` in order for the tokenizer to properly compute
-    the final `offset`.
+    Computes the final sequences by merging the end of the nth sequence with the beginning of the n+1th sequence. Since
+    `WhisperForConditionalGeneration` produces the timestamps pairwise, we filter the consecutive timestamps and only
+    itereate over them. We keep track of the `time` which indicates the actual starting time of the chunk that is
+    processed. We need to make sure to offset the timestamps tokens by the `time` in order for the tokenizer to
+    properly compute the final `offset`.
     """
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
     begin_idx = np.where(sequences[0][0] == timestamp_begin)[1].item()
@@ -141,7 +140,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
             timestamp_tokens = np.where(sequence >= timestamp_begin)[0][0::2]
             previous_tokens = items[-1][1:-1]
 
-            if len(timestamp_tokens) > 1:
+            if len(timestamp_tokens) > 1 and len(previous_tokens) > 0:
                 current_slice = sequence[: timestamp_tokens[1]]
 
                 trie = SuffixTrie(current_slice)
@@ -186,16 +185,18 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         result += items[i].tolist()
     return result
 
+
 def _fast_find_longest_common_sequence(sequences, tokenizer):
-    sequence = [tok_id for tok_id in sequences[0][0].tolist() if tok_id not in tokenizer.all_special_ids][0]
+    sequence = [tok_id for tok_id in sequences[0][0].tolist() if tok_id not in tokenizer.all_special_ids]
     initial_trie = SuffixTrie(sequence)
     for new_seq in sequences[1:]:
-        new_sequence = [tok_id for tok_id in new_seq[0].tolist() if tok_id not in tokenizer.all_special_ids][0]
-        longest_common_sequence = initial_trie.search(new_sequence.tolist())
+        new_sequence = [tok_id for tok_id in new_seq[0].tolist() if tok_id not in tokenizer.all_special_ids]
+        longest_common_sequence = initial_trie.search(new_sequence)
         index = longest_common_sequence[0][0]
-        sequence.extend(new_sequence[index:].tolist())
-        initial_trie = SuffixTrie(sequence)
+        sequence.extend(new_sequence[index:])
+        initial_trie = SuffixTrie(new_sequence[index:])
     return np.array(sequence)
+
 
 def _find_longest_common_sequence(sequences, tokenizer):
     # TODO  Use a faster algorithm this can probably be done in O(n)
@@ -488,11 +489,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # it here.
             attention_mask = model_inputs.pop("attention_mask", None)
             if "Whisper" in self.model.__class__.__name__:
-
+                # todo, we should have the config already updated for timestamp generation
+                # and not always generete the timestamps
                 tokens = self.model.generate(
                     encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                     attention_mask=attention_mask,
-                    logits_processor=[TimeStampLogitsProcessor(5)],
+                    logits_processor=[TimeStampLogitsProcessor()],
                 )
             else:
                 tokens = self.model.generate(
@@ -549,12 +551,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # This won't work with left padding (which doesn't exist right now)
                 right_n = total_n - right
                 items = items[:, left:right_n]
-            if "Whisper" in self.model.__class__.__name__:
+            if "Whisper" in self.model.__class__.__name__ and return_timestamps:
                 # Whisper needs the stride data
                 items = [items, stride]
             final_items.append(items)
         if stride and self.type == "seq2seq" and not return_timestamps:
-            items = _find_longest_common_sequence(final_items, self.tokenizer)
+            items = _fast_find_longest_common_sequence(final_items, self.tokenizer)
         elif stride and self.type == "seq2seq" and return_timestamps:
             items = _find_timestamp_sequence(
                 final_items, self.tokenizer, self.feature_extractor, self.model.config.max_source_positions
