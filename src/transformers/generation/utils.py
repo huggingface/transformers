@@ -772,8 +772,7 @@ class GenerationMixin:
         max_length: int,
         eos_token_id: Union[int, List[int]],
         forced_bos_token_id: int,
-        # TODO: This should be optionally List[int]
-        forced_eos_token_id: int,
+        forced_eos_token_id: Union[int, List[int]],
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         num_beams: int,
         num_beam_groups: int,
@@ -1049,7 +1048,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         forced_bos_token_id: Optional[int] = None,
-        forced_eos_token_id: Optional[int] = None,
+        forced_eos_token_id: Optional[Union[int, List[int]]] = None,
         remove_invalid_values: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
         exponential_decay_length_penalty: Optional[Tuple[int, float]] = None,
