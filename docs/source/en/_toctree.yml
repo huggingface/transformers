@@ -331,8 +331,6 @@
         title: NLLB
       - local: model_doc/nystromformer
         title: Nyströmformer
-      - local: model_doc/oneformer
-        title: OneFormer
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
@@ -540,6 +538,8 @@
         title: LayoutXLM
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/oneformer
+        title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/perceiver
