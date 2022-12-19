@@ -1007,6 +1007,9 @@ class FSMTModel(PretrainedFSMTModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_encoder(self):
+        return self.encoder
+
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1247,6 +1250,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
 
     def get_encoder(self):
         return self.model.encoder
+
+    def get_decoder(self):
+        return self.model.decoder
 
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens
