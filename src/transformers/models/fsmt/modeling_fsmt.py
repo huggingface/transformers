@@ -1078,7 +1078,7 @@ class FSMTModel(PretrainedFSMTModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # make masks if user doesn't supply
-        if not use_cache and (input_ids is not None and decoder_input_ids is not None):
+        if not use_cache and input_ids is not None:
             decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_fsmt_decoder_inputs(
                 self.config,
                 input_ids,
