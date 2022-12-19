@@ -525,8 +525,8 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             use_fast (`bool`, *optional*, defaults to `True`):
                 Use a [fast Rust-based tokenizer](https://huggingface.co/docs/tokenizers/index) if it is supported for
-                a given model (check the [supported frameworks](./index#supported-frameworks) for the full list). If a
-                fast tokenizer is not available for a given model, a normal Python-based tokenizer is used instead.
+                a given model. If a fast tokenizer is not available for a given model, a normal Python-based tokenizer
+                is returned instead.
             tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
