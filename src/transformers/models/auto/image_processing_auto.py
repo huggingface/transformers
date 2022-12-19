@@ -38,11 +38,17 @@ logger = logging.get_logger(__name__)
 IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitImageProcessor"),
+        ("bit", "BitImageProcessor"),
+        ("chinese_clip", "ChineseCLIPImageProcessor"),
         ("clip", "CLIPImageProcessor"),
+        ("clipseg", "ViTImageProcessor"),
+        ("conditional_detr", "ConditionalDetrImageProcessor"),
         ("convnext", "ConvNextImageProcessor"),
         ("cvt", "ConvNextImageProcessor"),
         ("data2vec-vision", "BeitImageProcessor"),
+        ("deformable_detr", "DeformableDetrImageProcessor"),
         ("deit", "DeiTImageProcessor"),
+        ("detr", "DetrImageProcessor"),
         ("dinat", "ViTImageProcessor"),
         ("donut-swin", "DonutImageProcessor"),
         ("dpt", "DPTImageProcessor"),
@@ -53,24 +59,33 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2ImageProcessor"),
         ("layoutlmv3", "LayoutLMv3ImageProcessor"),
         ("levit", "LevitImageProcessor"),
+        ("maskformer", "MaskFormerImageProcessor"),
         ("mobilenet_v1", "MobileNetV1ImageProcessor"),
         ("mobilenet_v2", "MobileNetV2ImageProcessor"),
+        ("mobilenet_v2", "MobileNetV2ImageProcessor"),
+        ("mobilevit", "MobileViTImageProcessor"),
         ("mobilevit", "MobileViTImageProcessor"),
         ("nat", "ViTImageProcessor"),
+        ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
         ("poolformer", "PoolFormerImageProcessor"),
         ("regnet", "ConvNextImageProcessor"),
         ("resnet", "ConvNextImageProcessor"),
         ("segformer", "SegformerImageProcessor"),
         ("swin", "ViTImageProcessor"),
+        ("swin2sr", "Swin2SRImageProcessor"),
         ("swinv2", "ViTImageProcessor"),
+        ("table-transformer", "DetrImageProcessor"),
+        ("timesformer", "VideoMAEImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
         ("vilt", "ViltImageProcessor"),
         ("vit", "ViTImageProcessor"),
+        ("vit_hybrid", "ViTHybridImageProcessor"),
         ("vit_mae", "ViTImageProcessor"),
         ("vit_msn", "ViTImageProcessor"),
         ("xclip", "CLIPImageProcessor"),
+        ("yolos", "YolosImageProcessor"),
     ]
 )
 
@@ -113,7 +128,7 @@ def get_image_processor_config(
     **kwargs,
 ):
     """
-    Loads the image processor configuration from a pretrained model imag processor configuration. # FIXME
+    Loads the image processor configuration from a pretrained model image processor configuration.
 
     Args:
         pretrained_model_name_or_path (`str` or `os.PathLike`):

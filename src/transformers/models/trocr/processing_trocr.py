@@ -23,7 +23,7 @@ from ...processing_utils import ProcessorMixin
 
 class TrOCRProcessor(ProcessorMixin):
     r"""
-    Constructs a TrOCR processor which wraps a vision feature extractor and a TrOCR tokenizer into a single processor.
+    Constructs a TrOCR processor which wraps a vision image processor and a TrOCR tokenizer into a single processor.
 
     [`TrOCRProcessor`] offers all the functionalities of [`ViTImageProcessor`/`DeiTImageProcessor`] and
     [`RobertaTokenizer`/`XLMRobertaTokenizer`]. See the [`~TrOCRProcessor.__call__`] and [`~TrOCRProcessor.decode`] for
@@ -42,7 +42,7 @@ class TrOCRProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         if "feature_extractor" in kwargs:
             warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v4.27, use `image_processor`"
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
                 " instead.",
                 FutureWarning,
             )
@@ -124,8 +124,15 @@ class TrOCRProcessor(ProcessorMixin):
     @property
     def feature_extractor_class(self):
         warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v4.27. Use `image_processor_class`"
-            " instead.",
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
             FutureWarning,
         )
         return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor

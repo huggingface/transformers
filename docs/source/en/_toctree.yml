@@ -146,6 +146,8 @@
     title: BERTology
   - local: perplexity
     title: Perplexity of fixed-length models
+  - local: pipeline_webserver
+    title: Pipelines for webserver inference
   title: Conceptual guides
 - sections:
   - sections:
@@ -209,6 +211,8 @@
         title: BigBird
       - local: model_doc/bigbird_pegasus
         title: BigBirdPegasus
+      - local: model_doc/biogpt
+        title: BioGpt
       - local: model_doc/blenderbot
         title: Blenderbot
       - local: model_doc/blenderbot-small
@@ -271,6 +275,8 @@
         title: GPT-J
       - local: model_doc/gpt2
         title: GPT2
+      - local: model_doc/gpt-sw3
+        title: GPTSw3
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -343,6 +349,8 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roberta-prelayernorm
+        title: RoBERTa-PreLayerNorm
       - local: model_doc/roc_bert
         title: RoCBert
       - local: model_doc/roformer
@@ -384,6 +392,8 @@
       sections:
       - local: model_doc/beit
         title: BEiT
+      - local: model_doc/bit
+        title: BiT
       - local: model_doc/conditional_detr
         title: Conditional DETR
       - local: model_doc/convnext
@@ -430,14 +440,20 @@
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
+      - local: model_doc/swin2sr
+        title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
+      - local: model_doc/timesformer
+        title: TimeSformer
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
         title: VideoMAE
       - local: model_doc/vit
         title: Vision Transformer (ViT)
+      - local: model_doc/vit_hybrid
+        title: ViT Hybrid
       - local: model_doc/vit_mae
         title: ViTMAE
       - local: model_doc/vit_msn
@@ -482,6 +498,8 @@
       title: Audio models
     - isExpanded: false
       sections:
+      - local: model_doc/chinese_clip
+        title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
       - local: model_doc/clipseg

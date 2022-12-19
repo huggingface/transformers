@@ -17,7 +17,8 @@ An [`AutoClass`](model_doc/auto) automatically infers the model architecture and
 - Load and customize a model configuration.
 - Create a model architecture.
 - Create a slow and fast tokenizer for text.
-- Create a feature extractor for audio or image tasks.
+- Create an image processor for vision tasks.
+- Create a feature extractor for audio tasks.
 - Create a processor for multimodal tasks.
 
 ## Configuration
@@ -244,21 +245,21 @@ By default, [`AutoTokenizer`] will try to load a fast tokenizer. You can disable
 
 </Tip>
 
-## Feature Extractor
+## Image Processor
 
-A feature extractor processes audio or image inputs. It inherits from the base [`~feature_extraction_utils.FeatureExtractionMixin`] class, and may also inherit from the [`ImageFeatureExtractionMixin`] class for processing image features or the [`SequenceFeatureExtractor`] class for processing audio inputs.
+An image processor processes vision inputs. It inherits from the base [`~image_processing_utils.ImageProcessingMixin`] class.
 
-Depending on whether you are working on an audio or vision task, create a feature extractor associated with the model you're using. For example, create a default [`ViTFeatureExtractor`] if you are using [ViT](model_doc/vit) for image classification:
+To use, create an image processor associated with the model you're using. For example, create a default [`ViTImageProcessor`] if you are using [ViT](model_doc/vit) for image classification:
 
 ```py
->>> from transformers import ViTFeatureExtractor
+>>> from transformers import ViTImageProcessor
 
->>> vit_extractor = ViTFeatureExtractor()
+>>> vit_extractor = ViTImageProcessor()
 >>> print(vit_extractor)
-ViTFeatureExtractor {
+ViTImageProcessor {
   "do_normalize": true,
   "do_resize": true,
-  "feature_extractor_type": "ViTFeatureExtractor",
+  "feature_extractor_type": "ViTImageProcessor",
   "image_mean": [
     0.5,
     0.5,
@@ -276,21 +277,21 @@ ViTFeatureExtractor {
 
 <Tip>
 
-If you aren't looking for any customization, just use the `from_pretrained` method to load a model's default feature extractor parameters.
+If you aren't looking for any customization, just use the `from_pretrained` method to load a model's default image processor parameters.
 
 </Tip>
 
-Modify any of the [`ViTFeatureExtractor`] parameters to create your custom feature extractor:
+Modify any of the [`ViTImageProcessor`] parameters to create your custom image processor:
 
 ```py
->>> from transformers import ViTFeatureExtractor
+>>> from transformers import ViTImageProcessor
 
->>> my_vit_extractor = ViTFeatureExtractor(resample="PIL.Image.BOX", do_normalize=False, image_mean=[0.3, 0.3, 0.3])
+>>> my_vit_extractor = ViTImageProcessor(resample="PIL.Image.BOX", do_normalize=False, image_mean=[0.3, 0.3, 0.3])
 >>> print(my_vit_extractor)
-ViTFeatureExtractor {
+ViTImageProcessor {
   "do_normalize": false,
   "do_resize": true,
-  "feature_extractor_type": "ViTFeatureExtractor",
+  "feature_extractor_type": "ViTImageProcessor",
   "image_mean": [
     0.3,
     0.3,
@@ -306,7 +307,11 @@ ViTFeatureExtractor {
 }
 ```
 
-For audio inputs, you can create a [`Wav2Vec2FeatureExtractor`] and customize the parameters in a similar way:
+## Feature Extractor
+
+A feature extractor processes audio inputs. It inherits from the base [`~feature_extraction_utils.FeatureExtractionMixin`] class, and may also inherit from the [`SequenceFeatureExtractor`] class for processing audio inputs.
+
+To use, create a feature extractor associated with the model you're using. For example, create a default [`Wav2Vec2FeatureExtractor`] if you are using [Wav2Vec2](model_doc/wav2vec2) for audio classification:
 
 ```py
 >>> from transformers import Wav2Vec2FeatureExtractor
@@ -324,9 +329,34 @@ Wav2Vec2FeatureExtractor {
 }
 ```
 
+<Tip>
+
+If you aren't looking for any customization, just use the `from_pretrained` method to load a model's default feature extractor parameters.
+
+</Tip>
+
+Modify any of the [`Wav2Vec2FeatureExtractor`] parameters to create your custom feature extractor:
+
+```py
+>>> from transformers import Wav2Vec2FeatureExtractor
+
+>>> w2v2_extractor = Wav2Vec2FeatureExtractor(sampling_rate=8000, do_normalize=False)
+>>> print(w2v2_extractor)
+Wav2Vec2FeatureExtractor {
+  "do_normalize": false,
+  "feature_extractor_type": "Wav2Vec2FeatureExtractor",
+  "feature_size": 1,
+  "padding_side": "right",
+  "padding_value": 0.0,
+  "return_attention_mask": false,
+  "sampling_rate": 8000
+}
+```
+
+
 ## Processor
 
-For models that support multimodal tasks, 🤗 Transformers offers a processor class that conveniently wraps a feature extractor and tokenizer into a single object. For example, let's use the [`Wav2Vec2Processor`] for an automatic speech recognition task (ASR). ASR transcribes audio to text, so you will need a feature extractor and a tokenizer.
+For models that support multimodal tasks, 🤗 Transformers offers a processor class that conveniently wraps processing classes such as a feature extractor and a tokenizer into a single object. For example, let's use the [`Wav2Vec2Processor`] for an automatic speech recognition task (ASR). ASR transcribes audio to text, so you will need a feature extractor and a tokenizer.
 
 Create a feature extractor to handle the audio inputs:
 
@@ -352,4 +382,4 @@ Combine the feature extractor and tokenizer in [`Wav2Vec2Processor`]:
 >>> processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 ```
 
-With two basic classes - configuration and model - and an additional preprocessing class (tokenizer, feature extractor, or processor), you can create any of the models supported by 🤗 Transformers. Each of these base classes are configurable, allowing you to use the specific attributes you want. You can easily setup a model for training or modify an existing pretrained model to fine-tune.
+With two basic classes - configuration and model - and an additional preprocessing class (tokenizer, image processor, feature extractor, or processor), you can create any of the models supported by 🤗 Transformers. Each of these base classes are configurable, allowing you to use the specific attributes you want. You can easily setup a model for training or modify an existing pretrained model to fine-tune.

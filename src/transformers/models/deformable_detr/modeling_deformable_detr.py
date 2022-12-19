@@ -241,7 +241,7 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoFeatureExtractor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~AutoImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -1073,8 +1073,7 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoFeatureExtractor`]. See [`AutoFeatureExtractor.__call__`] for
-            details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1603,17 +1602,17 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, DeformableDetrModel
+        >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
 
@@ -1873,24 +1872,24 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, DeformableDetrForObjectDetection
+        >>> from transformers import AutoImageProcessor, DeformableDetrForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(
-        ...     outputs, threshold=0.5, target_sizes=target_sizes
-        ... )[0]
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+        ...     0
+        ... ]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(

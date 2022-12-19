@@ -13,6 +13,10 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 This guide focuses on inferencing large models efficiently on CPU.
 
+## `BetterTransformer` for faster inference
+
+We have recently integrated `BetterTransformer` for faster inference on CPU for text, image and audio models. Check the documentation about this integration [here](https://huggingface.co/docs/optimum/bettertransformer/overview) for more details.
+
 ## PyTorch JIT-mode (TorchScript)
 TorchScript is a way to create serializable and optimizable models from PyTorch code. Any TorchScript program can be saved from a Python process and loaded in a process where there is no Python dependency.
 Comparing to default eager mode, jit mode in PyTorch normally yields better performance for model inference from optimization methodologies like operator fusion.

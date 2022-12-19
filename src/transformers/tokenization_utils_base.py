@@ -24,7 +24,7 @@ import os
 import re
 import warnings
 from collections import OrderedDict, UserDict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
@@ -56,8 +56,8 @@ from .utils import (
     is_torch_device,
     is_torch_tensor,
     logging,
+    requires_backends,
     to_py_obj,
-    torch_required,
 )
 
 
@@ -739,7 +739,6 @@ class BatchEncoding(UserDict):
 
         return self
 
-    @torch_required
     def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
         """
         Send all values to device by calling `v.to(device)` (PyTorch only).
@@ -750,6 +749,7 @@ class BatchEncoding(UserDict):
         Returns:
             [`BatchEncoding`]: The same instance after modification.
         """
+        requires_backends(self, ["torch"])
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
@@ -841,7 +841,9 @@ class SpecialTokensMixin:
         """
         return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
-    def add_special_tokens(self, special_tokens_dict: Dict[str, Union[str, AddedToken]]) -> int:
+    def add_special_tokens(
+        self, special_tokens_dict: Dict[str, Union[str, AddedToken]], replace_additional_special_tokens=True
+    ) -> int:
         """
         Add a dictionary of special tokens (eos, pad, cls, etc.) to the encoder and link them to class attributes. If
         special tokens are NOT in the vocabulary, they are added to it (indexed starting from the last index of the
@@ -869,6 +871,11 @@ class SpecialTokensMixin:
 
                 Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer
                 assign the index of the `unk_token` to them).
+            replace_additional_special_tokens (`bool`, *optional*,, defaults to `True`):
+                If `True`, the existing list of additional special tokens will be replaced by the one specified in
+                `special_tokens_dict`. Otherwise, `self._additional_special_tokens` is updated. In the former case, the
+                tokens will NOT be removed from the tokenizer's full vocabulary - they are only being flagged as
+                non-special tokens.
 
         Returns:
             `int`: Number of tokens added to the vocabulary.
@@ -898,17 +905,32 @@ class SpecialTokensMixin:
 
             if self.verbose:
                 logger.info(f"Assigning {value} to the {key} key of the tokenizer")
-            setattr(self, key, value)
 
             if key == "additional_special_tokens":
                 assert isinstance(value, (list, tuple)) and all(
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
+
+                if replace_additional_special_tokens:
+                    setattr(self, key, value)
+                else:
+                    # This is a copy of `self._additional_special_tokens`
+                    additional_special_tokens = getattr(self, key)
+                    additional_special_tokens_set = set(additional_special_tokens)
+                    to_add = []
+                    for token in value:
+                        if str(token) not in additional_special_tokens_set and str(token) not in to_add:
+                            to_add.append(token)
+                    # update the property
+                    additional_special_tokens.extend(to_add)
+                    self.additional_special_tokens = additional_special_tokens
+
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
                 assert isinstance(
                     value, (str, AddedToken)
                 ), f"Token {value} for key {key} should be a str or an AddedToken instance"
+                setattr(self, key, value)
                 added_tokens += self.add_tokens([value], special_tokens=True)
 
         return added_tokens
@@ -2918,7 +2940,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         required_input = encoded_inputs[self.model_input_names[0]]
 
-        if not required_input:
+        if required_input is None or (isinstance(required_input, Sized) and len(required_input) == 0):
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
@@ -3746,6 +3768,7 @@ def get_fast_tokenizer_file(tokenization_files: List[str]) -> str:
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 PreTrainedTokenizerBase.push_to_hub = copy_func(PreTrainedTokenizerBase.push_to_hub)
-PreTrainedTokenizerBase.push_to_hub.__doc__ = PreTrainedTokenizerBase.push_to_hub.__doc__.format(
-    object="tokenizer", object_class="AutoTokenizer", object_files="tokenizer files"
-)
+if PreTrainedTokenizerBase.push_to_hub.__doc__ is not None:
+    PreTrainedTokenizerBase.push_to_hub.__doc__ = PreTrainedTokenizerBase.push_to_hub.__doc__.format(
+        object="tokenizer", object_class="AutoTokenizer", object_files="tokenizer files"
+    )

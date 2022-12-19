@@ -32,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_deformable_detr"] = ["DeformableDetrFeatureExtractor"]
+    _import_structure["image_processing_deformable_detr"] = ["DeformableDetrImageProcessor"]
 
 try:
     if not is_timm_available():
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_deformable_detr import DeformableDetrFeatureExtractor
+        from .image_processing_deformable_detr import DeformableDetrImageProcessor
 
     try:
         if not is_timm_available():

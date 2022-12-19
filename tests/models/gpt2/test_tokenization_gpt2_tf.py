@@ -2,12 +2,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from transformers import AutoConfig, TFGPT2LMHeadModel, is_tensorflow_text_available, is_tf_available
+from transformers import AutoConfig, TFGPT2LMHeadModel, is_keras_nlp_available, is_tf_available
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
-from transformers.testing_utils import require_tensorflow_text, slow
+from transformers.testing_utils import require_keras_nlp, slow
 
 
-if is_tensorflow_text_available():
+if is_keras_nlp_available():
     from transformers.models.gpt2 import TFGPT2Tokenizer
 
 if is_tf_available():
@@ -40,7 +40,7 @@ if is_tf_available():
             return outputs
 
 
-@require_tensorflow_text
+@require_keras_nlp
 class GPTTokenizationTest(unittest.TestCase):
     # The TF tokenizers are usually going to be used as pretrained tokenizers from existing model checkpoints,
     # so that's what we focus on here.
