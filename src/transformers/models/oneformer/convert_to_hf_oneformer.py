@@ -965,13 +965,21 @@ def test(
     processor: OneFormerProcessor,
     model_repo: str,
 ):
-    def pad_tokens_to_max_len(tokens, max_len=77):
-        tokens = tokens["input_ids"]
-        padded_tokens = torch.zeros(len(tokens), max_len, dtype=torch.long)
-        for i in range(len(tokens)):
-            token = tokens[i]
-            padded_tokens[i][: len(token)] = torch.tensor(token).long()
-        return padded_tokens
+    def _preprocess_text(text_list=None, max_length=77):
+        if text_list is None:
+            raise ValueError("tokens cannot be None.")
+
+        tokens = tokenizer(text_list, padding="max_length", max_length=max_length, truncation=True)
+
+        attention_masks, input_ids = tokens["attention_mask"], tokens["input_ids"]
+
+        token_inputs = []
+        for attn_mask, input_id in zip(attention_masks, input_ids):
+            token = torch.tensor(attn_mask) * torch.tensor(input_id)
+            token_inputs.append(token.unsqueeze(0))
+
+        token_inputs = torch.cat(token_inputs, dim=0)
+        return token_inputs
 
     with torch.no_grad():
         tokenizer = CLIPTokenizer.from_pretrained(model_repo)
@@ -994,8 +1002,7 @@ def test(
         x = tr(im).unsqueeze(0)
 
         task_input = ["the task is semantic"]
-        task_token = tokenizer(task_input)
-        task_token = pad_tokens_to_max_len(task_token, max_len=processor.task_seq_length)
+        task_token = _preprocess_text(task_input, max_length=processor.task_seq_length)
 
         original_model_backbone_features = original_model.backbone(x.clone())
 

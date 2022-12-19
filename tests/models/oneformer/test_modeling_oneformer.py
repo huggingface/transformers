@@ -440,10 +440,8 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = processor(image, ["semantic"], return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
-        # check size is divisible by 32
-        self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
         # check size
-        self.assertEqual(inputs_shape, (1, 3, 512, 704))
+        self.assertEqual(inputs_shape, (1, 3, 512, 682))
 
         task_inputs_shape = inputs["task_inputs"].shape
         # check size
@@ -453,7 +451,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         expected_slice_hidden_state = torch.tensor(
-            [[0.2389, 0.6014, 0.4428], [1.1968, 1.0971, 1.0077], [1.0039, 0.5138, 0.5313]]
+            [[0.2724, 0.8287, 0.6025], [1.2706, 1.1252, 1.1445], [1.1357, 0.6150, 0.4185]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -462,7 +460,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[1.0971, 1.2432, 1.2097], [1.2291, 1.3236, 1.2724], [1.2025, 1.2845, 1.2748]]
+            [[1.0581, 1.2275, 1.2000], [1.1901, 1.2925, 1.2861], [1.1578, 1.2558, 1.3212]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -471,7 +469,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[2.7761, -2.1867, -3.6433], [3.4408, -3.3945, -5.5952], [2.2712, -5.0023, -4.6808]]
+            [[3.0711, -1.1855, -5.1095], [3.5536, -3.2710, -5.2052], [2.6020, -4.3605, -4.1422]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -485,10 +483,8 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = processor(image, ["semantic"], return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
-        # check size is divisible by 32
-        self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
         # check size
-        self.assertEqual(inputs_shape, (1, 3, 512, 704))
+        self.assertEqual(inputs_shape, (1, 3, 512, 682))
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -497,9 +493,9 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         masks_queries_logits = outputs.masks_queries_logits
         self.assertEqual(
             masks_queries_logits.shape,
-            (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4),
+            (1, model.config.num_queries, inputs_shape[-2] // 4, (inputs_shape[-1] + 2) // 4),
         )
-        expected_slice = [[[2.7239, 3.5821, 3.8680], [2.8230, 3.4890, 3.8843], [2.5708, 2.9101, 3.4645]]]
+        expected_slice = [[[3.1215, 4.1250, 4.1106], [2.8183, 3.4623, 3.5512], [2.4550, 2.9841, 3.5081]]]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
         # class_queries_logits
@@ -509,9 +505,9 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             (1, model.config.num_queries, model.config.num_labels + 1),
         )
         expected_slice = torch.tensor(
-            [[2.7761, -2.1867, -3.6433], [3.4408, -3.3945, -5.5952], [2.2712, -5.0023, -4.6808]]
+            [[3.0711, -1.1855, -5.1095], [3.5536, -3.2710, -5.2052], [2.6020, -4.3605, -4.1422]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+        self.assertTrue(torch.allclose(class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_with_segmentation_maps_and_loss(self):
         dummy_model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)

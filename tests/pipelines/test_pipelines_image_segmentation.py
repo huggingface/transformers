@@ -30,6 +30,7 @@ from transformers import (
     AutoModelForImageSegmentation,
     AutoModelForInstanceSegmentation,
     AutoModelForUniversalSegmentation,
+    AutoProcessor,
     DetrForSegmentation,
     ImageSegmentationPipeline,
     MaskFormerForInstanceSegmentation,
@@ -634,7 +635,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model_id = "shi-labs/oneformer_ade20k_swin_tiny"
 
         model = AutoModelForUniversalSegmentation.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        feature_extractor = AutoProcessor.from_pretrained(model_id)
 
         image_segmenter = pipeline("image-segmentation", model=model, feature_extractor=feature_extractor)
 

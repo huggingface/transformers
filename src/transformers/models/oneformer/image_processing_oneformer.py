@@ -15,7 +15,6 @@
 """Image processor class for OneFormer."""
 
 import json
-import math
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
@@ -907,7 +906,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
               `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
-            - **texts_list** -- Optional list of text string entries to be fed to a model (when `annotations` are
+            - **text_inputs** -- Optional list of text string entries to be fed to a model (when `annotations` are
               provided). They identify the binary masks present in the image.
         """
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
@@ -941,7 +940,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         if annotations is not None:
             mask_labels = []
             class_labels = []
-            texts_list = []
+            text_inputs = []
 
             num_class_obj = {}
             for cls_name in self.metadata["class_names"]:
@@ -964,11 +963,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 masks = np.concatenate(masks, axis=0)
                 mask_labels.append(torch.from_numpy(masks))
                 class_labels.append(torch.from_numpy(classes).long())
-                texts_list.append(texts)
+                text_inputs.append(texts)
 
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
-            encoded_inputs["texts_list"] = texts_list
+            encoded_inputs["text_inputs"] = text_inputs
 
         return encoded_inputs
 

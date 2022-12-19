@@ -27,23 +27,6 @@ if is_torch_available():
     import torch
 
 
-def pad_tokens_to_max_len(tokens, max_len=77):
-    if isinstance(tokens, list):
-        tmp_tokens = []
-        for token in tokens:
-            tmp_tokens.append(token["input_ids"])
-        tokens = tmp_tokens
-        del tmp_tokens
-    else:
-        tokens = tokens["input_ids"]
-
-    padded_tokens = torch.zeros(len(tokens), max_len, dtype=torch.long)
-    for i in range(len(tokens)):
-        token = tokens[i]
-        padded_tokens[i][: len(token)] = torch.tensor(token).long()
-    return padded_tokens
-
-
 class OneFormerProcessor(ProcessorMixin):
     r"""
     Constructs an OneFormer processor which wraps [`OneFormerImageProcessor`] and
@@ -81,6 +64,22 @@ class OneFormerProcessor(ProcessorMixin):
         self.task_seq_length = task_seq_length
 
         super().__init__(image_processor, tokenizer)
+
+    def _preprocess_text(self, text_list=None, max_length=77):
+        if text_list is None:
+            raise ValueError("tokens cannot be None.")
+
+        tokens = self.tokenizer(text_list, padding="max_length", max_length=max_length, truncation=True)
+
+        attention_masks, input_ids = tokens["attention_mask"], tokens["input_ids"]
+
+        token_inputs = []
+        for attn_mask, input_id in zip(attention_masks, input_ids):
+            token = torch.tensor(attn_mask) * torch.tensor(input_id)
+            token_inputs.append(token.unsqueeze(0))
+
+        token_inputs = torch.cat(token_inputs, dim=0)
+        return token_inputs
 
     def __call__(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
         """
@@ -128,22 +127,18 @@ class OneFormerProcessor(ProcessorMixin):
         if isinstance(task_inputs, List) and isinstance(task_inputs[0], str):
             task_token_inputs = []
             for task in task_inputs:
-                task_input = [f"the task is {task}"]
-                task_token = self.tokenizer(task_input)
-                task_token = pad_tokens_to_max_len(task_token, max_len=self.task_seq_length)
-                task_token_inputs.append(task_token)
-
-            encoded_inputs["task_inputs"] = torch.cat(task_token_inputs, dim=0)
+                task_input = f"the task is {task}"
+                task_token_inputs.append(task_input)
+            encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
         else:
             raise TypeError("Task Inputs should be a string or a list of strings.")
 
-        if hasattr(encoded_inputs, "texts_list"):
-            texts_list = encoded_inputs.texts_list
+        if hasattr(encoded_inputs, "text_inputs"):
+            texts_list = encoded_inputs.text_inputs
 
             text_inputs = []
             for texts in texts_list:
-                text_input_list = [self.tokenizer(texts[i]) for i in range(len(texts))]
-                text_input_list = pad_tokens_to_max_len(text_input_list, max_len=self.max_seq_length)
+                text_input_list = self._preprocess_text(texts, max_length=self.max_seq_length)
                 text_inputs.append(text_input_list.unsqueeze(0))
 
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
@@ -155,6 +150,12 @@ class OneFormerProcessor(ProcessorMixin):
         This method forwards all its arguments to [`OneFormerImageProcessor.encode_inputs`] and then tokenizes the
         task_inputs. Please refer to the docstring of this method for more information.
         """
+
+        if task_inputs is None:
+            raise ValueError("You have to specify the task_input. Found None.")
+        elif images is None:
+            raise ValueError("You have to specify the image. Found None.")
+
         encoded_inputs = self.image_processor.encode_inputs(images, task_inputs, segmentation_maps, **kwargs)
 
         if isinstance(task_inputs, str):
@@ -163,22 +164,18 @@ class OneFormerProcessor(ProcessorMixin):
         if isinstance(task_inputs, List) and isinstance(task_inputs[0], str):
             task_token_inputs = []
             for task in task_inputs:
-                task_input = [f"the task is {task}"]
-                task_token = self.tokenizer(task_input)
-                task_token = pad_tokens_to_max_len(task_token, max_len=self.task_seq_length)
-                task_token_inputs.append(task_token)
-
-            encoded_inputs["task_inputs"] = torch.cat(task_token_inputs, dim=0)
+                task_input = f"the task is {task}"
+                task_token_inputs.append(task_input)
+            encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
         else:
             raise TypeError("Task Inputs should be a string or a list of strings.")
 
-        if hasattr(encoded_inputs, "texts_list"):
-            texts_list = encoded_inputs.texts_list
+        if hasattr(encoded_inputs, "text_inputs"):
+            texts_list = encoded_inputs.text_inputs
 
             text_inputs = []
             for texts in texts_list:
-                text_input_list = [self.tokenizer(texts[i]) for i in range(len(texts))]
-                text_input_list = pad_tokens_to_max_len(text_input_list, max_len=self.max_seq_length)
+                text_input_list = self._preprocess_text(texts, max_length=self.max_seq_length)
                 text_inputs.append(text_input_list.unsqueeze(0))
 
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
