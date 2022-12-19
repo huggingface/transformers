@@ -118,8 +118,14 @@ class TvltForPreTrainingOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`):
             Pixel reconstruction loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+        matching_logits (`torch.FloatTensor` of shape `(batch_size, 1)`):
+            Matching objective logits.
+        pixel_logits (`torch.FloatTensor` of shape 
+            `(batch_size, pixel_patch_length, pixel_patch_size ** 3 * pixel_num_channels)`):
             Pixel reconstruction logits.
+        audio_logits (`torch.FloatTensor` of shape 
+            `(batch_size, audio_patch_length, pixel_patch_size[0] * pixel_patch_size[1])`):
+            Audio reconstruction logits.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -131,6 +137,7 @@ class TvltForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
+    matching_logits: torch.FloatTensor = None
     pixel_logits: torch.FloatTensor = None
     audio_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -1132,10 +1139,10 @@ class TvltForPreTraining(TvltPreTrainedModel):
             )
 
             sequence_output = outputs.last_hidden_state
-            logits = self.matching_head(sequence_output)
+            matching_logits = self.matching_head(sequence_output)
 
             loss_fct = BCEWithLogitsLoss()
-            loss = loss_fct(logits.view(-1), labels.view(-1))
+            loss = loss_fct(matching_logits.view(-1), labels.view(-1))
             total_loss += loss
 
         if self.task_mae:
@@ -1198,6 +1205,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         return TvltForPreTrainingOutput(
             loss=total_loss,
+            matching_logits=matching_logits,
             pixel_logits=pixel_logits,
             audio_logits=audio_logits,
             hidden_states=outputs.hidden_states,

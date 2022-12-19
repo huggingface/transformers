@@ -72,6 +72,10 @@ class TvltImageProcessor(BaseImageProcessor):
             Size of the output image after resizing. The shortest edge of the image will be resized to
             `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
             `size` in the `preprocess` method.
+        patch_size (`int` *optional*, defaults to `16`):
+            The patch size of image patch embedding.
+        num_frames (`int` *optional*, defaults to `8`):
+            The maximum number of video frames.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
@@ -104,6 +108,8 @@ class TvltImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
+        patch_size: int = 16,
+        num_frames: int = 16,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
@@ -122,6 +128,8 @@ class TvltImageProcessor(BaseImageProcessor):
 
         self.do_resize = do_resize
         self.size = size
+        self.patch_size = patch_size
+        self.num_frames = num_frames
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.resample = resample
@@ -287,6 +295,7 @@ class TvltImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        is_mixed: bool = False,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -327,6 +336,7 @@ class TvltImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                     - Unset: Use the inferred channel dimension format of the input image.
+            is_mixed (`bool`, *optional*, if the input video has negative samples.
         """
         
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -351,6 +361,19 @@ class TvltImageProcessor(BaseImageProcessor):
 
         visual_inputs = make_batched(visual_inputs)
 
+        # Check number of frames is fewer than maximum frames
+        for visual_input in visual_inputs:
+            assert len(visual_input) <= self.num_frames, f"number of frames must not be greater than {self.num_frames}."
+
+        max_num_frames = max([len(visual_input) for visual_input in visual_inputs])
+        num_patches_per_image = (self.size["shortest_edge"] // self.patch_size) ** 2
+        visual_masks = [
+            len(visual_input) * num_patches_per_image * [1]
+            + (max_num_frames - len(visual_input)) * num_patches_per_image * [0]
+            for visual_input in visual_inputs
+        ]
+        visual_masks = np.array(visual_masks)
+        
         visual_inputs = [
             [
                 self._preprocess_image(
@@ -371,6 +394,9 @@ class TvltImageProcessor(BaseImageProcessor):
             ]
             for visual_input in visual_inputs
         ]
-
-        data = {"pixel_values": visual_inputs}
+        
+        if is_mixed:
+            data = {"pixel_values_mixed": visual_inputs, "pixel_masks_mixed": visual_masks}
+        else:
+            data = {"pixel_values": visual_inputs, "pixel_masks": visual_masks}
         return BatchFeature(data=data, tensor_type=return_tensors)

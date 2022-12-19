@@ -19,9 +19,9 @@ from typing import List, Optional, Union
 import numpy as np
 from numpy.fft import fft
 
-from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor, BatchFeature
 from ...image_utils import is_torch_tensor
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, is_speech_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -30,7 +30,7 @@ if is_speech_available():
     import torchaudio
 
     
- # Copied from whisper
+# Copied from whisper
 class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TVLT audio feature extractor. This feature extractor can be used to prepare audios for the model.
@@ -319,7 +319,7 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
         max_patch_len = max([feature.shape[0] // self.audio_patch_size[0] * self.freq_len for feature in audio_features])
         # Pad to multiple of audio patch size
         max_patch_len = (max_patch_len // 16 + 1) * 16 if max_patch_len % 16 > 0 else max_patch_len
-        max_time_len = max([feature.shape[0] for feature in audio_features])
+        max_time_len = max_patch_len // self.freq_len * self.audio_patch_size[0]
         audio_masks = [
             (feature.shape[0] // self.audio_patch_size[0] * self.freq_len) * [1]
             + (max_patch_len - feature.shape[0] // self.audio_patch_size[0] * self.freq_len) * [0]
