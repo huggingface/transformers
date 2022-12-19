@@ -509,7 +509,14 @@ class FSMTEncoder(nn.Module):
             embed_pos = self.embed_positions(input_ids)
         elif inputs_embeds is not None:
             inputs_embeds = inputs_embeds * self.embed_scale
-            embed_pos = self.embed_positions(inputs_embeds[:, :, 0])
+
+            # We assume zeros hidden states correspond to padding tokens
+            # and create `position_ids` where inputs_embeds[:, :, 0] == 0
+            position_ids = inputs_embeds[:, :, 0].masked_fill(
+                inputs_embeds[:, :, 0].eq(0), self.embed_positions.padding_idx
+            )
+
+            embed_pos = self.embed_positions(position_ids)
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -741,7 +748,12 @@ class FSMTDecoder(nn.Module):
                 # assert input_ids.ne(self.padding_idx).any()
             x = self.embed_tokens(input_ids) * self.embed_scale
         elif inputs_embeds is not None:
-            positions = self.embed_positions(inputs_embeds[:, :, 0])
+            # We assume zeros hidden states correspond to padding tokens
+            # and create `position_ids` where inputs_embeds[:, :, 0] == 0
+            position_ids = inputs_embeds[:, :, 0].masked_fill(
+                inputs_embeds[:, :, 0].eq(0), self.embed_positions.padding_idx
+            )
+            positions = self.embed_positions(position_ids)
             x = inputs_embeds * self.embed_scale
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
