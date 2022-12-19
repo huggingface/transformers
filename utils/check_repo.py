@@ -252,8 +252,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
-    "MaskFormerForInstanceSegmentation",
-    "OneFormerForUniversalSegmentation",
     "XCLIPVisionModel",
     "XCLIPTextModel",
     "AltCLIPTextModel",
