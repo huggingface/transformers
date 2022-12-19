@@ -72,6 +72,7 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
             add input project 1x1 conv even if input channels and hidden dim is identical in transformer decoder
         common_stride (`int`, *optional*, defaults to 4):
             parameter used for determining number of FPN levels used as part of pixel decoder
+
     Example:
     ```python
     >>> from transformers import Mask2FormerDecoderConfig, Mask2FormerConfig, Mask2FormerModel
