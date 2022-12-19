@@ -574,11 +574,8 @@ class GenerationMixin:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
         if isinstance(eos_token_id, int):
-            is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
-        elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
-            is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id in eos_token_id)
-        else:
-            raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
+            eos_token_id = [eos_token_id]
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id in eos_token_id)
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
@@ -807,6 +804,8 @@ class GenerationMixin:
         )
         bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         diversity_penalty = diversity_penalty if diversity_penalty is not None else self.config.diversity_penalty
         forced_bos_token_id = (
             forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
@@ -1331,20 +1330,18 @@ class GenerationMixin:
         if eos_token_id is None and hasattr(self.config, "decoder"):
             eos_token_id = self.config.decoder.eos_token_id
 
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+
         if pad_token_id is None and eos_token_id is not None:
             if model_kwargs.get("attention_mask", None) is None:
                 logger.warning(
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
-            if isinstance(eos_token_id, int):
-                pad_token_id = eos_token_id
-            elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
-                # Setting the first eos_token_id
-                pad_token_id = eos_token_id[0]
-            else:
-                raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id[0]} for open-end generation.")
+            # Setting the first eos_token_id
+            pad_token_id = eos_token_id[0]
 
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1912,6 +1909,8 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2130,12 +2129,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                if isinstance(eos_token_id, int):
-                    unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
-                elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
-                    unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
-                else:
-                    raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
+                unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2272,6 +2266,8 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2363,12 +2359,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                if isinstance(eos_token_id, int):
-                    unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
-                elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
-                    unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
-                else:
-                    raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
+                unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2525,6 +2516,8 @@ class GenerationMixin:
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2619,12 +2612,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                if isinstance(eos_token_id, int):
-                    unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
-                elif isinstance(eos_token_id, list) and isinstance(eos_token_id[0], int):
-                    unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
-                else:
-                    raise ValueError(f'`eos_token_id` should be of type `int` or `List[int]`.')
+                unfinished_sequences = unfinished_sequences.mul((sum(next_tokens == i for i in eos_token_id)).long())
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -3411,6 +3399,8 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -3780,6 +3770,8 @@ class GenerationMixin:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
