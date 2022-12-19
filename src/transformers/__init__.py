@@ -772,7 +772,6 @@ else:
         ["EfficientFormerFeatureExtractor", "EfficientFormerImageProcessor"]
     )
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
-    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
@@ -1336,7 +1335,7 @@ else:
         [
             "EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "EfficientFormerForImageClassification",
-            "EfficientFormerForMaskedImageModeling",
+            "EfficientFormerForImageClassificationWithTeacher",
             "EfficientFormerModel",
             "EfficientFormerPreTrainedModel",
         ]
@@ -4504,7 +4503,7 @@ if TYPE_CHECKING:
         from .models.efficientformer import (
             EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             EfficientFormerForImageClassification,
-            EfficientFormerForMaskedImageModeling,
+            EfficientFormerForImageClassificationWithTeacher,
             EfficientFormerModel,
             EfficientFormerPreTrainedModel,
         )

@@ -31,13 +31,13 @@ def rename_key(old_name):
         _, layer, param = old_name.split(".")
 
         if layer == "0":
-            new_name = old_name.replace("0", "conv1")
+            new_name = old_name.replace("0", "convolution1")
         elif layer == "1":
-            new_name = old_name.replace("1", "norm1")
+            new_name = old_name.replace("1", "batchnorm_before")
         elif layer == "3":
-            new_name = old_name.replace("3", "conv2")
+            new_name = old_name.replace("3", "convolution2")
         else:
-            new_name = old_name.replace("4", "norm2")
+            new_name = old_name.replace("4", "batchnorm_after")
 
     if "network" in old_name and re.search("\d\.\d", old_name):
         match = re.search("\d\.\d", old_name).group()
@@ -85,6 +85,22 @@ def convert_efficientformer_checkpoint(checkpoint_path, efficientformer_config_f
     print(f"Checkpoint successfuly converted. Model saved at {pytorch_dump_path}")
     feature_extractor.save_pretrained(pytorch_dump_path)
     print(f"Feature extractor successfuly saved at {pytorch_dump_path}")
+
+    print("Pushing model to the hub...")
+
+    model_name = "EfficientFormer"
+    repo_name = Path(pytorch_dump_path, model_name)
+
+    model.push_to_hub(
+        repo_path_or_name=repo_name,
+        commit_message="Add model",
+        use_temp_dir=True,
+    )
+    feature_extractor.push_to_hub(
+        repo_path_or_name=repo_name,
+        commit_message="Add feature extractor",
+        use_temp_dir=True,
+    )
 
 
 if __name__ == "__main__":

@@ -2062,7 +2062,7 @@ class EfficientFormerForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class EfficientFormerForMaskedImageModeling(metaclass=DummyObject):
+class EfficientFormerForImageClassificationWithTeacher(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

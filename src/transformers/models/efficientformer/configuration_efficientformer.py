@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Snapchat Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,10 +49,14 @@ class EfficientFormerConfig(PretrainedConfig):
             Dimensionality of each stage.
         downsamples (`list(bool)`, *optional*, defaults to [True, True, True, True])
             Whether or not to downsample inputs between two stages.
-        dim: TODO
-        key_dim: TODO
-        attn_ratio: TODO
-        resolution: TODO
+        dim (`int`, *optional*, defaults to 448):
+            Number of input channels
+        key_dim (`int`, *optional*, defaults to 32):
+            The size of the key in meta3D block.
+        attn_ratio (`int`, *optional*, defaults to 4):
+            Ratio of the size of the output dimension compared to input dimension of attention layers.
+        resolution (`int`, *optional*, defaults to 5)
+            Size of each patch
         num_hidden_layers (`int`, *optional*, defaults to 5):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
@@ -116,7 +120,6 @@ class EfficientFormerConfig(PretrainedConfig):
         key_dim: int = 32,
         attn_ratio: int = 4,
         resolution: int = 7,
-        # TODO: not clear
         num_hidden_layers: int = 5,
         num_attention_heads: int = 8,
         mlp_expansion_ratio: int = 4,

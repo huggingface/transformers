@@ -15,7 +15,9 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The EfficientFormer model was proposed in [EfficientFormer: Vision Transformers at MobileNet Speed](https://arxiv.org/abs/2206.01191) 
-by Yanyu Li, Geng Yuan, Yang Wen, Eric Hu, Georgios Evangelidis, Sergey Tulyakov, Yanzhi Wang, Jian Ren.
+by Yanyu Li, Geng Yuan, Yang Wen, Eric Hu, Georgios Evangelidis, Sergey Tulyakov, Yanzhi Wang, Jian Ren.  EfficientFormer proposes  a
+dimension-consistent pure transformer that can be run on mobile devices for dense prediction tasks like image classification, object
+detection and semantic segmentation.
 
 The abstract from the paper is the following:
 
@@ -42,14 +44,12 @@ The original code can be found [here](https://github.com/snap-research/Efficient
 
 [[autodoc]] EfficientFormerConfig
 
-## EfficientFormerConfig
+## EfficientFormerrFeatureExtractor
 
-[[autodoc]] EfficientFormerConfig
+[[autodoc]] EfficientFormerFeatureExtractor
     - forward
 
-## EfficientFormerForImageClassification
+## EfficientFormerModel
 
-[[autodoc]] EfficientFormerForImageClassification
+[[autodoc]] EfficientFormerModel
     - forward
-
-# TODO: add the rest of the EF models

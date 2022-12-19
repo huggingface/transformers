@@ -46,7 +46,7 @@ else:
     _import_structure["modeling_efficientformer"] = [
         "EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "EfficientFormerForImageClassification",
-        "EfficientFormerForMaskedImageModeling",
+        "EfficientFormerForImageClassificationWithTeacher",
         "EfficientFormerModel",
         "EfficientFormerPreTrainedModel",
     ]
@@ -67,7 +67,7 @@ if TYPE_CHECKING:
         from .modeling_efficientformer import (
             EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             EfficientFormerForImageClassification,
-            EfficientFormerForMaskedImageModeling,
+            EfficientFormerForImageClassificationWithTeacher,
             EfficientFormerModel,
             EfficientFormerPreTrainedModel,
         )
