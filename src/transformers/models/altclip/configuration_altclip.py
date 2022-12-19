@@ -83,12 +83,12 @@ class AltCLIPTextConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import AltCLIPTextModel
+    >>> from transformers import AltCLIPTextModel, AltCLIPTextConfig
 
-    >>> # Initializing a AltCLIP style configuration
+    >>> # Initializing a AltCLIPTextConfig with BAAI/AltCLIP style configuration
     >>> configuration = AltCLIPTextConfig()
 
-    >>> # Initializing a model (with random weights) from the AltCLIP style configuration
+    >>> # Initializing a AltCLIPTextModel (with random weights) from the BAAI/AltCLIP style configuration
     >>> model = AltCLIPTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -278,11 +278,11 @@ class AltCLIPConfig(PretrainedConfig):
     ```python
     >>> from transformers import AltCLIPConfig, CLIPModel
 
-    >>> # Initializing a AltCLIPConfig with openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a AltCLIPConfig with BAAI/AltCLIP style configuration
     >>> configuration = AltCLIPConfig()
 
-    >>> # Initializing a CLIPModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
-    >>> model = CLIPModel(configuration)
+    >>> # Initializing a AltCLIPModel (with random weights) from the BAAI/AltCLIP style configuration
+    >>> model = AltCLIPModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

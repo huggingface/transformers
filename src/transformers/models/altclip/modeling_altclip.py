@@ -1226,7 +1226,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
     """
 
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    config_class = AltCLIPTextConfig
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->AltRoberta
     def __init__(self, config, add_pooling_layer=True):
@@ -1395,16 +1395,13 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
 
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
     config_class = AltCLIPTextConfig
 
     def __init__(self, config):
         super().__init__(config)
-        self.roberta = AltRobertaModel(config)
+        self.roberta = AltRobertaModel(config, add_pooling_layer=False)
         self.transformation = nn.Linear(config.hidden_size, config.project_dim)
         self.pre_LN = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = lambda x: x[:, 0]
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -1476,7 +1473,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
 
         # pooler
         projection_state = self.transformation(sequence_output)
-        pooler_output = self.pooler(projection_state)
+        pooler_output = projection_state[:, 0]
 
         if not return_dict:
             return (projection_state, pooler_output) + outputs[2:4]
@@ -1502,7 +1499,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
             )
         if not isinstance(config.text_config, AltCLIPTextConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type AltCLIPTextConfig but is of type"
+                "config.text_config is expected to be of type AltCLIPTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
