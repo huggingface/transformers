@@ -104,6 +104,7 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
 
         return (audio - mean[None, None, None]) / std[None, None, None]
 
+    # Copied from WhisperFeatureExtractor
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
         n_mels = int(n_mels)
@@ -153,6 +154,7 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
 
         return weights
 
+    # Copied from WhisperFeatureExtractor
     def fram_wave(self, waveform, center=True):
         """
         Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
@@ -188,6 +190,7 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
             frames.append(frame)
         return np.stack(frames, 0)
 
+    # Copied from WhisperFeatureExtractor
     def stft(self, frames, window):
         """
         Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
