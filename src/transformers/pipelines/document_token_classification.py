@@ -250,6 +250,8 @@ class DocumentTokenClassificationPipeline(Pipeline):
         # add pixel values
         images = features.pop("pixel_values")
         encoded_inputs["pixel_values"] = images
+        encoded_inputs["word_ids"] = encoded_inputs.word_ids()
+        encoded_inputs["words"] = words if words is not None else features["words"]
 
         return encoded_inputs
 
@@ -265,6 +267,28 @@ class DocumentTokenClassificationPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, **kwargs):
-        
+        logits = model_outputs["logits"].detach().cpu().numpy()
+        # if first dimension is 1, remove it
+        if logits.shape[0] == 1:
+            logits = logits[0]
+        words = model_outputs["words"]
+        # if words is a list of list of strings, get the first one
+        if isinstance(words, list) and isinstance(words[0], list):
+            words = words[0]
+        token_predictions = logits.argmax(-1)
+
+        word_ids = model_outputs["word_ids"]
+
+        # Map Token predictions to word predictions
+        word_predictions = [None] * len(words)
+        for word_id, token_prediction in zip(word_ids, token_predictions):
+            if word_id is not None and word_predictions[word_id] is None:
+                word_predictions[word_id] = token_prediction
+            elif word_id is not None and word_predictions[word_id] != token_prediction:
+                # If conflict, we take the first prediction
+                pass
+            
+        word_labels = [self.model.config.id2label[prediction] for prediction in word_predictions]
+        model_outputs["word_labels"] = word_labels
         return model_outputs
 
