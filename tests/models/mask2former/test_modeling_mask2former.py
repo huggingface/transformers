@@ -56,6 +56,12 @@ class Mask2FormerModelTester:
         mask_feature_size=32,
         feature_strides=[2, 4, 8, 16],
         feature_size=64,
+        encoder_feedforward_dim=32,
+        encoder_layers=2,
+        decoder_layers=3,
+        num_decoder_heads=4,
+        dim_feedforward=16,
+        common_stride=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -70,6 +76,12 @@ class Mask2FormerModelTester:
         self.mask_feature_size = mask_feature_size
         self.feature_strides = feature_strides
         self.feature_size = feature_size
+        self.encoder_feedforward_dim = encoder_feedforward_dim
+        self.encoder_layers = encoder_layers
+        self.decoder_layers = decoder_layers
+        self.num_decoder_heads = num_decoder_heads
+        self.dim_feedforward = dim_feedforward
+        self.common_stride = common_stride
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -94,18 +106,17 @@ class Mask2FormerModelTester:
                 depths=[1, 1, 1, 1],
             ),
         )
-        config.general_config["num_classes"] = self.num_labels
-        config.general_config["num_queries"] = self.num_queries
-        config.general_config["feature_strides"] = self.feature_strides
-        config.decoder_config["feature_size"] = self.feature_size
-        config.decoder_config["mask_feature_size"] = self.mask_feature_size
-        config.decoder_config["hidden_dim"] = self.hidden_dim
-        config.decoder_config["encoder_feedforward_dim"] = 32
-        config.decoder_config["encoder_layers"] = 2
-        config.decoder_config["decoder_layers"] = 3
-        config.decoder_config["num_heads"] = 4
-        config.decoder_config["dim_feedforward"] = 16
-        config.decoder_config["common_stride"] = 4
+        config.num_queries = self.num_queries
+        config.feature_strides = self.feature_strides
+        config.decoder_config.feature_size = self.feature_size
+        config.decoder_config.mask_feature_size = self.mask_feature_size
+        config.decoder_config.hidden_dim = self.hidden_dim
+        config.decoder_config.encoder_feedforward_dim = self.encoder_feedforward_dim
+        config.decoder_config.encoder_layers = self.encoder_layers
+        config.decoder_config.decoder_layers = self.decoder_layers
+        config.decoder_config.num_heads = self.num_decoder_heads
+        config.decoder_config.dim_feedforward = self.dim_feedforward
+        config.decoder_config.common_stride = self.common_stride
         return config
 
     def prepare_config_and_inputs_for_common(self):

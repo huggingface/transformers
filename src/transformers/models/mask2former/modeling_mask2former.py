@@ -25,7 +25,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from transformers import AutoBackbone, MaskFormerSwinConfig
+from transformers import AutoBackbone, SwinConfig
 from transformers.utils import logging
 
 from ...activations import ACT2FN
@@ -49,11 +49,11 @@ logger = logging.get_logger(__name__)
 
 
 _CONFIG_FOR_DOC = "Mask2FormerConfig"
-_CHECKPOINT_FOR_DOC = "shivi/mask2former-instance-swin-small-coco"
+_CHECKPOINT_FOR_DOC = "facebook/mask2former-instance-swin-small-coco"
 _IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
 
 MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "shivi/mask2former-instance-swin-small-coco",
+    "facebook/mask2former-instance-swin-small-coco",
     # See all mask2former models at https://huggingface.co/models?filter=mask2former
 ]
 
@@ -1110,6 +1110,7 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
             ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                indexing="ij",
             )
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * height)
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * width)
@@ -1393,8 +1394,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
         backbone_config = config.backbone_config
 
         # For backwards compatibility
-        backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
-        backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
+        backbone_config = SwinConfig.from_dict(backbone_config.to_dict())
 
         self.encoder = AutoBackbone.from_config(backbone_config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
@@ -2339,7 +2339,6 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         mask_labels: Optional[List[Tensor]] = None,
         class_labels: Optional[List[Tensor]] = None,
         pixel_mask: Optional[Tensor] = None,
-        output_auxiliary_logits: bool = False,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2391,8 +2390,6 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )[0]["segmentation"]
         ```
         """
-
-        output_auxiliary_logits = self.config.output_auxiliary_logits or output_auxiliary_logits
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

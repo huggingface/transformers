@@ -24,9 +24,10 @@ from ..swin import SwinConfig
 
 
 MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shivi/mask2former-instance-swin-small-coco": (
-        "https://huggingface.co/shivi/mask2former-instance-swin-small-coco/resolve/main/config.json"
-    ),
+    "facebook/mask2former-instance-swin-small-coco": (
+        "https://huggingface.co/facebook/mask2former-instance-swin-small-coco/blob/main/config.json"
+    )
+    # See all Mask2Former models at https://huggingface.co/models?filter=mask2former
 }
 
 
@@ -39,7 +40,7 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
     [`Mask2FormerModel`]. It is used to instantiate an Mask2Former model according to the specified arguments, defining
     the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that
     of the Mask2Former
-    [shivi/mask2former-instance-swin-small-coco](https://huggingface.co/shivi/mask2former-instance-swin-small-coco)
+    [facebook/mask2former-instance-swin-small-coco](https://huggingface.co/facebook/mask2former-instance-swin-small-coco)
     architecture. Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
     Read the documentation from [`PretrainedConfig`] for more information.
 
@@ -75,10 +76,10 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
     ```python
     >>> from transformers import Mask2FormerDecoderConfig, Mask2FormerConfig, Mask2FormerModel
 
-    >>> # Initializing a Mask2FormerDecoderConfig with shivi/mask2former-instance-swin-small-coco style configuration
+    >>> # Initializing a Mask2FormerDecoderConfig with facebook/mask2former-instance-swin-small-coco style configuration
     >>> decoder_config = Mask2FormerDecoderConfig()
     >>> configuration = Mask2FormerConfig(decoder_config=decoder_config.to_dict())
-    >>> # Initializing a Mask2FormerModel (with random weights) from the shivi/mask2former-instance-swin-small-coco style configuration
+    >>> # Initializing a Mask2FormerModel (with random weights) from the facebook/mask2former-instance-swin-small-coco style configuration
     >>> model = Mask2FormerModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -141,8 +142,8 @@ class Mask2FormerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Mask2FormerModel`]. It is used to instantiate a
     Mask2Former model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Mask2Former
-    [shivi/mask2former-instance-swin-small-coco](https://huggingface.co/shivi/mask2former-instance-swin-small-coco)
-    architecture trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
+    [facebook/mask2former-instance-swin-small-coco](facebook/mask2former-instance-swin-small-coco) architecture trained
+    on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -150,10 +151,10 @@ class Mask2FormerConfig(PretrainedConfig):
     Currently, Mask2Former only supports the [Swin Transformer](swin) as backbone.
 
     Args:
-        backbone_config (`Dict`, *optional*, defaults to `swin-tiny-patch4-window7-224`):
-            The configuration passed to the backbone, if unset, the configuration corresponding to
+        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `SwinConfig()`):
+            The configuration of the backbone model. if unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
-        decoder_config (`Dict`, *optional*):
+        decoder_config (`dict`, *optional*):
             The configuration passed to the pixel decoder and transformer decoder models. Includes the number of
             layers, hidden state dimensions, normalization settings, etc.
         ignore_value (`int`, *optional*, defaults to 255):
@@ -199,10 +200,10 @@ class Mask2FormerConfig(PretrainedConfig):
     ```python
     >>> from transformers import Mask2FormerConfig, Mask2FormerModel
 
-    >>> # Initializing a Mask2Former shivi/mask2former-instance-swin-small-coco configuration
+    >>> # Initializing a Mask2Former facebook/mask2former-instance-swin-small-coco configuration
     >>> configuration = Mask2FormerConfig()
 
-    >>> # Initializing a model (with random weights) from the shivi/mask2former-instance-swin-small-coco style configuration
+    >>> # Initializing a model (with random weights) from the facebook/mask2former-instance-swin-small-coco style configuration
     >>> model = Mask2FormerModel(configuration)
 
     >>> # Accessing the model configuration
