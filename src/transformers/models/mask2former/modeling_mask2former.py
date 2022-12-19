@@ -1391,17 +1391,13 @@ class Mask2FormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-        backbone_config = config.backbone_config
-
-        # For backwards compatibility
-        backbone_config = SwinConfig.from_dict(backbone_config.to_dict())
 
         self.encoder = AutoBackbone.from_config(backbone_config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
         backbone_features = self.encoder(pixel_values).feature_maps
-        decoder_output: Mask2FormerPixelDecoderOutput = self.decoder(
+        decoder_output = self.decoder(
             backbone_features, output_hidden_states=output_hidden_states
         )
 
@@ -1547,7 +1543,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
 
 
 # Copied from transformers.models.maskformer.modeling_maskformer.PredictionBlock with MaskFormer->Mask2Former
-class PredictionBlock(nn.Module):
+class Mask2FormerPredictionBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, activation: nn.Module) -> None:
         super().__init__()
         self.layers = [nn.Linear(in_dim, out_dim), activation]
@@ -2237,7 +2233,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=pixel_values.device)
 
-        pixel_level_module_output: Mask2FormerPixelLevelModuleOutput = self.pixel_level_module(
+        pixel_level_module_output = self.pixel_level_module(
             pixel_values=pixel_values, output_hidden_states=output_hidden_states
         )
 
@@ -2281,6 +2277,10 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         return output
 
 
+@add_start_docstrings(
+    "The Mask2Former Model with heads on top for instance/semantic/panoptic segmentation.",
+    MASK2FORMER_START_DOCSTRING,
+)
 class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -2396,7 +2396,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs: Mask2FormerModelOutput = self.model(
+        outputs = self.model(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             output_hidden_states=output_hidden_states or self.config.use_auxiliary_loss,
@@ -2408,7 +2408,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         auxiliary_logits = outputs.auxiliary_logits
 
         if mask_labels is not None and class_labels is not None:
-            loss_dict: Dict[str, Tensor] = self.get_loss_dict(
+            loss_dict = self.get_loss_dict(
                 masks_queries_logits=outputs.masks_queries_logits,
                 class_queries_logits=outputs.class_queries_logits,
                 mask_labels=mask_labels,

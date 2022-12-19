@@ -184,7 +184,7 @@ class Mask2FormerConfig(PretrainedConfig):
             description
         is_train (`boolean``, *optional*, defaults to False):
             description
-        use_auxiliary_loss (`boolean``, *optional*, defaults to True):
+        use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
             the logits from each decoder's stage.
         feature_strides (`List[int]`, *optional*, defaults to [4, 8, 16, 32]):
