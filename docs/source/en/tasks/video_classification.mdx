@@ -52,9 +52,7 @@ Start by loading a subset of the UCF-101 dataset. This'll give you a chance to e
 
 >>> hf_dataset_identifier = "sayakpaul/ucf101-subset"
 >>> filename = "UCF101_subset.tar.gz"
->>> file_path = hf_hub_download(
-...     repo_id=hf_dataset_identifier, filename=filename, repo_type="dataset"
-... )
+>>> file_path = hf_hub_download(repo_id=hf_dataset_identifier, filename=filename, repo_type="dataset")
 ```
 
 After the subset's been downloaded, we need to un-archive it:
@@ -365,9 +363,10 @@ import evaluate
 
 metric = evaluate.load("accuracy")
 
->>> def compute_metrics(eval_pred):
-...     predictions = np.argmax(eval_pred.predictions, axis=1)
-...     return metric.compute(predictions=predictions, references=eval_pred.label_ids)
+
+def compute_metrics(eval_pred):
+    predictions = np.argmax(eval_pred.predictions, axis=1)
+    return metric.compute(predictions=predictions, references=eval_pred.label_ids)
 ```
 
 **A note on evaluation**:
@@ -459,7 +458,7 @@ You can also manually replicate the results of the `pipeline` if you'd like.
 ...     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ...     inputs = {k: v.to(device) for k, v in inputs.items()}
 ...     model = model.to(device)
-     
+
 ...     # forward pass
 ...     with torch.no_grad():
 ...         outputs = model(**inputs)
