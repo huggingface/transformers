@@ -36,6 +36,7 @@ from . import (
     blenderbot_small,
     bloom,
     bort,
+    bridgetower,
     byt5,
     camembert,
     canine,
