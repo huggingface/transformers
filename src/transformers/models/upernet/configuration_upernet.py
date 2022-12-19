@@ -92,7 +92,7 @@ class UperNetConfig(PretrainedConfig):
 
         if backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = ResNetConfig()
+            backbone_config = ResNetConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
         else:
             if isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.pop("model_type")
