@@ -349,6 +349,8 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roberta-prelayernorm
+        title: RoBERTa-PreLayerNorm
       - local: model_doc/roc_bert
         title: RoCBert
       - local: model_doc/roformer
@@ -438,6 +440,8 @@
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
+      - local: model_doc/swin2sr
+        title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
       - local: model_doc/timesformer
