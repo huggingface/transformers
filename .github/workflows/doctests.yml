@@ -25,7 +25,7 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -53,7 +53,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: doc_tests_gpu_test_reports
           path: reports/doc_tests_gpu
@@ -65,8 +65,8 @@ jobs:
     if: always()
     needs: [run_doctests]
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/download-artifact@v2
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}

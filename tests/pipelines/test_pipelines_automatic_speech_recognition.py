@@ -118,15 +118,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 },
             )
         else:
-            # Non CTC models cannot use chunk_length
-            with self.assertRaises(ValueError) as v:
-                outputs = speech_recognizer(audio, chunk_length_s=10)
-            self.assertEqual(v.exception, "")
-
             # Non CTC models cannot use return_timestamps
-            with self.assertRaises(ValueError) as v:
+            with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
                 outputs = speech_recognizer(audio, return_timestamps="char")
-            self.assertEqual(v.exception, "")
 
     @require_torch
     @slow
@@ -148,9 +142,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output, {"text": "(Applaudissements)"})
 
         # Non CTC models cannot use return_timestamps
-        with self.assertRaises(ValueError) as v:
+        with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
             _ = speech_recognizer(waveform, return_timestamps="char")
-        self.assertEqual(str(v.exception), "We cannot return_timestamps yet on non-ctc models !")
 
     @require_torch
     def test_small_model_pt_seq2seq(self):
@@ -386,7 +379,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
         )
         output_3 = speech_translator(filename)
-        self.assertEqual(output_3, {"text": " Un uomo ha detto allo universo, Sir, esiste."})
+        self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
 
     @slow
     @require_torch

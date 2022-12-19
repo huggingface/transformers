@@ -481,6 +481,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @slow
+    @require_torch
     def test_integration_wtq_pt(self):
         table_querier = pipeline("table-question-answering")
 
@@ -574,6 +575,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertListEqual(results, expected_results)
 
     @slow
+    @require_torch
     def test_integration_sqa_pt(self):
         table_querier = pipeline(
             "table-question-answering",

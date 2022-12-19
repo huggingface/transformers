@@ -832,6 +832,9 @@ class TFModelTesterMixin:
             self.assertLess(np.sum(np.abs(output_dict - output_keywords)), 1e-6)
 
     def test_attention_outputs(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
@@ -2128,6 +2131,14 @@ class UtilsFunctionsTest(unittest.TestCase):
             ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             for p1, p2 in zip(model.weights, ref_model.weights):
                 assert np.allclose(p1.numpy(), p2.numpy())
+
+    @is_pt_tf_cross_test
+    def test_checkpoint_sharding_hub_from_pt(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded", from_pt=True)
+        # the model above is the same as the model below, just a sharded pytorch version.
+        ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        for p1, p2 in zip(model.weights, ref_model.weights):
+            assert np.allclose(p1.numpy(), p2.numpy())
 
     def test_shard_checkpoint(self):
         # This is the model we will use, total size 340,000 bytes.
