@@ -23,7 +23,6 @@ import unittest
 import numpy as np
 
 from transformers import WhisperConfig
-from transformers.generation.logits_process import TimeStampLogitsProcessor
 from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
@@ -47,6 +46,7 @@ if is_torch_available():
         WhisperProcessor,
         set_seed,
     )
+    from transformers.generation.logits_process import TimeStampLogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
 
 
