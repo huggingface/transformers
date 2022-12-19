@@ -73,6 +73,8 @@
       title: Image classification
     - local: tasks/semantic_segmentation
       title: Semantic segmentation
+    - local: tasks/video_classification
+      title: Video classification
     title: Computer Vision
   - sections:
     - local: performance
