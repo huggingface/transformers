@@ -135,6 +135,8 @@ class DetrConfig(PretrainedConfig):
 
     def __init__(
         self,
+        use_timm_backbone=True,
+        backbone_config=None,
         num_channels=3,
         num_queries=100,
         encoder_layers=6,
@@ -170,21 +172,18 @@ class DetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs
     ):
-        if backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = {}
-
-        if isinstance(backbone_config, dict):
-
-            if "model_type" in backbone_config:
-                backbone_config_class = CONFIG_MAPPING[backbone_config["model_type"]]
+        if not use_timm_backbone:
+            if backbone_config is None:
+                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+                backbone_config = ResNetConfig(out_features=["stage2", "stage3", "stage4"])
             else:
-                logger.info(
-                    "`model_type` is not found in `backbone_config`. Use `ResNet` as the backbone configuration class."
-                )
-                backbone_config_class = ResNetConfig
-            backbone_config = backbone_config_class(**backbone_config)
-
+                if isinstance(backbone_config, dict):
+                    backbone_model_type = backbone_config.pop("model_type")
+                    config_class = CONFIG_MAPPING[backbone_model_type]
+                    backbone_config = config_class.from_dict(backbone_config)
+            
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.num_queries = num_queries
         self.d_model = d_model

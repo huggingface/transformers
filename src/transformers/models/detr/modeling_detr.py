@@ -322,9 +322,9 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DetrConvolutionalBackbone(nn.Module):
+class DetrBackbone(nn.Module):
     """
-    Convolutional backbone. Either uses the default backbone or one from the timm library.
+    Backbone class, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
 
@@ -332,6 +332,8 @@ class DetrConvolutionalBackbone(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+
+        self.config = config
 
         if config.use_timm_backbone:
             requires_backends(self, ["timm"])
@@ -353,7 +355,9 @@ class DetrConvolutionalBackbone(nn.Module):
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.feature_info.channels()
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
         if "resnet" in config.backbone:
             for name, parameter in self.model.named_parameters():
@@ -362,7 +366,7 @@ class DetrConvolutionalBackbone(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values)
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -1195,7 +1199,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrConvolutionalBackbone(config)
+        backbone = DetrBackbone(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
