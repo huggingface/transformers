@@ -22,9 +22,10 @@ import unittest
 
 import numpy as np
 
-from transformers import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
-from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available
+import requests
+from transformers import AltCLIPConfig, AltCLIPProcessor, AltCLIPTextConfig, AltCLIPVisionConfig
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -42,6 +43,9 @@ if is_torch_available():
 
     from transformers import AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
     from transformers.models.altclip.modeling_altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
+
+if is_vision_available():
+    from PIL import Image
 
 
 class AltCLIPVisionModelTester:
@@ -382,6 +386,13 @@ class AltCLIPModelTester:
         return config, inputs_dict
 
 
+# We will verify our results on an image of cute cats
+def prepare_img():
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    im = Image.open(requests.get(url, stream=True).raw)
+    return im
+
+
 @require_torch
 class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
@@ -493,3 +504,35 @@ class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = AltCLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_vision
+@require_torch
+class AltCLIPModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        model_name = "BAAI/AltCLIP"
+        model = AltCLIPModel.from_pretrained(model_name).to(torch_device)
+        processor = AltCLIPProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        inputs = processor(text=["一张猫的照片", "一张狗的照片"], images=image, padding=True, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        self.assertEqual(
+            outputs.logits_per_image.shape,
+            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+        )
+        self.assertEqual(
+            outputs.logits_per_text.shape,
+            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+        )
+
+        probs = outputs.logits_per_image.softmax(dim=1)
+        expected_probs = torch.tensor([[9.9942e-01, 5.7805e-04]], device=torch_device)
+
+        self.assertTrue(torch.allclose(probs, expected_probs, atol=5e-3))
