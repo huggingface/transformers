@@ -240,6 +240,7 @@ class Mask2FormerConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = SwinConfig(
                 image_size=224,
                 in_channels=3,
