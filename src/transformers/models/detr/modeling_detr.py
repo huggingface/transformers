@@ -322,9 +322,9 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DetrBackbone(nn.Module):
+class DetrConvEncoder(nn.Module):
     """
-    Backbone class, using either the AutoBackbone API or one from the timm library.
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
 
@@ -1204,7 +1204,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrBackbone(config)
+        backbone = DetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
