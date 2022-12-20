@@ -30,7 +30,7 @@ if is_speech_available():
     import torchaudio
 
     
-# Copied from WhisperFeatureExtractor
+# Copied from whisper
 class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TVLT audio feature extractor. This feature extractor can be used to prepare audios for the model.
@@ -39,33 +39,14 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
     should refer to this superclass for more information regarding those methods.
 
     Args:
-        audio_size (`int` *optional*, defaults to `2048`):
-            Size of audio spectrogram on time dimension.
-        num_channels (`int` *optional*, defaults to `1`):
-            Number of audio channels.
-        audio_patch_size (`List[int]` *optional*, defaults to `[16, 16]`):
-            The patch size of audio patch embedding.
-        feature_size (`int` *optional*, defaults to `128`):
-            Size of audio spectrogram on frequency dimension.
-        sampling_rate (`int`, defaults to 44100):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        hop_length (`int`, defaults to 160):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
-        chunk_length (`int`, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
-            sequences.
-        n_fft (`int`, defaults to 400):
-            Size of the Fourier transform.
-        padding_value (`float`, *optional*, defaults to 0.0):
-            Padding value used to pad the audio. Should correspond to silences.
-    """
 
+    """
 
     model_input_names = ["audio_values", "audio_masks"]
 
     def __init__(
         self,
-        audio_size=2048,
+        audio_size=1024,
         num_channels=1,
         audio_patch_size=[16, 16],
         feature_size=128,
@@ -74,12 +55,14 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
         chunk_length=30,
         n_fft=2048,
         padding_value=0.0,
+        return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         **kwargs
     ):
         super().__init__(
             feature_size=feature_size,
             sampling_rate=sampling_rate,
             padding_value=padding_value,
+            return_attention_mask=return_attention_mask,
             **kwargs,
         )
 
@@ -104,7 +87,6 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
 
         return (audio - mean[None, None, None]) / std[None, None, None]
 
-    # Copied from WhisperFeatureExtractor
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
         n_mels = int(n_mels)
@@ -154,7 +136,6 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
 
         return weights
 
-    # Copied from WhisperFeatureExtractor
     def fram_wave(self, waveform, center=True):
         """
         Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
@@ -190,7 +171,6 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
             frames.append(frame)
         return np.stack(frames, 0)
 
-    # Copied from WhisperFeatureExtractor
     def stft(self, frames, window):
         """
         Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
@@ -241,11 +221,13 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        return_tensors: Optional[Union[str, TensorType]] = None,
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
+        return_attention_mask: Optional[bool] = None,
+        padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        sampling_rate: Optional[int] = None,
         **kwargs
     ) -> BatchFeature:
         """
@@ -268,10 +250,20 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
                 If set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+            return_attention_mask (`bool`, *optional*):
+                Whether to return the attention mask. If left to the default, will return the attention mask according
+                to the specific feature_extractor's default.
+                [What are attention masks?](../glossary#attention-mask)
+                <Tip>
+                For WhisperTransoformer models, `attention_mask` should alwys be passed for batched inference, to avoid
+                subtle bugs.
+                </Tip>
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
+            padding_value (`float`, defaults to 0.0):
+                The value that is used to fill the padding values / vectors.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
