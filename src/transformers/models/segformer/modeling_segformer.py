@@ -819,7 +819,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
                 loss = loss_fct(upsampled_logits.squeeze(1), labels.float())
                 loss = (loss * valid_mask).mean()
             else:
-                raise ValueError("Number of labels should be >=0: {}".format(self.config.num_labels))
+                raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
 
         if not return_dict:
             if output_hidden_states:
