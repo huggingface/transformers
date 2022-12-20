@@ -55,7 +55,7 @@ if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import TvltAudioFeatureExtractor
+    from transformers import TvltImageProcessor, TvltAudioFeatureExtractor
 
 
 class TvltModelTester:

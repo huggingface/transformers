@@ -12,14 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TVLT feature extractor. """
+""" Testing suite for the TVLT image processor. """
 
 import random
 import unittest
 
 import numpy as np
 
-from test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -30,7 +30,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TvltAudioFeatureExtractor, TvltPixelFeatureExtractor
+    from transformers import TvltAudioFeatureExtractor, TvltImageProcessor
 
 global_rng = random.Random()
 
@@ -48,7 +48,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
     return values
 
-
+        
 class TvltAudioFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
