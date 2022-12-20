@@ -294,7 +294,7 @@ class TvltAudioEmbeddings(nn.Module):
         return embeddings, attention_masks, label_masks, ids_restore
 
     
-# Copied from transformers.models.beit.modeling_beit.BeitPatchEmbeddings with BeitPatchEmbedding->TvltPixelPatchEmbeddings
+# Copied from transformers.models.beit.modeling_beit.BeitPatchEmbeddings
 class TvltPixelPatchEmbeddings(nn.Module):
     """
     Video/Image to Patch Embedding. This module turns a batch of videos/images of shape (batch_size, num_frames, num_channels,
