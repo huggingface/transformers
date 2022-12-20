@@ -75,9 +75,6 @@ class FunnelConfig(PretrainedConfig):
             The dropout probability for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability used between the two layers of the feed-forward blocks.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 3):
             The vocabulary size of the `token_type_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
         initializer_range (`float`, *optional*, defaults to 0.1):
@@ -121,7 +118,6 @@ class FunnelConfig(PretrainedConfig):
         hidden_dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.0,
-        max_position_embeddings=512,
         type_vocab_size=3,
         initializer_range=0.1,
         initializer_std=None,
@@ -148,7 +144,6 @@ class FunnelConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.initializer_std = initializer_std
