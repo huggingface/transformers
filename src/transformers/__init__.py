@@ -405,6 +405,7 @@ _import_structure = {
         "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TvltConfig",
         "TvltAudioFeatureExtractor",
+        "TvltProcessor",
     ],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
