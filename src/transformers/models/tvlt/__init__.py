@@ -47,7 +47,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_tvlt"] = [
-        "TvltAudioFeatureExtractor",
+        "TvltFeatureExtractor",
     ]
     _import_structure["image_processing_tvlt"] = [
         "TvltImageProcessor",
@@ -81,7 +81,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_tvlt import TvltAudioFeatureExtractor
+        from .feature_extraction_tvlt import TvltFeatureExtractor
         from .image_processing_tvlt import TvltImageProcessor
         from .processing_tvlt import TvltProcessor
 
