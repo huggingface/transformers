@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Swin2SRConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "Swin2SRImageProcessor"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
@@ -1145,9 +1145,9 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> from PIL import Image
          >>> import requests
 
-         >>> from transformers import Swin2SRImageProcessor, Swin2SRForImageSuperResolution
+         >>> from transformers import AutoImageProcessor, Swin2SRForImageSuperResolution
 
-         >>> processor = Swin2SRImageProcessor.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
+         >>> processor = AutoImageProcessor.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
          >>> model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
 
          >>> url = "https://huggingface.co/spaces/jjourney1125/swin2sr/resolve/main/samples/butterfly.jpg"
