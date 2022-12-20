@@ -36,8 +36,12 @@ def get_detr_config(model_name):
     config = DetrConfig(use_timm_backbone=False)
 
     # set backbone attributes
-    if "resnet101" in model_name:
+    if "resnet50" in model_name:
+        pass
+    elif "resnet101" in model_name:
         config.backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101")
+    else:
+        raise ValueError("Model name should include either resnet50 or resnet101")
 
     # set label attributes
     is_panoptic = "panoptic" in model_name

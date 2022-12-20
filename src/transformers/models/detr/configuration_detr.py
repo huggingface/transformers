@@ -45,7 +45,7 @@ class DetrConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        use_timm_backbone (`int`, *optional*, defaults to 3):
+        use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether or not to use the timm library as the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
@@ -182,11 +182,10 @@ class DetrConfig(PretrainedConfig):
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
                 backbone_config = ResNetConfig(out_features=["stage2", "stage3", "stage4"])
-            else:
-                if isinstance(backbone_config, dict):
-                    backbone_model_type = backbone_config.pop("model_type")
-                    config_class = CONFIG_MAPPING[backbone_model_type]
-                    backbone_config = config_class.from_dict(backbone_config)
+            elif isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.get("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
