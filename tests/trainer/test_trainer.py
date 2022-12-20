@@ -2332,7 +2332,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ADAMW_BNB, ouput_dir="None"),
+                TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
                 bnb.optim.Adam8bit,
                 default_adam_kwargs,
             )
