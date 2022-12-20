@@ -353,26 +353,38 @@ class TemporalFusionTransformerAttention(nn.Module):
 class TemporalFusionTransformerEncoderLayer(nn.Module):
     def __init__(self, config: TemporalFusionTransformerConfig):
         super().__init__()
-        self.embed_dim = config.d_model
-        self.self_attn = TemporalFusionTransformerAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
+
+        self.encoder_lstm = nn.LSTM(
+            input_size=config.variable_dimension,
+            hidden_size=config.embedding_dimension,
+            dropout=config.dropout,
+            batch_first=True,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+
+        self.decoder_lstm = nn.LSTM(
+            input_size=config.variable_dimension,
+            hidden_size=config.embedding_dimension,
+            dropout=config.dropout,
+            batch_first=True,
+        )
+
+        self.gate = nn.Sequential(
+            nn.Linear(in_features=config.embedding_dimension, out_features=config.embedding_dimension * 2),
+            nn.GLU(),
+        )
+        if config.variable_dimension != config.embedding_dimension:
+            self.skip_proj = nn.Linear(in_features=config.variable_dimension, out_features=config.embedding_dimension)
+            self.add_skip = True
+        else:
+            self.add_skip = False
+
+        self.lnorm = nn.LayerNorm(config.embedding_dimension)
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
+        context_input: torch.Tensor,
+        target_input: torch.Tensor,
+        states: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         """
         Args:
@@ -385,37 +397,21 @@ class TemporalFusionTransformerEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        residual = hidden_states
-        hidden_states, attn_weights, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        ctx_encodings, states = self.encoder_lstm(context_input, states)
 
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        if target_input is not None:
+            tgt_encodings, _ = self.decoder_lstm(target_input, states)
+            encodings = torch.cat((ctx_encodings, tgt_encodings), dim=1)
+            skip = torch.cat((context_input, target_input), dim=1)
+        else:
+            encodings = ctx_encodings
+            skip = context_input
 
-        if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
-        ):
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        if self.add_skip:
+            skip = self.skip_proj(skip)
+        encodings = self.gate(encodings)
+        encodings = self.lnorm(skip + encodings)
+        return encodings
 
 
 class TemporalFusionTransformerDecoderLayer(nn.Module):
