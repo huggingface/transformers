@@ -952,7 +952,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
 
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
-        [1, 2048, 7, 7]
+        [1, 512, 7, 7]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
