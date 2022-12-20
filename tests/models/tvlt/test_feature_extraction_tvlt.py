@@ -30,7 +30,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TvltAudioFeatureExtractor, TvltImageProcessor
+    from transformers import TvltFeatureExtractor, TvltImageProcessor
 
 global_rng = random.Random()
 
@@ -49,7 +49,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
         
-class TvltAudioFeatureExtractionTester(unittest.TestCase):
+class TvltFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -82,11 +82,11 @@ class TvltAudioFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class TvltAudioFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-    feature_extraction_class = TvltAudioFeatureExtractor
+class TvltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+    feature_extraction_class = TvltFeatureExtractor
 
     def setUp(self):
-        self.feature_extract_tester = TvltAudioFeatureExtractionTester(self)
+        self.feature_extract_tester = TvltFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):
