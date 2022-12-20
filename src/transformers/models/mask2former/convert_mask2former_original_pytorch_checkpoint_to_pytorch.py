@@ -118,6 +118,10 @@ class OriginalMask2FormerConfigToOursConverter:
             backbone_config = SwinConfig.from_pretrained(
                 "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
             )
+        elif model.SWIN.EMBED_DIM == 128:
+            backbone_config = SwinConfig.from_pretrained(
+                "microsoft/swin-base-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
+            )
         elif model.SWIN.EMBED_DIM == 192:
             backbone_config = SwinConfig.from_pretrained(
                 "microsoft/swin-large-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
@@ -195,18 +199,18 @@ class OriginalMask2FormerCheckpointToOursConverter:
         for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
 
-    def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig):
+    def replace_swin_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig):
         dst_prefix: str = "pixel_level_module.encoder"
         src_prefix: str = "backbone"
 
         renamed_keys = [
             (
                 f"{src_prefix}.patch_embed.proj.weight",
-                f"{dst_prefix}.model.embeddings.patch_embeddings.projection.weight",
+                f"{dst_prefix}.embeddings.patch_embeddings.projection.weight",
             ),
-            (f"{src_prefix}.patch_embed.proj.bias", f"{dst_prefix}.model.embeddings.patch_embeddings.projection.bias"),
-            (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.model.embeddings.norm.weight"),
-            (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.model.embeddings.norm.bias"),
+            (f"{src_prefix}.patch_embed.proj.bias", f"{dst_prefix}.embeddings.patch_embeddings.projection.bias"),
+            (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.embeddings.norm.weight"),
+            (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.embeddings.norm.bias"),
         ]
         num_layers = len(config.backbone_config.depths)
         for layer_idx in range(num_layers):
@@ -215,15 +219,15 @@ class OriginalMask2FormerCheckpointToOursConverter:
                     [  # src, dst
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm1.weight",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_before.weight",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_before.weight",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm1.bias",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_before.bias",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_before.bias",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.relative_position_bias_table",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_bias_table",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_bias_table",
                         ),
                     ]
                 )
@@ -236,24 +240,24 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 size = src_att_weight.shape[0]
                 offset = size // 3
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.query.weight"
+                    f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.query.weight"
                 ] = src_att_weight[:offset, :]
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.query.bias"
+                    f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.query.bias"
                 ] = src_att_bias[:offset]
 
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.key.weight"
+                    f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.key.weight"
                 ] = src_att_weight[offset : offset * 2, :]
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.key.bias"
+                    f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.key.bias"
                 ] = src_att_bias[offset : offset * 2]
 
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.value.weight"
+                    f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.value.weight"
                 ] = src_att_weight[-offset:, :]
                 dst_state_dict[
-                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.value.bias"
+                    f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.value.bias"
                 ] = src_att_bias[-offset:]
 
                 # let's pop them
@@ -264,11 +268,11 @@ class OriginalMask2FormerCheckpointToOursConverter:
                     [
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.proj.weight",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.output.dense.weight",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.output.dense.weight",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.proj.bias",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.output.dense.bias",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.output.dense.bias",
                         ),
                     ]
                 )
@@ -278,11 +282,11 @@ class OriginalMask2FormerCheckpointToOursConverter:
                     [
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm2.weight",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_after.weight",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_after.weight",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm2.bias",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_after.bias",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_after.bias",
                         ),
                     ]
                 )
@@ -292,19 +296,19 @@ class OriginalMask2FormerCheckpointToOursConverter:
                     [
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc1.weight",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.intermediate.dense.weight",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.intermediate.dense.weight",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc1.bias",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.intermediate.dense.bias",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.intermediate.dense.bias",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc2.weight",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.output.dense.weight",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.output.dense.weight",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc2.bias",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.output.dense.bias",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.output.dense.bias",
                         ),
                     ]
                 )
@@ -313,7 +317,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
                     [
                         (
                             f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.relative_position_index",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_index",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_index",
                         )
                     ]
                 )
@@ -324,15 +328,15 @@ class OriginalMask2FormerCheckpointToOursConverter:
                     [
                         (
                             f"{src_prefix}.layers.{layer_idx}.downsample.reduction.weight",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.downsample.reduction.weight",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.downsample.reduction.weight",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.downsample.norm.weight",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.downsample.norm.weight",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.downsample.norm.weight",
                         ),
                         (
                             f"{src_prefix}.layers.{layer_idx}.downsample.norm.bias",
-                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.downsample.norm.bias",
+                            f"{dst_prefix}.encoder.layers.{layer_idx}.downsample.norm.bias",
                         ),
                     ]
                 )
@@ -342,11 +346,11 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 [
                     (
                         f"{src_prefix}.norm{layer_idx}.weight",
-                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.weight",
                     ),
                     (
                         f"{src_prefix}.norm{layer_idx}.bias",
-                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.bias",
                     ),
                 ]
             )
@@ -357,7 +361,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
-        self.replace_backbone(dst_state_dict, src_state_dict, self.config)
+        self.replace_swin_backbone(dst_state_dict, src_state_dict, self.config)
 
         def rename_keys_for_weight_bias(src_prefix: str, dst_prefix: str):
             return [
@@ -420,7 +424,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         renamed_keys.extend([(f"{src_prefix}.transformer.level_embed", f"{dst_prefix}.level_embed")])
 
         # layers
-        for layer_idx in range(self.config.decoder_config["encoder_layers"]):
+        for layer_idx in range(self.config.decoder_config.encoder_layers):
             renamed_keys.extend(
                 rename_keys_for_encoder_layer(
                     f"{src_prefix}.transformer.encoder.layers.{layer_idx}", f"{dst_prefix}.encoder.layers.{layer_idx}"
@@ -440,7 +444,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
     def replace_keys_qkv_transformer_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module.decoder.layers"
         src_prefix: str = "sem_seg_head.predictor"
-        for i in range(self.config.decoder_config["decoder_layers"] - 1):
+        for i in range(self.config.decoder_config.decoder_layers - 1):
             # read in weights + bias of input projection layer of self-attention
             in_proj_weight = src_state_dict.pop(
                 f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_weight"
@@ -555,7 +559,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
             )
 
         # decoder layers
-        for i in range(self.config.decoder_config["decoder_layers"] - 1):
+        for i in range(self.config.decoder_config.decoder_layers - 1):
             renamed_keys.extend(
                 rename_keys_for_transformer_decoder_layer(
                     f"{src_prefix}",
