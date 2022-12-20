@@ -24,19 +24,19 @@ from ...utils import TensorType
 
 class TvltProcessor(PushToHubMixin):
     r"""
-    Constructs a TVLT processor which wraps a TVLT image processor and TVLT audio feature extractor into a single processor.
+    Constructs a TVLT processor which wraps a TVLT image processor and TVLT feature extractor into a single processor.
 
-    [`TvltProcessor`] offers all the functionalities of [`TvltImageProcessor`] and [`TvltAudioFeatureExtractor`]. See the
+    [`TvltProcessor`] offers all the functionalities of [`TvltImageProcessor`] and [`TvltFeatureExtractor`]. See the
     docstring of [`~TvltProcessor.__call__`] for more information.
 
     Args:
         image_processor (`TvltImageProcessor`):
             An instance of [`TvltImageProcessor`]. The image processor is a required input.
-        feature_extractor (`TvltAudioFeatureExtractor`):
-            An instance of [`TvltAudioFeatureExtractor`]. The audio feature extractor is a required input.
+        feature_extractor (`TvltFeatureExtractor`):
+            An instance of [`TvltFeatureExtractor`]. The audio feature extractor is a required input.
     """
     image_processor_class = "TvltImageProcessor"
-    audio_feature_extractor_class = "TvltAudioFeatureExtractor"
+    audio_feature_extractor_class = "TvltFeatureExtractor"
 
     def __init__(self, image_processor, audio_feature_extractor):
         super().__init__()
@@ -46,7 +46,7 @@ class TvltProcessor(PushToHubMixin):
     def __call__(self, visual_inputs=None, audio_inputs=None, visual_inputs_mixed=None, sampling_rate=None, *args, **kwargs):
         """
         Forwards the `visual_inputs` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`] 
-        and the `audio_inputs` argument to TvltAudioFeatureExtractor's [`~TvltAudioFeatureExtractor.__call__`]. 
+        and the `audio_inputs` argument to TvltFeatureExtractor's [`~TvltFeatureExtractor.__call__`]. 
         Please refer to the doctsring of the above two methods for more information.
         """
 
