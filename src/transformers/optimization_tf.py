@@ -22,9 +22,9 @@ import tensorflow as tf
 
 
 try:
-    from tf.keras.optimizers.legacy import Adam
+    from tensorflow.keras.optimizers.legacy import Adam
 except ImportError:
-    from tf.keras.optimizers import Adam
+    from tensorflow.keras.optimizers import Adam
 
 
 class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
