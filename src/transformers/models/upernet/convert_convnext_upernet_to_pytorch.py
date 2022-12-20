@@ -144,14 +144,6 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    # TODO: remove
-    # from torchvision.transforms import Compose, Normalize, Resize, ToTensor
-    # from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-    # image_transforms = Compose(
-    #     [Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)]
-    # )
-    # pixel_values = image_transforms(image).unsqueeze(0)
-
     processor = UperNetImageProcessor()
     pixel_values = processor(image, return_tensors="pt").pixel_values
 

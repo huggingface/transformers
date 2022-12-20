@@ -15,12 +15,6 @@
 """Convert Swin Transformer + UperNet checkpoints from mmsegmentation.
 
 URL: https://github.com/open-mmlab/mmsegmentation/tree/master/configs/swin
-
-Update: there seems to be an incompatibility with this version, due to a new implementation of their downsampling
-operation using nn.Unfold.
-
-TODO we need to update the parameters as shown here:
-https://github.com/open-mmlab/mmdetection/blob/31c84958f54287a8be2b99cbf87a6dcf12e57753/mmdet/models/utils/ckpt_convert.py#L96.
 """
 
 import argparse
@@ -170,6 +164,9 @@ def correct_unfold_norm_order(x):
     return x
 
 
+# there was an incompatibility with this version, due to a new implementation of their downsampling operation using nn.Unfold.
+# was resolved as seen here:
+# https://github.com/open-mmlab/mmdetection/blob/31c84958f54287a8be2b99cbf87a6dcf12e57753/mmdet/models/utils/ckpt_convert.py#L96.
 def reverse_correct_unfold_norm_order(x):
     in_channel = x.shape[0]
     x = x.reshape(in_channel // 4, 4)
@@ -222,14 +219,6 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # verify on image
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-
-    # TODO: remove
-    # from torchvision.transforms import Compose, Normalize, Resize, ToTensor
-    # from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-    # image_transforms = Compose(
-    #     [Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)]
-    # )
-    # pixel_values = image_transforms(image).unsqueeze(0)
 
     processor = UperNetImageProcessor()
     pixel_values = processor(image, return_tensors="pt").pixel_values
