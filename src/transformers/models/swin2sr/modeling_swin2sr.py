@@ -43,6 +43,11 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Swin2SRConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
+_EXPECTED_OUTPUT_SHAPE = [1, 180, 488, 648]
 
 
 SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -888,12 +893,12 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class="AutoImageProcessor",
-        checkpoint="caidas/swin2SR-classical-sr-x2-64",
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
-        expected_output=[1, 180, 488, 648],
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
