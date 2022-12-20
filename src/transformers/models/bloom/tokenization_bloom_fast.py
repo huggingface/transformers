@@ -18,8 +18,11 @@
 import json
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
+import numpy as np
+
 from tokenizers import pre_tokenizers
 
+from ... import is_flax_available, is_tf_available, is_torch_available
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
@@ -27,6 +30,13 @@ from ...utils import logging
 
 if TYPE_CHECKING:
     from transformers.pipelines.conversational import Conversation
+
+    if is_torch_available():
+        import torch
+    if is_tf_available():
+        import tensorflow as tf
+    if is_flax_available():
+        import jax.numpy as jnp  # noqa: F401
 
 
 logger = logging.get_logger(__name__)
