@@ -16,6 +16,7 @@
 
 
 import json
+import warnings
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
@@ -192,7 +193,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             warnings.warn(
                 "Bloom tokenizer was built in order to have lossless encoding. Most likely, you should use"
                 " `clean_up_tokenization_spaces=False`. This flag is deprecated and will be remove in v5. The"
-                " behaviour will correspond to `clean_up_tokenization_spaces=False`"
+                " behaviour will correspond to `clean_up_tokenization_spaces=False`",
                 FutureWarning,
             )
         return super().batch_decode(
@@ -229,10 +230,11 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             `str`: The decoded sentence.
         """
         if clean_up_tokenization_spaces:
-            logger.warning(
+            warnings.warn(
                 "Bloom tokenizer was built in order to have lossless encoding. Most likely, you should use"
                 " `clean_up_tokenization_spaces=False`. This flag is deprecated and will be remove in v5. The"
-                " behaviour will correspond to `clean_up_tokenization_spaces=False`"
+                " behaviour will correspond to `clean_up_tokenization_spaces=False`",
+                FutureWarning,
             )
         return super().decode(
             token_ids=token_ids,
