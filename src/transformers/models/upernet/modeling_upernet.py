@@ -297,15 +297,11 @@ class UperNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    # TODO look into weights initialization
-    def _init_weights(self, module):
+    def init_weights(self):
         """Initialize the weights"""
-        if isinstance(module, BackboneMixin):
-            module.init_weights()
-        elif isinstance(module, UperNetHead):
-            module.init_weights()
-        elif isinstance(module, UperNetFCNHead):
-            module.init_weights()
+        self.backbone.init_weights()
+        self.decode_head.init_weights()
+        self.auxiliary_head.init_weights()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BackboneMixin):

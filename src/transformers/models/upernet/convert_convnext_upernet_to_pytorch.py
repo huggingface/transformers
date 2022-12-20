@@ -15,14 +15,14 @@
 """Convert ConvNext + UperNet checkpoints from mmsegmentation."""
 
 import argparse
+import json
 
 import torch
 from PIL import Image
-from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
+from huggingface_hub import hf_hub_download
 from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation, UperNetImageProcessor
-from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 def get_upernet_config(model_name):
@@ -46,11 +46,23 @@ def get_upernet_config(model_name):
         hidden_sizes = [256, 512, 1024, 2048]
         auxiliary_in_channels = 1024
 
+    # set label information
+    num_labels = 150
+    repo_id = "huggingface/label-files"
+    filename = "ade20k-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    label2id = {v: k for k, v in id2label.items()}
+
     backbone_config = ConvNextConfig(
         depths=depths, hidden_sizes=hidden_sizes, out_features=["stage1", "stage2", "stage3", "stage4"]
     )
     config = UperNetConfig(
-        backbone_config=backbone_config, auxiliary_in_channels=auxiliary_in_channels, num_labels=150
+        backbone_config=backbone_config,
+        auxiliary_in_channels=auxiliary_in_channels,
+        num_labels=num_labels,
+        id2label=id2label,
+        label2id=label2id,
     )
 
     return config
@@ -104,11 +116,6 @@ def create_rename_keys(config):
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
-
-
-image_transforms = Compose(
-    [Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)]
-)
 
 
 def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):

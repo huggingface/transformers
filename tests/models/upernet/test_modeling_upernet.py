@@ -246,6 +246,10 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @unittest.skip(reason="UperNet does not have tied weights")
+    def test_tied_model_weights_key_ignore(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -281,7 +285,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-7.6034, -7.6034, -7.4257], [-7.6034, -7.6034, -7.4257], [-7.4655, -7.4655, -7.2804]]
+            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
 
@@ -300,6 +304,6 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-8.8408, -8.8408, -8.6897], [-8.8408, -8.8408, -8.6897], [-8.7968, -8.7968, -8.6412]]
+            [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
