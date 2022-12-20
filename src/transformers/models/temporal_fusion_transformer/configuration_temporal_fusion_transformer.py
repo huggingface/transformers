@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "temporal-fusion-transformer": "https://huggingface.co/temporal-fusion-transformer/resolve/main/config.json",
+    "huggingface/temporal-fusion-transformer-tourism-monthly": "https://huggingface.co/temporal-fusion-transformer-tourism-monthly/resolve/main/config.json",
     # See all TemporalFusionTransformer models at https://huggingface.co/models?filter=temporal_fusion_transformer
 }
 
@@ -94,15 +94,11 @@ class TemporalFusionTransformerConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "temporal_fusion_transformer"
     keys_to_ignore_at_inference = ["past_key_values"]
-    
-    attribute_map = {
-        "num_attention_heads": "encoder_attention_heads",
-        "hidden_size": "d_model"
-    }
+
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -159,7 +155,5 @@ class TemporalFusionTransformerConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            **kwargs,
         )
-
-    

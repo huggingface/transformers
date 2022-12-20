@@ -18,14 +18,15 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
+from ...utils import _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
 from ...utils import is_torch_available
 
 
-
-
 _import_structure = {
-    "configuration_temporal_fusion_transformer": ["TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TemporalFusionTransformerConfig"],
+    "configuration_temporal_fusion_transformer": [
+        "TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TemporalFusionTransformerConfig",
+    ],
     "tokenization_temporal_fusion_transformer": ["TemporalFusionTransformerTokenizer"],
 }
 
@@ -54,10 +55,11 @@ else:
     ]
 
 
-
-
 if TYPE_CHECKING:
-    from .configuration_temporal_fusion_transformer import TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TemporalFusionTransformerConfig
+    from .configuration_temporal_fusion_transformer import (
+        TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TemporalFusionTransformerConfig,
+    )
     from .tokenization_temporal_fusion_transformer import TemporalFusionTransformerTokenizer
 
     try:
@@ -83,7 +85,6 @@ if TYPE_CHECKING:
             TemporalFusionTransformerModel,
             TemporalFusionTransformerPreTrainedModel,
         )
-
 
 
 else:
