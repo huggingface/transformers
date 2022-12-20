@@ -184,7 +184,7 @@ class TemporalFusionTransformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.d_model = input_size * len(lags_sequence) + self._number_of_features
+        self.d_model = input_size * len(lags_sequence)
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
