@@ -94,7 +94,7 @@ class EfficientFormerModelTester:
         self.embed_dim = embed_dim
         self.seq_length = embed_dim + 1
 
-    def prepare_config_and_inputs(self) -> Tuple[EfficientFormerConfig, torch.Tensor, torch.Tensor]:
+    def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
@@ -104,7 +104,7 @@ class EfficientFormerModelTester:
         config = self.get_config()
         return config, pixel_values, labels
 
-    def get_config(self) -> EfficientFormerConfig:
+    def get_config(self):
         return EfficientFormerConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
@@ -121,14 +121,14 @@ class EfficientFormerModelTester:
             encoder_stride=self.encoder_stride,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels) -> None:
+    def create_and_check_model(self, config, pixel_values, labels):
         model = EfficientFormerModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels) -> None:
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = EfficientFormerForImageClassification(config)
         model.to(torch_device)
@@ -146,7 +146,7 @@ class EfficientFormerModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
-    def prepare_config_and_inputs_for_common(self) -> Tuple[EfficientFormerConfig, Dict[str, torch.Tensor]]:
+    def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
@@ -179,13 +179,13 @@ class EfficientFormerModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self) -> None:
+    def setUp(self):
         self.model_tester = EfficientFormerModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=EfficientFormerConfig, has_text_modality=False, hidden_size=37
         )
 
-    def test_config(self) -> None:
+    def test_config(self):
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="EfficientFormer does not use inputs_embeds")
@@ -196,7 +196,7 @@ class EfficientFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    def test_forward_signature(self) -> None:
+    def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -270,12 +270,12 @@ class EfficientFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
         return inputs_dict
 
-    def test_model(self) -> None:
+    def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(reason="EfficientFormer does not implement masked image modeling yet")
-    def test_for_masked_image_modeling(self) -> None:
+    def test_for_masked_image_modeling(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
 
@@ -356,7 +356,7 @@ class EfficientFormerModelTest(ModelTesterMixin, unittest.TestCase):
                     loss.backward()
 
     @slow
-    def test_model_from_pretrained(self) -> None:
+    def test_model_from_pretrained(self):
         for model_name in EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = EfficientFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
@@ -425,7 +425,7 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    def test_inference_image_classification_head(self) -> None:
+    def test_inference_image_classification_head(self):
         model = EfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1").to(
             torch_device
         )
@@ -450,7 +450,7 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[1][:3], expected_slice_2, atol=1e-4))
 
     @slow
-    def test_inference_image_classification_head_with_teacher(self) -> None:
+    def test_inference_image_classification_head_with_teacher(self):
         model = EfficientFormerForImageClassificationWithTeacher.from_pretrained(
             "snap-research/efficientformer-l1"
         ).to(torch_device)
