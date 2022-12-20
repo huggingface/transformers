@@ -103,21 +103,114 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-class TemporalFusionTransformerLearnedPositionalEmbedding(nn.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
+class FeatureEmbedder(nn.Module):
+    def __init__(
+        self,
+        cardinalities: List[int],
+        embedding_dims: List[int],
+    ) -> None:
+        super().__init__()
 
-    def __init__(self, num_embeddings: int, embedding_dim: int):
-        super().__init__(num_embeddings, embedding_dim)
+        self.num_features = len(cardinalities)
+        self.embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
 
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if self.num_features > 1:
+            # we slice the last dimension, giving an array of length
+            # self._num_features with shape (N,T) or (N)
+            cat_feature_slices = torch.chunk(features, self.num_features, dim=-1)
+        else:
+            cat_feature_slices = [features]
+
+        return [
+            embed(cat_feature_slice.squeeze(-1))
+            for embed, cat_feature_slice in zip(self.embedders, cat_feature_slices)
+        ]
+
+
+class GatedResidualNetwork(nn.Module):
+    def __init__(
+        self,
+        d_hidden: int,
+        d_input: Optional[int] = None,
+        d_output: Optional[int] = None,
+        d_static: Optional[int] = None,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+
+        d_input = d_input or d_hidden
+        d_static = d_static or 0
+        if d_output is None:
+            d_output = d_input
+            self.add_skip = False
+        else:
+            if d_output != d_input:
+                self.add_skip = True
+                self.skip_proj = nn.Linear(in_features=d_input, out_features=d_output)
+            else:
+                self.add_skip = False
+
+        self.mlp = nn.Sequential(
+            nn.Linear(in_features=d_input + d_static, out_features=d_hidden),
+            nn.ELU(),
+            nn.Linear(in_features=d_hidden, out_features=d_hidden),
+            nn.Dropout(p=dropout),
+            nn.Linear(in_features=d_hidden, out_features=d_output * 2),
+            nn.GLU(),
         )
-        return super().forward(positions)
+
+        self.lnorm = nn.LayerNorm(d_output)
+
+    def forward(self, x: torch.Tensor, c: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if self.add_skip:
+            skip = self.skip_proj(x)
+        else:
+            skip = x
+
+        if c is not None:
+            x = torch.cat((x, c), dim=-1)
+        x = self.mlp(x)
+        x = self.lnorm(x + skip)
+        return x
+
+
+class VariableSelectionNetwork(nn.Module):
+    def __init__(
+        self,
+        d_hidden: int,
+        n_vars: int,
+        dropout: float = 0.0,
+        add_static: bool = False,
+    ):
+        super().__init__()
+        self.weight_network = GatedResidualNetwork(
+            d_hidden=d_hidden,
+            d_input=d_hidden * n_vars,
+            d_output=n_vars,
+            d_static=d_hidden if add_static else None,
+            dropout=dropout,
+        )
+
+        self.variable_network = nn.ModuleList(
+            [GatedResidualNetwork(d_hidden=d_hidden, dropout=dropout) for _ in range(n_vars)]
+        )
+
+    def forward(
+        self, variables: List[torch.Tensor], static: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        flatten = torch.cat(variables, dim=-1)
+        if static is not None:
+            static = static.expand_as(variables[0])
+        weight = self.weight_network(flatten, static)
+        weight = torch.softmax(weight.unsqueeze(-2), dim=-1)
+
+        var_encodings = [net(var) for var, net in zip(variables, self.variable_network)]
+        var_encodings = torch.stack(var_encodings, dim=-1)
+
+        var_encodings = torch.sum(var_encodings * weight, dim=-1)
+
+        return var_encodings, weight
 
 
 class TemporalFusionTransformerAttention(nn.Module):
