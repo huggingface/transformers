@@ -21,10 +21,10 @@ from typing import Callable, List, Optional, Union
 import tensorflow as tf
 
 
-if hasattr(tf.keras, "optimizer") and hasattr(tf.keras.optimizer, "legacy"):
-    Adam = tf.keras.optimizer.legacy.Adam
-else:
-    Adam = tf.keras.optimizers.Adam
+try:
+    from tensorflow.keras.optimizers.legacy import Adam
+except ImportError:
+    from tensorflow.keras.optimizers import Adam
 
 
 class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
