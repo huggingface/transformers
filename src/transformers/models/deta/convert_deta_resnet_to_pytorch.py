@@ -63,11 +63,11 @@ def create_rename_keys(config):
 
     # stem
     # fmt: off
-    rename_keys.append(("backbone.0.body.conv1.weight", "model.backbone.conv_encoder.model.embedder.embedder.convolution.weight"))
-    rename_keys.append(("backbone.0.body.bn1.weight", "model.backbone.conv_encoder.model.embedder.embedder.normalization.weight"))
-    rename_keys.append(("backbone.0.body.bn1.bias", "model.backbone.conv_encoder.model.embedder.embedder.normalization.bias"))
-    rename_keys.append(("backbone.0.body.bn1.running_mean", "model.backbone.conv_encoder.model.embedder.embedder.normalization.running_mean"))
-    rename_keys.append(("backbone.0.body.bn1.running_var", "model.backbone.conv_encoder.model.embedder.embedder.normalization.running_var"))
+    rename_keys.append(("backbone.0.body.conv1.weight", "model.backbone.model.embedder.embedder.convolution.weight"))
+    rename_keys.append(("backbone.0.body.bn1.weight", "model.backbone.model.embedder.embedder.normalization.weight"))
+    rename_keys.append(("backbone.0.body.bn1.bias", "model.backbone.model.embedder.embedder.normalization.bias"))
+    rename_keys.append(("backbone.0.body.bn1.running_mean", "model.backbone.model.embedder.embedder.normalization.running_mean"))
+    rename_keys.append(("backbone.0.body.bn1.running_var", "model.backbone.model.embedder.embedder.normalization.running_var"))
     # stages
     for stage_idx in range(len(config.backbone_config.depths)):
         for layer_idx in range(config.backbone_config.depths[stage_idx]):
@@ -76,31 +76,31 @@ def create_rename_keys(config):
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.0.weight",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.convolution.weight",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.convolution.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.weight",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.weight",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.bias",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.bias",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.bias",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.running_mean",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.running_var",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var",
                     )
                 )
             # 3 convs
@@ -108,31 +108,31 @@ def create_rename_keys(config):
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.conv{i+1}.weight",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.weight",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.bias",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_mean",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_var",
-                        f"model.backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
                     )
                 )
     # transformer encoder

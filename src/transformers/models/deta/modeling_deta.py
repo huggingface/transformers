@@ -373,9 +373,9 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DetrConvolutionalBackbone(nn.Module):
+class DetaBackboneWithPositionalEncodings(nn.Module):
     """
-    Convolutional encoder (backbone).
+    Backbone model with positional embeddings.
 
     nn.BatchNorm2d layers are replaced by DetaFrozenBatchNorm2d as defined above.
     """
@@ -396,40 +396,25 @@ class DetrConvolutionalBackbone(nn.Module):
                 if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                     parameter.requires_grad_(False)
 
+        self.position_embedding = build_position_encoding(config)
+
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         """
         Outputs feature maps of latter stages C_3 through C_5 in ResNet if `config.num_feature_levels > 1`, otherwise
         outputs feature maps of C_5.
         """
-        # send pixel_values through the model to get list of feature maps
+        # first, send pixel_values through the backbone to get list of feature maps
         features = self.model(pixel_values).feature_maps
 
+        # next, create position embeddings
         out = []
+        pos = []
         for feature_map in features:
             # downsample pixel_mask to match shape of corresponding feature_map
             mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            position_embeddings = self.position_embedding(feature_map, mask).to(feature_map.dtype)
             out.append((feature_map, mask))
-        return out
-
-
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->Deta
-class DetaConvModel(nn.Module):
-    """
-    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
-    """
-
-    def __init__(self, conv_encoder, position_embedding):
-        super().__init__()
-        self.conv_encoder = conv_encoder
-        self.position_embedding = position_embedding
-
-    def forward(self, pixel_values, pixel_mask):
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self.conv_encoder(pixel_values, pixel_mask)
-        pos = []
-        for feature_map, mask in out:
-            # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
+            pos.append(position_embeddings)
 
         return out, pos
 
@@ -1438,18 +1423,17 @@ class DetaModel(DetaPreTrainedModel):
     def __init__(self, config: DetaConfig):
         super().__init__(config)
 
-        # Create backbone + positional encoding
-        backbone = DetrConvolutionalBackbone(config)
-        position_embeddings = build_position_encoding(config)
-        self.backbone = DetaConvModel(backbone, position_embeddings)
+        # Create backbone with positional encoding
+        self.backbone = DetaBackboneWithPositionalEncodings(config)
+        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
         # Create input projection layers
         if config.num_feature_levels > 1:
-            num_backbone_outs = len(backbone.intermediate_channel_sizes)
-            print("Backbone intermediate channels:", backbone.intermediate_channel_sizes)
+            num_backbone_outs = len(intermediate_channel_sizes)
+            print("Backbone intermediate channels:", intermediate_channel_sizes)
             input_proj_list = []
             for _ in range(num_backbone_outs):
-                in_channels = backbone.intermediate_channel_sizes[_]
+                in_channels = intermediate_channel_sizes[_]
                 input_proj_list.append(
                     nn.Sequential(
                         nn.Conv2d(in_channels, config.d_model, kernel_size=1),
@@ -1469,7 +1453,7 @@ class DetaModel(DetaPreTrainedModel):
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
+                        nn.Conv2d(intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
                         nn.GroupNorm(32, config.d_model),
                     )
                 ]
@@ -2824,7 +2808,6 @@ class Stage1Assigner(nn.Module):
             all_pr_inds = torch.arange(len(anchors))
             pos_pr_inds = all_pr_inds[matched_labels == 1]
             pos_gt_inds = matched_idxs[pos_pr_inds]
-            pos_ious = iou[pos_gt_inds, pos_pr_inds]
             pos_pr_inds, pos_gt_inds = self.postprocess_indices(pos_pr_inds, pos_gt_inds, iou)
             pos_pr_inds, pos_gt_inds = pos_pr_inds.to(anchors.device), pos_gt_inds.to(anchors.device)
             indices.append((pos_pr_inds, pos_gt_inds))
