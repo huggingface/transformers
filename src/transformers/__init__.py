@@ -2961,7 +2961,7 @@ else:
             "TFRobertaPreTrainedModel",
         ]
     )
-     _import_structure["models.roberta_prelayernorm"].extend(
+    _import_structure["models.roberta_prelayernorm"].extend(
         [
             "TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFRobertaPreLayerNormForCausalLM",
@@ -3341,7 +3341,7 @@ else:
             "FlaxRobertaPreTrainedModel",
         ]
     )
-     _import_structure["models.roberta_prelayernorm"].extend(
+    _import_structure["models.roberta_prelayernorm"].extend(
         [
             "FlaxRobertaPreLayerNormForCausalLM",
             "FlaxRobertaPreLayerNormForMaskedLM",
