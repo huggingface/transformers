@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     from_gh = args.from_gh
     if from_gh:
-        # The artifacts have to be downloaded using `actions/download-artifact@v2`
+        # The artifacts have to be downloaded using `actions/download-artifact@v3`
         pass
     else:
         os.makedirs(args.output_dir, exist_ok=True)

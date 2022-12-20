@@ -210,6 +210,7 @@ PYTORCH_EXPORT_MODELS = {
     ("owlvit", "google/owlvit-base-patch32"),
     ("perceiver", "hf-internal-testing/tiny-random-PerceiverModel", ("masked-lm", "sequence-classification")),
     ("perceiver", "hf-internal-testing/tiny-random-PerceiverModel", ("image-classification",)),
+    ("rembert", "google/rembert"),
     ("resnet", "microsoft/resnet-50"),
     ("roberta", "hf-internal-testing/tiny-random-RobertaModel"),
     ("roformer", "hf-internal-testing/tiny-random-RoFormerModel"),

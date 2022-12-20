@@ -112,6 +112,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
+    "TFRobertaPreLayerNormForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "TFWhisperEncoder",  # Building part of bigger (tested) model.
     "TFWhisperDecoder",  # Building part of bigger (tested) model.
@@ -146,6 +147,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "Swin2SRForImageSuperResolution",
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
@@ -202,6 +204,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaImageModel",
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
+    "GPTSw3DoubleHeadsModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
@@ -238,7 +241,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
-    "MaskFormerForInstanceSegmentation",
     "XCLIPVisionModel",
     "XCLIPTextModel",
 ]
@@ -672,11 +674,15 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "PyTorchBenchmarkArguments",
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
+    "BitBackbone",
     "MaskFormerSwinBackbone",
     "ResNetBackbone",
     "AutoBackbone",
+    "DinatBackbone",
+    "NatBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
+    "SwinBackbone",
 ]
 
 

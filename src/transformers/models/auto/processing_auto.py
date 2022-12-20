@@ -287,8 +287,8 @@ class AutoProcessor:
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
-            "tokenizer or a feature extractor for this model. Make sure the repository contains the files of at least "
-            "one of those processing classes."
+            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains"
+            "the files of at least one of those processing classes."
         )
 
     @staticmethod
