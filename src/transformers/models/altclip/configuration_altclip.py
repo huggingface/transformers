@@ -186,10 +186,10 @@ class AltCLIPVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import AltCLIPVisionConfig, AltCLIPVisionModel
 
-    >>> # Initializing a AltCLIPVisionConfig with openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a AltCLIPVisionConfig with BAAI/AltCLIP style configuration
     >>> configuration = AltCLIPVisionConfig()
 
-    >>> # Initializing a AltCLIPVisionModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a AltCLIPVisionModel (with random weights) from the BAAI/AltCLIP style configuration
     >>> model = AltCLIPVisionModel(configuration)
 
     >>> # Accessing the model configuration
