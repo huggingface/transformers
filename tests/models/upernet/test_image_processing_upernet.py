@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 HuggingFace Inc.
+# Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,11 +17,12 @@
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -30,91 +31,76 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import UperNetImageProcessor
-    from transformers.models.upernet.image_processing_upernet import rescale_size
+    from transformers import SegformerImageProcessor
 
 
-class UperNetImageProcessingTester(unittest.TestCase):
+class SegformerImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
         batch_size=7,
         num_channels=3,
-        image_size=18,
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        scale=[1024, 512],
-        do_rescale=True,
-        scale_factor=1 / 255,
+        size=None,
         do_normalize=True,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
+        do_reduce_labels=False,
     ):
+        size = size if size is not None else {"height": 30, "width": 30}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
-        self.image_size = image_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.scale = scale
-        self.do_rescale = do_rescale
-        self.scale_factor = scale_factor
+        self.size = size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.do_reduce_labels = do_reduce_labels
 
     def prepare_feat_extract_dict(self):
         return {
             "do_resize": self.do_resize,
-            "scale": self.scale,
-            "do_rescale": self.do_rescale,
-            "scale_factor": self.scale_factor,
+            "size": self.size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
+            "do_reduce_labels": self.do_reduce_labels,
         }
 
-    def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
 
-        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+def prepare_semantic_single_inputs():
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
-        if equal_resolution:
-            image_inputs = []
-            for i in range(self.batch_size):
-                image_inputs.append(
-                    np.random.randint(
-                        255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
-                    )
-                )
-        else:
-            image_inputs = []
-            for i in range(self.batch_size):
-                width, height = np.random.choice(np.arange(self.min_resolution, self.max_resolution), 2)
-                image_inputs.append(np.random.randint(255, size=(self.num_channels, width, height), dtype=np.uint8))
+    image = Image.open(dataset[0]["file"])
+    map = Image.open(dataset[1]["file"])
 
-        if not numpify and not torchify:
-            # PIL expects the channel dimension as last dimension
-            image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+    return image, map
 
-        if torchify:
-            image_inputs = [torch.from_numpy(x) for x in image_inputs]
 
-        return image_inputs
+def prepare_semantic_batch_inputs():
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+
+    image1 = Image.open(dataset[0]["file"])
+    map1 = Image.open(dataset[1]["file"])
+    image2 = Image.open(dataset[2]["file"])
+    map2 = Image.open(dataset[3]["file"])
+
+    return [image1, image2], [map1, map2]
 
 
 @require_torch
 @require_vision
-class UperNetImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class SegformerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = UperNetImageProcessor if is_vision_available() else None
+    feature_extraction_class = SegformerImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = UperNetImageProcessingTester(self)
+        self.feature_extract_tester = SegformerImageProcessingTester(self)
 
     @property
     def feat_extract_dict(self):
@@ -123,43 +109,44 @@ class UperNetImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Test
     def test_feat_extract_properties(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "scale"))
-        self.assertTrue(hasattr(feature_extractor, "do_rescale"))
-        self.assertTrue(hasattr(feature_extractor, "scale_factor"))
+        self.assertTrue(hasattr(feature_extractor, "size"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
+        self.assertTrue(hasattr(feature_extractor, "do_reduce_labels"))
 
     def test_batch_feature(self):
         pass
-
-    def calculate_expected_size(self, image, feature_extractor):
-        # old_size needs to be provided as tuple (width, height)
-        old_size = image.size if isinstance(image, Image.Image) else image.shape[-2:][::-1]
-
-        new_size = rescale_size(old_size=old_size, scale=feature_extractor.scale, return_scale=False)
-
-        return new_size
 
     def test_call_pil(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL images
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-
-        # Get expected size
-        expected_size = self.calculate_expected_size(image_inputs[0], feature_extractor)[::-1]
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                *expected_size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+
+        # Test batched
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -167,21 +154,31 @@ class UperNetImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Test
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, numpify=True)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-
-        # Get expected size
-        expected_size = self.calculate_expected_size(image_inputs[0], feature_extractor)[::-1]
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                *expected_size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+
+        # Test batched
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -189,20 +186,151 @@ class UperNetImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Test
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PyTorch tensors
-        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-
-        # Get expected size
-        expected_size = self.calculate_expected_size(image_inputs[0], feature_extractor)[::-1]
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                *expected_size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
+
+        # Test batched
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+
+    def test_call_segmentation_maps(self):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # create random PyTorch tensors
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        maps = []
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+            maps.append(torch.zeros(image.shape[-2:]).long())
+
+        # Test not batched input
+        encoding = feature_extractor(image_inputs[0], maps[0], return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                1,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # Test batched
+        encoding = feature_extractor(image_inputs, maps, return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # Test not batched input (PIL images)
+        image, segmentation_map = prepare_semantic_single_inputs()
+
+        encoding = feature_extractor(image, segmentation_map, return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                1,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # Test batched input (PIL images)
+        images, segmentation_maps = prepare_semantic_batch_inputs()
+
+        encoding = feature_extractor(images, segmentation_maps, return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                2,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                2,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+    def test_reduce_labels(self):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+
+        # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
+        image, map = prepare_semantic_single_inputs()
+        encoding = feature_extractor(image, map, return_tensors="pt")
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 150)
+
+        feature_extractor.reduce_labels = True
+        encoding = feature_extractor(image, map, return_tensors="pt")
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)

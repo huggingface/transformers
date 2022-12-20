@@ -34,6 +34,7 @@ from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentati
 
 def get_upernet_config(model_name):
     auxiliary_in_channels = 384
+    window_size = 7
     if "tiny" in model_name:
         embed_dim = 96
         depths = (2, 2, 6, 2)
@@ -242,19 +243,19 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # assert values
     if model_name == "upernet-swin-tiny":
         expected_slice = torch.tensor(
-            [[-7.6034, -7.6034, -7.4257], [-7.6034, -7.6034, -7.4257], [-7.4655, -7.4655, -7.2804]]
+            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
         )
     elif model_name == "upernet-swin-small":
         expected_slice = torch.tensor(
-            [[-7.0189, -7.0189, -6.7604], [-7.0189, -7.0189, -6.7604], [-6.9016, -6.9016, -6.6415]]
+            [[-7.1921, -7.1921, -6.9532], [-7.1921, -7.1921, -6.9532], [-7.0908, -7.0908, -6.8534]]
         )
     elif model_name == "upernet-swin-base":
         expected_slice = torch.tensor(
-            [[-6.5961, -6.5961, -6.4133], [-6.5961, -6.5961, -6.4133], [-6.4834, -6.4834, -6.2972]]
+            [[-6.5851, -6.5851, -6.4330], [-6.5851, -6.5851, -6.4330], [-6.4763, -6.4763, -6.3254]]
         )
     elif model_name == "upernet-swin-large":
         expected_slice = torch.tensor(
-            [[-7.3338, -7.3338, -7.1665], [-7.3338, -7.3338, -7.1665], [-7.1914, -7.1914, -7.0264]]
+            [[-7.5297, -7.5297, -7.3802], [-7.5297, -7.5297, -7.3802], [-7.4044, -7.4044, -7.2586]]
         )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)

@@ -160,23 +160,23 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     if model_name == "upernet-convnext-tiny":
         expected_slice = torch.tensor(
-            [[-8.8408, -8.8408, -8.6897], [-8.8408, -8.8408, -8.6897], [-8.7968, -8.7968, -8.6412]]
+            [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
         )
     elif model_name == "upernet-convnext-small":
         expected_slice = torch.tensor(
-            [[-8.8132, -8.8132, -8.6767], [-8.8132, -8.8132, -8.6767], [-8.7449, -8.7449, -8.6147]]
+            [[-8.8236, -8.8236, -8.6771], [-8.8236, -8.8236, -8.6771], [-8.7638, -8.7638, -8.6240]]
         )
     elif model_name == "upernet-convnext-base":
         expected_slice = torch.tensor(
-            [[-9.0911, -9.0911, -8.9166], [-9.0911, -9.0911, -8.9166], [-9.0085, -9.0085, -8.8313]]
+            [[-8.8558, -8.8558, -8.6905], [-8.8558, -8.8558, -8.6905], [-8.7669, -8.7669, -8.6021]]
         )
     elif model_name == "upernet-convnext-large":
         expected_slice = torch.tensor(
-            [[-8.6823, -8.6823, -8.6110], [-8.6823, -8.6823, -8.6110], [-8.6309, -8.6309, -8.5677]]
+            [[-8.6660, -8.6660, -8.6210], [-8.6660, -8.6660, -8.6210], [-8.6310, -8.6310, -8.5964]]
         )
     elif model_name == "upernet-convnext-xlarge":
         expected_slice = torch.tensor(
-            [[-8.2285, -8.2285, -8.1214], [-8.2285, -8.2285, -8.1214], [-8.1630, -8.1630, -8.0604]]
+            [[-8.4980, -8.4980, -8.3977], [-8.4980, -8.4980, -8.3977], [-8.4379, -8.4379, -8.3412]]
         )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)

@@ -277,7 +277,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_shape = torch.Size((1, model.config.num_labels, 512, 683))
+        expected_shape = torch.Size((1, model.config.num_labels, 512, 512))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -296,7 +296,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_shape = torch.Size((1, model.config.num_labels, 512, 683))
+        expected_shape = torch.Size((1, model.config.num_labels, 512, 512))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
