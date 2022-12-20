@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    temporal_fusion_transformer,
     albert,
     audio_spectrogram_transformer,
     auto,

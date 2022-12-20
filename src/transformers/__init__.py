@@ -123,6 +123,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.temporal_fusion_transformer": ["TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TemporalFusionTransformerConfig", "TemporalFusionTransformerTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -616,6 +617,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.temporal_fusion_transformer"].append("TemporalFusionTransformerTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -897,6 +899,18 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.temporal_fusion_transformer"].extend(
+        [
+            "TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TemporalFusionTransformerForCausalLM",
+            "TemporalFusionTransformerForConditionalGeneration",
+            "TemporalFusionTransformerForQuestionAnswering",
+            "TemporalFusionTransformerForSequenceClassification",
+            "TemporalFusionTransformerModel",
+            "TemporalFusionTransformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3451,6 +3465,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.temporal_fusion_transformer import TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TemporalFusionTransformerConfig, TemporalFusionTransformerTokenizer
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
@@ -3903,6 +3918,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.temporal_fusion_transformer import TemporalFusionTransformerTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -4128,6 +4144,16 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+
+        from .models.temporal_fusion_transformer import (
+            TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TemporalFusionTransformerForConditionalGeneration,
+            TemporalFusionTransformerForCausalLM,
+            TemporalFusionTransformerForQuestionAnswering,
+            TemporalFusionTransformerForSequenceClassification,
+            TemporalFusionTransformerModel,
+            TemporalFusionTransformerPreTrainedModel,
+        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
