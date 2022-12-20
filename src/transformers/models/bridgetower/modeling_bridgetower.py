@@ -538,7 +538,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
-        irtr_len = 0
         input_shape = input_ids.size()
         text_embeds = self.text_transformer.embeddings(input_ids=input_ids)
 
@@ -568,9 +567,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         ).expand_as(image_embeds_with_ln)
         image_embeds_with_ln = image_embeds_with_ln + image_token_type_embeddings
         cross_modal_image = self.cross_modal_image_layernorm(image_embeds_with_ln)
-        if irtr_len > 0:
-            _bs, _L, _D = image_embeds_with_ln.size()
-            cross_modal_image = cross_modal_image.unsqueeze(1).expand(_bs, irtr_len, _L, _D).reshape(-1, _L, _D)
+
         pixel_mask = torch.ones(
             (cross_modal_image.size(0), cross_modal_image.size(1)), dtype=torch.long, device=self.device
         )
@@ -610,14 +607,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 cross_text_feats,
                 extend_text_masks,
             )
-            if irtr_len > 0:
-                cross_image_feats_ = image_link_tower(
-                    image_embeds_with_ln.unsqueeze(1).expand(_bs, irtr_len, _L, _D).reshape(-1, _L, _D),
-                    cross_image_feats,
-                    extend_image_masks,
-                )
-            else:
-                cross_image_feats_ = image_link_tower(image_embeds_with_ln, cross_image_feats, extend_image_masks)
+            cross_image_feats_ = image_link_tower(image_embeds_with_ln, cross_image_feats, extend_image_masks)
 
             cross_text_feats = self.cross_modal_text_layers[link_layer_index + 1](
                 cross_text_feats_,
