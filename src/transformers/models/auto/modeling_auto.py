@@ -392,7 +392,10 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("dinat", "DinatForImageClassification"),
         (
             "efficientformer",
-            ("EfficientFormerForImageClassification", "EfficientFormerForImageClassificationWithTeacher"),
+            (
+                "EfficientFormerForImageClassification",
+                "EfficientFormerForImageClassificationWithTeacher",
+            ),
         ),
         ("imagegpt", "ImageGPTForImageClassification"),
         ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),

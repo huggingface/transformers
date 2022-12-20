@@ -34,7 +34,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_efficientformer"] = ["EfficientFormerFeatureExtractor"]
     _import_structure["image_processing_efficientformer"] = ["EfficientFormerImageProcessor"]
 
 try:
@@ -64,7 +63,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_efficientformer import EfficientFormerFeatureExtractor
         from .image_processing_efficientformer import EfficientFormerImageProcessor
 
     try:

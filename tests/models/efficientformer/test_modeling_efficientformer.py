@@ -46,7 +46,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import EfficientFormerFeatureExtractor
+    from transformers import EfficientFormerImageProcessor
 
 
 class EfficientFormerModelTester:
@@ -418,7 +418,7 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            EfficientFormerFeatureExtractor.from_pretrained("snap-research/efficientformer-l1")
+            EfficientFormerImageProcessor.from_pretrained("snap-research/efficientformer-l1")
             if is_vision_available()
             else None
         )

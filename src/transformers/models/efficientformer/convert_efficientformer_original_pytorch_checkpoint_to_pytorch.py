@@ -21,7 +21,7 @@ from pathlib import Path
 
 import torch
 
-from transformers import EfficientFormerConfig, EfficientFormerFeatureExtractor, EfficientFormerForImageClassification
+from transformers import EfficientFormerConfig, EfficientFormerForImageClassification, EfficientFormerImageProcessor
 
 
 def rename_key(old_name):
@@ -77,7 +77,7 @@ def convert_efficientformer_checkpoint(checkpoint_path, efficientformer_config_f
     model.load_state_dict(new_state_dict)
     model.eval()
 
-    feature_extractor = EfficientFormerFeatureExtractor(config.size)
+    feature_extractor = EfficientFormerImageProcessor(size=config.size)
 
     # Save Checkpoints
     Path(pytorch_dump_path).mkdir(exist_ok=True)

@@ -164,13 +164,6 @@ class DPTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class EfficientFormerFeatureExtractor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class EfficientFormerImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 

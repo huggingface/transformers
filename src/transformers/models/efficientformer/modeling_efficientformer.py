@@ -151,7 +151,7 @@ class EfficientFormerSelfAttention(nn.Module):
 
 
 class EfficientFormerConvStem(nn.Module):
-    def __init__(self, config: EfficientFormerConfig, out_channels: int) -> None:
+    def __init__(self, config: EfficientFormerConfig, out_channels: int):
         super().__init__()
 
         self.convolution1 = nn.Conv2d(config.num_channels, out_channels // 2, kernel_size=3, stride=2, padding=1)
@@ -263,7 +263,7 @@ def drop_path(
 class EfficientFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None, scale_by_keep: bool = True):
+    def __init__(self, drop_prob: float, scale_by_keep: bool = True):
         super().__init__()
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
@@ -282,7 +282,7 @@ class EfficientFormerFlat(nn.Module):
 
 
 class EfficientFormerMeta3D(nn.Module):
-    def __init__(self, config: EfficientFormerConfig, dim: int, drop_path: float = 0.0) -> None:
+    def __init__(self, config: EfficientFormerConfig, dim: int, drop_path: float = 0.0):
         super().__init__()
 
         self.token_mixer = EfficientFormerSelfAttention(
@@ -398,7 +398,7 @@ class EfficientFormerMeta4DLayers(nn.Module):
 
 
 class EfficientFormerIntermediateStage(nn.Module):
-    def __init__(self, config: EfficientFormerConfig, index: int) -> None:
+    def __init__(self, config: EfficientFormerConfig, index: int):
         super().__init__()
         self.meta4D_layers = EfficientFormerMeta4DLayers(config, index)
 
@@ -408,7 +408,7 @@ class EfficientFormerIntermediateStage(nn.Module):
 
 
 class EfficientFormerLastStage(nn.Module):
-    def __init__(self, config: EfficientFormerConfig) -> None:
+    def __init__(self, config: EfficientFormerConfig):
         super().__init__()
         self.meta4D_layers = EfficientFormerMeta4DLayers(config, -1)
         self.flat = EfficientFormerFlat()
@@ -423,7 +423,7 @@ class EfficientFormerLastStage(nn.Module):
 
 
 class EfficientFormerEncoder(nn.Module):
-    def __init__(self, config: EfficientFormerConfig) -> None:
+    def __init__(self, config: EfficientFormerConfig):
         super().__init__()
         self.config = config
         num_intermediate_stages = len(config.layers) - 1
@@ -488,16 +488,15 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 EFFICIENTFORMER_START_DOCSTRING = r"""
@@ -531,7 +530,7 @@ EFFICIENTFORMER_INPUTS_DOCSTRING = r"""
     EFFICIENTFORMER_START_DOCSTRING,
 )
 class EfficientFormerModel(EfficientFormerPreTrainedModel):
-    def __init__(self, config: EfficientFormerConfig) -> None:
+    def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
         self.config = config
 
@@ -594,7 +593,7 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
     EFFICIENTFORMER_START_DOCSTRING,
 )
 class EfficientFormerForImageClassification(EfficientFormerPreTrainedModel):
-    def __init__(self, config: EfficientFormerConfig) -> None:
+    def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -723,7 +722,7 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
     EFFICIENTFORMER_START_DOCSTRING,
 )
 class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrainedModel):
-    def __init__(self, config: EfficientFormerConfig) -> None:
+    def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
