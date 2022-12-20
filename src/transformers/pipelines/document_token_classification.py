@@ -170,7 +170,9 @@ class DocumentTokenClassificationPipeline(Pipeline):
 
     def preprocess(self, input, lang=None, tesseract_config="", **kwargs):
         image = None
-        if input.get("image", None) is not None:
+        if isinstance(input, str) or isinstance(input, Image.Image):
+            image = load_image(input)
+        elif input.get("image", None) is not None:
             image = load_image(input["image"])
 
         words, boxes = None, None
