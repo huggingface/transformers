@@ -162,12 +162,83 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         clean_up_tokenization_spaces: bool = True,
         **kwargs
     ) -> str:
+
+        return super()._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+    def batch_decode(
+        self,
+        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        **kwargs
+    ) -> List[str]:
+        """
+        Convert a list of lists of token ids into a list of strings by calling decode.
+
+        Args:
+            sequences (`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            `List[str]`: The list of decoded sentences.
+        """
         if clean_up_tokenization_spaces:
             logger.warning(
                 "Bloom tokenizer was built in order to have lossless encoding. Most likely, you should use"
-                " `clean_up_tokenization_spaces=False`."
+                " `clean_up_tokenization_spaces=False`. This flag is deprecated and will be remove in v5. The"
+                " behaviour will correspond to `clean_up_tokenization_spaces=False`"
             )
-        return super()._decode(
+        return super().batch_decode(
+            sequences=sequences,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+    def decode(
+        self,
+        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = False,
+        **kwargs
+    ) -> str:
+        """
+        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
+        tokens and clean up tokenization spaces.
+
+        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            `str`: The decoded sentence.
+        """
+        if clean_up_tokenization_spaces:
+            logger.warning(
+                "Bloom tokenizer was built in order to have lossless encoding. Most likely, you should use"
+                " `clean_up_tokenization_spaces=False`. This flag is deprecated and will be remove in v5. The"
+                " behaviour will correspond to `clean_up_tokenization_spaces=False`"
+            )
+        return super().decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
