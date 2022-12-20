@@ -51,6 +51,10 @@ else:
     _import_structure["image_processing_tvlt"] = [
         "TvltImageProcessor",
     ]
+    _import_structure["processing_tvlt"] = [
+        "TvltProcessor",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_tvlt import Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
@@ -78,6 +82,7 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_tvlt import TvltAudioFeatureExtractor
         from .image_processing_tvlt import TvltImageProcessor
+        from .processing_tvlt import TvltProcessor
 
 else:
     import sys
