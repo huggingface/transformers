@@ -189,10 +189,11 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             `List[str]`: The list of decoded sentences.
         """
         if clean_up_tokenization_spaces:
-            logger.warning(
+            warnings.warn(
                 "Bloom tokenizer was built in order to have lossless encoding. Most likely, you should use"
                 " `clean_up_tokenization_spaces=False`. This flag is deprecated and will be remove in v5. The"
                 " behaviour will correspond to `clean_up_tokenization_spaces=False`"
+                FutureWarning,
             )
         return super().batch_decode(
             sequences=sequences,
