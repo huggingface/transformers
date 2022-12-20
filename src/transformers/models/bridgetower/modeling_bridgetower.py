@@ -654,7 +654,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
 class LinkTower(nn.Module):
     def __init__(self, config):
-        super(LinkTower, self).__init__()
+        super().__init__()
         self.link_tower_type = config.link_tower_type
         self.hidden_size = config.hidden_size
         if config.link_tower_type in [
