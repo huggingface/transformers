@@ -35,6 +35,7 @@ class TvltProcessor(PushToHubMixin):
         feature_extractor (`TvltFeatureExtractor`):
             An instance of [`TvltFeatureExtractor`]. The audio feature extractor is a required input.
     """
+    attributes = ["image_processor", "feature_extractor"]
     image_processor_class = "TvltImageProcessor"
     audio_feature_extractor_class = "TvltFeatureExtractor"
 
