@@ -22,7 +22,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from transformers import AutoBackbone, SwinConfig
@@ -955,7 +954,7 @@ class Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         attention_weights = self.attention_weights(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
-        attention_weights = F.softmax(attention_weights, -1).view(
+        attention_weights = nn.functional.softmax(attention_weights, -1).view(
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
@@ -992,7 +991,7 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.decoder_config.dropout
-        self.activation_fn = F.relu
+        self.activation_fn = nn.functional.relu
         self.activation_dropout = config.decoder_config.dropout
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_config.encoder_feedforward_dim)
         self.fc2 = nn.Linear(config.decoder_config.encoder_feedforward_dim, self.embed_dim)
@@ -1043,16 +1042,16 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
 
         hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
@@ -1358,7 +1357,7 @@ class Mask2FormerPixelDecoder(nn.Module):
             current_fpn = lateral_conv(feature.float())
 
             # Following FPN implementation, we use nearest upsampling here
-            out = current_fpn + F.interpolate(
+            out = current_fpn + nn.functional.interpolate(
                 outputs[-1], size=current_fpn.shape[-2:], mode="bilinear", align_corners=False
             )
             out = output_conv(out)
@@ -1391,8 +1390,8 @@ class Mask2FormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-
-        self.encoder = AutoBackbone.from_config(backbone_config)
+        
+        self.encoder = AutoBackbone.from_config(config.backbone_config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
@@ -1881,7 +1880,7 @@ class Mask2FormerMLPPredictionHead(nn.Module):
         self.layers = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
             activation = nn.ReLU() if i < num_layers - 1 else nn.Identity()
-            layer = PredictionBlock(in_dim, out_dim, activation=activation)
+            layer = Mask2FormerPredictionBlock(in_dim, out_dim, activation=activation)
             self.layers.append(layer)
             # Provide backwards compatibility from when the class inherited from nn.Sequential
             # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
@@ -2078,7 +2077,7 @@ class Mask2FormerTransformerDecoder(nn.Module):
 
         # Note: prediction is of higher-resolution
         # [B, Q, H, W] -> [B, Q, H*W] -> [B, h, Q, H*W] -> [B*h, Q, HW]
-        attention_mask = F.interpolate(
+        attention_mask = nn.functional.interpolate(
             outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False
         )
 
