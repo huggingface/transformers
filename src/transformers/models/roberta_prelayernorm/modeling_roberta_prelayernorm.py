@@ -885,7 +885,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
     """RoBERTa-PreLayerNorm Model with a `language modeling` head on top for CLM fine-tuning.""",
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with roberta-base->andreasmadsen/efficient_mlm_m0.40,ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with roberta-base->andreasmadsen/efficient_mlm_m0.40,ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm, RobertaPreLayerNormTokenizer->RobertaTokenizer
 class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -963,11 +963,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import (
-        ...     RobertaTokenizer,
-        ...     RobertaPreLayerNormForCausalLM,
-        ...     RobertaPreLayerNormConfig,
-        ... )
+        >>> from transformers import RobertaTokenizer, RobertaPreLayerNormForCausalLM, RobertaPreLayerNormConfig
         >>> import torch
 
         >>> tokenizer = RobertaTokenizer.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
