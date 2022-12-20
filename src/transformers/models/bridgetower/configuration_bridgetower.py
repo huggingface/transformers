@@ -14,6 +14,9 @@
 # limitations under the License.
 """ BridgeTower model configuration"""
 
+import copy
+import os
+from typing import Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -26,6 +29,68 @@ BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
         "https://huggingface.co/BridgeTower/bridgetower-base-itm-mlm/blob/main/config.json"
     ),
 }
+
+class BridgeTowerTextConfig(PretrainedConfig):
+    model_type = "bridgetower_text_model"
+
+    def __init__(
+        self,
+        vocab_size=50265,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=514,
+        type_vocab_size=1,
+        initializer_range=0.02,
+        layer_norm_eps=1e-05,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        position_embedding_type="absolute",
+        use_cache=True,
+        classifier_dropout=None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.position_embedding_type = position_embedding_type
+        self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        if config_dict.get("model_type") == "bridgetower":
+            config_dict = config_dict["text_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
 
 
 class BridgeTowerConfig(PretrainedConfig):
@@ -139,10 +204,6 @@ class BridgeTowerConfig(PretrainedConfig):
         self,
         cross_modal_transform_shared=True,
         drop_rate=0.1,
-        freeze_roberta=False,
-        freeze_vit=False,
-        freeze_layer_count_roberta=False,
-        freeze_layer_count_vit=False,
         head_hidden_scale=2,
         hidden_act="gelu",
         hidden_size=768,
@@ -159,14 +220,8 @@ class BridgeTowerConfig(PretrainedConfig):
         num_hidden_layers=6,
         resolution_before=224,
         stop_gradient=False,
+        text_config=None,
         tie_word_embeddings=False,
-        tokenizer="roberta-base",
-        unfreeze_roberta_attention=False,
-        unfreeze_roberta_embeddings=False,
-        unfreeze_roberta_encoder=False,
-        unfreeze_roberta_layernorm=False,
-        unfreeze_vit_attention=False,
-        unfreeze_vit_layernorm=False,
         vit_embed_dim=512,
         vit_num_hidden_layers=12,
         vit_layernorm_init_from_vit=False,
@@ -181,10 +236,6 @@ class BridgeTowerConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.cross_modal_transform_shared = cross_modal_transform_shared
         self.drop_rate = drop_rate
-        self.freeze_roberta = freeze_roberta
-        self.freeze_vit = freeze_vit
-        self.freeze_layer_count_roberta = freeze_layer_count_roberta
-        self.freeze_layer_count_vit = freeze_layer_count_vit
         self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
@@ -202,13 +253,6 @@ class BridgeTowerConfig(PretrainedConfig):
         self.resolution_before = resolution_before
         self.stop_gradient = stop_gradient
         self.tie_word_embeddings = tie_word_embeddings
-        self.tokenizer = tokenizer
-        self.unfreeze_roberta_attention = unfreeze_roberta_attention
-        self.unfreeze_roberta_embeddings = unfreeze_roberta_embeddings
-        self.unfreeze_roberta_encoder = unfreeze_roberta_encoder
-        self.unfreeze_roberta_layernorm = unfreeze_roberta_layernorm
-        self.unfreeze_vit_attention = unfreeze_vit_attention
-        self.unfreeze_vit_layernorm = unfreeze_vit_layernorm
         self.vit_embed_dim = vit_embed_dim
         self.vit_num_hidden_layers = vit_num_hidden_layers
         self.vit_layernorm_init_from_vit = vit_layernorm_init_from_vit
@@ -218,3 +262,36 @@ class BridgeTowerConfig(PretrainedConfig):
         self.vit_intermediate_size = vit_intermediate_size
         self.vit_hidden_size = vit_hidden_size
         self.vocab_size = vocab_size
+
+        text_config_dict = kwargs.pop("text_config_dict", None)
+        if text_config_dict is not None:
+            text_config = text_config_dict
+
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. Initializing the BridgeTowerTextConfig with default values.")
+
+        self.text_config = BridgeTowerTextConfig(**text_config)
+
+    @classmethod
+    def from_text_vision_configs(cls, text_config: BridgeTowerTextConfig,  **kwargs
+    ):
+        r"""
+        Instantiate a [`BridgeTowerConfig`] (or a derived class) from BridgeTower text model configuration.
+        Returns:
+            [`BridgeTowerConfig`]: An instance of a configuration object
+        """
+
+        return cls(text_config=text_config.to_dict(), **kwargs)
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["text_config"] = self.text_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
