@@ -44,52 +44,6 @@ if is_pytesseract_available():
 
 logger = logging.get_logger(__name__)
 
-
-# normalize_bbox() and apply_tesseract() are derived from apply_tesseract in models/layoutlmv3/feature_extraction_layoutlmv3.py.
-# However, because the pipeline may evolve from what layoutlmv3 currently does, it's copied (vs. imported) to avoid creating an
-# unecessary dependency.
-def normalize_box(box, width, height):
-    return [
-        int(1000 * (box[0] / width)),
-        int(1000 * (box[1] / height)),
-        int(1000 * (box[2] / width)),
-        int(1000 * (box[3] / height)),
-    ]
-
-
-def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config: Optional[str]):
-    """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
-    # apply OCR
-    data = pytesseract.image_to_data(image, lang=lang, output_type="dict", config=tesseract_config)
-    words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
-
-    # filter empty words and corresponding coordinates
-    irrelevant_indices = [idx for idx, word in enumerate(words) if not word.strip()]
-    words = [word for idx, word in enumerate(words) if idx not in irrelevant_indices]
-    left = [coord for idx, coord in enumerate(left) if idx not in irrelevant_indices]
-    top = [coord for idx, coord in enumerate(top) if idx not in irrelevant_indices]
-    width = [coord for idx, coord in enumerate(width) if idx not in irrelevant_indices]
-    height = [coord for idx, coord in enumerate(height) if idx not in irrelevant_indices]
-
-    # turn coordinates into (left, top, left+width, top+height) format
-    actual_boxes = []
-    for x, y, w, h in zip(left, top, width, height):
-        actual_box = [x, y, x + w, y + h]
-        actual_boxes.append(actual_box)
-
-    image_width, image_height = image.size
-
-    # finally, normalize the bounding boxes
-    normalized_boxes = []
-    for box in actual_boxes:
-        normalized_boxes.append(normalize_box(box, image_width, image_height))
-
-    if len(words) != len(normalized_boxes):
-        raise ValueError("Not as many words as there are bounding boxes")
-
-    return words, normalized_boxes
-
-
 class ModelType(ExplicitEnum):
     LayoutLMv3 = "layoutlmv3"
 
