@@ -63,7 +63,9 @@ def make_batched(videos) -> List[List[ImageInput]]:
 class TvltImageProcessor(BaseImageProcessor):
     r"""
     Constructs a TVLT image processor.
+    
     This processor can input either videos or images by converting images to 1-frame videos.
+    
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
