@@ -2032,7 +2032,7 @@ class GenerationMixin:
         >>> # instantiate logits processors
         >>> logits_processor = LogitsProcessorList(
         ...     [
-        ...         MinLengthLogitsProcessor(10, eos_token_id=model.config.eos_token_id),
+        ...         MinLengthLogitsProcessor(10, eos_token_id=model.config.eos_token_id, pad_token_id=model.config.pad_token_id),
         ...     ]
         ... )
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
