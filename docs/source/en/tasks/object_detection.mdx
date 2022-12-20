@@ -1,0 +1,269 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Object detection
+
+[[open-in-colab]]
+
+Object detection is a computer vision task of detecting instances of semantic objects that belong to a certain class (such
+as humans, buildings, or cars) in parts of an image. Object detection models receive an image as an input and outputs
+coordinates of the bounding boxes and associated labels of the detected objects. An image can contain multiple objects,
+each of them will have their own bounding box and a label. Similarly, several instances of the same class objects may
+appear in different parts of an image.
+
+ <Tip>
+ Check out the [object detection task page](https://huggingface.co/tasks/object-detection) to learn about use cases,
+ models, metrics, and datasets associated with this task.
+ </Tip>
+
+In this guide you will learn how to:
+
+ 1. Finetune [DETR](https://huggingface.co/docs/transformers/model_doc/detr), a model commonly used for object detection
+ that combines a convolutional backbone with an encoder-decoder Transformer, on the [CPPE-5](https://huggingface.co/datasets/cppe-5)
+ dataset.
+ 2. Use your finetuned model for inference.
+
+Before you begin, make sure you have all the necessary libraries installed:
+
+```bash
+pip install -q datasets transformers evaluate timm
+```
+
+We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
+
+```py
+>>> from huggingface_hub import notebook_login
+
+>>> notebook_login()
+```
+
+## Load the CPPE-5 dataset
+In this guide, you'll use the [CPPE-5 dataset](https://huggingface.co/datasets/cppe-5) that contains images with
+annotations identifying medical personal protective equipment (PPE) in the context of the COVID-19 pandemic.
+
+Start by loading the dataset:
+
+```py
+>>> from datasets import load_dataset
+
+>>> cppe5 = load_dataset("cppe-5")
+>>> cppe5
+```
+
+You'll see that this dataset is already split into a training set containing 1000 images and a test set with 29 images.
+It is helpful to explore what the examples look like.
+
+```py
+>>> cppe5['train'][0]
+```
+The examples in the dataset have the following fields:
+- `image_id`: the example image id
+- `image`: a `PIL.Image.Image` object containing the image
+- `width`: width of the image
+- `height`: height of the image
+- `objects`: A dictionary containing bounding box metadata for the objects in the image:
+  - `id`: The annotation id.
+  - `area`: The area of the bounding box.
+  - `bbox`: The object's bounding box (in the [COCO](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco) format).
+  - `category`: The object's category, with possible values including `Coverall (0)`, `Face_Shield (1)`, `Gloves (2)`, `Goggles (3)` and `Mask (4)`.
+
+You may notice that the `bbox` field follows the [COCO] format. This is good news, because it is the data format that DETR expects.
+However, the way fields are organized inside the `objects` dictionary differs from the expected format and you will need to
+apply some preprocessing transformations later.
+Before that, let's visualize one of the examples in the dataset.
+
+```py
+>>> import numpy as np
+>>> import os
+>>> from PIL import Image, ImageDraw
+
+>>> image_ids = cppe5['train']['image_id']
+
+>>> # pick a random image
+>>> image_id = image_ids[np.random.randint(0, len(image_ids))]
+>>> print('Image n°{}'.format(image_id))
+
+>>> image = cppe5['train'][image_id]['image']
+>>> annotations = cppe5['train'][image_id]['objects']
+>>> draw = ImageDraw.Draw(image, "RGBA")
+
+>>> # get the categories from the dataset's metadata
+>>> categories = cppe5['train'].features['objects'].feature['category'].names
+
+>>> # the id to category matching will be also useful later when training a model
+>>> id2label = {index: x for index, x in enumerate(categories, start=0)}
+>>> label2id = {v: k for k, v in id2label.items()}
+
+>>> for i in range(len(annotations['id'])):
+>>>   box = annotations['bbox'][i-1]
+>>>   class_idx = annotations['category'][i-1]
+>>>   x,y,w,h = tuple(box)
+>>>   draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
+>>>   draw.text((x, y), id2label[class_idx], fill='white')
+
+>>> image
+```
+
+To visualize the bounding boxes together with associated labels, you can get the labels from dataset's metadata.
+You'll also want to create a dictionaries that maps a label id to a label class, and the other way around. You'll need
+them later when setting up a model.
+
+## Preprocess the data
+
+[TODO: add transformations with `albumentations` as described in this guide: https://huggingface.co/docs/datasets/object_detection,
+also add the reasoning. It is common to apply some data augmentations to an image dataset to make a model more robust against overfitting.]
+
+
+The data used for fine-tuning a model has to be preprocessed to match exactly the approach used for the pre-trained model.
+For DETR models, `DetrImageProcessor` takes care of processing image data to create `pixel_values`, `pixel_mask` and
+`labels` that a DETR model can train with. The preprocessor has some important attributes that you won't have to worry about:
+
+- `image_mean = [0.485, 0.456, 0.406 ]`
+- `image_std = [0.229, 0.224, 0.225]`
+
+These are the mean and standard deviation used to normalize images during the model training. These values are essential
+to replicate when doing inference or fine-tuning a pre-trained model.
+
+```py
+>>> from transformers import DetrImageProcessor
+
+>>> checkpoint = "facebook/detr-resnet-50"
+>>> image_processor = DetrImageProcessor.from_pretrained(checkpoint)
+```
+
+The `DetrImageProcessor` expects the annotations to be provided in a certain format:
+`{'image_id': int, 'annotations': List[Dict]}`, where each `Dict` is an individual COCO object annotation.
+As you saw earlier in this guide, the annotations in the dataset are grouped per example and you need to reorganize
+them prior to passing to the `DetrImageProcessor`.
+
+Building up gradually, add a function to change how annotations are formatted for a single example:
+
+```py
+>>> def formatted_anns(image_id, objects):
+>>>   annotations = []
+>>>   for i in range(0,len(objects["id"])-1):
+>>>     new_ann = {"id": objects["id"][i],
+>>>           "category_id": objects["category"][i],
+>>>           "isCrowd": 0,
+>>>           "image_id": image_id,
+>>>           "area": objects["area"][i],
+>>>           "bbox": objects["bbox"][i]}
+>>>     annotations.append(new_ann)
+>>>   return annotations
+```
+
+Next, create a function that can reformat annotations for a batch of examples.
+
+```py
+>>> def transform(example_batch):
+>>>     images = example_batch["image"]
+>>>     ids_ = example_batch["image_id"]
+>>>     objects = example_batch["objects"]
+
+>>>     targets = [
+>>>         {"image_id": id_, "annotations": formatted_anns(id_,object_)} for id_, object_ in zip(ids_, objects)
+>>>     ]
+>>>     return image_processor(images=images, annotations=targets, return_tensors="pt")
+```
+
+Apply this preprocessing function to the entire dataset using 🤗 Datasets `with_transform` method.
+The transformations are applied on the fly when you load an element of the dataset.
+At this point, you can check what an example from the dataset looks like after the transformations.
+
+```py
+>>> cppe5["train"] = cppe5["train"].with_transform(transform)
+>>> cppe5["train"][0]
+```
+
+The individual examples now follow the required format, however, preprocessing isn't complete. In the final preprocessing
+step, create a custom `collate_fn` to batch images together.
+As DETR resizes images to have a min size of 800 and a max size of 1333, images can have different sizes. For this reason,
+you have to pad images (which are now `pixel_values`) to the largest image in a batch, and create a corresponding `pixel_mask`
+ to indicate which pixels are real (1) and which are padding (0).
+
+```py
+>>> def collate_fn(batch):
+>>>   pixel_values = [item['pixel_values'] for item in batch]
+>>>   encoding = image_processor.pad_and_create_pixel_mask(pixel_values, return_tensors="pt")
+>>>   labels = [item['labels'] for item in batch]
+>>>   batch = {}
+>>>   batch['pixel_values'] = encoding['pixel_values']
+>>>   batch['pixel_mask'] = encoding['pixel_mask']
+>>>   batch['labels'] = labels
+>>>   return batch
+```
+
+## Training
+You have done most of the heavy-lifting in the previous sections, so now you are ready to train the model!
+The images in this dataset are quite large, and by default the `DetrImageProcessor` resizes each image to have a
+`min_size` of 800 pixels and a `max_size` of 1333 pixels (as these are the default values that DETR uses at inference time).
+This means that fine-tuning this model will require at least one GPU.
+
+```py
+>>> import torch
+>>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+```
+
+Given the size of the images and resulting tensors, we recommend to use a batch size of 2 on a single GPU.
+Alternatively, you can initialize `DetrImageProcessor` with a smaller image sizes to use bigger batches.
+
+```py
+>>> from transformers import DetrForObjectDetection
+
+>>> model = DetrForObjectDetection.from_pretrained(
+>>>     checkpoint,
+>>>     id2label=id2label,
+>>>     label2id=label2id,
+>>>     ignore_mismatched_sizes=True,
+>>> )
+```
+
+[TODO : write about training_args ]
+
+```py
+>>> from transformers import TrainingArguments
+
+>>> training_args = TrainingArguments(
+>>>     output_dir="detr-resnet-50_fine_tuned_cppe5",
+>>>     per_device_train_batch_size=2,
+>>>     num_train_epochs=3,
+>>>     fp16=False,
+>>>     save_steps=200,
+>>>     logging_steps=50,
+>>>     learning_rate=1e-4,
+>>>     save_total_limit=2,
+>>>     remove_unused_columns=False,
+>>>     # push_to_hub=True,
+>>>     # hub_model_id="davanstrien/detr-resnet-50_fine_tuned_nls_chapbooks",
+>>> )
+```
+
+[TODO : write about trainer and putting everything together ]
+
+```py
+>>> from transformers import Trainer
+
+>>> trainer = Trainer(
+>>>     model=model,
+>>>     args=training_args,
+>>>     data_collator=collate_fn,
+>>>     train_dataset=cppe5["train"],
+>>>     tokenizer=image_processor,
+>>> )
+```
+
+[TODO: Evaluate]
+
+[TODO: Inference]
+
+
+
