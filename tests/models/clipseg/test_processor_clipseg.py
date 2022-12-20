@@ -183,7 +183,7 @@ class CLIPSegProcessorTest(unittest.TestCase):
         image_input = self.prepare_image_inputs()
         visual_prompt_input = self.prepare_image_inputs()
 
-        inputs = processor(visual_prompt=visual_prompt_input, images=image_input)
+        inputs = processor(images=image_input, visual_prompt=visual_prompt_input)
 
         self.assertListEqual(list(inputs.keys()), ["pixel_values", "conditional_pixel_values"])
 
