@@ -44,6 +44,7 @@ if is_pytesseract_available():
 
 logger = logging.get_logger(__name__)
 
+
 class ModelType(ExplicitEnum):
     LayoutLMv3 = "layoutlmv3"
 
@@ -69,7 +70,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
         self.check_model_type(MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING)
         self.image_processor = self.feature_extractor
         self.image_processor.apply_ocr = False
-        if self.model.config.model_type=="layoutlmv3":
+        if self.model.config.model_type == "layoutlmv3":
             self.model_type = ModelType.LayoutLMv3
 
     def _sanitize_parameters(
@@ -172,6 +173,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
         image = None
         if isinstance(input, str) or isinstance(input, Image.Image):
             image = load_image(input)
+            input = {"image": image}
         elif input.get("image", None) is not None:
             image = load_image(input["image"])
 
@@ -183,13 +185,17 @@ class DocumentTokenClassificationPipeline(Pipeline):
             words = [x[0] for x in input["word_boxes"]]
             boxes = [x[1] for x in input["word_boxes"]]
         elif image is not None and not TESSERACT_LOADED:
-                raise ValueError(
-                    "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract,"
-                    " but pytesseract is not available"
-                )
-        
+            raise ValueError(
+                "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract,"
+                " but pytesseract is not available"
+            )
+
         # first, apply the image processor
-        features = self.image_processor(images=image, return_tensors=self.framework, **kwargs,)
+        features = self.image_processor(
+            images=image,
+            return_tensors=self.framework,
+            **kwargs,
+        )
 
         # second, apply the tokenizer
         # if text is not None and self.image_processor.apply_ocr:
@@ -223,14 +229,17 @@ class DocumentTokenClassificationPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, **kwargs):
-        logits = model_outputs["logits"].detach().cpu().numpy()
+        logits = model_outputs["logits"]
+        if self.framework == "pt":
+            logits = logits.detach().cpu().numpy()
+        words = model_outputs["words"]
         # if first dimension is 1, remove it
         if logits.shape[0] == 1:
             logits = logits[0]
-        words = model_outputs["words"]
         # if words is a list of list of strings, get the first one
         if isinstance(words, list) and isinstance(words[0], list):
             words = words[0]
+            model_outputs["words"] = words
         token_predictions = logits.argmax(-1)
 
         word_ids = model_outputs["word_ids"]
@@ -243,8 +252,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
             elif word_id is not None and word_predictions[word_id] != token_prediction:
                 # If conflict, we take the first prediction
                 pass
-            
+
         word_labels = [self.model.config.id2label[prediction] for prediction in word_predictions]
         model_outputs["word_labels"] = word_labels
         return model_outputs
-
