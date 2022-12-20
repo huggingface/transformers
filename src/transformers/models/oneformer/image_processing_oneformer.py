@@ -518,8 +518,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
             reduce_labels=reduce_labels,
         )
 
-    def __call__(self, images, task_inputs, segmentation_maps=None, **kwargs) -> BatchFeature:
-        return self.preprocess(images, task_inputs, segmentation_maps=segmentation_maps, **kwargs)
+    def __call__(self, images, task_inputs=None, segmentation_maps=None, **kwargs) -> BatchFeature:
+        return self.preprocess(images, task_inputs=task_inputs, segmentation_maps=segmentation_maps, **kwargs)
 
     def _preprocess(
         self,
@@ -604,7 +604,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        task_inputs: List[str],
+        task_inputs: Optional[List[str]] = None,
         segmentation_maps: Optional[ImageInput] = None,
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         do_resize: Optional[bool] = None,
@@ -638,6 +638,10 @@ class OneFormerImageProcessor(BaseImageProcessor):
                     " `do_reduce_labels` instead."
                 )
             do_reduce_labels = kwargs.pop("reduce_labels")
+
+        if task_inputs is None:
+            # Default value
+            task_inputs = ["panoptic"]
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -973,8 +977,10 @@ class OneFormerImageProcessor(BaseImageProcessor):
                     classes, masks, texts = self.get_semantic_annotations(label, num_class_obj)
                 elif task == "instance":
                     classes, masks, texts = self.get_instance_annotations(label, num_class_obj)
-                if task == "panoptic":
+                elif task == "panoptic":
                     classes, masks, texts = self.get_panoptic_annotations(label, num_class_obj)
+                else:
+                    raise ValueError(f"{task} was not expected, expected `semantic`, `instance` or `panoptic`")
 
                 # we cannot batch them since they don't share a common class size
                 masks = [mask[None, ...] for mask in masks]
@@ -989,6 +995,24 @@ class OneFormerImageProcessor(BaseImageProcessor):
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
             encoded_inputs["text_inputs"] = text_inputs
+
+        def get_input_ids(task_input: str) -> List[int]:
+            if task_input == "semantic":
+                # this task is semantic
+                return [49406, 589, 10549, 533, 29119, 1550, 49407]
+            elif task_input == "panoptic":
+                # this task is panoptic
+                return [49406, 589, 10549, 533, 1072, 24755, 49407]
+            elif task_input == "instance":
+                # this task is instance
+                return [49406, 589, 10549, 533, 34572, 49407]
+
+        task_input_ids = torch.zeros(len(task_inputs), 77, dtype=torch.int)
+        for i, task_input in enumerate(task_inputs):
+            input_ids = get_input_ids(task_input)
+            task_input_ids[i, : len(input_ids)] = torch.LongTensor(input_ids)
+
+        encoded_inputs["task_inputs"] = task_input_ids
 
         return encoded_inputs
 

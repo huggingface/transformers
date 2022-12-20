@@ -31,8 +31,10 @@ from huggingface_hub import model_info
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
@@ -482,6 +484,7 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer, PreTrainedTokenizerFast]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
+    image_processor: Optional[Union[str, BaseImageProcessor]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
@@ -766,6 +769,7 @@ def pipeline(
 
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+    load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
     if (
         tokenizer is None
@@ -827,6 +831,27 @@ def pipeline(
 
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
+            )
+
+    if load_image_processor:
+        # Try to infer feature extractor from model or config name (if provided as str)
+        if image_processor is None:
+            if isinstance(model_name, str):
+                image_processor = model_name
+            elif isinstance(config, str):
+                image_processor = config
+            else:
+                # Impossible to guess what is the right image_processor here
+                raise Exception(
+                    "Impossible to guess which feature extractor to use. "
+                    "Please provide a PreTrainedFeatureExtractor class or a path/identifier "
+                    "to a pretrained feature extractor."
+                )
+
+        # Instantiate image_processor if needed
+        if isinstance(image_processor, (str, tuple)):
+            image_processor = AutoImageProcessor.from_pretrained(
+                image_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs
             )
 
     if load_feature_extractor:
@@ -896,6 +921,9 @@ def pipeline(
 
     if torch_dtype is not None:
         kwargs["torch_dtype"] = torch_dtype
+
+    if image_processor is not None:
+        kwargs["image_processor"] = image_processor
 
     if device is not None:
         kwargs["device"] = device

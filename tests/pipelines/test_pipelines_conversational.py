@@ -53,7 +53,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         else []
     )
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
         return conversation_agent, [Conversation("Hi there!")]
 

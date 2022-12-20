@@ -26,6 +26,7 @@ from transformers import (
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
     AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForImageSegmentation,
     AutoModelForInstanceSegmentation,
     DetrForSegmentation,
@@ -80,8 +81,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
     }
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
+    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+        image_segmenter = ImageSegmentationPipeline(
+            model=model, feature_extractor=feature_extractor, image_processor=image_processor
+        )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -139,7 +142,11 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
         outputs = image_segmenter(
-            batch, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0, batch_size=batch_size
+            batch,
+            threshold=0.0,
+            mask_threshold=0,
+            overlap_mask_area_threshold=0,
+            batch_size=batch_size,
         )
         self.assertEqual(len(batch), len(outputs))
         self.assertEqual(len(outputs[0]), n)
@@ -188,10 +195,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
         image_segmenter = ImageSegmentationPipeline(
             model=model,
-            feature_extractor=feature_extractor,
+            image_processor=image_processor,
             subtask="panoptic",
             threshold=0.0,
             mask_threshold=0.0,
@@ -599,6 +606,110 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     "score": 1.0,
                     "label": "sky",
                     "mask": {"hash": "a3756324a6", "shape": (512, 683), "white_pixels": 135802},
+                },
+            ],
+        )
+
+    @require_torch
+    @slow
+    def test_oneformer(self):
+        image_segmenter = pipeline(model="shi-labs/oneformer_ade20k_swin_tiny")
+
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        file = image[0]["file"]
+        outputs = image_segmenter(file, threshold=0.99)
+        # Shortening by hashing
+        for o in outputs:
+            o["mask"] = mask_to_test_readable(o["mask"])
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    "score": 0.9982,
+                    "label": "grass",
+                    "mask": {"hash": "ed9062af33", "white_pixels": 118861, "shape": (512, 683)},
+                },
+                {
+                    "score": 0.9991,
+                    "label": "sky",
+                    "mask": {"hash": "551fcb95c0", "white_pixels": 230835, "shape": (512, 683)},
+                },
+            ],
+        )
+
+        # Different task
+        outputs = image_segmenter(file, threshold=0.1, subtask="instance")
+        # Shortening by hashing
+        for o in outputs:
+            o["mask"] = mask_to_test_readable(o["mask"])
+
+        print(nested_simplify(outputs, decimals=4))
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    "score": 0.5194,
+                    "label": "street lamp",
+                    "mask": {"hash": "895acbce0b", "white_pixels": 1654, "shape": (512, 683)},
+                },
+                {
+                    "score": 0.1131,
+                    "label": "fence",
+                    "mask": {"hash": "a57425bc07", "white_pixels": 348042, "shape": (512, 683)},
+                },
+            ],
+        )
+
+        # Different task
+        outputs = image_segmenter(file, subtask="semantic")
+        # Shortening by hashing
+        for o in outputs:
+            o["mask"] = mask_to_test_readable(o["mask"])
+
+        print(nested_simplify(outputs, decimals=4))
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    "score": None,
+                    "label": "wall",
+                    "mask": {"hash": "a9c95a10a8", "white_pixels": 14270, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "building",
+                    "mask": {"hash": "72d8ea3807", "white_pixels": 124553, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "sky",
+                    "mask": {"hash": "2d79540404", "white_pixels": 135307, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "tree",
+                    "mask": {"hash": "a01681085c", "white_pixels": 15766, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "road, route",
+                    "mask": {"hash": "d16eee4668", "white_pixels": 2144, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "grass",
+                    "mask": {"hash": "8b30cf552e", "white_pixels": 52869, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "plant",
+                    "mask": {"hash": "0cff2dda4e", "white_pixels": 4583, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "house",
+                    "mask": {"hash": "83e2a657f9", "white_pixels": 204, "shape": (512, 683)},
                 },
             ],
         )
