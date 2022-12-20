@@ -140,6 +140,16 @@ class SegformerModelTester:
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
         )
+        self.parent.assertGreater(result.loss, 0.0)
+
+    def create_and_check_for_binary_image_segmentation(self, config, pixel_values, labels):
+        config.num_labels = 1
+        model = SegformerForSemanticSegmentation(config=config)
+        model.to(torch_device)
+        model.eval()
+        labels = torch.randint(0, 1, (self.batch_size, self.image_size, self.image_size)).to(torch_device)
+        result = model(pixel_values, labels=labels)
+        self.parent.assertGreater(result.loss, 0.0)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -176,6 +186,10 @@ class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_binary_image_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_binary_image_segmentation(*config_and_inputs)
 
     def test_for_image_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
