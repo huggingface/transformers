@@ -16,7 +16,7 @@
 
 
 import json
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 from tokenizers import pre_tokenizers
 
@@ -154,6 +154,25 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             )
 
         return super()._encode_plus(*args, **kwargs)
+
+    def _decode(
+        self,
+        token_ids: Union[int, List[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        **kwargs
+    ) -> str:
+        if clean_up_tokenization_spaces:
+            logger.warning(
+                "Bloom tokenizer was built in order to have lossless encoding. Most likely, you should use"
+                " `clean_up_tokenization_spaces=False`."
+            )
+        return super()._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
