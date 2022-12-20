@@ -30,7 +30,7 @@ if is_speech_available():
     import torchaudio
 
     
-class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
+class TvltFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TVLT audio feature extractor. This feature extractor can be used to prepare audios for the model.
 
