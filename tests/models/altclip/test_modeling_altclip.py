@@ -456,48 +456,49 @@ class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
         configs_no_init.return_dict = False
-        model = self.model_class(config=configs_no_init)
-        model.to(torch_device)
-        model.eval()
-
-        try:
-            input_ids = inputs_dict["input_ids"]
-            pixel_values = inputs_dict["pixel_values"]  # CLIP needs pixel_values
-            traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-        except RuntimeError:
-            self.fail("Couldn't trace module.")
-
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
 
             try:
-                torch.jit.save(traced_model, pt_file_name)
-            except Exception:
-                self.fail("Couldn't save module.")
+                input_ids = inputs_dict["input_ids"]
+                pixel_values = inputs_dict["pixel_values"]  # CLIP needs pixel_values
+                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
+            except RuntimeError:
+                self.fail("Couldn't trace module.")
 
-            try:
-                loaded_model = torch.jit.load(pt_file_name)
-            except Exception:
-                self.fail("Couldn't load module.")
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
 
-        model.to(torch_device)
-        model.eval()
+                try:
+                    torch.jit.save(traced_model, pt_file_name)
+                except Exception:
+                    self.fail("Couldn't save module.")
 
-        loaded_model.to(torch_device)
-        loaded_model.eval()
+                try:
+                    loaded_model = torch.jit.load(pt_file_name)
+                except Exception:
+                    self.fail("Couldn't load module.")
 
-        model_state_dict = model.state_dict()
-        loaded_model_state_dict = loaded_model.state_dict()
+            model.to(torch_device)
+            model.eval()
 
-        self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            loaded_model.to(torch_device)
+            loaded_model.eval()
 
-        models_equal = True
-        for layer_name, p1 in model_state_dict.items():
-            p2 = loaded_model_state_dict[layer_name]
-            if p1.data.ne(p2.data).sum() > 0:
-                models_equal = False
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
 
-        self.assertTrue(models_equal)
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            models_equal = True
+            for layer_name, p1 in model_state_dict.items():
+                p2 = loaded_model_state_dict[layer_name]
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
 
     @slow
     def test_model_from_pretrained(self):
