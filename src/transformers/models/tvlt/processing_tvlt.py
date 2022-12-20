@@ -47,7 +47,7 @@ class TvltProcessor(PushToHubMixin):
         """
         Forwards the `visual_inputs` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`] 
         and the `audio_inputs` argument to TvltFeatureExtractor's [`~TvltFeatureExtractor.__call__`]. 
-        Please refer to the doctsring of the above two methods for more information.
+        Please refer to the docstring of the above two methods for more information.
         """
 
         if visual_inputs is None and audio_inputs is None:
