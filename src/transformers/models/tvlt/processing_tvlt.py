@@ -40,9 +40,7 @@ class TvltProcessor(PushToHubMixin):
     audio_feature_extractor_class = "TvltFeatureExtractor"
 
     def __init__(self, image_processor, audio_feature_extractor):
-        super().__init__()
-        self.current_image_processor = image_processor
-        self.current_audio_feature_extractor = audio_feature_extractor
+        super().__init__(image_processor=image_processor, feature_extractor=feature_extractor)
 
     def __call__(self, visual_inputs=None, audio_inputs=None, visual_inputs_mixed=None, sampling_rate=None, *args, **kwargs):
         """
