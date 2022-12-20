@@ -30,7 +30,6 @@ if is_speech_available():
     import torchaudio
 
     
-# Copied from whisper
 class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TVLT audio feature extractor. This feature extractor can be used to prepare audios for the model.
@@ -87,6 +86,7 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
 
         return (audio - mean[None, None, None]) / std[None, None, None]
 
+    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.get_mel_filters
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
         n_mels = int(n_mels)
@@ -136,6 +136,7 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
 
         return weights
 
+    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.fram_wave
     def fram_wave(self, waveform, center=True):
         """
         Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
@@ -171,6 +172,7 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
             frames.append(frame)
         return np.stack(frames, 0)
 
+    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.stft
     def stft(self, frames, window):
         """
         Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
@@ -199,6 +201,7 @@ class TvltAudioFeatureExtractor(SequenceFeatureExtractor):
 
         return data.T
 
+    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor._np_extract_fbank_features
     def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
