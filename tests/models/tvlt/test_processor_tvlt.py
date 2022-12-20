@@ -22,7 +22,7 @@ from transformers import is_vision_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
 if is_vision_available():
-    from transformers import TvltImageProcessor, TvltAudioFeatureExtractor, TvltProcessor
+    from transformers import TvltImageProcessor, TvltFeatureExtractor, TvltProcessor
 
 
 @require_torch
@@ -35,7 +35,7 @@ class TvltProcessorTest(unittest.TestCase):
         return TvltImageProcessor.from_pretrained(self.checkpoint, **kwargs)
 
     def get_audio_feature_extractor(self, **kwargs):
-        return TvltAudioFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return TvltFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
