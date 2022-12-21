@@ -197,11 +197,6 @@ class DocumentTokenClassificationPipeline(Pipeline):
             **kwargs,
         )
 
-        # second, apply the tokenizer
-        # if text is not None and self.image_processor.apply_ocr:
-        #     if isinstance(text, str):
-        #         text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
-
         encoded_inputs = self.tokenizer(
             text=words if words is not None else features["words"],
             boxes=boxes if boxes is not None else features["boxes"],
