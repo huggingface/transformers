@@ -224,9 +224,8 @@ class DocumentTokenClassificationPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, **kwargs):
-        logits = model_outputs["logits"]
         if self.framework == "pt":
-            logits = logits.detach().cpu().numpy()
+            logits = model_outputs["logits"].detach().cpu().numpy()
         words = model_outputs["words"]
         # if first dimension is 1, remove it
         if logits.shape[0] == 1:
@@ -250,4 +249,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
 
         word_labels = [self.model.config.id2label[prediction] for prediction in word_predictions]
         model_outputs["word_labels"] = word_labels
+        model_outputs = dict(model_outputs)
+        model_outputs.pop("attention_mask", None)
+        model_outputs.pop("logits", None)
         return model_outputs
