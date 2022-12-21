@@ -59,24 +59,15 @@ class ViTHybridEmbeddings(nn.Module):
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
     """
 
+    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.__init__ with ViT->ViTHybrid
     def __init__(self, config: ViTHybridConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
-        self.cls_token = nn.Parameter(
-            nn.init.trunc_normal_(
-                torch.zeros(1, 1, config.hidden_size, dtype=torch.float32), mean=0.0, std=config.initializer_range
-            )
-        )
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = ViTHybridPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(
-            nn.init.trunc_normal_(
-                torch.zeros(1, num_patches + 1, config.hidden_size, dtype=torch.float32),
-                mean=0.0,
-                std=config.initializer_range,
-            )
-        )
+        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
@@ -166,10 +157,10 @@ class ViTHybridPatchEmbeddings(nn.Module):
         feature_dim = self.backbone.channels[-1]
 
         if feature_size is None:
-            dummy_image = torch.zeros(1, num_channels, image_size[0], image_size[1])
-            feature_map = self.backbone._get_feature_map(dummy_image)
-            feature_size = feature_map.shape[-2:]
-            feature_dim = feature_map.shape[1]
+            feature_map = config.backbone_featmap_shape
+
+            feature_size = feature_map[-2:]
+            feature_dim = feature_map[1]
         else:
             feature_size = (
                 feature_size if isinstance(feature_size, collections.abc.Iterable) else (feature_size, feature_size)
@@ -358,7 +349,6 @@ class ViTHybridOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->ViTHybrid
 class ViTHybridLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -387,7 +377,8 @@ class ViTHybridLayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        # We assign to correct device for `accelerate`, check: https://github.com/huggingface/transformers/pull/20705/
+        hidden_states = attention_output + hidden_states.to(attention_output.device)
 
         # in ViTHybrid, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
@@ -485,6 +476,18 @@ class ViTHybridPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ViTHybridEmbeddings):
+            nn.init.trunc_normal_(
+                module.position_embeddings,
+                mean=0.0,
+                std=self.config.initializer_range,
+            )
+
+            nn.init.trunc_normal_(
+                module.cls_token,
+                mean=0.0,
+                std=self.config.initializer_range,
+            )
 
     def _set_gradient_checkpointing(self, module: ViTHybridEncoder, value: bool = False) -> None:
         if isinstance(module, ViTHybridEncoder):

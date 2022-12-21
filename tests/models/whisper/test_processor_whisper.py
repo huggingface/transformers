@@ -26,7 +26,6 @@ if is_speech_available():
     from transformers import WhisperFeatureExtractor, WhisperProcessor
 
 
-START_OF_TRANSCRIPT = 50257
 TRANSCRIBE = 50358
 NOTIMESTAMPS = 50362
 
@@ -145,5 +144,5 @@ class WhisperProcessorTest(unittest.TestCase):
         for ids in forced_decoder_ids:
             self.assertIsInstance(ids, (list, tuple))
 
-        expected_ids = [START_OF_TRANSCRIPT, TRANSCRIBE, NOTIMESTAMPS]
+        expected_ids = [TRANSCRIBE, NOTIMESTAMPS]
         self.assertListEqual([ids[-1] for ids in forced_decoder_ids], expected_ids)

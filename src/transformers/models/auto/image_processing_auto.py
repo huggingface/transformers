@@ -39,6 +39,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitImageProcessor"),
         ("bit", "BitImageProcessor"),
+        ("blip", "BlipImageProcessor"),
         ("chinese_clip", "ChineseCLIPImageProcessor"),
         ("clip", "CLIPImageProcessor"),
         ("clipseg", "ViTImageProcessor"),
@@ -73,6 +74,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("resnet", "ConvNextImageProcessor"),
         ("segformer", "SegformerImageProcessor"),
         ("swin", "ViTImageProcessor"),
+        ("swin2sr", "Swin2SRImageProcessor"),
         ("swinv2", "ViTImageProcessor"),
         ("table-transformer", "DetrImageProcessor"),
         ("timesformer", "VideoMAEImageProcessor"),

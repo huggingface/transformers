@@ -18,6 +18,7 @@ import collections
 import math
 from typing import Optional, Tuple
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
@@ -30,7 +31,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import BackboneMixin, PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -592,7 +593,8 @@ class BitEncoder(nn.Module):
         dilation = 1
 
         layer_dropouts = [
-            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+            x.tolist()
+            for x in torch.Tensor(np.linspace(0, config.drop_path_rate, sum(config.depths))).split(config.depths)
         ]
 
         for stage_idx, (current_depth, current_hidden_size, layer_dropout) in enumerate(
@@ -670,15 +672,6 @@ class BitPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BitModel):
             module.gradient_checkpointing = value
-
-    @torch.no_grad()
-    def _get_feature_map(self, dummy_image):
-        training = self.training
-        if training:
-            self.eval()
-        feature_map = self(dummy_image).feature_maps[-1]
-        self.train(training)
-        return feature_map
 
 
 BIT_START_DOCSTRING = r"""
@@ -851,14 +844,14 @@ class BitForImageClassification(BitPreTrainedModel):
     """,
     BIT_START_DOCSTRING,
 )
-class BitBackbone(BitPreTrainedModel):
+class BitBackbone(BitPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
 
         self.stage_names = config.stage_names
         self.bit = BitModel(config)
 
-        self.out_features = config.out_features
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
 
         out_feature_channels = {}
         out_feature_channels["stem"] = config.embedding_size

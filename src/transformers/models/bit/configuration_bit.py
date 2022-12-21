@@ -63,7 +63,7 @@ class BitConfig(PretrainedConfig):
             The width factor for the model.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has).
+            (depending on how many stages the model has). Will default to the last stage if unset.
 
     Example:
     ```python

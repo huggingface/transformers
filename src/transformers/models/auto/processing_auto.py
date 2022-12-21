@@ -41,7 +41,11 @@ logger = logging.get_logger(__name__)
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+<<<<<<< HEAD
         ("altclip", "AltCLIPProcessor"),
+=======
+        ("blip", "BLIPProcessor"),
+>>>>>>> 76d02feadbc99bbccd86e67b02728338a2469f22
         ("chinese_clip", "ChineseCLIPProcessor"),
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
@@ -288,8 +292,8 @@ class AutoProcessor:
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
-            "tokenizer or a feature extractor for this model. Make sure the repository contains the files of at least "
-            "one of those processing classes."
+            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains"
+            "the files of at least one of those processing classes."
         )
 
     @staticmethod

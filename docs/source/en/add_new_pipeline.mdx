@@ -12,7 +12,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 # How to create a custom pipeline?
 
 In this guide, we will see how to create a custom pipeline and share it on the [Hub](hf.co/models) or add it to the
-Transformers library.
+🤗 Transformers library.
 
 First and foremost, you need to decide the raw entries the pipeline will be able to take. It can be strings, raw bytes,
 dictionaries or whatever seems to be the most likely desired input. Try to keep these inputs as pure Python as possible
@@ -22,8 +22,8 @@ pipeline (`preprocess`).
 Then define the `outputs`. Same policy as the `inputs`. The simpler, the better. Those will be the outputs of
 `postprocess` method.
 
-Start by inheriting the base class `Pipeline`. with the 4 methods needed to implement `preprocess`,
-`_forward`, `postprocess` and `_sanitize_parameters`.
+Start by inheriting the base class `Pipeline` with the 4 methods needed to implement `preprocess`,
+`_forward`, `postprocess`, and `_sanitize_parameters`.
 
 
 ```python
@@ -62,14 +62,14 @@ contain more information and is usually a `Dict`.
 called method as it contains safeguards to make sure everything is working on the expected device. If anything is
 linked to a real model it belongs in the `_forward` method, anything else is in the preprocess/postprocess.
 
-`postprocess` methods will take the output of `_forward` and turn it into the final output that were decided
+`postprocess` methods will take the output of `_forward` and turn it into the final output that was decided
 earlier.
 
 `_sanitize_parameters` exists to allow users to pass any parameters whenever they wish, be it at initialization
 time `pipeline(...., maybe_arg=4)` or at call time `pipe = pipeline(...); output = pipe(...., maybe_arg=4)`.
 
 The returns of `_sanitize_parameters` are the 3 dicts of kwargs that will be passed directly to `preprocess`,
-`_forward` and `postprocess`. Don't fill anything if the caller didn't call with any extra parameter. That
+`_forward`, and `postprocess`. Don't fill anything if the caller didn't call with any extra parameter. That
 allows to keep the default arguments in the function definition which is always more "natural".
 
 A classic example would be a `top_k` argument in the post processing in classification tasks.
@@ -126,7 +126,7 @@ PIPELINE_REGISTRY.register_pipeline(
 )
 ```
 
-You can specify a default model if you want, in which case it should come with a specific revision (which can be the name of a branch or a commit hash, here we took `"abcdef"`) as well was the type:
+You can specify a default model if you want, in which case it should come with a specific revision (which can be the name of a branch or a commit hash, here we took `"abcdef"`) as well as the type:
 
 ```python
 PIPELINE_REGISTRY.register_pipeline(
@@ -225,9 +225,9 @@ from transformers import pipeline
 classifier = pipeline(model="{your_username}/test-dynamic-pipeline", trust_remote_code=True)
 ```
 
-## Add the pipeline to Transformers
+## Add the pipeline to 🤗 Transformers
 
-If you want to contribute your pipeline to Transformers, you will need to add a new module in the `pipelines` submodule
+If you want to contribute your pipeline to 🤗 Transformers, you will need to add a new module in the `pipelines` submodule
 with the code of your pipeline, then add it in the list of tasks defined in `pipelines/__init__.py`.
 
 Then you will need to add tests. Create a new file `tests/test_pipelines_MY_PIPELINE.py` with example with the other tests.
@@ -237,7 +237,7 @@ architecture as defined by `model_mapping` and `tf_model_mapping`.
 
 This is very important to test future compatibility, meaning if someone adds a new model for
 `XXXForQuestionAnswering` then the pipeline test will attempt to run on it. Because the models are random it's
-impossible to check for actual values, that's why There is a helper `ANY` that will simply attempt to match the
+impossible to check for actual values, that's why there is a helper `ANY` that will simply attempt to match the
 output of the pipeline TYPE.
 
 You also *need* to implement 2 (ideally 4) tests.
@@ -248,7 +248,7 @@ You also *need* to implement 2 (ideally 4) tests.
   and test the pipeline outputs. The results should be the same as `test_small_model_pt`.
 - `test_large_model_pt` (`optional`): Tests the pipeline on a real pipeline where the results are supposed to
   make sense. These tests are slow and should be marked as such. Here the goal is to showcase the pipeline and to make
-  sure there is no drift in future releases
+  sure there is no drift in future releases.
 - `test_large_model_tf` (`optional`): Tests the pipeline on a real pipeline where the results are supposed to
   make sense. These tests are slow and should be marked as such. Here the goal is to showcase the pipeline and to make
-  sure there is no drift in future releases
+  sure there is no drift in future releases.

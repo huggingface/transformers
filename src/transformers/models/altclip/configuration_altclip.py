@@ -243,7 +243,7 @@ class AltCLIPVisionConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from AltCLIPConfig
-        if config_dict.get("model_type") == "clip":
+        if config_dict.get("model_type") == "altclip":
             config_dict = config_dict["vision_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -280,7 +280,7 @@ class AltCLIPConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import AltCLIPConfig, CLIPModel
+    >>> from transformers import AltCLIPConfig, AltCLIPModel
 
     >>> # Initializing a AltCLIPConfig with BAAI/AltCLIP style configuration
     >>> configuration = AltCLIPConfig()
@@ -293,7 +293,7 @@ class AltCLIPConfig(PretrainedConfig):
 
     >>> # We can also initialize a AltCLIPConfig from a AltCLIPTextConfig and a AltCLIPVisionConfig
 
-    >>> # Initializing a CLIPText and CLIPVision configuration
+    >>> # Initializing a AltCLIPText and AltCLIPVision configuration
     >>> config_text = AltCLIPTextConfig()
     >>> config_vision = AltCLIPVisionConfig()
 
@@ -334,8 +334,8 @@ class AltCLIPConfig(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: AltCLIPTextConfig, vision_config: AltCLIPVisionConfig, **kwargs):
         r"""
-        Instantiate a [`AltCLIPConfig`] (or a derived class) from clip text model configuration and clip vision model
-        configuration.
+        Instantiate a [`AltCLIPConfig`] (or a derived class) from altclip text model configuration and altclip vision
+        model configuration.
 
         Returns:
             [`AltCLIPConfig`]: An instance of a configuration object
