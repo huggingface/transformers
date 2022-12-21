@@ -51,10 +51,10 @@ class ModelType(ExplicitEnum):
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class DocumentTokenClassificationPipeline(Pipeline):
-    # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
+    # TODO: Update task_summary docs to include an example with document token classification
     """
     Document Token Classification pipeline using any `AutoModelForDocumentTokenClassification`. The inputs/outputs are
-    similar to the (extractive) Token Classification pipeline; however, the pipeline takes an image (and optional OCR'd
+    similar to the Token Classification pipeline; however, the pipeline takes an image (and optional OCR'd
     words/boxes) as input instead of text context.
 
     This Document Token Classification pipeline can currently be loaded from [`pipeline`] using the following task
