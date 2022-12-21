@@ -336,7 +336,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("Chunk length must be superior to stride length")
 
             # make sure that
-            for item in chunk_iter(inputs, self.feature_extractor, chunk_len, stride_left, stride_righ, dtype):
+            for item in chunk_iter(inputs, self.feature_extractor, chunk_len, stride_left, stride_right, dtype):
                 yield item
         else:
             processed = self.feature_extractor(
