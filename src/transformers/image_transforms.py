@@ -20,6 +20,7 @@ import numpy as np
 
 from transformers.image_utils import (
     ChannelDimension,
+    ImageInput,
     get_channel_dimension_axis,
     get_image_size,
     infer_channel_dimension_format,
@@ -686,4 +687,23 @@ def pad(
         raise ValueError(f"Invalid padding mode: {mode}")
 
     image = to_channel_dimension_format(image, data_format) if data_format is not None else image
+    return image
+
+
+# TODO (Amy): Accept 1/3/4 channel numpy array as input and return np.array as default
+def convert_to_rgb(image: ImageInput) -> ImageInput:
+    """
+    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+    as is.
+
+    Args:
+        image (Image):
+            The image to convert.
+    """
+    requires_backends(convert_to_rgb, ["vision"])
+
+    if not isinstance(image, PIL.Image.Image):
+        return image
+
+    image = image.convert("RGB")
     return image
