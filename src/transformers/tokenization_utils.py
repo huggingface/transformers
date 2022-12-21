@@ -926,9 +926,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         spaces_between_special_tokens: bool = True,
         **kwargs
     ) -> str:
-        import ipdb
-
-        ipdb.set_trace()
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
