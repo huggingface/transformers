@@ -20,6 +20,8 @@ import unittest
 import warnings
 from math import ceil, floor
 
+from packaging import version
+
 from transformers import LevitConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
@@ -40,7 +42,7 @@ if is_torch_available():
         LevitModel,
     )
     from transformers.models.levit.modeling_levit import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10, is_torch_less_than_1_9
+
 
 if is_vision_available():
     from PIL import Image
@@ -336,8 +338,9 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_problem_types(self):
 
-        if not (is_torch_less_than_1_9 or is_torch_greater_or_equal_than_1_10):
-            self.skipTest(reason="This test fails with PyTorch 1.9: some CUDA issue")
+        parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
+        if parsed_torch_version_base.base_version.startswith("1.9"):
+            self.skipTest(reason="This test fails with PyTorch 1.9.x: some CUDA issue")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
