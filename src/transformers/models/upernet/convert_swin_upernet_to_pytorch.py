@@ -272,8 +272,8 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to hub")
-        model.push_to_hub(f"facebook/{model_name}")
-        processor.push_to_hub(f"facebook/{model_name}")
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
