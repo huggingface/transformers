@@ -42,7 +42,7 @@ which are then linearly embedded. A [CLS] token is added to serve as representat
 also add absolute position embeddings, and feed the resulting sequence of vectors to a standard Transformer encoder.
 The [`CLIPFeatureExtractor`] can be used to resize (or rescale) and normalize images for the model.
 
-The [`AltCLIPProcessor`] wraps [`CLIPFeatureExtractor`] and [`XLMRobertaTokenizer`] into a single instance to both
+The [`AltCLIPProcessor`] wraps a [`CLIPFeatureExtractor`] and a [`XLMRobertaTokenizer`] into a single instance to both
 encode the text and prepare the images. The following example shows how to get the image-text similarity scores using
 [`AltCLIPProcessor`] and [`AltCLIPModel`].
 
@@ -51,11 +51,10 @@ encode the text and prepare the images. The following example shows how to get t
 from PIL import Image
 import requests
 
-# transformers version >= 4.21.0
-from modeling_altclip import AltCLIP
+from modeling_altclip import AltCLIPModel
 from processing_altclip import AltCLIPProcessor
 
-model = AltCLIP.from_pretrained("BAAI/AltCLIP")
+model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"

@@ -79,6 +79,10 @@ class AltCLIPTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        project_dim (`int`, *optional*, defaults to 768):
+            The dimentions of the teacher model before the mapping layer.
+        position_embedding_type (`str`, *optional*, defaults to `"cls"`):
+            Type of pooler we use. We take the first token as pooled output.
 
     Examples:
 
@@ -253,7 +257,7 @@ class AltCLIPVisionConfig(PretrainedConfig):
 
 class AltCLIPConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~AltCLIPModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
     AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the AltCLIP
     [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.

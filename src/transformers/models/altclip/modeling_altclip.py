@@ -1097,7 +1097,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVisionTransformer->AltCLIPVisionTransformer,CLIPVisionConfig->AltCLIPVisionConfig,CLIPVisionEmbeddings->AltCLIPVisionEmbeddings,CLIPEncoder->AltCLIPEncoder,CLIP_VISION_INPUTS_DOCSTRING->ALTCLIP_VISION_INPUTS_DOCSTRING
+# CLIP_->ALTCLIP_,CLIP->AltCLIP
 class AltCLIPVisionTransformer(nn.Module):
     def __init__(self, config: AltCLIPVisionConfig):
         super().__init__()
@@ -1394,7 +1394,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
 
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
-
     config_class = AltCLIPTextConfig
 
     def __init__(self, config):
@@ -1520,6 +1519,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(ALTCLIP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
