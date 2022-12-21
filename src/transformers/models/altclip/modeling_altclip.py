@@ -31,13 +31,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 
 
@@ -1255,13 +1249,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(ALTCLIP_TEXT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
     # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
@@ -1441,7 +1428,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
 
         >>> texts = ["it's a cat", "it's a dog"]
 
-        >>> inputs = processor(texts=texts, padding=True, return_tensors="pt")
+        >>> inputs = processor(text=texts, padding=True, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1541,8 +1528,8 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         >>> from transformers import AltCLIPProcessor, AltCLIPModel
 
         >>> model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
-        >>> processor = AltCLIPProecssor.from_pretrained("BAAI/AltCLIP")
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
+        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         # Use AltCLIP model's config for some fields (if specified) instead of those of vision & text components.

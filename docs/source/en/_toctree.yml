@@ -275,6 +275,8 @@
         title: GPT-J
       - local: model_doc/gpt2
         title: GPT2
+      - local: model_doc/gpt-sw3
+        title: GPTSw3
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -347,6 +349,8 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roberta-prelayernorm
+        title: RoBERTa-PreLayerNorm
       - local: model_doc/roc_bert
         title: RoCBert
       - local: model_doc/roformer
@@ -436,6 +440,8 @@
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
+      - local: model_doc/swin2sr
+        title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
       - local: model_doc/timesformer
@@ -492,8 +498,13 @@
       title: Audio models
     - isExpanded: false
       sections:
+<<<<<<< HEAD
       - local: model_doc/altclip
         title: AltCLIP
+=======
+      - local: model_doc/blip
+        title: BLIP
+>>>>>>> 76d02feadbc99bbccd86e67b02728338a2469f22
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip

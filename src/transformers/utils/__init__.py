@@ -104,6 +104,7 @@ from .import_utils import (
     is_bs4_available,
     is_coloredlogs_available,
     is_datasets_available,
+    is_decord_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -148,6 +149,7 @@ from .import_utils import (
     is_torch_bf16_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_compile_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
@@ -161,9 +163,7 @@ from .import_utils import (
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
-    tf_required,
     torch_only_method,
-    torch_required,
     torch_version,
 )
 

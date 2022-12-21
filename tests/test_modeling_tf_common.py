@@ -830,6 +830,9 @@ class TFModelTesterMixin:
             self.assertLess(np.sum(np.abs(output_dict - output_keywords)), 1e-6)
 
     def test_attention_outputs(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)

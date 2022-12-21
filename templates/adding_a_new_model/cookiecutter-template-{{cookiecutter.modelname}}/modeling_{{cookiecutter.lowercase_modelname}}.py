@@ -2982,7 +2982,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
         )
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = input_ids.eq(self.config.eos_token_id)
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
