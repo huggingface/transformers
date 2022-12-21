@@ -399,6 +399,6 @@ class GitModelIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(pixel_values=pixel_values, max_length=20)
         generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        expected_shape = torch.Size((1, 8))
+        expected_shape = torch.Size((1, 9))
         self.assertEqual(generated_ids.shape, expected_shape)
-        self.assertEquals(generated_caption, "two cats laying on a couch")
+        self.assertEquals(generated_caption, "two cats laying on a pink blanket")
