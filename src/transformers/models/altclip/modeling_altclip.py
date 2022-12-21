@@ -1576,7 +1576,9 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`AltCLIPVisionModel`].
+
         Examples:
+
         ```python
         >>> from PIL import Image
         >>> import requests
