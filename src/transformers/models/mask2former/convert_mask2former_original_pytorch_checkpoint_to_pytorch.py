@@ -444,10 +444,10 @@ class OriginalMask2FormerCheckpointToOursConverter:
     def rename_keys_in_masked_attention_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module.decoder"
         src_prefix: str = "sem_seg_head.predictor"
-        
+
         rename_keys = []
         for i in range(self.config.decoder_config.decoder_layers - 1):
-            
+
             rename_keys.append(
                 (
                     f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_weight",
@@ -524,26 +524,39 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 )
             )
 
-            rename_keys.append((f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight", f"{dst_prefix}.layers.{i}.fc1.weight"))
-            rename_keys.append((f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias", f"{dst_prefix}.layers.{i}.fc1.bias"))
-            rename_keys.append((f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight", f"{dst_prefix}.layers.{i}.fc2.weight"))
-            rename_keys.append((f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias", f"{dst_prefix}.layers.{i}.fc2.bias"))
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.norm.weight", f"{dst_prefix}.layers.{i}.final_layer_norm.weight")
+                (f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight", f"{dst_prefix}.layers.{i}.fc1.weight")
             )
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.norm.bias", f"{dst_prefix}.layers.{i}.final_layer_norm.bias")
+                (f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias", f"{dst_prefix}.layers.{i}.fc1.bias")
             )
-    
+            rename_keys.append(
+                (f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight", f"{dst_prefix}.layers.{i}.fc2.weight")
+            )
+            rename_keys.append(
+                (f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias", f"{dst_prefix}.layers.{i}.fc2.bias")
+            )
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.norm.weight",
+                    f"{dst_prefix}.layers.{i}.final_layer_norm.weight",
+                )
+            )
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.norm.bias",
+                    f"{dst_prefix}.layers.{i}.final_layer_norm.bias",
+                )
+            )
 
         return rename_keys
 
     def replace_masked_attention_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module.decoder"
         src_prefix: str = "sem_seg_head.predictor"
-        
+
         renamed_keys = self.rename_keys_in_masked_attention_decoder(dst_state_dict, src_state_dict)
-        
+
         # add more
         renamed_keys.extend(
             [
@@ -556,14 +569,18 @@ class OriginalMask2FormerCheckpointToOursConverter:
         for i in range(mlp_len):
             renamed_keys.extend(
                 [
-                    (f"{src_prefix}.mask_embed.layers.{i}.weight", f"{dst_prefix}.mask_predictor.mask_embedder.{i}.0.weight"),
-                    (f"{src_prefix}.mask_embed.layers.{i}.bias", f"{dst_prefix}.mask_predictor.mask_embedder.{i}.0.bias"),
+                    (
+                        f"{src_prefix}.mask_embed.layers.{i}.weight",
+                        f"{dst_prefix}.mask_predictor.mask_embedder.{i}.0.weight",
+                    ),
+                    (
+                        f"{src_prefix}.mask_embed.layers.{i}.bias",
+                        f"{dst_prefix}.mask_predictor.mask_embedder.{i}.0.bias",
+                    ),
                 ]
             )
-        
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
-
 
     def replace_transformer_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module"
@@ -613,12 +630,11 @@ class OriginalMask2FormerCheckpointToOursConverter:
         src_state_dict = self.original_model.state_dict()
 
         self.replace_universal_segmentation_module(dst_state_dict, src_state_dict)
-        
+
         state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
         mask2former.load_state_dict(state_dict)
 
         return mask2former
-
 
     @staticmethod
     def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[Tuple[object, Path, Path]]:
@@ -685,9 +701,7 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
         assert torch.allclose(
             original_mask_logits, our_mask_logits, atol=3e-3
         ), "The predicted masks are not the same."
-        assert torch.allclose(
-            original_class_logits, our_class_logits, atol=3e-3
-        ), "The class logits are not the same."
+        assert torch.allclose(original_class_logits, our_class_logits, atol=3e-3), "The class logits are not the same."
 
         logger.info("✅ Test passed!")
 
@@ -793,9 +807,7 @@ if __name__ == "__main__":
         mask2former_for_segmentation = Mask2FormerForUniversalSegmentation(config=config).eval()
         mask2former_for_segmentation.model = mask2former
 
-        mask2former_for_segmentation = converter.convert_universal_segmentation(
-            mask2former_for_segmentation
-        )
+        mask2former_for_segmentation = converter.convert_universal_segmentation(mask2former_for_segmentation)
 
         test(original_model, mask2former_for_segmentation, feature_extractor)
 

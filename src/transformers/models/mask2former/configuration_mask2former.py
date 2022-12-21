@@ -15,11 +15,10 @@
 """ Mask2Former model configuration"""
 import copy
 import os
-from typing import Dict, Optional, Union, List
+from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
 from ..swin import SwinConfig
 
 
@@ -65,7 +64,8 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
         dim_feedforward (`int`, *optional*, defaults to 2048):
             Feature dimension in feedforward network for transformer decoder.
         enforce_input_projection (`bool`, *optional*, defaults to `False`):
-            Whether to add an input projection 1x1 convolution even if the input channels and hidden dim are identical in the Transformer decoder.
+            Whether to add an input projection 1x1 convolution even if the input channels and hidden dim are identical
+            in the Transformer decoder.
         common_stride (`int`, *optional*, defaults to 4):
             Parameter used for determining number of FPN levels used as part of pixel decoder.
 
@@ -85,18 +85,18 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        feature_size=256,
-        mask_feature_size=256,
-        hidden_dim=256,
-        encoder_feedforward_dim=1024,
-        activation_function="relu", 
-        encoder_layers=6,
-        decoder_layers=10,
-        num_heads=8,
-        dropout=0.1,
-        dim_feedforward=2048,
-        enforce_input_projection=False,
-        common_stride=4,
+        feature_size: Optional[int] = 256,
+        mask_feature_size: Optional[int] = 256,
+        hidden_dim: Optional[int] = 256,
+        encoder_feedforward_dim: Optional[int] = 1024,
+        activation_function: Optional[str] = "relu",
+        encoder_layers: Optional[int] = 6,
+        decoder_layers: Optional[int] = 10,
+        num_heads: Optional[int] = 8,
+        dropout: Optional[float] = 0.1,
+        dim_feedforward: Optional[int] = 2048,
+        enforce_input_projection: Optional[bool] = False,
+        common_stride: Optional[int] = 4,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -110,7 +110,7 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
         self.decoder_layers = decoder_layers
         self.num_heads = num_heads
         self.dropout = dropout
-        self.dim_feedforward = dim_feedforward 
+        self.dim_feedforward = dim_feedforward
         self.enforce_input_projection = enforce_input_projection
         self.common_stride = common_stride
 
@@ -267,7 +267,6 @@ class Mask2FormerConfig(PretrainedConfig):
         self.use_auxiliary_loss = use_auxiliary_loss
         self.feature_strides = feature_strides
         self.output_auxiliary_logits = output_auxiliary_logits
-        
 
         self.hidden_size = self.decoder_config.hidden_dim
         self.num_attention_heads = self.decoder_config.num_heads
