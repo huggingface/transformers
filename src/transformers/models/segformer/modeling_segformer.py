@@ -806,15 +806,20 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if not self.config.num_labels > 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
+            # upsample logits to the images' original size
+            upsampled_logits = nn.functional.interpolate(
+                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+            if self.config.num_labels > 1:
                 loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
                 loss = loss_fct(upsampled_logits, labels)
+            elif self.config.num_labels == 1:
+                valid_mask = ((labels >= 0) & (labels != self.config.semantic_loss_ignore_index)).float()
+                loss_fct = BCEWithLogitsLoss(reduction="none")
+                loss = loss_fct(upsampled_logits.squeeze(1), labels.float())
+                loss = (loss * valid_mask).mean()
+            else:
+                raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
 
         if not return_dict:
             if output_hidden_states:
