@@ -15,7 +15,7 @@
 """ Mask2Former model configuration"""
 import copy
 import os
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -51,27 +51,23 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
             The masks' features size, this value will also be used to specify the Feature Pyramid Network features'
             size.
         hidden_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of the encoder layers
+            Dimensionality of the encoder layers.
         encoder_feedforward_dim (`int`, *optional*, defaults to 1024):
-            Dimension of feedforward network for deformable detr encoder used as part of pixel decoder
-        norm (`str`, *optional*, defaults to `"GN"`):
-            Normalization for all convolution layers
+            Dimension of feedforward network for deformable detr encoder used as part of pixel decoder.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of layers in the deformable detr encoder used as part of pixel decoder.
         decoder_layers (`int`, *optional*, defaults to 10):
-            Number of layers in the Transformer decoder used by Mask2Former
+            Number of layers in the Transformer decoder.
         num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer
+            Number of attention heads for each attention layer.
         dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder
+            The dropout probability for all fully connected layers in the embeddings, encoder.
         dim_feedforward (`int`, *optional*, defaults to 2048):
-            Feature dimension in feedforward network for transformer decoder
-        pre_norm (`boolean``, *optional*, defaults to False):
-            Whether to use pre-LayerNorm or not in layers of transformer decoder
-        enforce_input_proj (`boolean``, *optional*, defaults to False):
-            add input project 1x1 conv even if input channels and hidden dim is identical in transformer decoder
+            Feature dimension in feedforward network for transformer decoder.
+        enforce_input_projection (`bool`, *optional*, defaults to `False`):
+            Whether to add an input projection 1x1 convolution even if the input channels and hidden dim are identical in the Transformer decoder.
         common_stride (`int`, *optional*, defaults to 4):
-            parameter used for determining number of FPN levels used as part of pixel decoder
+            Parameter used for determining number of FPN levels used as part of pixel decoder.
 
     Example:
     ```python
@@ -79,7 +75,7 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
 
     >>> # Initializing a Mask2FormerDecoderConfig with facebook/mask2former-instance-swin-small-coco style configuration
     >>> decoder_config = Mask2FormerDecoderConfig()
-    >>> configuration = Mask2FormerConfig(decoder_config=decoder_config.to_dict())
+    >>> configuration = Mask2FormerConfig(decoder_config=decoder_config)
     >>> # Initializing a Mask2FormerModel (with random weights) from the facebook/mask2former-instance-swin-small-coco style configuration
     >>> model = Mask2FormerModel(configuration)
     >>> # Accessing the model configuration
@@ -93,14 +89,13 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
         mask_feature_size=256,
         hidden_dim=256,
         encoder_feedforward_dim=1024,
-        norm="GN",
+        activation_function="relu", 
         encoder_layers=6,
         decoder_layers=10,
         num_heads=8,
         dropout=0.1,
         dim_feedforward=2048,
-        pre_norm=False,
-        enforce_input_proj=False,
+        enforce_input_projection=False,
         common_stride=4,
         **kwargs
     ):
@@ -110,14 +105,13 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
         self.mask_feature_size = mask_feature_size
         self.hidden_dim = hidden_dim
         self.encoder_feedforward_dim = encoder_feedforward_dim
-        self.norm = norm
+        self.activation_function = activation_function
         self.encoder_layers = encoder_layers
         self.decoder_layers = decoder_layers
         self.num_heads = num_heads
         self.dropout = dropout
-        self.dim_feedforward = dim_feedforward
-        self.pre_norm = pre_norm
-        self.enforce_input_proj = enforce_input_proj
+        self.dim_feedforward = dim_feedforward 
+        self.enforce_input_projection = enforce_input_projection
         self.common_stride = common_stride
 
     @classmethod
@@ -155,7 +149,7 @@ class Mask2FormerConfig(PretrainedConfig):
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model. If unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
-        decoder_config (`dict`, *optional*):
+        decoder_config (`PretrainedConfig` or `dict`, *optional*, defaults to `Mask2FormerDecoderConfig()`):
             The configuration passed to the pixel decoder and transformer decoder models. Includes the number of
             layers, hidden state dimensions, normalization settings, etc.
         ignore_value (`int`, *optional*, defaults to 255):
@@ -180,21 +174,13 @@ class Mask2FormerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (`float``, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        layer_norm_eps (`float``, *optional*, defaults to 1e-05):
-            description
-        is_train (`boolean``, *optional*, defaults to False):
-            description
         use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
             the logits from each decoder's stage.
         feature_strides (`List[int]`, *optional*, defaults to [4, 8, 16, 32]):
-            Feature strides corresponding to features generated from backbone network
-        deep_supervision (`boolean``, *optional*, defaults to True):
-            description
-
-    Raises:
-        `ValueError`:
-            Raised if the backbone model type selected is not in `["swin"]`.
+            Feature strides corresponding to features generated from backbone network.
+        output_auxiliary_logits (`bool`, *optional*):
+            Should the model output its `auxiliary_logits` or not.
 
     Examples:
 
@@ -213,29 +199,26 @@ class Mask2FormerConfig(PretrainedConfig):
 
     """
     model_type = "mask2former"
-    backbones_supported = ["swin"]
     attribute_map = {"hidden_size": "mask_feature_size"}
 
     def __init__(
         self,
         backbone_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
-        ignore_value=255,
-        num_queries=150,
-        no_object_weight=0.1,
-        class_weight=2.0,
-        mask_weight=5.0,
-        dice_weight=5.0,
-        train_num_points=12544,
-        oversample_ratio=3.0,
-        importance_sample_ratio=0.75,
-        init_std=0.02,
-        init_xavier_std=1.0,
-        layer_norm_eps=1e-05,
-        is_train=False,
-        use_auxiliary_loss=True,
-        feature_strides=[4, 8, 16, 32],
-        deep_supervision=True,
+        ignore_value: Optional[int] = 255,
+        num_queries: Optional[int] = 150,
+        no_object_weight: Optional[float] = 0.1,
+        class_weight: Optional[float] = 2.0,
+        mask_weight: Optional[float] = 5.0,
+        dice_weight: Optional[float] = 5.0,
+        train_num_points: Optional[int] = 12544,
+        oversample_ratio: Optional[float] = 3.0,
+        importance_sample_ratio: Optional[float] = 0.75,
+        init_std: Optional[float] = 0.02,
+        init_xavier_std: Optional[float] = 1.0,
+        use_auxiliary_loss: Optional[bool] = True,
+        feature_strides: Optional[List[int]] = [4, 8, 16, 32],
+        output_auxiliary_logits: Optional[bool] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -253,18 +236,6 @@ class Mask2FormerConfig(PretrainedConfig):
                 drop_path_rate=0.3,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
-        else:
-            backbone_model_type = (
-                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
-            )
-            if backbone_model_type not in self.backbones_supported:
-                raise ValueError(
-                    f"Backbone {backbone_model_type} not supported, please use one of"
-                    f" {','.join(self.backbones_supported)}"
-                )
-            if isinstance(backbone_config, dict):
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
 
         decoder_config_dict = kwargs.pop("decoder_config_dict", None)
 
@@ -276,6 +247,10 @@ class Mask2FormerConfig(PretrainedConfig):
             logger.info("decoder_config is None. Initializing the Mask2FormerDecoderConfig with default values.")
 
         self.backbone_config = backbone_config
+
+        if isinstance(decoder_config, PretrainedConfig):
+            decoder_config = decoder_config.to_dict()
+
         self.decoder_config = Mask2FormerDecoderConfig(**decoder_config)
 
         self.ignore_value = ignore_value
@@ -289,11 +264,10 @@ class Mask2FormerConfig(PretrainedConfig):
         self.importance_sample_ratio = importance_sample_ratio
         self.init_std = init_std
         self.init_xavier_std = init_xavier_std
-        self.layer_norm_eps = layer_norm_eps
-        self.is_train = is_train
         self.use_auxiliary_loss = use_auxiliary_loss
         self.feature_strides = feature_strides
-        self.deep_supervision = deep_supervision
+        self.output_auxiliary_logits = output_auxiliary_logits
+        
 
         self.hidden_size = self.decoder_config.hidden_dim
         self.num_attention_heads = self.decoder_config.num_heads
