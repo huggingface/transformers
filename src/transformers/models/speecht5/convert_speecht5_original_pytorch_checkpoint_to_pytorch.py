@@ -30,6 +30,8 @@ from transformers import (
     SpeechT5ForTextToSpeech,
     SpeechT5Tokenizer,
     SpeechT5CTCTokenizer,
+    SpeechT5Processor,
+    Wav2Vec2FeatureExtractor,
     logging,
 )
 from transformers.tokenization_utils import AddedToken
@@ -363,19 +365,18 @@ def convert_speecht5_checkpoint(
             tokenizer.add_special_tokens({"mask_token": mask_token})
             tokenizer.add_tokens(["<ctc_blank>"])
 
-        tokenizer.save_pretrained(pytorch_dump_folder_path)
-
-        #TODO: save processor
-        #         return_attention_mask = True if config.feat_extract_norm == "layer" else False
-        #         feature_extractor = Wav2Vec2FeatureExtractor(
-        #             feature_size=1,
-        #             sampling_rate=16000,
-        #             padding_value=0,
-        #             do_normalize=True,
-        #             return_attention_mask=return_attention_mask,
-        #         )
-        #         processor = SpeechT5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-        #         processor.save_pretrained(pytorch_dump_folder_path)
+        if task in ["s2t", "ctc"]:
+            feature_extractor = Wav2Vec2FeatureExtractor(
+                feature_size=1,
+                sampling_rate=16000,
+                padding_value=0.0,
+                do_normalize=False,
+                return_attention_mask=True,
+            )
+            processor = SpeechT5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor.save_pretrained(pytorch_dump_folder_path)
+        else:
+            tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     fairseq_checkpoint = torch.load(checkpoint_path)
     recursively_load_weights(fairseq_checkpoint["model"], model, task)
