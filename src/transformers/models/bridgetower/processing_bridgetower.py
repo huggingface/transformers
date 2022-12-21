@@ -92,11 +92,7 @@ class BridgeTowerProcessor(ProcessorMixin):
         )
         # add pixel_values + pixel_mask
         encoding_image_processor = self.image_processor(
-            images,
-            return_tensors=return_tensors,
-            do_normalize=True,
-            do_center_crop=True,
-            **kwargs
+            images, return_tensors=return_tensors, do_normalize=True, do_center_crop=True, **kwargs
         )
         encoding.update(encoding_image_processor)
 

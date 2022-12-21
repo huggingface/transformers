@@ -14,11 +14,11 @@
 # limitations under the License.
 """PyTorch BridgeTower Model"""
 
+import math
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -34,13 +34,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
 )
 from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -237,7 +231,9 @@ class BridgeTowerVisualTransformer(nn.Module):
 
         scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
-        self.positional_embedding = nn.Parameter(scale * torch.randn((output_resolution // patch_size) ** 2 + 1, width))
+        self.positional_embedding = nn.Parameter(
+            scale * torch.randn((output_resolution // patch_size) ** 2 + 1, width)
+        )
         self.ln_pre = BridgeTowerLayerNorm(width)
 
         self.transformer = BridgeTowerTransformer(
@@ -253,8 +249,7 @@ class BridgeTowerVisualTransformer(nn.Module):
         # shape = [*, width, grid, grid]
         visual_output = self.conv1(x)
         # shape = [*, width, grid ** 2]
-        visual_output = visual_output.reshape(
-            visual_output.shape[0], visual_output.shape[1], -1)
+        visual_output = visual_output.reshape(visual_output.shape[0], visual_output.shape[1], -1)
         # shape = [*, grid ** 2, width]
         visual_output = visual_output.permute(0, 2, 1)
         t = self.class_embedding.to(visual_output.dtype) + torch.zeros(
@@ -287,8 +282,7 @@ class BridgeTowerVisualTransformer(nn.Module):
         # shape = [*, width, grid, grid]
         visual_outputs_pre = self.conv1(x)
         # shape = [*, width, grid ** 2]
-        visual_outputs_pre = visual_outputs_pre.reshape(
-            visual_outputs_pre.shape[0], visual_outputs_pre.shape[1], -1)
+        visual_outputs_pre = visual_outputs_pre.reshape(visual_outputs_pre.shape[0], visual_outputs_pre.shape[1], -1)
         # shape = [*, grid ** 2, width]
         visual_outputs_pre = visual_outputs_pre.permute(0, 2, 1)
         embeddings_to = self.class_embedding.to(visual_outputs_pre.dtype) + torch.zeros(
@@ -296,7 +290,8 @@ class BridgeTowerVisualTransformer(nn.Module):
             1,
             visual_outputs_pre.shape[-1],
             dtype=visual_outputs_pre.dtype,
-            device=visual_outputs_pre.device,)
+            device=visual_outputs_pre.device,
+        )
         # shape = [*, grid ** 2 + 1, width]
         visual_outputs_pre = torch.cat([embeddings_to, visual_outputs_pre], dim=1)
         visual_outputs_pre = visual_outputs_pre + self.positional_embedding.to(visual_outputs_pre.dtype)
@@ -313,6 +308,7 @@ class BridgeTowerVisualTransformer(nn.Module):
 
 class BridgeTowerCLIP(nn.Module):
     config_class = BridgeTowerVisionConfig
+
     def __init__(
         self,
         embed_dim: int,
@@ -423,10 +419,8 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-    (
-        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-        " top."
-    ),
+    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+    " top.",
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -458,8 +452,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             output_resolution=vision_config.output_resolution,
             stop_gradient=vision_config.stop_gradient,
             vit_layernorm_shared=vision_config.vit_layernorm_shared,
-            vit_remove_last=vision_config.vit_remove_last
-            )
+            vit_remove_last=vision_config.vit_remove_last,
+        )
 
         text_config = config.text_config
         self.text_transformer = BridgeTowerTextModel(text_config)
@@ -959,7 +953,6 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->BridgeTower
 class BridgeTowerSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -1206,7 +1199,6 @@ class BridgeTowerPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLayer with Roberta->BridgeTowerText
 class BridgeTowerTextLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1479,7 +1471,6 @@ class BridgeTowerTextEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -1511,11 +1502,11 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
 
     """
+
     config_class = BridgeTowerTextConfig
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.bert.modeling_bert.RobertaModel.__init__ with Roberta->BridgeTower
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -1542,7 +1533,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertModel.forward
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

@@ -174,10 +174,10 @@ _import_structure = {
     "models.bridgetower": [
         "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BridgeTowerConfig",
-        "BridgeTowerTextConfig",
-        "BridgeTowerVisionConfig",
         "BridgeTowerImageProcessor",
         "BridgeTowerProcessor",
+        "BridgeTowerTextConfig",
+        "BridgeTowerVisionConfig",
     ],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],

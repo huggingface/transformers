@@ -16,7 +16,8 @@
 
 import copy
 import os
-from typing import Optional, Union
+from typing import Union
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -30,6 +31,7 @@ BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     ),
 }
 
+
 class BridgeTowerVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the vision configuration of a [`BridgeTowerModel`]. Instantiating a
@@ -40,7 +42,6 @@ class BridgeTowerVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-
         output_resolution (`int`, *optional*, defaults to 288):
             The final size (resolution) of each image.
         input_resolution_before (`int`, *optional*, defaults to 224):
@@ -125,15 +126,15 @@ class BridgeTowerVisionConfig(PretrainedConfig):
 
 class BridgeTowerTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the text configuration of a [`BridgeTowerModel`]. The default values here are copied from RoBERTa.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the bridgetower-base
-    [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
+    This is the configuration class to store the text configuration of a [`BridgeTowerModel`]. The default values here
+    are copied from RoBERTa. Instantiating a configuration with the defaults will yield a similar configuration to that
+    of the bridgetower-base [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the text part of the model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
@@ -380,11 +381,11 @@ class BridgeTowerConfig(PretrainedConfig):
         self.vision_config = BridgeTowerTextConfig(**vision_config)
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: BridgeTowerTextConfig, vision_config: BridgeTowerVisionConfig, **kwargs
+    def from_text_vision_configs(
+        cls, text_config: BridgeTowerTextConfig, vision_config: BridgeTowerVisionConfig, **kwargs
     ):
         r"""
-        Instantiate a [`BridgeTowerConfig`] (or a derived class) from BridgeTower text model configuration.
-        Returns:
+        Instantiate a [`BridgeTowerConfig`] (or a derived class) from BridgeTower text model configuration. Returns:
             [`BridgeTowerConfig`]: An instance of a configuration object
         """
 
