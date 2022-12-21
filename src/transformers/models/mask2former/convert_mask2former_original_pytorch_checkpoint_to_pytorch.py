@@ -441,135 +441,155 @@ class OriginalMask2FormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     # Transformer Decoder
-    def replace_keys_qkv_transformer_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "transformer_module.decoder.layers"
+    def rename_keys_in_masked_attention_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+        dst_prefix: str = "transformer_module.decoder"
         src_prefix: str = "sem_seg_head.predictor"
+        
+        rename_keys = []
         for i in range(self.config.decoder_config.decoder_layers - 1):
-            # read in weights + bias of input projection layer of self-attention
-            in_proj_weight = src_state_dict.pop(
-                f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_weight"
+            
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_weight",
+                    f"{dst_prefix}.layers.{i}.self_attn.in_proj_weight",
+                )
             )
-            in_proj_bias = src_state_dict.pop(
-                f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_bias"
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_bias",
+                    f"{dst_prefix}.layers.{i}.self_attn.in_proj_bias",
+                )
             )
-            # next, add query, keys and values (in that order) to the state dict
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.q_proj.bias"] = in_proj_bias[:256]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.out_proj.weight",
+                    f"{dst_prefix}.layers.{i}.self_attn.out_proj.weight",
+                )
+            )
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.out_proj.bias",
+                    f"{dst_prefix}.layers.{i}.self_attn.out_proj.bias",
+                )
+            )
+
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_self_attention_layers.{i}.norm.weight",
+                    f"{dst_prefix}.layers.{i}.self_attn_layer_norm.weight",
+                )
+            )
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_self_attention_layers.{i}.norm.bias",
+                    f"{dst_prefix}.layers.{i}.self_attn_layer_norm.bias",
+                )
+            )
+
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.in_proj_weight",
+                    f"{dst_prefix}.layers.{i}.cross_attn.in_proj_weight",
+                )
+            )
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.in_proj_bias",
+                    f"{dst_prefix}.layers.{i}.cross_attn.in_proj_bias",
+                )
+            )
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.out_proj.weight",
+                    f"{dst_prefix}.layers.{i}.cross_attn.out_proj.weight",
+                )
+            )
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_cross_attention_layers.{i}.multihead_attn.out_proj.bias",
+                    f"{dst_prefix}.layers.{i}.cross_attn.out_proj.bias",
+                )
+            )
+
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_cross_attention_layers.{i}.norm.weight",
+                    f"{dst_prefix}.layers.{i}.cross_attn_layer_norm.weight",
+                )
+            )
+            rename_keys.append(
+                (
+                    f"{src_prefix}.transformer_cross_attention_layers.{i}.norm.bias",
+                    f"{dst_prefix}.layers.{i}.cross_attn_layer_norm.bias",
+                )
+            )
+
+            rename_keys.append((f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight", f"{dst_prefix}.layers.{i}.fc1.weight"))
+            rename_keys.append((f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias", f"{dst_prefix}.layers.{i}.fc1.bias"))
+            rename_keys.append((f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight", f"{dst_prefix}.layers.{i}.fc2.weight"))
+            rename_keys.append((f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias", f"{dst_prefix}.layers.{i}.fc2.bias"))
+            rename_keys.append(
+                (f"{src_prefix}.transformer_ffn_layers.{i}.norm.weight", f"{dst_prefix}.layers.{i}.final_layer_norm.weight")
+            )
+            rename_keys.append(
+                (f"{src_prefix}.transformer_ffn_layers.{i}.norm.bias", f"{dst_prefix}.layers.{i}.final_layer_norm.bias")
+            )
+    
+
+        return rename_keys
+
+    def replace_masked_attention_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+        dst_prefix: str = "transformer_module.decoder"
+        src_prefix: str = "sem_seg_head.predictor"
+        
+        renamed_keys = self.rename_keys_in_masked_attention_decoder(dst_state_dict, src_state_dict)
+        
+        # add more
+        renamed_keys.extend(
+            [
+                (f"{src_prefix}.decoder_norm.weight", f"{dst_prefix}.layernorm.weight"),
+                (f"{src_prefix}.decoder_norm.bias", f"{dst_prefix}.layernorm.bias"),
+            ]
+        )
+
+        mlp_len = 3
+        for i in range(mlp_len):
+            renamed_keys.extend(
+                [
+                    (f"{src_prefix}.mask_embed.layers.{i}.weight", f"{dst_prefix}.mask_predictor.mask_embedder.{i}.0.weight"),
+                    (f"{src_prefix}.mask_embed.layers.{i}.bias", f"{dst_prefix}.mask_predictor.mask_embedder.{i}.0.bias"),
+                ]
+            )
+        
+
+        self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
+
 
     def replace_transformer_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module"
         src_prefix: str = "sem_seg_head.predictor"
 
-        def rename_keys_for_weight_bias(src_prefix: str, dst_prefix: str):
-            return [
-                (f"{src_prefix}.weight", f"{dst_prefix}.weight"),
-                (f"{src_prefix}.bias", f"{dst_prefix}.bias"),
-            ]
+        self.replace_masked_attention_decoder(dst_state_dict, src_state_dict)
 
-        def rename_keys_for_attn(src_prefix: str, dst_prefix: str):
-            attn_keys = [
-                (f"{src_prefix}.in_proj_bias", f"{dst_prefix}.in_proj_bias"),
-                (f"{src_prefix}.in_proj_weight", f"{dst_prefix}.in_proj_weight"),
-            ]
-            attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"))
-
-            return attn_keys
-
-        def rename_keys_for_self_attn(src_prefix: str, dst_prefix: str):
-            attn_keys = []
-            attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"))
-
-            return attn_keys
-
-        def rename_keys_for_cross_attn_layer(src_prefix: str, dst_prefix: str):
-            cross_attn_layer_keys = []
-
-            cross_attn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm"))
-            cross_attn_layer_keys.extend(
-                rename_keys_for_attn(f"{src_prefix}.multihead_attn", f"{dst_prefix}.multihead_attn")
-            )
-
-            return cross_attn_layer_keys
-
-        def rename_keys_for_self_attn_layer(src_prefix: str, dst_prefix: str):
-            self_attn_layer_keys = []
-
-            self_attn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm"))
-            self_attn_layer_keys.extend(
-                rename_keys_for_self_attn(f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn")
-            )
-
-            return self_attn_layer_keys
-
-        def rename_keys_for_ffn_layer(src_prefix: str, dst_prefix: str):
-            ffn_layer_keys = []
-
-            ffn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.linear1", f"{dst_prefix}.linear1"))
-            ffn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.linear2", f"{dst_prefix}.linear2"))
-            ffn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm"))
-
-            return ffn_layer_keys
-
-        def rename_keys_for_transformer_decoder_layer(src_prefix: str, dst_prefix: str, idx: int):
-            transformer_decoder_layer_keys = []
-
-            transformer_decoder_layer_keys.extend(
-                rename_keys_for_cross_attn_layer(
-                    f"{src_prefix}.transformer_cross_attention_layers.{idx}", f"{dst_prefix}.{idx}.cross_attn"
-                )
-            )
-
-            transformer_decoder_layer_keys.extend(
-                rename_keys_for_self_attn_layer(
-                    f"{src_prefix}.transformer_self_attention_layers.{idx}", f"{dst_prefix}.{idx}.self_attn"
-                )
-            )
-
-            transformer_decoder_layer_keys.extend(
-                rename_keys_for_ffn_layer(f"{src_prefix}.transformer_ffn_layers.{idx}", f"{dst_prefix}.{idx}.ffn")
-            )
-
-            return transformer_decoder_layer_keys
-
-        # positional embedding for object queries
         renamed_keys = [
             (f"{src_prefix}.query_embed.weight", f"{dst_prefix}.queries_embedder.weight"),
             (f"{src_prefix}.query_feat.weight", f"{dst_prefix}.queries_features.weight"),
             (f"{src_prefix}.level_embed.weight", f"{dst_prefix}.level_embed.weight"),
         ]
 
-        # norm
-        renamed_keys.extend(
-            rename_keys_for_weight_bias(f"{src_prefix}.decoder_norm", f"{dst_prefix}.decoder.decoder_norm")
-        )
-
-        renamed_keys.extend(
-            rename_keys_for_weight_bias(f"{src_prefix}.class_embed", f"{dst_prefix}.decoder.class_embed")
-        )
-
-        for i in range(3):
-            renamed_keys.extend(
-                rename_keys_for_weight_bias(
-                    f"{src_prefix}.mask_embed.layers.{i}", f"{dst_prefix}.decoder.mask_embed.{i}.0"
-                )
-            )
-
-        # decoder layers
-        for i in range(self.config.decoder_config.decoder_layers - 1):
-            renamed_keys.extend(
-                rename_keys_for_transformer_decoder_layer(
-                    f"{src_prefix}",
-                    f"{dst_prefix}.decoder.layers",
-                    i,
-                )
-            )
-
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
-        self.replace_keys_qkv_transformer_decoder(dst_state_dict, src_state_dict)
+
+    def replace_universal_segmentation_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+        dst_prefix: str = ""
+        src_prefix: str = "sem_seg_head.predictor"
+
+        renamed_keys = [
+            (f"{src_prefix}.class_embed.weight", f"{dst_prefix}class_predictor.weight"),
+            (f"{src_prefix}.class_embed.bias", f"{dst_prefix}class_predictor.bias"),
+        ]
+
+        logger.info(f"Replacing keys {pformat(renamed_keys)}")
+        self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     def convert(self, mask2former: Mask2FormerModel) -> Mask2FormerModel:
         dst_state_dict = TrackedStateDict(mask2former.state_dict())
@@ -585,6 +605,20 @@ class OriginalMask2FormerCheckpointToOursConverter:
         state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
         mask2former.load_state_dict(state_dict)
         return mask2former
+
+    def convert_universal_segmentation(
+        self, mask2former: Mask2FormerForUniversalSegmentation
+    ) -> Mask2FormerForUniversalSegmentation:
+        dst_state_dict = TrackedStateDict(mask2former.state_dict())
+        src_state_dict = self.original_model.state_dict()
+
+        self.replace_universal_segmentation_module(dst_state_dict, src_state_dict)
+        
+        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
+        mask2former.load_state_dict(state_dict)
+
+        return mask2former
+
 
     @staticmethod
     def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[Tuple[object, Path, Path]]:
@@ -651,6 +685,9 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
         assert torch.allclose(
             original_mask_logits, our_mask_logits, atol=3e-3
         ), "The predicted masks are not the same."
+        assert torch.allclose(
+            original_class_logits, our_class_logits, atol=3e-3
+        ), "The class logits are not the same."
 
         logger.info("✅ Test passed!")
 
@@ -755,6 +792,10 @@ if __name__ == "__main__":
 
         mask2former_for_segmentation = Mask2FormerForUniversalSegmentation(config=config).eval()
         mask2former_for_segmentation.model = mask2former
+
+        mask2former_for_segmentation = converter.convert_universal_segmentation(
+            mask2former_for_segmentation
+        )
 
         test(original_model, mask2former_for_segmentation, feature_extractor)
 
