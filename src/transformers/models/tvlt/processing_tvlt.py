@@ -16,13 +16,10 @@
 Processor class for TVLT.
 """
 
-from typing import List, Optional, Union
-
-from ...processing_utils import PushToHubMixin
-from ...utils import TensorType
+from ...processing_utils import ProcessorMixin
 
 
-class TvltProcessor(PushToHubMixin):
+class TvltProcessor(ProcessorMixin):
     r"""
     Constructs a TVLT processor which wraps a TVLT image processor and TVLT feature extractor into a single processor.
 
@@ -33,19 +30,24 @@ class TvltProcessor(PushToHubMixin):
         image_processor (`TvltImageProcessor`):
             An instance of [`TvltImageProcessor`]. The image processor is a required input.
         feature_extractor (`TvltFeatureExtractor`):
-            An instance of [`TvltFeatureExtractor`]. The audio feature extractor is a required input.
+            An instance of [`TvltFeatureExtractor`]. The feature extractor is a required input.
     """
     attributes = ["image_processor", "feature_extractor"]
     image_processor_class = "TvltImageProcessor"
-    audio_feature_extractor_class = "TvltFeatureExtractor"
+    feature_extractor_class = "TvltFeatureExtractor"
 
     def __init__(self, image_processor, feature_extractor):
         super().__init__(image_processor=image_processor, feature_extractor=feature_extractor)
 
-    def __call__(self, visual_inputs=None, audio_inputs=None, visual_inputs_mixed=None, sampling_rate=None, *args, **kwargs):
+        self.current_image_processor = image_processor
+        self.current_feature_extractor = feature_extractor
+
+    def __call__(
+        self, visual_inputs=None, audio_inputs=None, visual_inputs_mixed=None, sampling_rate=None, *args, **kwargs
+    ):
         """
-        Forwards the `visual_inputs` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`] 
-        and the `audio_inputs` argument to TvltFeatureExtractor's [`~TvltFeatureExtractor.__call__`]. 
+        Forwards the `visual_inputs` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`]
+        and the `audio_inputs` argument to TvltFeatureExtractor's [`~TvltFeatureExtractor.__call__`].
         Please refer to the docstring of the above two methods for more information.
         """
 
@@ -54,20 +56,29 @@ class TvltProcessor(PushToHubMixin):
 
         if visual_inputs is not None:
             visual_inputs_dict = self.current_image_processor(visual_inputs, *args, **kwargs)
+            visual_inputs_mixed_dict = None
         if visual_inputs_mixed is not None:
-            visual_inputs_mixed_dict = self.current_image_processor(visual_inputs_mixed, is_mixed=True, *args, **kwargs)
+            visual_inputs_mixed_dict = self.current_image_processor(
+                visual_inputs_mixed, is_mixed=True, *args, **kwargs
+            )
         if audio_inputs is not None:
-            audio_inputs_dict = self.current_audio_feature_extractor(audio_inputs, *args, sampling_rate=sampling_rate, **kwargs)
+            audio_inputs_dict = self.current_feature_extractor(
+                audio_inputs, *args, sampling_rate=sampling_rate, **kwargs
+            )
 
         if audio_inputs is None:
-            return visual_inputs_dict
+            output_dict = visual_inputs_dict
         elif visual_inputs is None:
-            return audio_inputs_dict
+            output_dict = audio_inputs_dict
+            return output_dict
         else:
-            return dict(pixel_inputs.items() + visual_inputs_mixed_dict.items() + audio_inputs.items())
+            output_dict = dict(visual_inputs_dict.items() + audio_inputs.items())
+        if visual_inputs_mixed_dict is not None:
+            output_dict.update(visual_inputs_mixed_dict)
+        return output_dict
 
     @property
     def model_input_names(self):
         image_processor_input_names = self.current_image_processor.model_input_names
-        audio_feature_extractor_input_names = self.current_audio_feature_extractor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + audio_feature_extractor_input_names))
+        feature_extractor_input_names = self.current_feature_extractor.model_input_names
+        return list(dict.fromkeys(image_processor_input_names + feature_extractor_input_names))

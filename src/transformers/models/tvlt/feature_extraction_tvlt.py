@@ -14,14 +14,15 @@
 # limitations under the License.
 """Feature extractor class for TVLT."""
 
+from math import ceil
 from typing import List, Optional, Union
 
 import numpy as np
+import torch
 from numpy.fft import fft
 
-from ...feature_extraction_sequence_utils import SequenceFeatureExtractor, BatchFeature
-from ...image_utils import is_torch_tensor
-from ...utils import TensorType, is_vision_available, is_speech_available, logging
+from ...feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
+from ...utils import TensorType, is_speech_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -29,7 +30,7 @@ logger = logging.get_logger(__name__)
 if is_speech_available():
     import torchaudio
 
-    
+
 class TvltFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TVLT audio feature extractor. This feature extractor can be used to prepare audios for the model.
@@ -38,53 +39,61 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
     should refer to this superclass for more information regarding those methods.
 
     Args:
-
+        audio_size (`Dict[str, int]` *optional*, defaults to `2048`):
+            Time length of the output audio spectrogram.
+        num_channels (`int` *optional*, defaults to `1`):
+            Number of audio channels.
+        patch_size (`List[int]` *optional*, defaults to `[16, 16]`):
+            The patch size of audio patch embedding.
+        feature_size (`int`, defaults to 128):
+            The feature dimension of the extracted audio spectrogram.
+        sampling_rate (`int`, defaults to 41000):
+            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+        hop_length (`int`, defaults to 512):
+            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+        chunk_length (`int`, defaults to 30):
+            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
+            sequences.
+        n_fft (`int`, defaults to 2048):
+            Size of the Fourier transform.
+        padding_value (`float`, *optional*, defaults to -1.0):
+            Padding value used to pad the audio. Should correspond to silences.
     """
 
     model_input_names = ["audio_values", "audio_masks"]
 
     def __init__(
         self,
-        audio_size=1024,
+        audio_size=2048,
         num_channels=1,
-        audio_patch_size=[16, 16],
+        patch_size=[16, 16],
         feature_size=128,
         sampling_rate=44100,
         hop_length=512,
         chunk_length=30,
         n_fft=2048,
-        padding_value=0.0,
-        return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
+        padding_value=-1.0,
         **kwargs
     ):
         super().__init__(
             feature_size=feature_size,
             sampling_rate=sampling_rate,
             padding_value=padding_value,
-            return_attention_mask=return_attention_mask,
             **kwargs,
         )
 
         self.audio_size = audio_size
         self.num_channels = num_channels
-        self.audio_patch_size = audio_patch_size
-        self.freq_len = feature_size // self.audio_patch_size[1]
+        self.patch_size = patch_size
+        self.freq_len = feature_size // self.patch_size[1]
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.chunk_length = chunk_length
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
+        self.padding_value = padding_value
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
-
-    def normalize_pixel(self, audio, mean, std):
-        # normalize
-        if not isinstance(mean, np.ndarray):
-            mean = np.array(mean).astype(video.dtype)
-        if not isinstance(std, np.ndarray):
-            std = np.array(std).astype(video.dtype)
-
-        return (audio - mean[None, None, None]) / std[None, None, None]
 
     # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.get_mel_filters
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
@@ -225,53 +234,37 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         return_tensors: Optional[Union[str, TensorType]] = None,
-        truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "max_length",
-        max_length: Optional[int] = None,
+        return_attention_mask: Optional[bool] = True,
         sampling_rate: Optional[int] = None,
+        resample: bool = False,
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several video(s) or image(s) and audio(s).
-
-        <Tip warning={true}>
-
-        NumPy arrays are converted to PIL images when resizing, so the most efficient is to pass PIL images.
-
-        </Tip>
+        Main method to prepare for the model one or several audio(s).
 
         Args:
 
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            truncation (`bool`, *optional*, default to `True`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*, defaults to None):
-                If set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
                 [What are attention masks?](../glossary#attention-mask)
                 <Tip>
-                For WhisperTransoformer models, `attention_mask` should alwys be passed for batched inference, to avoid
+                For TvltTransformer models, `attention_mask` should alwys be passed for batched inference, to avoid
                 subtle bugs.
                 </Tip>
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
-            padding_value (`float`, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
+            resample (`bool`, *optional*):
+                If the sampling rate is not matched, resample the input audio to match.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -287,11 +280,16 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
-                raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
-                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
-                    f" {self.sampling_rate} and not {sampling_rate}."
-                )
+                if resample:
+                    raise ValueError(
+                        f"The model corresponding to this feature extractor: {self} was trained using a sampling rate"
+                        f" of {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled"
+                        f" with {self.sampling_rate} and not {sampling_rate}."
+                    )
+                else:
+                    raw_speech = torchaudio.functional.resample(
+                        torch.tensor(raw_speech), orig_freq=sampling_rate, new_freq=self.sampling_rate
+                    ).numpy()
         else:
             logger.warning(
                 "It is strongly recommended to pass the `sampling_rate` argument to this function. "
@@ -319,25 +317,31 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         ]
         if isinstance(audio_features[0], List):
             audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
-        max_patch_len = max([feature.shape[0] // self.audio_patch_size[0] * self.freq_len for feature in audio_features])
-        # Pad to multiple of audio patch size
-        max_patch_len = (max_patch_len // 16 + 1) * 16 if max_patch_len % 16 > 0 else max_patch_len
-        max_time_len = max_patch_len // self.freq_len * self.audio_patch_size[0]
-        audio_masks = [
-            (feature.shape[0] // self.audio_patch_size[0] * self.freq_len) * [1]
-            + (max_patch_len - feature.shape[0] // self.audio_patch_size[0] * self.freq_len) * [0]
-            for feature in audio_features
-        ]
-        audio_masks = np.array(audio_masks).astype(np.float32)
+
+        max_patch_len = max(
+            [ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len for feature in audio_features]
+        )
+        max_time_len = max_patch_len // self.freq_len * self.patch_size[0]
+        if return_attention_mask:
+            audio_masks = [
+                (ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len) * [1]
+                + (max_patch_len - ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len) * [0]
+                for feature in audio_features
+            ]
+            audio_masks = np.array(audio_masks).astype(np.float32)
 
         # convert into correct format for padding
-        padded_audio_features = np.zeros([len(audio_features), 1, max_time_len, 128]).astype(np.float32)
+        padded_audio_features = np.ones([len(audio_features), 1, max_time_len, 128]).astype(np.float32)
+        padded_audio_features = padded_audio_features * self.padding_value
         for i in range(len(audio_features)):
             feature = audio_features[i]
             padded_audio_features[i, :, : feature.shape[0], :] = feature
 
         # return as BatchFeature
-        data = {"audio_values": padded_audio_features, "audio_masks": audio_masks}
+        if return_attention_mask:
+            data = {"audio_values": padded_audio_features, "audio_masks": audio_masks}
+        else:
+            data = {"audio_values": padded_audio_features}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs

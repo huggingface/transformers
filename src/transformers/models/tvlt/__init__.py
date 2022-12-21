@@ -17,7 +17,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_speech_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -46,19 +52,23 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_tvlt"] = [
-        "TvltFeatureExtractor",
-    ]
     _import_structure["image_processing_tvlt"] = [
         "TvltImageProcessor",
     ]
-    _import_structure["processing_tvlt"] = [
-        "TvltProcessor",
-    ]
 
+try:
+    if not is_speech_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_tvlt"] = [
+        "TvltFeatureExtractor",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_tvlt import Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
+    from .processing_tvlt import TvltProcessor
 
     try:
         if not is_torch_available():
@@ -68,10 +78,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_tvlt import (
             TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TvltModel,
             TvltForPreTraining,
             TvltForQuestionAnswering,
             TvltForSequenceClassification,
+            TvltModel,
             TvltPreTrainedModel,
         )
 
@@ -81,9 +91,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_tvlt import TvltFeatureExtractor
         from .image_processing_tvlt import TvltImageProcessor
-        from .processing_tvlt import TvltProcessor
+
+    try:
+        if not is_speech_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_tvlt import TvltFeatureExtractor
 
 else:
     import sys
