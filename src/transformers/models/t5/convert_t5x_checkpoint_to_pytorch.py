@@ -12,7 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert T5X checkpoint to PyTorch"""
+"""Convert T5X checkpoint to PyTorch
+
+Steps:
+
+- Install gsutil according to https://cloud.google.com/storage/docs/gsutil_install
+- Get a T5X checkpoint at https://github.com/google-research/t5x/blob/main/docs/models.md#t5-11-checkpoints
+  Example: `gsutil -m cp -r gs://t5-data/pretrained_models/t5x/t5_1_1_small $HOME/`
+- Create or download a corresponding config for the downloaded model.
+  E.g. for T5 v1.1 small, you can use https://huggingface.co/google/t5-v1_1-small/blob/main/config.json
+- Convert: `python3 convert_t5x_checkpoint_to_pytorch.py --t5x_checkpoint_path=$HOME/t5_1_1_small --config_file=config.json --pytorch_dump_path=$HOME/t5_1_1_small_pt`
+
+"""
 
 # WARNING: Tested on the original T5 and T5 1.1 models.
 
@@ -53,7 +64,7 @@ def t5x_mlp_lookup(params, i, prefix, split_mlp_wi=False):
 
 
 def t5x_layer_norm_lookup(params, i, prefix, layer_name):
-    """Returns a layer norm param a layer."""
+    """Returns the layer norm param of a layer."""
     return params[f"{prefix}/layers_{i}/{layer_name}/scale"]
 
 
@@ -164,16 +175,8 @@ def make_state_dict(converted_params):
 
 def load_t5x_weights_in_t5(model, config, t5x_checkpoint_path):
     """Replaces the params in model witht the T5X converted params."""
-    num_weights = sum([1 for _ in model.named_parameters()])
-    num_layers = config.num_layers
-
     variables = checkpoints.load_t5x_checkpoint(t5x_checkpoint_path)
-    converted = convert_t5x_to_pytorch(variables, num_layers=num_layers)
-    if len(converted) != num_weights:
-        raise RuntimeError(
-            f"Number of converted parameters {len(converted)} does not match "
-            f"number of original parameters {num_weights}"
-        )
+    converted = convert_t5x_to_pytorch(variables, num_layers=config.num_layers)
     state_dict = make_state_dict(converted)
     model.load_state_dict(state_dict, strict=True)
 
@@ -200,7 +203,7 @@ def convert_t5x_checkpoint_to_pytorch(t5x_checkpoint_path, config_file, pytorch_
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Converts a native T5X checkpoint into a PyTorch checkpoint.")
     # Required parameters
     parser.add_argument(
         "--t5x_checkpoint_path", default=None, type=str, required=True, help="Path to the T5X checkpoint."
