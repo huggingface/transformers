@@ -656,6 +656,7 @@ class FlaxWhisperEncoder(nn.Module):
 
         outputs = self.layers(
             hidden_states,
+            attention_mask=None,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
