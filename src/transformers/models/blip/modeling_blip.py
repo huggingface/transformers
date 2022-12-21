@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2022 The Salesforce Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLIP model."""
-
+""" PyTorch BLIP model."""
 
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
@@ -21,6 +20,7 @@ from typing import Any, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn.functional import normalize
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -32,52 +32,84 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
+from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
+from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "openai/clip-vit-base-patch32"
+_CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
 
-CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/clip-vit-base-patch32",
-    # See all CLIP models at https://huggingface.co/models?filter=clip
+BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "Salesforce/blip-vqa-base",
+    "Salesforce/blip-vqa-capfit-large",
+    "Salesforce/blip-image-captioning-base",
+    "Salesforce/blip-image-captioning-large",
+    "Salesforce/blip-itm-base-coco",
+    "Salesforce/blip-itm-large-coco",
+    "Salesforce/blip-itm-base-flikr",
+    "Salesforce/blip-itm-large-flikr",
+    # See all BLIP models at https://huggingface.co/models?filter=blip
 ]
 
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
+# Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->blip
+def blip_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
 
 
 @dataclass
-class CLIPVisionModelOutput(ModelOutput):
+class BlipForConditionalGenerationModelOutput(ModelOutput):
     """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder.
 
     Args:
+        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            Languge modeling loss from the text decoder.
+        decoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
+            Prediction scores of the language modeling head of the text decoder model.
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
+            The image embeddings obtained after applying the Vision Transformer model to the input image.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_logits: Optional[Tuple[torch.FloatTensor]] = None
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class BlipTextVisionModelOutput(ModelOutput):
+    """
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Languge modeling loss from the text decoder.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -95,6 +127,7 @@ class CLIPVisionModelOutput(ModelOutput):
             heads.
     """
 
+    loss: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -102,13 +135,19 @@ class CLIPVisionModelOutput(ModelOutput):
 
 
 @dataclass
-class CLIPTextModelOutput(ModelOutput):
+class BlipImageTextMatchingModelOutput(ModelOutput):
     """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
+    scores.
 
     Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
+        itm_score (`torch.FloatTensor`):
+            The image-text similarity scores.
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Languge modeling loss from the text decoder.
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -116,22 +155,30 @@ class CLIPTextModelOutput(ModelOutput):
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        vision_pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+            Last layer hidden-state of the vision of the vision-only branch of the model.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        question_embeds (`torch.FloatTensor`):
+            The question embeddings obtained by the text projection layer.
     """
 
-    text_embeds: Optional[torch.FloatTensor] = None
+    itm_score: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.FloatTensor] = None
+    image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    vision_pooler_output: Optional[torch.FloatTensor] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_embeds: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class CLIPOutput(ModelOutput):
+class BlipOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -143,13 +190,13 @@ class CLIPOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`BlipTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`BlipVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLIPTextModel`].
+            The output of the [`BlipTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLIPVisionModel`].
+            The output of the [`BlipVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -167,42 +214,42 @@ class CLIPOutput(ModelOutput):
         )
 
 
-class CLIPVisionEmbeddings(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
+class BlipVisionEmbeddings(nn.Module):
+    def __init__(self, config: BlipVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+        self.class_embedding = nn.Parameter(
+            torch.randn(1, 1, self.embed_dim),
+        )
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
+            in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+
+        self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :].to(target_dtype)
         return embeddings
 
 
-class CLIPTextEmbeddings(nn.Module):
-    def __init__(self, config: CLIPTextConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->Blip
+class BlipTextEmbeddings(nn.Module):
+    def __init__(self, config: BlipTextConfig):
         super().__init__()
         embed_dim = config.hidden_size
 
@@ -232,7 +279,7 @@ class CLIPTextEmbeddings(nn.Module):
         return embeddings
 
 
-class CLIPAttention(nn.Module):
+class BlipAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -247,12 +294,11 @@ class CLIPAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.dropout = nn.Dropout(config.attention_dropout)
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim)
+
+        self.projection = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -260,83 +306,55 @@ class CLIPAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        mixed_qkv = self.qkv(hidden_states)
+        mixed_qkv = (
+            self.qkv(hidden_states)
+            .reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
+        query_states, key_states, value_states = (
+            mixed_qkv[0],
+            mixed_qkv[1],
+            mixed_qkv[2],
+        )
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        attention_scores = attention_scores * self.scale
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
 
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
+        new_context_layer_shape = context_layer.size()[:-2] + (self.embed_dim,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        output = self.projection(context_layer)
 
-        attn_output = torch.bmm(attn_probs, value_states)
+        outputs = (output, attention_probs) if output_attentions else (output, None)
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
+        return outputs
 
 
-class CLIPMLP(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Blip
+class BlipMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -351,20 +369,19 @@ class CLIPMLP(nn.Module):
         return hidden_states
 
 
-class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig):
+class BlipEncoderLayer(nn.Module):
+    def __init__(self, config: BlipConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIPAttention(config)
+        self.self_attn = BlipAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.mlp = CLIPMLP(config)
+        self.mlp = BlipMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
@@ -382,16 +399,15 @@ class CLIPEncoderLayer(nn.Module):
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
+            head_mask=attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = residual + hidden_states
-
+        hidden_states = hidden_states + residual
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+
+        hidden_states = hidden_states + residual
 
         outputs = (hidden_states,)
 
@@ -401,76 +417,52 @@ class CLIPEncoderLayer(nn.Module):
         return outputs
 
 
-class CLIPPreTrainedModel(PreTrainedModel):
+class BlipPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = CLIPConfig
-    base_model_prefix = "clip"
+    config_class = BlipConfig
+    base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = self.config.initializer_factor
-        if isinstance(module, CLIPTextEmbeddings):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, CLIPVisionEmbeddings):
-            factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, CLIPAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, CLIPMLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, CLIPModel):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, CLIPVisionModelWithProjection):
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, CLIPTextModelWithProjection):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
+        factor = self.config.initializer_range
+        if isinstance(module, nn.Conv2d) or isinstance(module, nn.Embedding) or isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+
+        if isinstance(module, BlipVisionEmbeddings):
+            if hasattr(self.config, "vision_config"):
+                factor = self.config.vision_config.initializer_range
+            nn.init.trunc_normal_(
+                module.position_embedding,
+                mean=0.0,
+                std=factor,
             )
 
-        if isinstance(module, nn.LayerNorm):
+            nn.init.trunc_normal_(
+                module.class_embedding,
+                mean=0.0,
+                std=factor,
+            )
+
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        elif isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CLIPEncoder):
+        if isinstance(module, BlipEncoder):
             module.gradient_checkpointing = value
 
 
-CLIP_START_DOCSTRING = r"""
+BLIP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -480,19 +472,18 @@ CLIP_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`CLIPConfig`]): Model configuration class with all the parameters of the model.
+        config ([`BlipConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-CLIP_TEXT_INPUTS_DOCSTRING = r"""
+BLIP_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`BlipProcessor`]. See [`BlipProcessor.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -517,11 +508,11 @@ CLIP_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-CLIP_VISION_INPUTS_DOCSTRING = r"""
+BLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`BlipImageProcessor`]. See [`BlipImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -532,14 +523,13 @@ CLIP_VISION_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-CLIP_INPUTS_DOCSTRING = r"""
+BLIP_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`BlipProcessor`]. See [`BlipProcessor.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -556,7 +546,7 @@ CLIP_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`BlipImageProcessor`]. See [`BlipImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -570,26 +560,26 @@ CLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-class CLIPEncoder(nn.Module):
+class BlipEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`CLIPEncoderLayer`].
+    [`BlipEncoderLayer`].
 
     Args:
-        config: CLIPConfig
+        config (`BlipConfig`):
+            The corresponding vision configuration for the `BlipEncoder`.
     """
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: BlipConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([BlipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -602,13 +592,6 @@ class CLIPEncoder(nn.Module):
                 than the model's internal embedding lookup matrix.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
@@ -648,13 +631,11 @@ class CLIPEncoder(nn.Module):
                     create_custom_forward(encoder_layer),
                     hidden_states,
                     attention_mask,
-                    causal_attention_mask,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    causal_attention_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -673,169 +654,23 @@ class CLIPEncoder(nn.Module):
         )
 
 
-class CLIPTextTransformer(nn.Module):
-    def __init__(self, config: CLIPTextConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-        self.embeddings = CLIPTextEmbeddings(config)
-        self.encoder = CLIPEncoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
+class BlipVisionModel(BlipPreTrainedModel):
+    main_input_name = "pixel_values"
+    config_class = BlipVisionConfig
 
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is None:
-            raise ValueError("You have to specify input_ids")
-
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_shape[-1])
-
-        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
-
-        bsz, seq_len = input_shape
-        # CLIP's text model uses causal mask, prepare it here.
-        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len, hidden_states.dtype).to(
-            hidden_states.device
-        )
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-        last_hidden_state = self.final_layer_norm(last_hidden_state)
-
-        # text_embeds.shape = [batch_size, sequence_length, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
-        pooled_output = last_hidden_state[
-            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
-        ]
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-    def _build_causal_attention_mask(self, bsz, seq_len, dtype):
-        # lazily create causal attention mask, with full attention between the vision tokens
-        # pytorch uses additive attention mask; fill with -inf
-        mask = torch.empty(bsz, seq_len, seq_len, dtype=dtype)
-        mask.fill_(torch.tensor(torch.finfo(dtype).min))
-        mask.triu_(1)  # zero out the lower diagonal
-        mask = mask.unsqueeze(1)  # expand mask
-        return mask
-
-
-@add_start_docstrings(
-    """The text model from CLIP without any head or projection on top.""",
-    CLIP_START_DOCSTRING,
-)
-class CLIPTextModel(CLIPPreTrainedModel):
-    config_class = CLIPTextConfig
-
-    _no_split_modules = ["CLIPEncoderLayer"]
-
-    def __init__(self, config: CLIPTextConfig):
+    def __init__(self, config: BlipVisionConfig):
         super().__init__(config)
-        self.text_model = CLIPTextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import CLIPTokenizer, CLIPTextModel
-
-        >>> model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-
-class CLIPVisionTransformer(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
-        super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = CLIPVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
-        self.encoder = CLIPEncoder(config)
+        self.embeddings = BlipVisionEmbeddings(config)
+        self.encoder = BlipEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BlipVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -857,7 +692,6 @@ class CLIPVisionTransformer(nn.Module):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -867,6 +701,8 @@ class CLIPVisionTransformer(nn.Module):
         )
 
         last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
@@ -880,81 +716,26 @@ class CLIPVisionTransformer(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-
-@add_start_docstrings(
-    """The vision model from CLIP without any head or projection on top.""",
-    CLIP_START_DOCSTRING,
-)
-class CLIPVisionModel(CLIPPreTrainedModel):
-    config_class = CLIPVisionConfig
-    main_input_name = "pixel_values"
-
-    def __init__(self, config: CLIPVisionConfig):
-        super().__init__(config)
-        self.vision_model = CLIPVisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPVisionModel
-
-        >>> model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+    def get_input_embeddings(self):
+        return self.embeddings
 
 
-@add_start_docstrings(CLIP_START_DOCSTRING)
-class CLIPModel(CLIPPreTrainedModel):
-    config_class = CLIPConfig
+@add_start_docstrings(BLIP_START_DOCSTRING)
+class BlipModel(BlipPreTrainedModel):
+    config_class = BlipConfig
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: BlipConfig):
         super().__init__(config)
 
-        if not isinstance(config.text_config, CLIPTextConfig):
+        if not isinstance(config.text_config, BlipTextConfig):
             raise ValueError(
-                "config.text_config is expected to be of type CLIPTextConfig but is of type"
+                "config.text_config is expected to be of type BlipTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, CLIPVisionConfig):
+        if not isinstance(config.vision_config, BlipVisionConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type CLIPVisionConfig but is of type"
+                "config.vision_config is expected to be of type BlipVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
@@ -965,8 +746,8 @@ class CLIPModel(CLIPPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = CLIPTextTransformer(text_config)
-        self.vision_model = CLIPVisionTransformer(vision_config)
+        self.text_model = BlipTextModel(text_config)
+        self.vision_model = BlipVisionModel(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -975,45 +756,36 @@ class CLIPModel(CLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPTextModel`].
+            applying the projection layer to the pooled output of [`BlipTextModel`].
 
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, CLIPModel
+        >>> from transformers import BlipProcessor, BlipModel
 
-        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use CLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
@@ -1022,28 +794,26 @@ class CLIPModel(CLIPPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPVisionModel`].
+            applying the projection layer to the pooled output of [`BlipVisionModel`].
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPModel
+        >>> from transformers import BlipProcessor, BlipModel
 
-        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1052,17 +822,10 @@ class CLIPModel(CLIPPreTrainedModel):
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use CLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
@@ -1071,8 +834,8 @@ class CLIPModel(CLIPPreTrainedModel):
 
         return image_features
 
-    @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPOutput, config_class=CLIPConfig)
+    @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BlipOutput, config_class=BlipConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1083,7 +846,7 @@ class CLIPModel(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLIPOutput]:
+    ) -> Union[Tuple, BlipOutput]:
         r"""
         Returns:
 
@@ -1092,10 +855,10 @@ class CLIPModel(CLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPModel
+        >>> from transformers import BlipProcessor, BlipModel
 
-        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1108,7 +871,7 @@ class CLIPModel(CLIPPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use CLIP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use BLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1148,13 +911,13 @@ class CLIPModel(CLIPPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = clip_loss(logits_per_text)
+            loss = blip_loss(logits_per_text)
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return CLIPOutput(
+        return BlipOutput(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
@@ -1167,101 +930,27 @@ class CLIPModel(CLIPPreTrainedModel):
 
 @add_start_docstrings(
     """
-    CLIP Text Model with a projection layer on top (a linear layer on top of the pooled output).
+    BLIP Model for image captioning. The model consists of a vision encoder and a text decoder. One can optionally pass
+    `input_ids` to the model, which serve as a text prompt, to make the text decoder continue the prompt. Otherwise,
+    the decoder starts generating text from the [BOS] (beginning-of-sequence) token. will start generating the caption
+    from the text input. If no text input is provided, the decoder will start with the [BOS] token only.
     """,
-    CLIP_START_DOCSTRING,
+    BLIP_START_DOCSTRING,
 )
-class CLIPTextModelWithProjection(CLIPPreTrainedModel):
-    config_class = CLIPTextConfig
-
-    _no_split_modules = ["CLIPEncoderLayer"]
-
-    def __init__(self, config: CLIPTextConfig):
-        super().__init__(config)
-
-        self.text_model = CLIPTextTransformer(config)
-
-        self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPTextModelOutput, config_class=CLIPTextConfig)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLIPTextModelOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import CLIPTokenizer, CLIPTextModelWithProjection
-
-        >>> model = CLIPTextModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> text_embeds = outputs.text_embeds
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = text_outputs[1]
-
-        text_embeds = self.text_projection(pooled_output)
-
-        if not return_dict:
-            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
-            return tuple(output for output in outputs if output is not None)
-
-        return CLIPTextModelOutput(
-            text_embeds=text_embeds,
-            last_hidden_state=text_outputs.last_hidden_state,
-            hidden_states=text_outputs.hidden_states,
-            attentions=text_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    CLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLIP_START_DOCSTRING,
-)
-class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
-    config_class = CLIPVisionConfig
+class BlipForConditionalGeneration(BlipPreTrainedModel):
+    config_class = BlipConfig
+    _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
     main_input_name = "pixel_values"
 
-    def __init__(self, config: CLIPVisionConfig):
+    def __init__(self, config: BlipConfig):
         super().__init__(config)
 
-        self.vision_model = CLIPVisionTransformer(config)
+        self.vision_model = BlipVisionModel(config.vision_config)
 
-        self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+        self.text_decoder = BlipTextLMHeadModel(config.text_config)
+
+        self.decoder_input_ids = config.text_config.bos_token_id
+        self.decoder_pad_token_id = config.text_config.pad_token_id
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1269,15 +958,18 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPVisionModelOutput, config_class=CLIPVisionConfig)
+    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BlipForConditionalGenerationModelOutput, config_class=BlipVisionConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLIPVisionModelOutput]:
+    ) -> Union[Tuple, BlipForConditionalGenerationModelOutput]:
         r"""
         Returns:
 
@@ -1286,10 +978,10 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPVisionModelWithProjection
+        >>> from transformers import BlipProcessor, BlipForConditionalGeneration
 
-        >>> model = CLIPVisionModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1297,8 +989,8 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
-        >>> image_embeds = outputs.image_embeds
         ```"""
+        batch_size = pixel_values.shape[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
@@ -1308,17 +1000,422 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = vision_outputs[1]  # pooled_output
+        image_embeds = vision_outputs[0]
 
-        image_embeds = self.visual_projection(pooled_output)
+        if input_ids is None:
+            input_ids = torch.LongTensor([[self.decoder_input_ids] * batch_size]).to(image_embeds.device)
+
+        if labels is None:
+            labels = input_ids.masked_fill(input_ids == self.decoder_pad_token_id, -100)
+
+        outputs = self.text_decoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            labels=labels,
+            return_dict=return_dict,
+        )
 
         if not return_dict:
-            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
+            outputs = (outputs[0], outputs[1], image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        return CLIPVisionModelOutput(
+        return BlipForConditionalGenerationModelOutput(
+            loss=outputs.loss,
+            decoder_logits=outputs.logits,
             image_embeds=image_embeds,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
+        )
+
+    @torch.no_grad()
+    def generate(
+        self,
+        pixel_values: torch.FloatTensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        **generate_kwargs
+    ) -> torch.LongTensor:
+        r"""
+        Overrides *generate* function to be able to use the model as a conditional generator
+
+        Parameters:
+            pixel_values (*torch.FloatTensor* of shape *(batch_size, image_width, image_height)*:
+                Input image to be processed
+            input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+                The sequence used as a prompt for the generation.
+            attention_mask (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+
+        Examples:
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import BlipProcessor, BlipForConditionalGeneration
+
+        >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model.generate(**inputs)
+        >>> print(processor.decode(outputs[0], skip_special_tokens=True))
+        two cats are laying on a couch
+        ```
+        """
+
+        batch_size = pixel_values.shape[0]
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+        )
+
+        image_embeds = vision_outputs[0]
+
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
+
+        if isinstance(input_ids, list):
+            input_ids = torch.LongTensor(input_ids)
+        elif input_ids is None:
+            input_ids = (
+                torch.LongTensor([[self.decoder_input_ids, self.config.text_config.eos_token_id]])
+                .repeat(batch_size, 1)
+                .to(image_embeds.device)
+            )
+
+        input_ids[:, 0] = self.config.text_config.bos_token_id
+        attention_mask = attention_mask[:, :-1] if attention_mask is not None else None
+
+        outputs = self.text_decoder.generate(
+            input_ids=input_ids[:, :-1],
+            eos_token_id=self.config.text_config.sep_token_id,
+            pad_token_id=self.config.text_config.pad_token_id,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_attention_mask,
+            **generate_kwargs,
+        )
+
+        return outputs
+
+
+@add_start_docstrings(
+    """
+    BLIP Model for visual question answering. The model consists of a vision encoder, a text encoder as well as a text
+    decoder. The vision encoder will encode the input image, the text encoder will encode the input question together
+    with the encoding of the image, and the text decoder will output the answer to the question.
+    """,
+    BLIP_START_DOCSTRING,
+)
+class BlipForQuestionAnswering(BlipPreTrainedModel):
+    config_class = BlipConfig
+    _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
+
+    def __init__(self, config: BlipConfig):
+        super().__init__(config)
+
+        self.vision_model = BlipVisionModel(config.vision_config)
+
+        self.text_encoder = BlipTextModel(config.text_config, add_pooling_layer=False)
+
+        self.text_decoder = BlipTextLMHeadModel(config.text_config)
+
+        self.decoder_pad_token_id = config.text_config.pad_token_id
+        self.decoder_bos_token_id = config.text_config.bos_token_id
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BlipTextVisionModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import BlipProcessor, BlipForQuestionAnswering
+
+        >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "How many cats are in the picture?"
+
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        batch_size = input_ids.shape[0]
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[0]
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long)
+
+        question_embeds = self.text_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_attention_mask,
+            return_dict=return_dict,
+        )
+
+        question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
+
+        if decoder_input_ids is None:
+            decoder_input_ids = torch.LongTensor([self.decoder_bos_token_id]).repeat((batch_size, 1))
+
+        if labels is None:
+            labels = decoder_input_ids.masked_fill(decoder_input_ids == self.decoder_pad_token_id, -100)
+
+        answer_output = self.text_decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=question_embeds,
+            encoder_attention_mask=attention_mask,
+            labels=labels,
+            return_dict=return_dict,
+            reduction="none",
+        )
+
+        decoder_loss = answer_output.loss.mean() if return_dict else answer_output[0].mean()
+
+        if not return_dict:
+            outputs = (decoder_loss, image_embeds, vision_outputs[0]) + vision_outputs[2:]
+            return tuple(output for output in outputs if output is not None)
+
+        return BlipTextVisionModelOutput(
+            loss=decoder_loss,
+            image_embeds=image_embeds,
+            last_hidden_state=vision_outputs.last_hidden_state,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+        )
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        **generate_kwargs
+    ) -> torch.LongTensor:
+        r"""
+        Overrides *generate* function to be able to use the model as a conditional generator
+
+        Parameters:
+            input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*):
+                The sequence used as a prompt for the generation.
+            pixel_values (*torch.FloatTensor* of shape *(batch_size, image_width, image_height)*:
+                Input image to be processed
+            attention_mask (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`. `1` for
+                tokens that are NOT MASKED, `0` for MASKED tokens.
+            **generate_kwargs:
+                Additional arguments passed to the *generate* function of the decoder
+
+
+        Examples:
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import BlipProcessor, BlipForQuestionAnswering
+
+        >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "How many cats are in the picture?"
+
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
+
+        >>> outputs = model.generate(**inputs)
+        >>> print(processor.decode(outputs[0], skip_special_tokens=True))
+        2
+        ```
+        """
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+        )
+
+        image_embeds = vision_outputs[0]
+
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
+
+        if isinstance(input_ids, list):
+            input_ids = torch.LongTensor(input_ids)
+
+        question_outputs = self.text_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_attention_mask,
+            return_dict=False,
+        )
+
+        question_embeds = question_outputs[0]
+
+        question_attention_mask = torch.ones(question_embeds.size()[:-1], dtype=torch.long).to(question_embeds.device)
+
+        bos_ids = torch.full(
+            (question_embeds.size(0), 1), fill_value=self.decoder_bos_token_id, device=question_embeds.device
+        )
+
+        outputs = self.text_decoder.generate(
+            input_ids=bos_ids,
+            eos_token_id=self.config.text_config.sep_token_id,
+            pad_token_id=self.config.text_config.pad_token_id,
+            encoder_hidden_states=question_embeds,
+            encoder_attention_mask=question_attention_mask,
+            **generate_kwargs,
+        )
+
+        return outputs
+
+
+@add_start_docstrings(
+    """
+    BLIP Model with a vision and text projector, and a classification head on top. The model is used in the context of
+    image-text retrieval. Given an image and a text, the model returns the probability of the text being relevant to
+    the image.
+    """,
+    BLIP_START_DOCSTRING,
+)
+class BlipForImageTextRetrieval(BlipPreTrainedModel):
+    config_class = BlipConfig
+
+    def __init__(self, config: BlipConfig):
+        super().__init__(config)
+
+        self.vision_model = BlipVisionModel(config.vision_config)
+
+        self.text_encoder = BlipTextModel(config.text_config, add_pooling_layer=False)
+
+        # vision projection layer
+        self.vision_proj = nn.Linear(config.vision_config.hidden_size, config.image_text_hidden_size)
+
+        # text projection layer
+        self.text_proj = nn.Linear(config.text_config.hidden_size, config.image_text_hidden_size)
+
+        # image text matching head
+        self.itm_head = nn.Linear(config.text_config.hidden_size, 2)
+
+        self.decoder_pad_token_id = config.text_config.pad_token_id
+        self.decoder_bos_token_id = config.text_config.bos_token_id
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
+        use_itm_head: Optional[bool] = True,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BlipTextVisionModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import BlipProcessor, BlipForImageTextRetrieval
+
+        >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "an image of a cat"
+
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[0]
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long)
+
+        if use_itm_head:
+            question_embeds = self.text_encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_atts,
+                return_dict=return_dict,
+            )
+            question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
+
+            output = self.itm_head(question_embeds[:, 0, :])
+        else:
+            question_embeds = self.text_encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=return_dict,
+            )
+            question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
+
+            image_feat = normalize(self.vision_proj(image_embeds[:, 0, :]), dim=-1)
+            text_feat = normalize(self.text_proj(question_embeds[:, 0, :]), dim=-1)
+
+            output = image_feat @ text_feat.t()
+
+        if not return_dict:
+            outputs = (output, vision_outputs[0]) + vision_outputs[2:] + (question_embeds,)
+            return tuple(output for output in outputs if output is not None)
+
+        return BlipImageTextMatchingModelOutput(
+            itm_score=output,
+            last_hidden_state=vision_outputs.last_hidden_state,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+            question_embeds=question_embeds,
         )
