@@ -193,6 +193,8 @@ class SpeechT5CTCTokenizer(SpeechT5Tokenizer):
             The token used for defining the end of a word.
         replace_word_delimiter_char (`str`, *optional*, defaults to `" "`):
             The character that replaces occurences of the `word_delimiter_token` in the final string.
+        blank_token (`str`, *optional*, defaults to `"<ctc_blank>"`):
+            The CTC blank token.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to accept lowercase input and lowercase the output when decoding.
     """
@@ -206,6 +208,7 @@ class SpeechT5CTCTokenizer(SpeechT5Tokenizer):
         pad_token="<pad>",
         word_delimiter_token="▁",
         replace_word_delimiter_char=" ",
+        blank_token="<ctc_blank>",
         do_lower_case=False,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
@@ -223,7 +226,7 @@ class SpeechT5CTCTokenizer(SpeechT5Tokenizer):
         self._word_delimiter_token = word_delimiter_token
         self.replace_word_delimiter_char = replace_word_delimiter_char
         self.do_lower_case = do_lower_case
-        self.blank_token = "<ctc_blank>"
+        self.blank_token = blank_token
 
     @property
     def word_delimiter_token(self) -> str:
@@ -287,3 +290,30 @@ class SpeechT5CTCTokenizer(SpeechT5Tokenizer):
             string = string.lower()
 
         return string
+
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        group_tokens: bool = True,
+        spaces_between_special_tokens: bool = False,
+    ) -> str:
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+
+        result = []
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_ids:
+                continue
+            result.append(token)
+
+        text = self.convert_tokens_to_string(
+            result,
+            group_tokens=group_tokens,
+            spaces_between_special_tokens=spaces_between_special_tokens,
+        )
+
+        if clean_up_tokenization_spaces:
+            text = self.clean_up_tokenization(text)
+
+        return text
