@@ -34,6 +34,7 @@ from . import (
     bit,
     blenderbot,
     blenderbot_small,
+    blip,
     bloom,
     bort,
     byt5,

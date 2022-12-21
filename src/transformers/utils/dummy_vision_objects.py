@@ -38,6 +38,13 @@ class BitImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class BlipImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ChineseCLIPFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
