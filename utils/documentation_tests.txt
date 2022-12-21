@@ -166,6 +166,7 @@ src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/squeezebert/configuration_squeezebert.py
 src/transformers/models/swin/configuration_swin.py
 src/transformers/models/swin/modeling_swin.py
+src/transformers/models/swin2sr/modeling_swin2sr.py
 src/transformers/models/swinv2/configuration_swinv2.py
 src/transformers/models/table_transformer/modeling_table_transformer.py
 src/transformers/models/time_series_transformer/configuration_time_series_transformer.py
