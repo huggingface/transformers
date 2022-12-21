@@ -12,20 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert T5X checkpoint to PyTorch
+"""
+Convert T5X checkpoint to PyTorch
 
 Steps:
-
 - Install gsutil according to https://cloud.google.com/storage/docs/gsutil_install
-- Get a T5X checkpoint at https://github.com/google-research/t5x/blob/main/docs/models.md#t5-11-checkpoints
-  Example: `gsutil -m cp -r gs://t5-data/pretrained_models/t5x/t5_1_1_small $HOME/`
-- Create or download a corresponding config for the downloaded model.
-  E.g. for T5 v1.1 small, you can use https://huggingface.co/google/t5-v1_1-small/blob/main/config.json
-- Convert: `python3 convert_t5x_checkpoint_to_pytorch.py --t5x_checkpoint_path=$HOME/t5_1_1_small --config_file=config.json --pytorch_dump_path=$HOME/t5_1_1_small_pt`
-
-"""
-
-# WARNING: Tested on the original T5 and T5 1.1 models.
+- Get a T5X checkpoint at https://github.com/google-research/t5x/blob/main/docs/models.md#t5-11-checkpoints Example:
+    `gsutil -m cp -r gs://t5-data/pretrained_models/t5x/t5_1_1_small $HOME/`
+- Create or download a corresponding config for the downloaded model. E.g. for T5 v1.1 small, you can use
+    https://huggingface.co/google/t5-v1_1-small/blob/main/config.json
+- Convert: ```
+    python3 convert_t5x_checkpoint_to_pytorch.py --t5x_checkpoint_path=$HOME/t5_1_1_small --config_file=config.json\
+      --pytorch_dump_path=$HOME/t5_1_1_small_pt
+    ```
+    """
 
 import argparse
 import collections
@@ -84,7 +84,6 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int):
 
     # Encoder.
     for i in range(num_layers):
-
         # Block i, layer 0 (Self Attention).
         layer_norm = t5x_layer_norm_lookup(old, i, "encoder", "pre_attention_layer_norm")
         k, o, q, v = t5x_attention_lookup(old, i, "encoder", "attention")
@@ -112,7 +111,6 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int):
 
     # Decoder.
     for i in range(num_layers):
-
         # Block i, layer 0 (Self Attention).
         layer_norm = t5x_layer_norm_lookup(old, i, "decoder", "pre_self_attention_layer_norm")
         k, o, q, v = t5x_attention_lookup(old, i, "decoder", "self_attention")
@@ -213,9 +211,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help=(
-            "The config json file corresponding to the pre-trained T5 model. \nThis specifies the model architecture."
-        ),
+        help="The config json file corresponding to the pre-trained T5 model.\nThis specifies the model architecture.",
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
