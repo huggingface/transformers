@@ -16,9 +16,12 @@
 
 import unittest
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
+
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
 
 
 if is_torch_available():
@@ -29,7 +32,7 @@ if is_vision_available():
 
     from transformers import TvltImageProcessor
 
-    
+
 class TvltImageProcessorTester(unittest.TestCase):
     def __init__(
         self,
@@ -78,7 +81,6 @@ class TvltImageProcessorTester(unittest.TestCase):
 @require_torch
 @require_vision
 class TvltImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     image_processor_class = TvltImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -137,7 +139,7 @@ class TvltImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase
 
     def test_call_numpy(self):
         # Initialize image_processor
-        image_processor = self.image_processor_class(**self.feat_extract_dict)
+        image_processor = self.image_processor_class(**self.image_processor_dict)
         # create random numpy tensors
         video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
         for video in video_inputs:
@@ -172,7 +174,7 @@ class TvltImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase
 
     def test_call_pytorch(self):
         # Initialize image_processor
-        image_processor = self.image_processor_class(**self.feat_extract_dict)
+        image_processor = self.image_processor_class(**self.image_processor_dict)
         # create random PyTorch tensors
         video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
         for video in video_inputs:

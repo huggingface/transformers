@@ -18,11 +18,17 @@ import unittest
 
 import numpy as np
 
-from transformers import is_vision_available
-from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
+from transformers import is_speech_available, is_vision_available
+from transformers.testing_utils import require_torch
+
 
 if is_vision_available():
-    from transformers import TvltImageProcessor, TvltFeatureExtractor, TvltProcessor
+    from transformers import TvltImageProcessor
+
+if is_speech_available():
+    from transformers import TvltFeatureExtractor
+
+from transformers import TvltProcessor
 
 
 @require_torch
@@ -34,21 +40,21 @@ class TvltProcessorTest(unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return TvltImageProcessor.from_pretrained(self.checkpoint, **kwargs)
 
-    def get_audio_feature_extractor(self, **kwargs):
+    def get_feature_extractor(self, **kwargs):
         return TvltFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def test_audio_feature_extractor(self):
+    def test_feature_extractor(self):
         image_processor = self.get_image_processor()
-        audio_feature_extractor = self.get_audio_feature_extractor()
+        feature_extractor = self.get_feature_extractor()
 
-        processor = TvltProcessor(image_processor=image_processor, audio_feature_extractor=audio_feature_extractor)
+        processor = TvltProcessor(image_processor=image_processor, feature_extractor=feature_extractor)
 
         audio_inputs = np.ones([12000])
 
-        audio_inputs_dict = audio_feature_extractor(audio_inputs, return_tensors="np")
+        audio_inputs_dict = feature_extractor(audio_inputs, return_tensors="np")
         input_processor = processor(audio_inputs=audio_inputs, return_tensors="np")
 
         for key in audio_inputs_dict.keys():
@@ -56,9 +62,9 @@ class TvltProcessorTest(unittest.TestCase):
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
-        audio_feature_extractor = self.get_audio_feature_extractor()
+        feature_extractor = self.get_feature_extractor()
 
-        processor = TvltProcessor(image_processor=image_processor, audio_feature_extractor=audio_feature_extractor)
+        processor = TvltProcessor(image_processor=image_processor, feature_extractor=feature_extractor)
 
         visual_inputs = np.ones([3, 224, 224])
 
@@ -68,15 +74,14 @@ class TvltProcessorTest(unittest.TestCase):
         for key in visual_inputs_dict.keys():
             self.assertAlmostEqual(visual_inputs_dict[key].sum(), input_processor[key].sum(), delta=1e-2)
 
-
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
-        audio_feature_extractor = self.get_audio_feature_extractor()
+        feature_extractor = self.get_feature_extractor()
 
-        processor = TvltProcessor(image_processor=image_processor, audio_feature_extractor=audio_feature_extractor)
+        processor = TvltProcessor(image_processor=image_processor, feature_extractor=feature_extractor)
 
         self.assertListEqual(
             processor.model_input_names,
-            image_processor.model_input_names + audio_feature_extractor.model_input_names,
-            msg="`processor` and `image_processor`+`audio_feature_extractor` model input names do not match",
+            image_processor.model_input_names + feature_extractor.model_input_names,
+            msg="`processor` and `image_processor`+`feature_extractor` model input names do not match",
         )

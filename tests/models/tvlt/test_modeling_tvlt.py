@@ -18,44 +18,40 @@ import copy
 import unittest
 
 import numpy as np
-from datasets import load_dataset
-from packaging import version
 
 from huggingface_hub import hf_hub_download
-from transformers import TvltConfig, is_torch_available, is_vision_available, is_datasets_available
-from transformers.models.auto import get_values
+from transformers import (
+    TvltConfig,
+    is_datasets_available,
+    is_speech_available,
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.testing_utils import require_torch, require_vision, torch_device
 from transformers.utils import cached_property
 
-from test_configuration_common import ConfigTester
-from test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MODEL_MAPPING,
-        TvltModel,
-        TvltForPreTraining,
-        TvltForQuestionAnswering,
-        TvltForSequenceClassification
-    )
+    from transformers import TvltForPreTraining, TvltForQuestionAnswering, TvltForSequenceClassification, TvltModel
     from transformers.models.tvlt.modeling_tvlt import TVLT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 else:
     is_torch_greater_or_equal_than_1_10 = False
 
-    
-if is_datasets_available():
-    import datasets
-    from datasets import load_dataset
-    
-if is_vision_available():
-    import PIL
-    from PIL import Image
 
-    from transformers import TvltImageProcessor, TvltAudioFeatureExtractor
+if is_datasets_available():
+    from datasets import load_dataset
+
+if is_vision_available():
+    from transformers import TvltImageProcessor
+
+if is_speech_available():
+    from transformers import TvltFeatureExtractor
 
 
 class TvltModelTester:
@@ -125,24 +121,28 @@ class TvltModelTester:
         self.norm_pix_loss = norm_pix_loss
         self.pixel_mask_ratio = pixel_mask_ratio
         self.audio_mask_ratio = audio_mask_ratio
-        
+
         self.task_matching = task_matching
         self.task_mae = task_mae
         self.num_question_answering_labels = num_question_answering_labels
         self.num_labels = num_labels
-        # we set the expected sequence length (which is used in several tests)
-        # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
+
         self.expected_pixel_seq_len = (self.pixel_size // self.pixel_patch_size) ** 2 * self.num_frames
-        self.expected_audio_seq_len = (self.audio_size // self.audio_patch_size[0]) * (self.feature_size // self.audio_patch_size[1])
+        self.expected_audio_seq_len = (self.audio_size // self.audio_patch_size[0]) * (
+            self.feature_size // self.audio_patch_size[1]
+        )
+        # we set the expected sequence length (which is used in several tests)
+        # this is equal to the seq length of number of image/video patches + number of audio patches
         self.expected_seq_len = self.expected_pixel_seq_len + self.expected_audio_seq_len + 1
-        
+
         self.pixel_mae_output_dim = pixel_patch_size**2 * num_pixel_channels
         self.audio_mae_output_dim = audio_patch_size[0] * audio_patch_size[1] * num_audio_channels
         self.is_training = is_training
-        
+
     def prepare_config_and_inputs(self):
-        
-        pixel_values = floats_tensor([self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+        )
         audio_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_size, self.feature_size])
 
         pixel_masks = floats_tensor([self.batch_size, self.expected_pixel_seq_len])
@@ -153,21 +153,32 @@ class TvltModelTester:
         return (config, pixel_values, audio_values, pixel_masks, audio_masks)
 
     def prepare_config_and_inputs_for_pretraining(self):
-        
-        pixel_values = floats_tensor([self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+        )
         audio_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_size, self.feature_size])
 
         pixel_masks = floats_tensor([self.batch_size, self.expected_pixel_seq_len])
         audio_masks = floats_tensor([self.batch_size, self.expected_audio_seq_len])
-        
-        pixel_values_mixed = floats_tensor([self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size])
+
+        pixel_values_mixed = floats_tensor(
+            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+        )
         pixel_masks_mixed = floats_tensor([self.batch_size, self.expected_pixel_seq_len])
         labels = floats_tensor([self.batch_size])
         config = self.get_config()
 
-        return (config, pixel_values, audio_values, pixel_masks, audio_masks, 
-                pixel_values_mixed, pixel_masks_mixed, labels)
-    
+        return (
+            config,
+            pixel_values,
+            audio_values,
+            pixel_masks,
+            audio_masks,
+            pixel_values_mixed,
+            pixel_masks_mixed,
+            labels,
+        )
+
     def get_config(self):
         return TvltConfig(
             pixel_size=self.pixel_size,
@@ -199,17 +210,10 @@ class TvltModelTester:
             task_matching=self.task_matching,
             task_mae=self.task_mae,
             num_question_answering_labels=self.num_question_answering_labels,
-            num_labels=self.num_labels
+            num_labels=self.num_labels,
         )
 
-    def create_and_check_model(
-        self,
-        config,
-        pixel_values, 
-        audio_values, 
-        pixel_masks,
-        audio_masks
-    ):
+    def create_and_check_model(self, config, pixel_values, audio_values, pixel_masks, audio_masks):
         model = TvltModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -219,28 +223,16 @@ class TvltModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
         )
 
-    def create_and_check_for_question_answering(
-        self,
-        config,
-        pixel_values, 
-        audio_values, 
-        pixel_masks,
-        audio_masks
-    ):
+    def create_and_check_for_question_answering(self, config, pixel_values, audio_values, pixel_masks, audio_masks):
         model = TvltForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, audio_values, pixel_masks=pixel_masks, audio_masks=audio_masks)
         result = model(pixel_values, audio_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-        
+
     def create_and_check_for_sequence_classification(
-        self,
-        config,
-        pixel_values, 
-        audio_values, 
-        pixel_masks,
-        audio_masks
+        self, config, pixel_values, audio_values, pixel_masks, audio_masks
     ):
         model = TvltForSequenceClassification(config=config)
         model.to(torch_device)
@@ -252,8 +244,8 @@ class TvltModelTester:
     def create_and_check_for_pretraining(
         self,
         config,
-        pixel_values, 
-        audio_values, 
+        pixel_values,
+        audio_values,
         pixel_masks,
         audio_masks,
         pixel_values_mixed,
@@ -263,21 +255,26 @@ class TvltModelTester:
         model = TvltForPreTraining(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, audio_values, pixel_masks, audio_masks, 
-                       pixel_values_mixed=pixel_values_mixed, pixel_masks_mixed=pixel_masks_mixed, labels=labels)
+        result = model(
+            pixel_values,
+            audio_values,
+            pixel_masks,
+            audio_masks,
+            pixel_values_mixed=pixel_values_mixed,
+            pixel_masks_mixed=pixel_masks_mixed,
+            labels=labels,
+        )
         result = model(pixel_values, audio_values, pixel_values_mixed=pixel_values_mixed, labels=labels)
-        self.parent.assertEqual(result.pixel_logits.shape, (self.batch_size, self.expected_pixel_seq_len, self.pixel_mae_output_dim))
-        self.parent.assertEqual(result.audio_logits.shape, (self.batch_size, self.expected_audio_seq_len, self.audio_mae_output_dim))
-        
+        self.parent.assertEqual(
+            result.pixel_logits.shape, (self.batch_size, self.expected_pixel_seq_len, self.pixel_mae_output_dim)
+        )
+        self.parent.assertEqual(
+            result.audio_logits.shape, (self.batch_size, self.expected_audio_seq_len, self.audio_mae_output_dim)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values, 
-            audio_values, 
-            pixel_masks,
-            audio_masks
-        ) = config_and_inputs
+        (config, pixel_values, audio_values, pixel_masks, audio_masks) = config_and_inputs
         inputs_dict = {
             "pixel_values": pixel_values,
             "audio_values": audio_values,
@@ -287,8 +284,10 @@ class TvltModelTester:
         return config, inputs_dict
 
     def prepare_pixel_values(self):
-        return floats_tensor([self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size])
-    
+        return floats_tensor(
+            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+        )
+
     def prepare_audio_values(self):
         return floats_tensor([self.batch_size, self.num_audio_channels, self.audio_size, self.feature_size])
 
@@ -297,12 +296,7 @@ class TvltModelTester:
 @unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "TVLT is only available in torch v1.10+")
 class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (
-            TvltModel,
-            TvltForPreTraining,
-            TvltForQuestionAnswering,
-            TvltForSequenceClassification
-        )
+        (TvltModel, TvltForPreTraining, TvltForQuestionAnswering, TvltForSequenceClassification)
         if is_torch_available()
         else ()
     )
@@ -316,7 +310,6 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            
             if model_class.__name__ == "TvltForQuestionAnswering":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
@@ -330,13 +323,20 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
                     (self.model_tester.batch_size,), dtype=torch.float, device=torch_device
                 )
                 inputs_dict["pixel_values_mixed"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.num_frames, 
-                     self.model_tester.num_pixel_channels, self.model_tester.pixel_size, 
-                     self.model_tester.pixel_size),
-                    dtype=torch.float, device=torch_device
+                    (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_frames,
+                        self.model_tester.num_pixel_channels,
+                        self.model_tester.pixel_size,
+                        self.model_tester.pixel_size,
+                    ),
+                    dtype=torch.float,
+                    device=torch_device,
                 )
                 inputs_dict["pixel_masks_mixed"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.expected_pixel_seq_len), dtype=torch.float, device=torch_device
+                    (self.model_tester.batch_size, self.model_tester.expected_pixel_seq_len),
+                    dtype=torch.float,
+                    device=torch_device,
                 )
 
         return inputs_dict
@@ -355,7 +355,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-        
+
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
@@ -368,7 +368,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in TVLT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TvltModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-            
+
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -376,7 +376,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes[1:]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
-            
+
             model = model_class(config)
             model.to(torch_device)
             model.train()
@@ -401,7 +401,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
-            loss.backward()    
+            loss.backward()
 
     def test_attention_outputs(self):
         if not self.has_attentions:
@@ -503,11 +503,11 @@ def prepare_video(num_frames=8):
     video = np.load(file)[:num_frames]
     return list(video)
 
+
 def prepare_audio(num_samples=1):
     ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     # automatic decoding with librispeech
     speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-    print(np.mean(speech_samples[0]["array"]))
     return [x["array"] for x in speech_samples]
 
 
@@ -517,17 +517,10 @@ class TvltModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         # logits were tested with a different mean and std, so we use the same here
-        return (
-            TvltImageProcessor()
-            if is_vision_available()
-            else None,
-            TvltAudioFeatureExtractor()
-        )
+        return (TvltImageProcessor() if is_vision_available() else None, TvltFeatureExtractor())
 
     def test_inference_for_question_answering(self):
-        model = TvltForQuestionAnswering.from_pretrained("TVLT/tvlt-base").to(
-            torch_device
-        )
+        model = TvltForQuestionAnswering.from_pretrained("TVLT/tvlt-base").to(torch_device)
 
         image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()
@@ -544,11 +537,9 @@ class TvltModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        
+
     def test_inference_for_sequence_classification(self):
-        model = TvltForSequenceClassification.from_pretrained("TVLT/tvlt-base").to(
-            torch_device
-        )
+        model = TvltForSequenceClassification.from_pretrained("TVLT/tvlt-base").to(torch_device)
 
         image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()
@@ -566,7 +557,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        
+
     def test_inference_for_pretraining(self):
         model = TvltForPreTraining.from_pretrained("TVLT/tvlt-base").to(torch_device)
 
@@ -582,8 +573,8 @@ class TvltModelIntegrationTest(unittest.TestCase):
         inputs.update(video_inputs)
         inputs.update(video_mixed_inputs)
         inputs.update(audio_inputs)
-        inputs.update({'labels': labels})
-        
+        inputs.update({"labels": labels})
+
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
@@ -591,8 +582,8 @@ class TvltModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_pixel_logits_shape = torch.Size([1, 1568, 768])
         expected_audio_logits_shape = torch.Size([1, 96, 256])
-        expected_matching_logits = torch.tensor([[-1.0161]], device=torch_device)
-        
+        expected_matching_logits = torch.tensor([[-0.7540]], device=torch_device)
+
         self.assertEqual(outputs.pixel_logits.shape, expected_pixel_logits_shape)
         self.assertEqual(outputs.audio_logits.shape, expected_audio_logits_shape)
         self.assertTrue(torch.allclose(outputs.matching_logits, expected_matching_logits, atol=1e-4))

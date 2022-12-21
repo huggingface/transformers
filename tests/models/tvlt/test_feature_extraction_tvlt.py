@@ -12,25 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TVLT image processor. """
+""" Testing suite for the TVLT feature extraction. """
 
 import random
 import unittest
 
 import numpy as np
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_speech_available, is_torch_available
+
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from PIL import Image
-
-    from transformers import TvltFeatureExtractor, TvltImageProcessor
+if is_speech_available():
+    from transformers import TvltFeatureExtractor
 
 global_rng = random.Random()
 
@@ -48,7 +47,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
     return values
 
-        
+
 class TvltFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
@@ -107,6 +106,7 @@ class TvltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 20000)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
+        print(np_speech_inputs[0].shape)
         # Test not batched input
         encoded_audios = feature_extractor(np_speech_inputs[0], return_tensors="pt").audio_values
 
