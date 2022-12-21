@@ -2264,6 +2264,7 @@ class GenerationMixin:
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
         >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> model.generation_config.pad_token_id = model.config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids

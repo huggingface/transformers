@@ -921,7 +921,7 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
 
         >>> processor = AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "shi-labs/nat-mini-in1k-2240", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "shi-labs/nat-mini-in1k-224", out_features=["stage1", "stage2", "stage3", "stage4"]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")
@@ -930,7 +930,7 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
 
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
-        [1, 2048, 7, 7]
+        [1, 512, 7, 7]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

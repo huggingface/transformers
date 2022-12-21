@@ -960,11 +960,11 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLMRobertaTokenizer, XLMRobertaForCausalLM, XLMRobertaConfig
+        >>> from transformers import AutoTokenizer, XLMRobertaForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("roberta-base")
-        >>> config = XLMRobertaConfig.from_pretrained("roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+        >>> config = AutoConfig.from_pretrained("roberta-base")
         >>> config.is_decoder = True
         >>> model = XLMRobertaForCausalLM.from_pretrained("roberta-base", config=config)
 

@@ -1502,11 +1502,11 @@ class CamembertForCausalLM(CamembertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import CamembertTokenizer, CamembertForCausalLM, CamembertConfig
+        >>> from transformers import AutoTokenizer, CamembertForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = CamembertTokenizer.from_pretrained("camembert-base")
-        >>> config = CamembertConfig.from_pretrained("camembert-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("camembert-base")
+        >>> config = AutoConfig.from_pretrained("camembert-base")
         >>> config.is_decoder = True
         >>> model = CamembertForCausalLM.from_pretrained("camembert-base", config=config)
 
