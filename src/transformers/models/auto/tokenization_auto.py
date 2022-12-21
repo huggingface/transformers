@@ -576,9 +576,14 @@ class AutoTokenizer:
 
             tokenizer_class_name, tokenizer_fast_class_name = tokenizer_class_tuple
 
-            if use_fast and tokenizer_fast_class_name is not None:
-                tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
-
+            if use_fast:
+                if tokenizer_fast_class_name is not None:
+                    tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
+                else:
+                    logger.warning(
+                        "`use_fast` is set to `True` but the tokenizer class does not have a fast version. "
+                        " Falling back to the slow version."
+                    )
             if tokenizer_class is None:
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
 
