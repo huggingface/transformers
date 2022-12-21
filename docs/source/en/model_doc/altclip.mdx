@@ -42,7 +42,7 @@ which are then linearly embedded. A [CLS] token is added to serve as representat
 also add absolute position embeddings, and feed the resulting sequence of vectors to a standard Transformer encoder.
 The [`CLIPImageProcessor`] can be used to resize (or rescale) and normalize images for the model.
 
-The [`AltCLIPProcessor`] wraps a [`CLIPFeatureExtractor`] and a [`XLMRobertaTokenizer`] into a single instance to both
+The [`AltCLIPProcessor`] wraps a [`CLIPImageProcessor`] and a [`XLMRobertaTokenizer`] into a single instance to both
 encode the text and prepare the images. The following example shows how to get the image-text similarity scores using
 [`AltCLIPProcessor`] and [`AltCLIPModel`].
 
