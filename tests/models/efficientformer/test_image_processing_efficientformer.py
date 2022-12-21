@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import ViTFeatureExtractor
 
 
-class EfficientFormerFeatureExtractionTester(unittest.TestCase):
+class EfficientFormerImageProcessorTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -73,12 +73,12 @@ class EfficientFormerFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class EfficientFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class EfficientFormerImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     feature_extraction_class = ViTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = EfficientFormerFeatureExtractionTester(self)
+        self.feature_extract_tester = EfficientFormerImageProcessorTester(self)
 
     @property
     def feat_extract_dict(self):

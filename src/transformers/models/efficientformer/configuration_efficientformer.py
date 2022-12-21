@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "efficientformer-l1": "https://huggingface.co/efficientformer-l1/resolve/main/config.json",
+    "huggingface/efficientformer-l1": "https://huggingface.co/huggingface/efficientformer-l1/resolve/main/config.json",
 }
 
 
