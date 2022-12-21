@@ -963,11 +963,11 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RobertaTokenizer, RobertaPreLayerNormForCausalLM, RobertaPreLayerNormConfig
+        >>> from transformers import AutoTokenizer, RobertaPreLayerNormForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = RobertaTokenizer.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
-        >>> config = RobertaPreLayerNormConfig.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
+        >>> tokenizer = AutoTokenizer.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
+        >>> config = AutoConfig.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
         >>> config.is_decoder = True
         >>> model = RobertaPreLayerNormForCausalLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40", config=config)
 
