@@ -30,7 +30,162 @@ BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     ),
 }
 
+class BridgeTowerVisionConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the vision configuration of a [`BridgeTowerModel`]. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the bridgetower-base
+    [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+
+        output_resolution (`int`, *optional*, defaults to 288):
+            The final size (resolution) of each image.
+        input_resolution_before (`int`, *optional*, defaults to 224):
+            The size (resolution) of each input image.
+        stop_gradient (`bool`, *optional*, defaults to `False`):
+            Whether to stop gradient for training.
+        embed_dim (`int`, *optional*, defaults to 512):
+            Dimension of embeddings in vit model.
+        width (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in vit model.
+        vit_layernorm_init_from_vit (`bool`, *optional*, defaults to `False`):
+            Whether to init vit LayerNorm from vit.
+        vit_layernorm_shared (`bool`, *optional*, defaults to `True`):
+            Whether vit's LayerNorm layers are shared.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch in vit.
+        vit_remove_last (`bool`, *optional*, defaults to `False`):
+            Whether to remove vit's last layer.
+        transformer_width (`int`, *optional*, defaults to 512):
+            Width of vit's transformer.
+
+    Example:
+
+    ```python
+    >>> from transformers import BridgeTowerVisionConfig
+
+    >>> # Initializing a BridgeTower BridgeTower/bridgetower-base style configuration for the vision model
+    >>> configuration = BridgeTowerVisionConfig()
+
+    >>> # Accessing the configuration
+    >>> configuration
+    ```"""
+    model_type = "bridgetower_vision_model"
+
+    def __init__(
+        self,
+        embed_dim=512,
+        input_resolution=224,
+        width=768,
+        layers=12,
+        patch_size=16,
+        transformer_width=512,
+        output_resolution=288,
+        stop_gradient=False,
+        vit_layernorm_shared=True,
+        vit_remove_last=False,
+        vit_layernorm_init_from_vit=False,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+
+        self.embed_dim = embed_dim
+        self.input_resolution = input_resolution
+        self.width = width
+        self.layers = layers
+        self.patch_size = patch_size
+        self.transformer_width = transformer_width
+        self.output_resolution = output_resolution
+        self.stop_gradient = stop_gradient
+        self.vit_layernorm_shared = vit_layernorm_shared
+        self.vit_remove_last = vit_remove_last
+        self.vit_layernorm_init_from_vit = vit_layernorm_init_from_vit
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        if config_dict.get("model_type") == "bridgetower":
+            config_dict = config_dict["text_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
+
 class BridgeTowerTextConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the text configuration of a [`BridgeTowerModel`]. The default values here are copied from RoBERTa.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the bridgetower-base
+    [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+
+        vocab_size (`int`, *optional*, defaults to 50265):
+            Vocabulary size of the text part of the model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 6):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        max_position_embeddings (`int`, *optional*, defaults to 512):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids`.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
+
+    Example:
+
+    ```python
+    >>> from transformers import BridgeTowerTextConfig
+
+    >>> # Initializing a BridgeTower BridgeTower/bridgetower-base style configuration for the text model
+    >>> configuration = BridgeTowerTextConfig()
+
+    >>> # Accessing the configuration
+    >>> configuration
+    ```"""
     model_type = "bridgetower_text_model"
 
     def __init__(
@@ -108,14 +263,6 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether cross modal transformer layers are shared.
         drop_rate (`float`, *optional*, defaults to 0.1):
             Drop out probability.
-        freeze_roberta (`bool`, *optional*, defaults to `False`):
-            Whether to freeze roberta.
-        freeze_vit (`bool`, *optional*, defaults to `False`):
-            Whether to freeze vit.
-        freeze_layer_count_roberta (`bool`, *optional*, defaults to `False`):
-            Whether to freeze layer count for RobERTa.
-        freeze_layer_count_vit (`bool`, *optional*, defaults to `False`):
-            Whether to freeze layer count for vit.
         head_hidden_scale (`int`, *optional*, defaults to 2):
             Scale of hidden layers head.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -144,42 +291,12 @@ class BridgeTowerConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
-        resolution_before (`int`, *optional*, defaults to 224):
-            Prior resolution.
-        stop_gradient (`bool`, *optional*, defaults to `False`):
-            Whether to stop gradient for training.
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`BridgeTowerTextConfig`].
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether embedding weights are tied with the decoder
-        tokenizer (`str`, *optional*, defaults to `"roberta-base"`):
-            Choice of the text tokenizer.
-        unfreeze_roberta_attention (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze roberta's LayerNorm.
-        unfreeze_roberta_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze roberta's embeddings.
-        unfreeze_roberta_encoder (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze roberta's encoder.
-        unfreeze_roberta_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze roberta's LayerNorm.
-        unfreeze_vit_attention (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze vit's attention.
-        unfreeze_vit_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether to unfreeze vit's LayerNorm.
-        vit_embed_dim (`int`, *optional*, defaults to 512):
-            Dimension size of embeddings in vit model.
-        vit_hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        vit_num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in vit model.
-        vit_layernorm_init_from_vit (`bool`, *optional*, defaults to `False`):
-            Whether to init vit LayerNorm from vit.
-        vit_layernorm_shared (`bool`, *optional*, defaults to `True`):
-            Whether vit's LayerNorm layers are shared.
-        vit_patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch in vit.
-        vit_remove_last (`bool`, *optional*, defaults to `False`):
-            Whether to remove vit's last layer.
-        vit_intermediate_size (`int`, *optional*, defaults to 512):
-            Dimension of vit's transformer intermediate layer.
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`BridgeTowerVisionConfig`].
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the text part of the model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
@@ -218,18 +335,9 @@ class BridgeTowerConfig(PretrainedConfig):
         mlp_ratio=4,
         num_attention_heads=12,
         num_hidden_layers=6,
-        resolution_before=224,
-        stop_gradient=False,
         text_config=None,
         tie_word_embeddings=False,
-        vit_embed_dim=512,
-        vit_num_hidden_layers=12,
-        vit_layernorm_init_from_vit=False,
-        vit_layernorm_shared=True,
-        vit_patch_size=16,
-        vit_remove_last=False,
-        vit_intermediate_size=512,
-        vit_hidden_size=768,
+        vision_config=None,
         vocab_size=50265,
         **kwargs
     ):
@@ -250,31 +358,29 @@ class BridgeTowerConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
-        self.resolution_before = resolution_before
-        self.stop_gradient = stop_gradient
         self.tie_word_embeddings = tie_word_embeddings
-        self.vit_embed_dim = vit_embed_dim
-        self.vit_num_hidden_layers = vit_num_hidden_layers
-        self.vit_layernorm_init_from_vit = vit_layernorm_init_from_vit
-        self.vit_layernorm_shared = vit_layernorm_shared
-        self.vit_patch_size = vit_patch_size
-        self.vit_remove_last = vit_remove_last
-        self.vit_intermediate_size = vit_intermediate_size
-        self.vit_hidden_size = vit_hidden_size
         self.vocab_size = vocab_size
 
         text_config_dict = kwargs.pop("text_config_dict", None)
+        vision_config_dict = kwargs.pop("vision_config_dict", None)
         if text_config_dict is not None:
             text_config = text_config_dict
+        if vision_config_dict is not None:
+            vision_config = vision_config_dict
 
         if text_config is None:
             text_config = {}
             logger.info("text_config is None. Initializing the BridgeTowerTextConfig with default values.")
 
+        if vision_config is None:
+            vision_config = {}
+            logger.info("vision_config is None. Initializing the BridgeTowerVisionConfig with default values.")
+
         self.text_config = BridgeTowerTextConfig(**text_config)
+        self.vision_config = BridgeTowerTextConfig(**vision_config)
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: BridgeTowerTextConfig,  **kwargs
+    def from_text_vision_configs(cls, text_config: BridgeTowerTextConfig, vision_config: BridgeTowerVisionConfig, **kwargs
     ):
         r"""
         Instantiate a [`BridgeTowerConfig`] (or a derived class) from BridgeTower text model configuration.
@@ -282,7 +388,7 @@ class BridgeTowerConfig(PretrainedConfig):
             [`BridgeTowerConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), **kwargs)
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
@@ -293,5 +399,6 @@ class BridgeTowerConfig(PretrainedConfig):
         """
         output = copy.deepcopy(self.__dict__)
         output["text_config"] = self.text_config.to_dict()
+        output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

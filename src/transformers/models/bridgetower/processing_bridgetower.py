@@ -96,8 +96,7 @@ class BridgeTowerProcessor(ProcessorMixin):
             return_tensors=return_tensors,
             do_normalize=True,
             do_center_crop=True,
-            image_mean=[0.48145466, 0.4578275, 0.40821073],
-            image_std=[0.26862954, 0.26130258, 0.27577711],
+            **kwargs
         )
         encoding.update(encoding_image_processor)
 

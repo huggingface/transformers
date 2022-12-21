@@ -175,6 +175,7 @@ _import_structure = {
         "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BridgeTowerConfig",
         "BridgeTowerTextConfig",
+        "BridgeTowerVisionConfig",
         "BridgeTowerImageProcessor",
         "BridgeTowerProcessor",
     ],

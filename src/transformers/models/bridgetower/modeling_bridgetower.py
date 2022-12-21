@@ -23,7 +23,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-#from transformers import RobertaConfig, RobertaModel
 from transformers.modeling_utils import PreTrainedModel, apply_chunking_to_forward
 
 from ...activations import ACT2FN, QuickGELUActivation
@@ -35,8 +34,14 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
 )
 from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
+from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -216,8 +221,8 @@ class BridgeTowerVisualTransformer(nn.Module):
         width: int,
         layers: int,
         heads: int,
-        output_dim: int,
-        resolution_after: int,
+        embed_dim: int,
+        output_resolution: int,
         model_type: str = "bridgetower",
         stop_gradient: bool = False,
         vit_layernorm_shared: bool = True,
@@ -225,14 +230,14 @@ class BridgeTowerVisualTransformer(nn.Module):
     ):
         super().__init__()
         self.input_resolution = input_resolution
-        self.output_dim = output_dim
+        self.embed_dim = embed_dim
         self.conv1 = nn.Conv2d(
             in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False
         )
 
         scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
-        self.positional_embedding = nn.Parameter(scale * torch.randn((resolution_after // patch_size) ** 2 + 1, width))
+        self.positional_embedding = nn.Parameter(scale * torch.randn((output_resolution // patch_size) ** 2 + 1, width))
         self.ln_pre = BridgeTowerLayerNorm(width)
 
         self.transformer = BridgeTowerTransformer(
@@ -307,16 +312,17 @@ class BridgeTowerVisualTransformer(nn.Module):
 
 
 class BridgeTowerCLIP(nn.Module):
+    config_class = BridgeTowerVisionConfig
     def __init__(
         self,
         embed_dim: int,
         # vision
-        image_resolution: int,
-        vision_layers: Union[Tuple[int, int, int, int], int],
-        vision_width: int,
-        vision_patch_size: int,
+        input_resolution: int,
+        layers: Union[Tuple[int, int, int, int], int],
+        width: int,
+        patch_size: int,
         transformer_width: int,
-        resolution_after=224,
+        output_resolution=224,
         model_type="bridgetower",
         stop_gradient=False,
         vit_layernorm_shared=True,
@@ -324,15 +330,15 @@ class BridgeTowerCLIP(nn.Module):
     ):
         super().__init__()
 
-        vision_heads = vision_width // 64
+        vision_heads = width // 64
         self.visual = BridgeTowerVisualTransformer(
-            input_resolution=image_resolution,
-            patch_size=vision_patch_size,
-            width=vision_width,
-            layers=vision_layers,
+            input_resolution=input_resolution,
+            patch_size=patch_size,
+            width=width,
+            layers=layers,
             heads=vision_heads,
-            output_dim=embed_dim,
-            resolution_after=resolution_after,
+            embed_dim=embed_dim,
+            output_resolution=output_resolution,
             model_type=model_type,
             stop_gradient=stop_gradient,
             vit_layernorm_shared=vit_layernorm_shared,
@@ -441,24 +447,24 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
 
+        vision_config = config.vision_config
         self.vit_model = BridgeTowerCLIP(
-            config.vit_embed_dim,
-            config.resolution_before,
-            config.vit_num_hidden_layers,
-            config.vit_hidden_size,
-            config.vit_patch_size,
-            config.vit_intermediate_size,
-            resolution_after=config.image_size,
-            stop_gradient=config.stop_gradient,
-            vit_layernorm_shared=config.vit_layernorm_shared,
-            vit_remove_last=config.vit_remove_last,
-        )
+            embed_dim=vision_config.embed_dim,
+            input_resolution=vision_config.input_resolution,
+            layers=vision_config.layers,
+            width=vision_config.width,
+            patch_size=vision_config.patch_size,
+            transformer_width=vision_config.transformer_width,
+            output_resolution=vision_config.output_resolution,
+            stop_gradient=vision_config.stop_gradient,
+            vit_layernorm_shared=vision_config.vit_layernorm_shared,
+            vit_remove_last=vision_config.vit_remove_last
+            )
 
         text_config = config.text_config
         self.text_transformer = BridgeTowerTextModel(text_config)
 
-
-        if not config.vit_layernorm_shared and config.vit_layernorm_init_from_vit:
+        if not vision_config.vit_layernorm_shared and vision_config.vit_layernorm_init_from_vit:
             for ln in self.vit_model.visual.cross_modal_ln_separate:
                 ln.weight.data = self.vit_model.visual.ln_post.weight.data
                 ln.bias.data = self.vit_model.visual.ln_post.bias.data
@@ -1490,10 +1496,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-@add_start_docstrings(
-    "The text model from BridgeTower without any head or projection on top.",
-    BRIDGETOWER_START_DOCSTRING,
-)
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     """
 
@@ -1513,6 +1515,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.bert.modeling_bert.RobertaModel.__init__ with Roberta->BridgeTower
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -1539,14 +1542,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
-
+    # Copied from transformers.models.roberta.modeling_roberta.RobertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
