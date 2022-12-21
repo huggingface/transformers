@@ -1,6 +1,8 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
+import io
+import json
 import os
 
 # coding=utf-8
@@ -19,7 +21,9 @@ import os
 # limitations under the License.
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+from numpy import isin
 
 from huggingface_hub import model_info
 
@@ -42,8 +46,19 @@ from ..utils import (
 )
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
-from .base import Pipeline, PipelineRegistry, get_default_model_and_revision, infer_framework_load_model
-from .conversational import ConversationalPipeline
+from .base import (
+    ArgumentHandler,
+    CsvPipelineDataFormat,
+    JsonPipelineDataFormat,
+    PipedPipelineDataFormat,
+    Pipeline,
+    PipelineDataFormat,
+    PipelineException,
+    PipelineRegistry,
+    get_default_model_and_revision,
+    infer_framework_load_model,
+)
+from .conversational import Conversation, ConversationalPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
@@ -52,21 +67,33 @@ from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .image_to_text import ImageToTextPipeline
 from .object_detection import ObjectDetectionPipeline
-from .question_answering import QuestionAnsweringPipeline
-from .table_question_answering import TableQuestionAnsweringPipeline
+from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
+from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
 from .text_generation import TextGenerationPipeline
-from .token_classification import TokenClassificationPipeline
+from .token_classification import (
+    AggregationStrategy,
+    NerPipeline,
+    TokenClassificationArgumentHandler,
+    TokenClassificationPipeline,
+)
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
-from .zero_shot_classification import ZeroShotClassificationPipeline
+from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 if is_tf_available():
+    import tensorflow as tf
+
     from ..models.auto.modeling_tf_auto import (
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
         TFAutoModel,
         TFAutoModelForCausalLM,
         TFAutoModelForImageClassification,
@@ -83,6 +110,13 @@ if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import (
+        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
         AutoModel,
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
@@ -104,6 +138,9 @@ if is_torch_available():
         AutoModelForVisualQuestionAnswering,
         AutoModelForZeroShotObjectDetection,
     )
+if TYPE_CHECKING:
+    from ..modeling_tf_utils import TFPreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__name__)
 
@@ -798,7 +835,7 @@ def pipeline(
                 and isinstance(model_name, str)
             ):
                 try:
-                    import kenlm  # noqa: F401  to trigger `ImportError` if not installed
+                    import kenlm  # to trigger `ImportError` if not installed
                     from pyctcdecode import BeamSearchDecoderCTC
 
                     if os.path.isdir(model_name) or os.path.isfile(model_name):
