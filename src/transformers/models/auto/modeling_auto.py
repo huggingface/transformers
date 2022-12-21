@@ -876,11 +876,8 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
 _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
-<<<<<<< HEAD
         ("altclip", "AltCLIPModel"),
-=======
         ("blip", "BlipModel"),
->>>>>>> 76d02feadbc99bbccd86e67b02728338a2469f22
         ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),

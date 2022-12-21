@@ -498,13 +498,10 @@
       title: Audio models
     - isExpanded: false
       sections:
-<<<<<<< HEAD
       - local: model_doc/altclip
         title: AltCLIP
-=======
       - local: model_doc/blip
         title: BLIP
->>>>>>> 76d02feadbc99bbccd86e67b02728338a2469f22
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
