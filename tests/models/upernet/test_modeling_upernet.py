@@ -37,7 +37,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import UperNetImageProcessor
+    from transformers import AutoImageProcessor
 
 
 class UperNetModelTester:
@@ -272,7 +272,7 @@ def prepare_img():
 class UperNetModelIntegrationTest(unittest.TestCase):
     def test_inference_swin_backbone(self):
         # TODO update the organization
-        processor = UperNetImageProcessor.from_pretrained("nielsr/upernet-swin-tiny")
+        processor = AutoImageProcessor.from_pretrained("nielsr/upernet-swin-tiny")
         model = UperNetForSemanticSegmentation.from_pretrained("nielsr/upernet-swin-tiny")
 
         image = prepare_img()
@@ -291,7 +291,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
 
     def test_inference_convnext_backbone(self):
         # TODO update the organization
-        processor = UperNetImageProcessor.from_pretrained("nielsr/upernet-convnext-tiny")
+        processor = AutoImageProcessor.from_pretrained("nielsr/upernet-convnext-tiny")
         model = UperNetForSemanticSegmentation.from_pretrained("nielsr/upernet-convnext-tiny")
 
         image = prepare_img()
