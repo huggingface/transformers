@@ -52,7 +52,7 @@ def rescale_stride(stride, ratio):
     return new_strides
 
 
-def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, dtype):
+def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, dtype=None):
     inputs_len = inputs.shape[0]
     step = chunk_len - stride_left - stride_right
     for i in range(0, inputs_len, step):
@@ -254,6 +254,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return preprocess_params, {}, postprocess_params
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, ignore_warning=False, dtype=None):
+        print(f"Running with dtype {dtype}")
         if isinstance(inputs, str):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
@@ -340,7 +341,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 yield item
         else:
             processed = self.feature_extractor(
-                inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt", dtype=dtype
+                inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
             )
             if dtype is not None:
                 processed = {k: v.to(dtype=dtype) for k, v in processed.items()}
