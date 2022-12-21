@@ -39,6 +39,7 @@ if is_torch_available():
 else:
     is_torch_less_than_1_9 = True
 
+
 class TrajectoryTransformerModelTester:
     def __init__(self, parent, batch_size=13, n_embd=128, action_dim=6, observation_dim=17, is_training=True):
         self.parent = parent
