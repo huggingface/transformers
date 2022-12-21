@@ -81,7 +81,7 @@ class AltCLIPTextConfig(PretrainedConfig):
             The dropout ratio for the classification head.
         project_dim (`int`, *optional*, defaults to 768):
             The dimentions of the teacher model before the mapping layer.
-        position_embedding_type (`str`, *optional*, defaults to `"cls"`):
+        pooler_fn (`str`, *optional*, defaults to `"cls"`):
             Type of pooler we use. We take the first token as pooled output.
 
     Examples:
