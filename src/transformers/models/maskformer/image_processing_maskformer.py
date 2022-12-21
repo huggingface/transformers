@@ -400,7 +400,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         if "size_divisibility" in kwargs:
             warnings.warn(
                 "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
-                "`size_divisibility` instead.",
+                "`size_divisor` instead.",
                 FutureWarning,
             )
             size_divisor = kwargs.pop("size_divisibility")
@@ -431,6 +431,32 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
         self.reduce_labels = reduce_labels
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
+        create using from_dict and kwargs e.g. `MaskFormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
+        """
+        if "max_size" in kwargs:
+            warnings.warn(
+                "The `max_size` parameter is deprecated and will be removed in v4.27. "
+                "Please specify in `size['longest_edge'] instead`.",
+                FutureWarning,
+            )
+            max_size = kwargs.pop("max_size")
+            image_processor_dict["max_size"] = max_size
+
+        if "size_divisibility" in kwargs:
+            warnings.warn(
+                "The `size_divisibility` parameter is deprecated and will be removed in v4.27. "
+                "Please specify `size_divisor` instead`.",
+                FutureWarning,
+            )
+            size_divisibility = kwargs.pop("size_divisibility")
+            image_processor_dict["size_divisor"] = size_divisibility
+
+        return super().from_dict(image_processor_dict, **kwargs)
 
     @property
     def size_divisibility(self):

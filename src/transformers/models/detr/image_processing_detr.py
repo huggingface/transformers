@@ -797,6 +797,30 @@ class DetrImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
 
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
+        create using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600, max_size=800)`
+        """
+        if "max_size" in kwargs:
+            warnings.warn(
+                "The `max_size` parameter is deprecated and will be removed in v4.27. "
+                "Please specify in `size['longest_edge'] instead`.",
+                FutureWarning,
+            )
+            max_size = kwargs.pop("max_size")
+            image_processor_dict["max_size"] = max_size
+
+        if "pad_and_return_pixel_mask" in kwargs:
+            warnings.warn(
+                "The `pad_and_return_pixel_mask` parameter is deprecated and will be removed in v4.27. "
+                "Please specify `do_pad` instead`.",
+                FutureWarning,
+            )
+            image_processor_dict["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
+        return super().from_dict(image_processor_dict, **kwargs)
+
     def prepare_annotation(
         self,
         image: np.ndarray,
