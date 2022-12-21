@@ -16,8 +16,9 @@
 
 
 import os
+from itertools import groupby
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
@@ -41,7 +42,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"speecht5": 1024}
 
 class SpeechT5Tokenizer(PreTrainedTokenizer):
     """
-    Construct a T5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
+    Construct a SpeechT5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -83,7 +84,6 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    prefix_tokens: List[int] = []
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -179,3 +179,111 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+class SpeechT5CTCTokenizer(SpeechT5Tokenizer):
+    """
+    Construct a SpeechtT5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
+
+    This tokenizer inherits from [`SpeechT5Tokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
+
+    Args:
+        word_delimiter_token (`str`, *optional*, defaults to `"▁"`):
+            The token used for defining the end of a word.
+        replace_word_delimiter_char (`str`, *optional*, defaults to `" "`):
+            The character that replaces occurences of the `word_delimiter_token` in the final string.
+        do_lower_case (`bool`, *optional*, defaults to `False`):
+            Whether or not to accept lowercase input and lowercase the output when decoding.
+    """
+
+    def __init__(
+        self,
+        vocab_file,
+        bos_token="<s>",
+        eos_token="</s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        word_delimiter_token="▁",
+        replace_word_delimiter_char=" ",
+        do_lower_case=False,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> None:
+        super().__init__(
+            vocab_file,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            sp_model_kwargs=sp_model_kwargs,
+            **kwargs,
+        )
+
+        self._word_delimiter_token = word_delimiter_token
+        self.replace_word_delimiter_char = replace_word_delimiter_char
+        self.do_lower_case = do_lower_case
+        self.blank_token = "<ctc_blank>"
+
+    @property
+    def word_delimiter_token(self) -> str:
+        """
+        `str`: Word delimiter token. Log an error if used while not having been set.
+        """
+        if self._word_delimiter_token is None and self.verbose:
+            logger.error("Using word_delimiter_token, but it is not set yet.")
+            return None
+        return str(self._word_delimiter_token)
+
+    @property
+    def word_delimiter_token_id(self) -> Optional[int]:
+        """
+        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has not been
+        set.
+        """
+        if self._word_delimiter_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.word_delimiter_token)
+
+    @word_delimiter_token.setter
+    def word_delimiter_token(self, value):
+        self._word_delimiter_token = value
+
+    @word_delimiter_token_id.setter
+    def word_delimiter_token_id(self, value):
+        self._word_delimiter_token = self.convert_tokens_to_ids(value)
+
+    def convert_tokens_to_string(
+        self,
+        tokens: List[str],
+        group_tokens: bool = True,
+        spaces_between_special_tokens: bool = False,
+    ) -> Dict[str, Union[str, float]]:
+        """
+        Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
+        """
+        if len(tokens) == 0:
+            return {"text": "", "char_offsets": [], "word_offsets": []}
+
+        # group same tokens into non-repeating tokens in CTC style decoding
+        if group_tokens:
+            chars = [token for token, _ in groupby(tokens)]
+        else:
+            chars = tokens
+
+        # filter the CTC-blank token
+        processed_chars = list(filter(lambda char: char != self.blank_token, chars))
+
+        # replace delimiter token
+        processed_chars = [
+            self.replace_word_delimiter_char if char == self.word_delimiter_token else char for char in processed_chars
+        ]
+
+        # join to string
+        join_char = " " if spaces_between_special_tokens else ""
+        string = join_char.join(processed_chars).strip()
+
+        if self.do_lower_case:
+            string = string.lower()
+
+        return string

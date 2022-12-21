@@ -29,6 +29,7 @@ from transformers import (
     SpeechT5ForSpeechToText,
     SpeechT5ForTextToSpeech,
     SpeechT5Tokenizer,
+    SpeechT5CTCTokenizer,
     logging,
 )
 from transformers.tokenization_utils import AddedToken
@@ -336,9 +337,12 @@ def convert_speecht5_checkpoint(
     else:
         config = SpeechT5Config()
 
+    tokenizer_class = SpeechT5Tokenizer
+
     if task == "s2t":
         model = SpeechT5ForSpeechToText(config)
     elif task == "ctc":
+        tokenizer_class = SpeechT5CTCTokenizer
         model = SpeechT5ForCTC(config)
     elif task == "t2s":
         config.max_speech_positions = 1876
@@ -350,7 +354,7 @@ def convert_speecht5_checkpoint(
         raise ValueError(f"Unknown task name: {task}")
 
     if vocab_path:
-        tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
+        tokenizer = tokenizer_class(vocab_path, model_max_length=config.max_text_positions)
 
         if task in ["pretrain", "ctc"]:
             # Mask token behaves like a normal word, i.e. include the space before it
@@ -361,6 +365,7 @@ def convert_speecht5_checkpoint(
 
         tokenizer.save_pretrained(pytorch_dump_folder_path)
 
+        #TODO: save processor
         #         return_attention_mask = True if config.feat_extract_norm == "layer" else False
         #         feature_extractor = Wav2Vec2FeatureExtractor(
         #             feature_size=1,
