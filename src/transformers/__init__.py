@@ -169,13 +169,6 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
-    "models.blip": [
-        "BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BlipConfig",
-        "BlipProcessor",
-        "BlipTextConfig",
-        "BlipVisionConfig",
-    ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
     "models.byt5": ["ByT5Tokenizer"],
@@ -411,7 +404,6 @@ _import_structure = {
     "models.tvlt": [
         "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TvltConfig",
-        "TvltFeatureExtractor",
         "TvltProcessor",
     ],
     "models.unispeech": [
@@ -713,6 +705,7 @@ else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+    _import_structure["models.tvlt"].append("TvltFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -767,7 +760,6 @@ else:
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
-    _import_structure["models.blip"].extend(["BlipImageProcessor"])
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
@@ -1108,18 +1100,6 @@ else:
             "BlenderbotSmallForConditionalGeneration",
             "BlenderbotSmallModel",
             "BlenderbotSmallPreTrainedModel",
-        ]
-    )
-    _import_structure["models.blip"].extend(
-        [
-            "BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BlipForConditionalGeneration",
-            "BlipForImageTextRetrieval",
-            "BlipForQuestionAnswering",
-            "BlipModel",
-            "BlipPreTrainedModel",
-            "BlipTextModel",
-            "BlipVisionModel",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -2223,7 +2203,6 @@ else:
             "TvltForPreTraining",
             "TvltForQuestionAnswering",
             "TvltForSequenceClassification",
-            
         ]
     )
     _import_structure["models.unispeech"].extend(
@@ -3528,13 +3507,6 @@ if TYPE_CHECKING:
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
-    from .models.blip import (
-        BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BlipConfig,
-        BlipProcessor,
-        BlipTextConfig,
-        BlipVisionConfig,
-    )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
@@ -3751,7 +3723,7 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
-    from .models.tvlt import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltFeatureExtractor, TvltConfig, TvltProcessor
+    from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
@@ -4020,6 +3992,7 @@ if TYPE_CHECKING:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
+        from .models.tvlt import TvltFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -4055,7 +4028,6 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
-        from .models.blip import BlipImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
@@ -4345,16 +4317,6 @@ if TYPE_CHECKING:
             BlenderbotSmallForConditionalGeneration,
             BlenderbotSmallModel,
             BlenderbotSmallPreTrainedModel,
-        )
-        from .models.blip import (
-            BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BlipForConditionalGeneration,
-            BlipForImageTextRetrieval,
-            BlipForQuestionAnswering,
-            BlipModel,
-            BlipPreTrainedModel,
-            BlipTextModel,
-            BlipVisionModel,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5245,9 +5207,9 @@ if TYPE_CHECKING:
         from .models.tvlt import (
             Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST,
             TvltForPreTraining,
-            TvltModel,
             TvltForQuestionAnswering,
             TvltForSequenceClassification,
+            TvltModel,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
