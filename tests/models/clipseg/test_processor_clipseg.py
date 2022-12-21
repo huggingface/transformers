@@ -157,7 +157,7 @@ class CLIPSegProcessorTest(unittest.TestCase):
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
-    def test_processor(self):
+    def test_processor_text(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
@@ -169,6 +169,23 @@ class CLIPSegProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
+
+    def test_processor_visual_prompt(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = CLIPSegProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        image_input = self.prepare_image_inputs()
+        visual_prompt_input = self.prepare_image_inputs()
+
+        inputs = processor(images=image_input, visual_prompt=visual_prompt_input)
+
+        self.assertListEqual(list(inputs.keys()), ["pixel_values", "conditional_pixel_values"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
