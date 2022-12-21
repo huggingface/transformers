@@ -1,4 +1,3 @@
-# flake8: noqa
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
@@ -873,6 +872,9 @@ def pipeline(
 
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
+
+    if torch_dtype is not None:
+        kwargs["torch_dtype"] = torch_dtype
 
     if device is not None:
         kwargs["device"] = device
