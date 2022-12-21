@@ -732,8 +732,8 @@ class FlaxWhisperDecoder(nn.Module):
             return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            hidden_states=outputs.hidden_states,
+            last_hidden_state=last_hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
