@@ -26,7 +26,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_download, hf_hub_url
-from transformers import DeformableDetrImageProcessor, DetaConfig, DetaForObjectDetection, SwinConfig
+from transformers import DetaConfig, DetaForObjectDetection, DetaImageProcessor, SwinConfig
 from transformers.utils import logging
 
 
@@ -257,7 +257,7 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.to(device)
 
     # load image processor
-    processor = DeformableDetrImageProcessor(format="coco_detection")
+    processor = DetaImageProcessor(format="coco_detection")
 
     # verify our conversion on image
     img = prepare_img()
@@ -284,8 +284,9 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # Push to hub
     if push_to_hub:
-        print("Pushing model to hub...")
-        model.push_to_hub("nielsr/deta-swin-large")
+        print("Pushing model and processor to hub...")
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

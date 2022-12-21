@@ -26,7 +26,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_download, hf_hub_url
-from transformers import DeformableDetrImageProcessor, DetaConfig, DetaForObjectDetection
+from transformers import DetaConfig, DetaForObjectDetection, DetaImageProcessor
 from transformers.utils import logging
 
 
@@ -223,9 +223,9 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     config = get_deta_config()
 
     # load original state dict
-    if model_name == "deta":
+    if model_name == "deta-resnet-50":
         filename = "adet_checkpoint0011.pth"
-    elif model_name == "deta-24-epochs":
+    elif model_name == "deta-resnet-50-24-epochs":
         raise NotImplementedError("To do")
     else:
         raise ValueError(f"Model name {model_name} not supported")
@@ -263,7 +263,7 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.to(device)
 
     # load image processor
-    processor = DeformableDetrImageProcessor(format="coco_detection")
+    processor = DetaImageProcessor(format="coco_detection")
 
     # verify our conversion on image
     img = prepare_img()
@@ -290,8 +290,9 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # Push to hub
     if push_to_hub:
-        print("Pushing model to hub...")
-        model.push_to_hub("nielsr/deta-test")
+        print("Pushing model and processor to hub...")
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -300,8 +301,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         type=str,
-        default="deta",
-        choices=["deta", "deta-24-epochs"],
+        default="deta-resnet-50",
+        choices=["deta-resnet-50", "deta-resnet-50-24-epochs"],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
