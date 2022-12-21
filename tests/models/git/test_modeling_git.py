@@ -190,8 +190,8 @@ class GitModelTester:
         self,
         parent,
         num_channels=3,
-        image_size=32,
-        patch_size=16,
+        image_size=30,
+        patch_size=2,
         batch_size=13,
         text_seq_length=7,
         is_training=True,
@@ -234,6 +234,11 @@ class GitModelTester:
         self.num_labels = num_labels
         self.scope = scope
 
+        # make sure the BOS, EOS and PAD tokens are within the vocab
+        self.bos_token_id = vocab_size - 1
+        self.eos_token_id = vocab_size - 1
+        self.pad_token_id = vocab_size - 1
+
         # for GIT, the sequence length is the sum of the text and patch tokens, + 1 due to the CLS token
         self.seq_length = self.text_seq_length + int((self.image_size / self.patch_size) ** 2) + 1
 
@@ -274,6 +279,9 @@ class GitModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, pixel_values, token_labels):

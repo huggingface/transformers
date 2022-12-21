@@ -182,17 +182,17 @@ class GitSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
+        pixel_values_present: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
+        cutoff = self.image_patch_tokens if pixel_values_present else 0
         if past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat(
-                [key_layer[:, :, : self.image_patch_tokens, :], past_key_value[0], key_layer[:, :, -1:, :]], dim=2
-            )
+            key_layer = torch.cat([key_layer[:, :, :cutoff, :], past_key_value[0], key_layer[:, :, -1:, :]], dim=2)
             value_layer = torch.cat(
-                [value_layer[:, :, : self.image_patch_tokens, :], past_key_value[1], value_layer[:, :, -1:, :]], dim=2
+                [value_layer[:, :, :cutoff, :], past_key_value[1], value_layer[:, :, -1:, :]], dim=2
             )
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -210,8 +210,8 @@ class GitSelfAttention(nn.Module):
         # if encoder bi-directional self-attention `past_key_value` is always `None`
         # NOTE: like in other caches, we store the text component. In GIT it means we discard the image component.
         past_key_value = (
-            key_layer[:, :, self.image_patch_tokens :, :],
-            value_layer[:, :, self.image_patch_tokens :, :],
+            key_layer[:, :, cutoff:, :],
+            value_layer[:, :, cutoff:, :],
         )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
@@ -316,6 +316,7 @@ class GitAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
+        pixel_values_present: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -323,6 +324,7 @@ class GitAttention(nn.Module):
             head_mask,
             past_key_value,
             output_attentions,
+            pixel_values_present,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -376,6 +378,7 @@ class GitLayer(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
+        pixel_values_present: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -385,6 +388,7 @@ class GitLayer(nn.Module):
             head_mask,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
+            pixel_values_present=pixel_values_present,
         )
         attention_output = self_attention_outputs[0]
 
@@ -425,6 +429,7 @@ class GitEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
+        pixel_values_present: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
         all_hidden_states = () if output_hidden_states else None
@@ -465,6 +470,7 @@ class GitEncoder(nn.Module):
                     layer_head_mask,
                     past_key_value,
                     output_attentions,
+                    pixel_values_present,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1294,6 +1300,7 @@ class GitModel(GitPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            pixel_values_present=pixel_values is not None,
         )
         sequence_output = encoder_outputs[0]
 
