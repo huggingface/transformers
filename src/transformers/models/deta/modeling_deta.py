@@ -384,16 +384,15 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
         super().__init__()
 
         backbone = AutoBackbone.from_config(config.backbone_config)
-        # TODO replace batch norm by frozen batch norm
-        # with torch.no_grad():
-        #     replace_batch_norm(backbone)
+        with torch.no_grad():
+            replace_batch_norm(backbone)
         self.model = backbone
         self.intermediate_channel_sizes = self.model.channels
 
         # TODO fix this
         if config.backbone_config.model_type == "resnet":
             for name, parameter in self.model.named_parameters():
-                if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                if "stages.1" not in name and "stages.2" not in name and "stages.3" not in name:
                     parameter.requires_grad_(False)
 
         self.position_embedding = build_position_encoding(config)
