@@ -2564,7 +2564,7 @@ class Matcher(object):
         Args:
             match_quality_matrix (Tensor[float]): an MxN tensor, containing the
                 pairwise quality between M ground-truth elements and N predicted elements. All elements must be >= 0
-                (due to the us of `torch.nonzero` for selecting indices in :meth:`set_low_quality_matches_`).
+                (due to the us of `torch.nonzero` for selecting indices in `set_low_quality_matches_`).
 
         Returns:
             matches (Tensor[int64]): a vector of length N, where matches[i] is a matched

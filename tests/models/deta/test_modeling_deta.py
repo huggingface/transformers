@@ -22,7 +22,7 @@ from typing import Dict, List, Tuple
 
 from transformers import DetaConfig, is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_timm, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import require_timm, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -577,62 +577,3 @@ class DetaModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
-
-    def test_inference_object_detection_head_with_box_refine_two_stage(self):
-        model = DetaForObjectDetection.from_pretrained("SenseTime/deformable-detr-with-box-refine-two-stage").to(
-            torch_device
-        )
-
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-
-        expected_logits = torch.tensor(
-            [[-6.7108, -4.3213, -6.3777], [-8.9014, -6.1799, -6.7240], [-6.9315, -4.4735, -6.2298]]
-        ).to(torch_device)
-        expected_boxes = torch.tensor(
-            [[0.2583, 0.5499, 0.4683], [0.7652, 0.9068, 0.4882], [0.5490, 0.2763, 0.0564]]
-        ).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
-
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
-
-    @require_torch_gpu
-    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt")
-        pixel_values = encoding["pixel_values"]
-        pixel_mask = encoding["pixel_mask"]
-
-        # 1. run model on CPU
-        model = DetaForObjectDetection.from_pretrained("SenseTime/deformable-detr-single-scale")
-
-        with torch.no_grad():
-            cpu_outputs = model(pixel_values, pixel_mask)
-
-        # 2. run model on GPU
-        model.to("cuda")
-
-        with torch.no_grad():
-            gpu_outputs = model(pixel_values.to("cuda"), pixel_mask.to("cuda"))
-
-        # 3. assert equivalence
-        for key in cpu_outputs.keys():
-            assert torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-4)
-
-        expected_logits = torch.tensor(
-            [[-9.9051, -4.2541, -6.4852], [-9.6947, -4.0854, -6.8033], [-10.0665, -5.8470, -7.7003]]
-        )
-        assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
