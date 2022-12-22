@@ -718,6 +718,35 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
     return docstring_decorator
 
 
+
+# add local_files_first parameter. does that works?
+def decorator_local_files_first(fn):
+    import traceback
+
+    def local_files_first_decorated_func(*args, local_files_first: bool = False, local_files_first_debug: bool = False, **kwargs):
+        if local_files_first:
+            val = None  # nothing! no model.
+            # write this compatible for py3.8
+            try:
+                val = fn(*args, **{**kwargs, "local_files_only": True})
+                # val = fn(*args,**(kwargs| {"local_files_only":True}))
+            except:
+                if local_files_first_debug:
+                    traceback.print_exc()
+                # no traceback?
+                print()
+                print("downloading model from network")
+                print()
+                val = fn(*args, **{**kwargs, "local_files_only": False})
+                # val = fn(*args,**(kwargs| {"local_files_only":False}))
+                # if this fails, then we guess the network is not available or not so good.
+            finally:
+                return val  # can you really do that?
+        else:
+            return fn(*args, **kwargs)
+    return local_files_first_decorated_func
+
+
 class AutoConfig:
     r"""
     This is a generic configuration class that will be instantiated as one of the configuration classes of the library
@@ -742,6 +771,7 @@ class AutoConfig:
         )
 
     @classmethod
+    @decorator_local_files_first  # should i place it here?
     @replace_list_option_in_docstrings()
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
