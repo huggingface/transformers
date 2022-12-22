@@ -263,7 +263,6 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
                     elif "bias" in name:
                         weight_type = "bias"
                     elif "weight" in name:
-                        # TODO: don't match quantizer.weight_proj
                         weight_type = "weight"
                     elif "running_mean" in name:
                         weight_type = "running_mean"

@@ -28,7 +28,6 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->SpeechT5Waveform
 class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a SpeechT5 feature extractor.

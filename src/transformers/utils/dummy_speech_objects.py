@@ -22,3 +22,17 @@ class Speech2TextFeatureExtractor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["speech"])
+
+
+class SpeechT5SpectrogramFeatureExtractor(metaclass=DummyObject):
+    _backends = ["speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["speech"])
+
+
+class SpeechT5WaveformFeatureExtractor(metaclass=DummyObject):
+    _backends = ["speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["speech"])
