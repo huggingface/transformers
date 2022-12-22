@@ -609,6 +609,7 @@ def _load_state_dict_into_meta_model(
             param_name = param_name[len(start_prefix) :]
 
         module_name = param_name
+        force_upcast_dtype = None
 
         # We convert floating dtypes to the `dtype` passed. We want to keep the buffers/params
         # in int/uint/bool and not cast them.
@@ -618,7 +619,8 @@ def _load_state_dict_into_meta_model(
                 and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
                 and dtype == torch.float16
             ):
-                param = param.to(torch.float32)
+                force_upcast_dtype = torch.float32
+                param = param.to(force_upcast_dtype)
             else:
                 param = param.to(dtype)
 
@@ -651,7 +653,7 @@ def _load_state_dict_into_meta_model(
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif not load_in_8bit:
-            set_module_tensor_to_device(model, param_name, param_device, value=param)
+            set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=force_upcast_dtype)
         else:
             set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
 
