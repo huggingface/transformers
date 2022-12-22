@@ -19,13 +19,13 @@ import warnings
 from ...processing_utils import ProcessorMixin
 
 
-class SpeechT5Processor(ProcessorMixin):
+class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
     r"""
     Constructs a SpeechT5 processor which wraps a Wav2Vec2 feature extractor and a SpeechT5 tokenizer into a single
     processor.
 
-    [`SpeechT5Processor`] offers all the functionalities of [`Wav2Vec2FeatureExtractor`] and [`SpeechT5Tokenizer`].
-    See the docstring of [`~SpeechT5Processor.__call__`] and [`~SpeechT5Processor.decode`] for more information.
+    [`SpeechT5ProcessorForSpeechToText`] offers all the functionalities of [`Wav2Vec2FeatureExtractor`] and [`SpeechT5Tokenizer`].
+    See the docstring of [`~SpeechT5ProcessorForSpeechToText.__call__`] and [`~SpeechT5ProcessorForSpeechToText.decode`] for more information.
 
     Args:
         feature_extractor (`Wav2Vec2FeatureExtractor`):
@@ -38,7 +38,6 @@ class SpeechT5Processor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
 
     def __call__(self, *args, **kwargs):
         """
@@ -124,3 +123,60 @@ class SpeechT5Processor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+
+class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
+    r"""
+    Constructs a SpeechT5 processor which wraps a SpeechT5 tokenizer and a spectrogram feature extractor
+    into a single processor.
+
+    [`SpeechT5ProcessorForTextToSpeech`] offers all the functionalities of [`SpeechT5Tokenizer`] and
+    [`SpeechT5SpectrogramFeatureExtractor`].
+    See the docstring of [`~SpeechT5ProcessorForTextToSpeech.__call__`] for more information.
+
+    Args:
+        tokenizer (`SpeechT5Tokenizer`):
+            An instance of [`SpeechT5Tokenizer`]. The tokenizer is a required input.
+        feature_extractor (`SpeechT5SpectrogramFeatureExtractor`):
+            An instance of [`SpeechT5SpectrogramFeatureExtractor`]. The feature extractor is a required input.
+    """
+    feature_extractor_class = "SpeechT5SpectrogramFeatureExtractor"
+    tokenizer_class = "SpeechT5Tokenizer"
+
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
+
+    def __call__(self, *args, **kwargs):
+        """
+        When used in normal mode, this method forwards all its arguments to SpeechT5Tokenizer's
+        [`~SpeechT5Tokenizer.__call__`] and returns its output.
+
+        You can process your labels by using the argument `audio` (either in the same call as your text
+        inputs, or in a separate call). This forwards its arguments to  Wav2Vec2FeatureExtractor's
+        [`~Wav2Vec2FeatureExtractor.__call__`].
+
+        Please refer to the docstring of the above two methods for more information.
+        """
+        audio = kwargs.pop("audio", None)
+        sampling_rate = kwargs.pop("sampling_rate", None)
+        text = kwargs.pop("text", None)
+
+        if len(args) > 0:
+            text = args[0]
+            args = args[1:]
+
+        if audio is None and text is None:
+            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+
+        if audio is not None:
+            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+        if text is not None:
+            encodings = self.tokenizer(text, **kwargs)
+
+        if text is None:
+            return inputs
+        elif audio is None:
+            return encodings
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs

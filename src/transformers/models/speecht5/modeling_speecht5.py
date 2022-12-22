@@ -56,7 +56,7 @@ _HIDDEN_STATES_START_POSITION = 1
 
 # General docstring
 _CONFIG_FOR_DOC = "SpeechT5Config"
-_PROCESSOR_FOR_DOC = "SpeechT5Processor"
+_PROCESSOR_FOR_DOC = "SpeechT5ProcessorForSpeechToText"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "TODO"

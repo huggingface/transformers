@@ -408,7 +408,8 @@ _import_structure = {
         "SpeechT5HiFiGANConfig",
         "SpeechT5Tokenizer",
         "SpeechT5CTCTokenizer",
-        "SpeechT5Processor",
+        "SpeechT5ProcessorForSpeechToText",
+        "SpeechT5ProcessorForTextToSpeech",
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
@@ -742,6 +743,7 @@ else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+    _import_structure["models.speecht5"].append("SpeechT5SpectrogramFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -3876,7 +3878,8 @@ if TYPE_CHECKING:
         SpeechT5HiFiGANConfig,
         SpeechT5Tokenizer,
         SpeechT5CTCTokenizer,
-        SpeechT5Processor,
+        SpeechT5ProcessorForSpeechToText,
+        SpeechT5ProcessorForTextToSpeech,
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
@@ -4175,6 +4178,7 @@ if TYPE_CHECKING:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
+        from .models.speecht5 import SpeechT5SpectrogramFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():

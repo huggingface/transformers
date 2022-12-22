@@ -30,7 +30,9 @@ from transformers import (
     SpeechT5ForTextToSpeech,
     SpeechT5Tokenizer,
     SpeechT5CTCTokenizer,
-    SpeechT5Processor,
+    SpeechT5ProcessorForSpeechToText,
+    SpeechT5ProcessorForTextToSpeech,
+    SpeechT5SpectrogramFeatureExtractor,
     Wav2Vec2FeatureExtractor,
     logging,
 )
@@ -373,10 +375,13 @@ def convert_speecht5_checkpoint(
                 do_normalize=False,
                 return_attention_mask=True,
             )
-            processor = SpeechT5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = SpeechT5ProcessorForSpeechToText(feature_extractor=feature_extractor, tokenizer=tokenizer)
             processor.save_pretrained(pytorch_dump_folder_path)
-        else:
-            tokenizer.save_pretrained(pytorch_dump_folder_path)
+
+        if task == "t2s":
+            feature_extractor = SpeechT5SpectrogramFeatureExtractor()
+            processor = SpeechT5ProcessorForTextToSpeech(tokenizer=tokenizer, feature_extractor=feature_extractor)
+            processor.save_pretrained(pytorch_dump_folder_path)
 
     fairseq_checkpoint = torch.load(checkpoint_path)
     recursively_load_weights(fairseq_checkpoint["model"], model, task)

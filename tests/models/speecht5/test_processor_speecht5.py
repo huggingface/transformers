@@ -18,7 +18,12 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.models.speecht5 import SpeechT5CTCTokenizer, SpeechT5Processor
+from transformers.models.speecht5 import (
+    SpeechT5Tokenizer,
+    SpeechT5CTCTokenizer,
+    SpeechT5ProcessorForSpeechToText,
+    SpeechT5ProcessorFoTextToSpeech,
+)
 from transformers.models.speecht5.tokenization_speecht5 import VOCAB_FILES_NAMES
 from transformers.models.wav2vec2 import Wav2Vec2FeatureExtractor
 from transformers.utils import FEATURE_EXTRACTOR_NAME

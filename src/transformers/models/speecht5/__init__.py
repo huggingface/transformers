@@ -17,16 +17,43 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_sentencepiece_available,
+    is_speech_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
     "configuration_hifigan": ["SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP", "SpeechT5HiFiGANConfig"],
     "configuration_speecht5": ["SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "SpeechT5Config"],
-    "processing_speecht5": ["SpeechT5Processor"],
-    "tokenization_speecht5": ["SpeechT5Tokenizer", "SpeechT5CTCTokenizer"],
 }
 
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_speecht5"] = ["SpeechT5Tokenizer", "SpeechT5CTCTokenizer"]
+
+try:
+    if not is_speech_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_speecht5"] = ["SpeechT5SpectrogramFeatureExtractor"]
+
+try:
+    if not (is_speech_available() and is_sentencepiece_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["processing_speecht5"] = ["SpeechT5ProcessorForSpeechToText", "SpeechT5ProcessorForTextToSpeech"]
 
 try:
     if not is_torch_available():
@@ -48,8 +75,30 @@ else:
 if TYPE_CHECKING:
     from .configuration_hifigan import SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP, SpeechT5HiFiGANConfig
     from .configuration_speecht5 import SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP, SpeechT5Config
-    from .processing_speecht5 import SpeechT5Processor
-    from .tokenization_speecht5 import SpeechT5Tokenizer, SpeechT5CTCTokenizer
+
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_speecht5 import SpeechT5Tokenizer, SpeechT5CTCTokenizer
+
+    try:
+        if not is_speech_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_speecht5 import SpeechT5SpectrogramFeatureExtractor
+
+    try:
+        if not (is_speech_available() and is_sentencepiece_available()):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .processing_speecht5 import SpeechT5ProcessorForSpeechToText, SpeechT5ProcessorForTextToSpeech
 
     try:
         if not is_torch_available():
