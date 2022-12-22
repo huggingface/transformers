@@ -20,16 +20,16 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import DetaConfig, is_timm_available, is_vision_available
+from transformers import DetaConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_timm, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 
 
-if is_timm_available():
+if is_torch_available():
     import torch
 
     from transformers import DetaForObjectDetection, DetaModel
@@ -38,7 +38,7 @@ if is_timm_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class DetaModelTester:
@@ -165,9 +165,9 @@ class DetaModelTester:
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
-@require_timm
+@require_torch
 class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (DetaModel, DetaForObjectDetection) if is_timm_available() else ()
+    all_model_classes = (DetaModel, DetaForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
@@ -472,29 +472,6 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_different_timm_backbone(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if model_class.__name__ == "DetaForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-
-            self.assertTrue(outputs)
-
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -529,51 +506,49 @@ def prepare_img():
     return image
 
 
-@require_timm
+@require_torch
 @require_vision
 @slow
 class DetaModelIntegrationTests(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr") if is_vision_available() else None
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("nielsr/deta-resnet-50") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = DetaForObjectDetection.from_pretrained("SenseTime/deformable-detr").to(torch_device)
+        model = DetaForObjectDetection.from_pretrained("nielsr/deta-resnet-50").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
+            outputs = model(**inputs)
 
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_logits = torch.tensor(
-            [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
+            [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
-            [[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]]
+            [[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
 
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
+        expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
 
         # verify postprocessing
-        results = feature_extractor.post_process_object_detection(
+        results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
         expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382]).to(torch_device)
         expected_labels = [17, 17, 75, 75, 63]
         expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841]).to(torch_device)
 
-        self.assertEqual(len(results["scores"]), 5)
+        self.assertEqual(len(results["scores"]), 100)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))

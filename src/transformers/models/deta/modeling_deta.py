@@ -1430,7 +1430,6 @@ class DetaModel(DetaPreTrainedModel):
         # Create input projection layers
         if config.num_feature_levels > 1:
             num_backbone_outs = len(intermediate_channel_sizes)
-            print("Backbone intermediate channels:", intermediate_channel_sizes)
             input_proj_list = []
             for _ in range(num_backbone_outs):
                 in_channels = intermediate_channel_sizes[_]
