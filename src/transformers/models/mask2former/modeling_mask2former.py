@@ -1601,7 +1601,7 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
         # Masked(Cross)-Attention Block
         cross_attn_weights = None
         self_attn_weights = None
-        
+
         residual = hidden_states
 
         hidden_states, cross_attn_weights = self.cross_attn(
@@ -1660,7 +1660,7 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
         # Masked(Cross)-Attention Block
         cross_attn_weights = None
         self_attn_weights = None
-        
+
         residual = hidden_states
 
         hidden_states = self.cross_attn_layer_norm(hidden_states)
@@ -1675,7 +1675,6 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-            
 
         # Self Attention Block
         residual = hidden_states
@@ -1689,7 +1688,6 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        
 
         # Fully Connected
         residual = hidden_states
@@ -1736,26 +1734,28 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        
+
         if self.pre_norm:
             outputs = self.forward_pre(
-                    hidden_states=hidden_states,
-                    level_index=level_index,
-                    position_embeddings=position_embeddings,
-                    query_position_embeddings=query_position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions)
+                hidden_states=hidden_states,
+                level_index=level_index,
+                position_embeddings=position_embeddings,
+                query_position_embeddings=query_position_embeddings,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
+            )
         else:
             outputs = self.forward_post(
-                    hidden_states=hidden_states,
-                    level_index=level_index,
-                    position_embeddings=position_embeddings,
-                    query_position_embeddings=query_position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions)
-        
+                hidden_states=hidden_states,
+                level_index=level_index,
+                position_embeddings=position_embeddings,
+                query_position_embeddings=query_position_embeddings,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
+            )
+
         return outputs
 
 
