@@ -19,7 +19,6 @@ import copy
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import CONFIG_MAPPING
-from ..resnet import ResNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -92,7 +91,7 @@ class UperNetConfig(PretrainedConfig):
 
         if backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = ResNetConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
+            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
