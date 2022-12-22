@@ -1073,7 +1073,7 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += (attn_weights,)
+            outputs += (attn_weights.transpose(1, 0),)
 
         return outputs
 
@@ -1177,12 +1177,12 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
         hidden_states = inputs_embeds
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
 
-        encoder_states = () if output_hidden_states else None
+        all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+                all_hidden_states += (hidden_states.transpose(1, 0),)
 
             layer_outputs = encoder_layer(
                 hidden_states,
@@ -1200,10 +1200,10 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+            all_hidden_states += (hidden_states.transpose(1, 0),)
 
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
 
@@ -2312,26 +2312,25 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        encoder_last_hidden_state = pixel_level_module_output.encoder_last_hidden_state
-        pixel_decoder_last_hidden_state = pixel_level_module_output.decoder_last_hidden_state
-        transformer_decoder_last_hidden_state = transformer_module_output.last_hidden_state
-
         encoder_hidden_states = None
         pixel_decoder_hidden_states = None
         transformer_decoder_hidden_states = None
+        transformer_decoder_intermediate_states = None
         hidden_states = None
 
         if output_hidden_states:
             encoder_hidden_states = pixel_level_module_output.encoder_hidden_states
             pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states
-            transformer_decoder_hidden_states = transformer_module_output.hidden_states
+            transformer_decoder_hidden_states = tuple(
+                [state.transpose(1, 0) for state in transformer_module_output.hidden_states]
+            )
             transformer_decoder_intermediate_states = transformer_module_output.intermediate_hidden_states
             hidden_states = encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states
 
         output = Mask2FormerModelOutput(
-            encoder_last_hidden_state=encoder_last_hidden_state,
-            pixel_decoder_last_hidden_state=pixel_decoder_last_hidden_state,
-            transformer_decoder_last_hidden_state=transformer_decoder_last_hidden_state,
+            encoder_last_hidden_state=pixel_level_module_output.encoder_last_hidden_state,
+            pixel_decoder_last_hidden_state=pixel_level_module_output.decoder_last_hidden_state,
+            transformer_decoder_last_hidden_state=transformer_module_output.last_hidden_state.transpose(1, 0),
             encoder_hidden_states=encoder_hidden_states,
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
@@ -2491,8 +2490,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
 
         if mask_labels is not None and class_labels is not None:
             loss_dict = self.get_loss_dict(
-                masks_queries_logits=outputs.masks_queries_logits[-1],
-                class_queries_logits=outputs.class_queries_logits[-1],
+                masks_queries_logits=masks_queries_logits[-1],
+                class_queries_logits=class_queries_logits[-1],
                 mask_labels=mask_labels,
                 class_labels=class_labels,
                 auxiliary_predictions=auxiliary_logits,

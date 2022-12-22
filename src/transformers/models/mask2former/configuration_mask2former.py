@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 from ..swin import SwinConfig
 
 
@@ -95,7 +96,7 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
         encoder_layers: Optional[int] = 6,
         decoder_layers: Optional[int] = 10,
         num_heads: Optional[int] = 8,
-        dropout: Optional[float] = 0.1,
+        dropout: Optional[float] = 0.0,
         dim_feedforward: Optional[int] = 2048,
         pre_norm: Optional[bool] = False,
         enforce_input_projection: Optional[bool] = False,
@@ -158,7 +159,7 @@ class Mask2FormerConfig(PretrainedConfig):
             layers, hidden state dimensions, normalization settings, etc.
         ignore_value (`int`, *optional*, defaults to 255):
             Category id to be ignored during training.
-        num_queries (`int`, *optional*, defaults to 150):
+        num_queries (`int`, *optional*, defaults to 100):
             Number of queries for the decoder.
         no_object_weight (`int`, *optional*, defaults to 0.1):
             The weight to apply to the null (no object) class.
@@ -203,6 +204,7 @@ class Mask2FormerConfig(PretrainedConfig):
 
     """
     model_type = "mask2former"
+    backbones_supported = ["swin"]
     attribute_map = {"hidden_size": "mask_feature_size"}
 
     def __init__(
@@ -210,7 +212,7 @@ class Mask2FormerConfig(PretrainedConfig):
         backbone_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
         ignore_value: Optional[int] = 255,
-        num_queries: Optional[int] = 150,
+        num_queries: Optional[int] = 100,
         no_object_weight: Optional[float] = 0.1,
         class_weight: Optional[float] = 2.0,
         mask_weight: Optional[float] = 5.0,
@@ -237,9 +239,22 @@ class Mask2FormerConfig(PretrainedConfig):
                 depths=[2, 2, 6, 2],
                 num_heads=[3, 6, 12, 24],
                 window_size=7,
-                drop_path_rate=0.3,
+                drop_path_rate=0.1,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
+        else:
+            # verify that the backbone is supported
+            backbone_model_type = (
+                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
+            )
+            if backbone_model_type not in self.backbones_supported:
+                raise ValueError(
+                    f"Backbone {backbone_model_type} not supported, please use one of"
+                    f" {','.join(self.backbones_supported)}"
+                )
+            if isinstance(backbone_config, dict):
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
 
         decoder_config_dict = kwargs.pop("decoder_config_dict", None)
 

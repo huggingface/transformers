@@ -101,10 +101,16 @@ class Mask2FormerModelTester:
     def get_config(self):
         config = Mask2FormerConfig()
         config.num_labels = self.num_labels
-        config.backbone_config = (
-            SwinConfig(
-                depths=[1, 1, 1, 1],
-            ),
+        config.backbone_config = SwinConfig(
+            image_size=32,
+            in_channels=3,
+            patch_size=4,
+            embed_dim=12,
+            depths=[1, 1, 1, 1],
+            num_heads=[3, 6, 12, 24],
+            window_size=4,
+            drop_path_rate=0.3,
+            out_features=["stage1", "stage2", "stage3", "stage4"],
         )
         config.num_queries = self.num_queries
         config.feature_strides = self.feature_strides
@@ -313,9 +319,9 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
 
         pixel_decoder_hidden_states = outputs.pixel_decoder_hidden_states[0]
         pixel_decoder_hidden_states.retain_grad()
-        # we requires_grad=True in inputs_embeds (line 2152), the original implementation don't
-        transformer_decoder_hidden_states = outputs.transformer_decoder_hidden_states[0]
-        transformer_decoder_hidden_states.retain_grad()
+
+        hidden_states = outputs.hidden_states[0]
+        hidden_states.retain_grad()
 
         attentions = outputs.attentions[0]
         attentions.retain_grad()
@@ -324,7 +330,7 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(pixel_decoder_hidden_states.grad)
-        self.assertIsNotNone(transformer_decoder_hidden_states.grad)
+        self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
 

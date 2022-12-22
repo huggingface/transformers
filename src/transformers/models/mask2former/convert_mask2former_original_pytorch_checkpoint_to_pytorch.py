@@ -159,14 +159,12 @@ class OriginalMask2FormerConfigToOursConverter:
                 num_heads=model.MASK_FORMER.NHEADS,
                 dropout=model.MASK_FORMER.DROPOUT,
                 dim_feedforward=model.MASK_FORMER.DIM_FEEDFORWARD,
-                pre_norm=model.MASK_FORMER.PRE_NORM,
                 enforce_input_projection=model.MASK_FORMER.ENFORCE_INPUT_PROJ,
                 common_stride=model.SEM_SEG_HEAD.COMMON_STRIDE,
             ),
             id2label=id2label,
             label2id=label2id,
         )
-
         return config
 
 
@@ -783,6 +781,8 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
+        if "base" in str(config_file):
+            continue
         feature_extractor = OriginalMask2FormerConfigToFeatureExtractorConverter()(
             setup_cfg(Args(config_file=config_file))
         )
