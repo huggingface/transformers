@@ -509,8 +509,8 @@ def get_size_dict(
     if not isinstance(size, dict):
         size_dict = convert_to_size_dict(size, max_size, default_to_square, height_width_order)
         logger.info(
-            "{param_name} should be a dictionary on of the following set of keys: {VALID_SIZE_DICT_KEYS}, got {size}."
-            " Converted to {size_dict}.",
+            f"{param_name} should be a dictionary on of the following set of keys: {VALID_SIZE_DICT_KEYS}, got {size}."
+            f" Converted to {size_dict}.",
         )
     else:
         size_dict = size
