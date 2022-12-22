@@ -62,9 +62,6 @@ if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 if is_torch_neuroncore_available(check_device=False):
-    # Set compiler flag to compile for transformer model type
-    os.environ["NEURON_CC_FLAGS"] = os.environ.get("NEURON_CC_FLAGS", "") + " --model-type=transformer"
-
     # torchrun support
     # https://github.com/pytorch/xla/pull/3609
     if os.environ.get("WORLD_SIZE"):
