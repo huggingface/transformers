@@ -21,11 +21,12 @@ Steps:
     `gsutil -m cp -r gs://t5-data/pretrained_models/t5x/t5_1_1_small $HOME/`
 - Create or download a corresponding config for the downloaded model. E.g. for T5 v1.1 small, you can use
     https://huggingface.co/google/t5-v1_1-small/blob/main/config.json
-- Convert: ```
+- Convert:
+    ```
     python3 convert_t5x_checkpoint_to_pytorch.py --t5x_checkpoint_path=$HOME/t5_1_1_small --config_file=config.json\
       --pytorch_dump_path=$HOME/t5_1_1_small_pt
     ```
-    """
+"""
 
 import argparse
 import collections
