@@ -48,11 +48,8 @@ class BridgeTowerModelTester:
         parent,
         cross_modal_transform_shared=True,
         drop_rate=0.1,
-        freeze_roberta=False,
-        freeze_vit=False,
-        freeze_layer_count_roberta=False,
-        freeze_layer_count_vit=False,
         head_hidden_scale=2,
+        hidden_act="gelu",
         hidden_size=768,
         image_size=288,
         input_image_embed_size=768,
@@ -65,34 +62,16 @@ class BridgeTowerModelTester:
         mlp_ratio=4,
         num_attention_heads=12,
         num_hidden_layers=6,
-        resolution_before=224,
-        stop_gradient=False,
+        text_config=None,
         tie_word_embeddings=False,
-        tokenizer="roberta-base",
-        unfreeze_roberta_attention=False,
-        unfreeze_roberta_embeddings=False,
-        unfreeze_roberta_encoder=False,
-        unfreeze_roberta_layernorm=False,
-        unfreeze_vit_attention=False,
-        unfreeze_vit_layernorm=False,
-        vit_embed_dim=512,
-        vit_num_hidden_layers=12,
-        vit_layernorm_init_from_vit=False,
-        vit_layernorm_shared=True,
-        vit_patch_size=16,
-        vit_intermediate_size=512,
-        vit_hidden_size=768,
-        vit_remove_last=False,
+        vision_config=None,
         vocab_size=50265,
     ):
         self.parent = parent
         self.cross_modal_transform_shared = cross_modal_transform_shared
         self.drop_rate = drop_rate
-        self.freeze_roberta = freeze_roberta
-        self.freeze_vit = freeze_vit
-        self.freeze_layer_count_roberta = freeze_layer_count_roberta
-        self.freeze_layer_count_vit = freeze_layer_count_vit
         self.head_hidden_scale = head_hidden_scale
+        self.hidden_act = hidden_act
         self.hidden_size = hidden_size
         self.image_size = image_size
         self.input_image_embed_size = input_image_embed_size
@@ -105,24 +84,7 @@ class BridgeTowerModelTester:
         self.mlp_ratio = mlp_ratio
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
-        self.resolution_before = resolution_before
-        self.stop_gradient = stop_gradient
         self.tie_word_embeddings = tie_word_embeddings
-        self.tokenizer = tokenizer
-        self.unfreeze_roberta_attention = unfreeze_roberta_attention
-        self.unfreeze_roberta_embeddings = unfreeze_roberta_embeddings
-        self.unfreeze_roberta_encoder = unfreeze_roberta_encoder
-        self.unfreeze_roberta_layernorm = unfreeze_roberta_layernorm
-        self.unfreeze_vit_attention = unfreeze_vit_attention
-        self.unfreeze_vit_layernorm = unfreeze_vit_layernorm
-        self.vit_embed_dim = vit_embed_dim
-        self.vit_num_hidden_layers = vit_num_hidden_layers
-        self.vit_layernorm_init_from_vit = vit_layernorm_init_from_vit
-        self.vit_layernorm_shared = vit_layernorm_shared
-        self.vit_patch_size = vit_patch_size
-        self.vit_remove_last = vit_remove_last
-        self.vit_intermediate_size = vit_intermediate_size
-        self.vit_hidden_size = vit_hidden_size
         self.vocab_size = vocab_size
         self.num_channels = 3
         self.seq_length = 4
@@ -144,11 +106,8 @@ class BridgeTowerModelTester:
         return BridgeTowerConfig(
             cross_modal_transform_shared=self.cross_modal_transform_shared,
             drop_rate=self.drop_rate,
-            freeze_roberta=self.freeze_roberta,
-            freeze_vit=self.freeze_vit,
-            freeze_layer_count_roberta=self.freeze_layer_count_roberta,
-            freeze_layer_count_vit=self.freeze_layer_count_vit,
             head_hidden_scale=self.head_hidden_scale,
+            hidden_act=self.hidden_act,
             hidden_size=self.hidden_size,
             image_size=self.image_size,
             input_image_embed_size=self.input_image_embed_size,
@@ -161,24 +120,7 @@ class BridgeTowerModelTester:
             mlp_ratio=self.mlp_ratio,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
-            resolution_before=self.resolution_before,
-            stop_gradient=self.stop_gradient,
             tie_word_embeddings=self.tie_word_embeddings,
-            tokenizer=self.tokenizer,
-            unfreeze_roberta_attention=self.unfreeze_roberta_attention,
-            unfreeze_roberta_embeddings=self.unfreeze_roberta_embeddings,
-            unfreeze_roberta_encoder=self.unfreeze_roberta_encoder,
-            unfreeze_roberta_layernorm=self.unfreeze_roberta_layernorm,
-            unfreeze_vit_attention=self.unfreeze_vit_attention,
-            unfreeze_vit_layernorm=self.unfreeze_vit_layernorm,
-            vit_embed_dim=self.vit_embed_dim,
-            vit_num_hidden_layers=self.vit_num_hidden_layers,
-            vit_layernorm_init_from_vit=self.vit_layernorm_init_from_vit,
-            vit_layernorm_shared=self.vit_layernorm_shared,
-            vit_patch_size=self.vit_patch_size,
-            vit_remove_last=self.vit_remove_last,
-            vit_intermediate_size=self.vit_intermediate_size,
-            vit_hidden_size=self.vit_hidden_size,
             vocab_size=self.vocab_size,
         )
 
@@ -260,6 +202,7 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
+    has_attentions = False
 
     # function to extract meaningful tensor from output per different model_class
     def extract_output(self, outputs, model_class):
@@ -334,46 +277,30 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
+    @unittest.skip(
+        reason="""Bridge Tower model currently does not output hidden states. So this test is not applicable."""
+    )
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
+    @unittest.skip(
+        reason="""Bridge Tower model currently does not output hidden states. So this test is not applicable."""
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
-    def test_feed_forward_chunking(self):
-        pass
-
-    # Have not implemented model.get_input_embeddings() and model.get_output_embeddings()
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
+    @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. So this test is not applicable.""")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
-    def test_gradient_checkpointing_backward_compatibility(self):
-        pass
-
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
-    def test_gradient_checkpointing_enable_disable(self):
-        pass
-
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
+    @unittest.skip(
+        reason="""Bridge Tower model currently only supports pretrained model. Thus this test is not needed."""
+    )
     def test_initialization(self):
         pass
 
-    # Have not implemented model.get_input_embeddings()
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
+    @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. So this test is not applicable.""")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="""Bridge Tower model does not support this for now.""")
-    def test_save_load_fast_init_to_base(self):
         pass
 
 

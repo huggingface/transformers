@@ -77,6 +77,7 @@ else:
             ("biogpt", ("BioGptTokenizer", None)),
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
+            ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
             ("bridgetower", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("byt5", ("ByT5Tokenizer", None)),
@@ -525,7 +526,9 @@ class AutoTokenizer:
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
                 facebook/rag-token-base), specify it here.
             use_fast (`bool`, *optional*, defaults to `True`):
-                Whether or not to try to load the fast version of the tokenizer.
+                Use a [fast Rust-based tokenizer](https://huggingface.co/docs/tokenizers/index) if it is supported for
+                a given model. If a fast tokenizer is not available for a given model, a normal Python-based tokenizer
+                is returned instead.
             tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
@@ -574,9 +577,14 @@ class AutoTokenizer:
 
             tokenizer_class_name, tokenizer_fast_class_name = tokenizer_class_tuple
 
-            if use_fast and tokenizer_fast_class_name is not None:
-                tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
-
+            if use_fast:
+                if tokenizer_fast_class_name is not None:
+                    tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
+                else:
+                    logger.warning(
+                        "`use_fast` is set to `True` but the tokenizer class does not have a fast version. "
+                        " Falling back to the slow version."
+                    )
             if tokenizer_class is None:
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
 

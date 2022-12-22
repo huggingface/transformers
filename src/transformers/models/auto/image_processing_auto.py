@@ -39,6 +39,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitImageProcessor"),
         ("bit", "BitImageProcessor"),
+        ("blip", "BlipImageProcessor"),
         ("bridgetower", "BridgeTowerImageProcessor"),
         ("chinese_clip", "ChineseCLIPImageProcessor"),
         ("clip", "CLIPImageProcessor"),

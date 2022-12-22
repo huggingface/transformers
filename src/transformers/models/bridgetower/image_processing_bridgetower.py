@@ -25,8 +25,6 @@ from transformers.utils.generic import TensorType
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -53,7 +51,6 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.pad
 def pad(
     image: np.ndarray,
     output_size: Tuple[int, int],
@@ -111,8 +108,8 @@ def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarr
     return mask
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.get_max_dimensions
-def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
+# Copied from transformers.models.vilt.image_processing_vilt.get_max_height_width
+def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -233,11 +230,12 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
+        self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
         self.do_pad = do_pad
         self.do_center_crop = do_center_crop
 
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -274,6 +272,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         output_size = get_resize_output_image_size(image, shorter=shorter, longer=longer, size_divisor=size_divisor)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.rescale
     def rescale(
         self,
         image: np.ndarray,
@@ -316,6 +315,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         output_size = size["shortest_edge"]
         return center_crop(image, size=(output_size, output_size), data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.normalize
     def normalize(
         self,
         image: np.ndarray,
@@ -365,7 +365,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        pad_size = get_max_dimensions(images)
+        pad_size = get_max_height_width(images)
         padded_images = [pad(image=image, output_size=pad_size, data_format=data_format) for image in images]
         data = {"pixel_values": padded_images}
         if return_pixel_mask:
@@ -374,6 +374,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.pad_and_create_pixel_mask
     def pad_and_create_pixel_mask(
         self,
         pixel_values_list: List[ImageInput],
