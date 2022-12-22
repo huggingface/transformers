@@ -60,7 +60,7 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
         chunk = inputs[i : i + chunk_len]
         processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
         if dtype is not None:
-            processed = {k: v.to(dtype=dtype) for k, v in processed.items()}
+            processed = processed.to(dtype=dtype)
         _stride_left = 0 if i == 0 else stride_left
         is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
@@ -254,7 +254,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return preprocess_params, {}, postprocess_params
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, ignore_warning=False, dtype=None):
-        print(f"Running with dtype {dtype}")
         if isinstance(inputs, str):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
@@ -344,7 +343,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
             )
             if dtype is not None:
-                processed = {k: v.to(dtype=dtype) for k, v in processed.items()}
+                processed = processed.to(dtype=dtype)
             if stride is not None:
                 if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
                     raise ValueError("Stride is only usable with CTC models, try removing it")
