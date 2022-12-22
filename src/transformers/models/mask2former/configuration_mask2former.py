@@ -256,22 +256,15 @@ class Mask2FormerConfig(PretrainedConfig):
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
-        decoder_config_dict = kwargs.pop("decoder_config_dict", None)
-
-        if decoder_config_dict is not None:
-            decoder_config = decoder_config_dict
-
         if decoder_config is None:
-            decoder_config = {}
+            self.decoder_config = Mask2FormerDecoderConfig()
             logger.info("decoder_config is None. Initializing the Mask2FormerDecoderConfig with default values.")
+        elif isinstance(decoder_config, dict):
+            self.decoder_config = Mask2FormerDecoderConfig(**decoder_config)
+        else:
+            raise TypeError("Please pass in decoder configuration settings as a dictionary.")
 
         self.backbone_config = backbone_config
-
-        if isinstance(decoder_config, PretrainedConfig):
-            decoder_config = decoder_config.to_dict()
-
-        self.decoder_config = Mask2FormerDecoderConfig(**decoder_config)
-
         self.ignore_value = ignore_value
         self.num_queries = num_queries
         self.no_object_weight = no_object_weight
