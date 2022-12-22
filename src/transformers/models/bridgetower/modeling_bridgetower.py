@@ -419,8 +419,10 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-    " top.",
+    (
+        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+        " top."
+    ),
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -542,16 +544,20 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.device)
         extend_text_masks = self.text_transformer.get_extended_attention_mask(attention_mask, input_shape, self.device)
 
+        # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
         split_index = len(self.text_transformer.encoder.layer) - self.config.num_hidden_layers + 1
+
+        # Run the first 'split_index' layers of the textual encoder
         for layer in self.text_transformer.encoder.layer[:split_index]:
             text_embeds = layer(text_embeds, extend_text_masks)[0]
 
         image_embeds = self.vit_model.visual.forward_pre(pixel_values.type(self.vit_model.dtype))
+        # Run the first 'split_index' layers of the visual encoder
         for block in self.vit_model.visual.transformer.resblocks[:split_index]:
             image_embeds = block(image_embeds)
         image_embeds_with_ln = self.vit_model.visual.forward_post(image_embeds.type(self.vit_model.dtype))
 
-        # first layer
+        # first layer is a special case because we don't have the output from the cross-encoder yet
         cross_modal_text = self.cross_modal_text_transform(text_embeds)
         text_token_type_embeddings = self.token_type_embeddings(torch.zeros(1).long().to(self.device)).expand_as(
             cross_modal_text
@@ -587,7 +593,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         link_layer_index = 0
 
-        # link tower fusion
+        #  Each of the top 6 layers of the visual and textual encoders ([split_index:]) is connected to each layer of
+        #  the cross-modal encoder via bridge layers, which brings bottom-up alignment and fusion to the cross-modal encoder.
         for i in range(split_index, len(self.text_transformer.encoder.layer)):
             text_embeds = self.text_transformer.encoder.layer[i](text_embeds, extend_text_masks)[0]
             image_embeds = self.vit_model.visual.transformer.resblocks[i](image_embeds).type(self.vit_model.dtype)
@@ -599,6 +606,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             text_link_tower = self.cross_modal_text_link_tower[link_layer_index]
             image_link_tower = self.cross_modal_image_link_tower[link_layer_index]
 
+            # Bridge layers for textual and visual encoders
             cross_text_feats_ = text_link_tower(
                 self.cross_modal_text_transform(text_embeds) + text_token_type_embeddings,
                 cross_text_feats,
@@ -606,6 +614,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             )
             cross_image_feats_ = image_link_tower(image_embeds_with_ln, cross_image_feats, extend_image_masks)
 
+            # Cross-modal encoder via bridge layers of textual and visual encoders
             cross_text_feats = self.cross_modal_text_layers[link_layer_index + 1](
                 cross_text_feats_,
                 cross_image_feats_,
@@ -621,6 +630,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
             link_layer_index += 1
 
+        # Concatenate the cls token of the text and image feats to get the final represtation
         text_feats, image_feats = cross_text_feats, cross_image_feats
         cls_feats = self.get_cls_feats(text_feats, image_feats)
 
@@ -1319,7 +1329,6 @@ class BridgeTowerTextEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
