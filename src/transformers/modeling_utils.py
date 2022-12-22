@@ -619,8 +619,9 @@ def _load_state_dict_into_meta_model(
                 and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
                 and dtype == torch.float16
             ):
-                force_upcast_dtype = torch.float32
-                param = param.to(force_upcast_dtype)
+                param = param.to(torch.float32)
+                # For backward compatibility with older versions of the `accelerate`
+                force_upcast_dtype = torch.float32 if set_module_tensor_to_device.__code__.co_argcount == 5 else None
             else:
                 param = param.to(dtype)
 
@@ -653,7 +654,11 @@ def _load_state_dict_into_meta_model(
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif not load_in_8bit:
-            set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=force_upcast_dtype)
+            if force_upcast_dtype is not None:
+                set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=force_upcast_dtype)
+            else:
+                # For backward compatibility with older versions of the `accelerate`
+                set_module_tensor_to_device(model, param_name, param_device, value=param)
         else:
             set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
 
