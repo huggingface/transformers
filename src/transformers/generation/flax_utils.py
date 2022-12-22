@@ -169,7 +169,7 @@ class FlaxGenerationMixin:
             if decoder_input_ids is not None:
                 return decoder_input_ids
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
-        return jnp.array(decoder_start_token_id).reshape(1, -1).repeat(batch_size, axis=0)
+        return jnp.array(decoder_start_token_id, dtype="i4").reshape(1, -1).repeat(batch_size, axis=0)
 
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         # retrieve decoder_start_token_id for encoder-decoder models
