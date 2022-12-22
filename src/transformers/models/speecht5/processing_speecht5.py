@@ -24,8 +24,9 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
     Constructs a SpeechT5 processor which wraps a Wav2Vec2 feature extractor and a SpeechT5 tokenizer into a single
     processor.
 
-    [`SpeechT5ProcessorForSpeechToText`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and [`SpeechT5Tokenizer`].
-    See the docstring of [`~SpeechT5ProcessorForSpeechToText.__call__`] and [`~SpeechT5ProcessorForSpeechToText.decode`] for more information.
+    [`SpeechT5ProcessorForSpeechToText`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and
+    [`SpeechT5Tokenizer`]. See the docstring of [`~SpeechT5ProcessorForSpeechToText.__call__`] and
+    [`~SpeechT5ProcessorForSpeechToText.decode`] for more information.
 
     Args:
         feature_extractor (`SpeechT5WaveformFeatureExtractor`):
@@ -44,9 +45,8 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
         [`~SpeechT5WaveformFeatureExtractor.__call__`] and returns its output.
 
-        You can process your labels by using the argument `text` (either in the same call as your audio
-        inputs, or in a separate call). This forwards its arguments to SpeechT5Tokenizer's
-        [`~SpeechT5Tokenizer.__call__`].
+        You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
+        separate call). This forwards its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.__call__`].
 
         Please refer to the docstring of the above two methods for more information.
         """
@@ -84,9 +84,8 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
         [`~SpeechT5WaveformFeatureExtractor.pad`] and returns its output.
 
-        You can process your labels by using the argument `text` (either in the same call as your audio
-        inputs, or in a separate call). This forwards its arguments to SpeechT5Tokenizer's
-        [`~SpeechT5Tokenizer.pad`].
+        You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
+        separate call). This forwards its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].
 
         Please refer to the docstring of the above two methods for more information.
         """
@@ -112,27 +111,27 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
+        This method forwards all its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.batch_decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
+        This method forwards all its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
 
 class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
     r"""
-    Constructs a SpeechT5 processor which wraps a SpeechT5 tokenizer and a spectrogram feature extractor
-    into a single processor.
+    Constructs a SpeechT5 processor which wraps a SpeechT5 tokenizer and a spectrogram feature extractor into a single
+    processor.
 
     [`SpeechT5ProcessorForTextToSpeech`] offers all the functionalities of [`SpeechT5Tokenizer`] and
-    [`SpeechT5SpectrogramFeatureExtractor`].
-    See the docstring of [`~SpeechT5ProcessorForTextToSpeech.__call__`] for more information.
+    [`SpeechT5SpectrogramFeatureExtractor`]. See the docstring of [`~SpeechT5ProcessorForTextToSpeech.__call__`] for
+    more information.
 
     Args:
         tokenizer (`SpeechT5Tokenizer`):
@@ -151,8 +150,8 @@ class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to SpeechT5Tokenizer's
         [`~SpeechT5Tokenizer.__call__`] and returns its output.
 
-        You can process your labels by using the argument `audio` (either in the same call as your text
-        inputs, or in a separate call). This forwards its arguments to SpeechT5SpectrogramFeatureExtractor's
+        You can process your labels by using the argument `audio` (either in the same call as your text inputs, or in a
+        separate call). This forwards its arguments to SpeechT5SpectrogramFeatureExtractor's
         [`~SpeechT5SpectrogramFeatureExtractor.__call__`].
 
         Please refer to the docstring of the above two methods for more information.

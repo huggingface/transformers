@@ -2620,8 +2620,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         vocoder: Optional[nn.Module] = None,
     ) -> torch.FloatTensor:
         r"""
-        Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into
-        a speech waveform using a vocoder.
+        Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into a
+        speech waveform using a vocoder.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2640,8 +2640,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             maxlenratio (`float`, *optional*, defaults to 20.0):
                 Used to calculate the maximum allowed length for the output sequence.
             vocoder (`nn.Module`, *optional*, defaults to `None`):
-                The vocoder that converts the mel spectrogram into a speech waveform.
-                If `None`, the output is the mel spectrogram.
+                The vocoder that converts the mel spectrogram into a speech waveform. If `None`, the output is the mel
+                spectrogram.
 
         Returns:
             `torch.FloatTensor` of shape `(output_sequence_length, config.num_mel_bins)` containing the predicted mel

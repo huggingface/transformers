@@ -37,7 +37,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_speecht5"] = ["SpeechT5Tokenizer", "SpeechT5CTCTokenizer"]
+    _import_structure["tokenization_speecht5"] = ["SpeechT5CTCTokenizer", "SpeechT5Tokenizer"]
 
 try:
     if not is_speech_available():

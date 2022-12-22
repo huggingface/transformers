@@ -405,11 +405,11 @@ _import_structure = {
     "models.speecht5": [
         "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SpeechT5Config",
-        "SpeechT5HiFiGANConfig",
-        "SpeechT5Tokenizer",
         "SpeechT5CTCTokenizer",
+        "SpeechT5HiFiGANConfig",
         "SpeechT5ProcessorForSpeechToText",
         "SpeechT5ProcessorForTextToSpeech",
+        "SpeechT5Tokenizer",
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
@@ -2204,27 +2204,19 @@ else:
             "Speech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
     _import_structure["models.speecht5"].extend(
         [
             "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SpeechT5ForCTC",
+            "SpeechT5ForPreTraining",
             "SpeechT5ForSpeechToText",
             "SpeechT5ForTextToSpeech",
-            "SpeechT5ForPreTraining",
+            "SpeechT5HiFiGAN",
             "SpeechT5Model",
             "SpeechT5PreTrainedModel",
-            "SpeechT5HiFiGAN",
         ]
     )
-    _import_structure["models.whisper"].extend(
-        [
-            "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "WhisperForConditionalGeneration",
-            "WhisperModel",
-            "WhisperPreTrainedModel",
-        ]
-    )
-    _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2485,6 +2477,14 @@ else:
             "WavLMForXVector",
             "WavLMModel",
             "WavLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.whisper"].extend(
+        [
+            "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WhisperForConditionalGeneration",
+            "WhisperModel",
+            "WhisperPreTrainedModel",
         ]
     )
     _import_structure["models.whisper"].extend(
