@@ -1843,11 +1843,11 @@ class DetaModel(DetaPreTrainedModel):
     """,
     DETA_START_DOCSTRING,
 )
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection with DeformableDetr->Deta,DEFORMABLE_DETR->DETA,Deformable DETR->DETA
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _keys_to_ignore_on_load_missing = ["bbox_embed\.[1-9]\d*", "class_embed\.[1-9]\d*"]
 
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection.__init__ with DeformableDetr->Deta
     def __init__(self, config: DetaConfig):
         super().__init__(config)
 
@@ -1888,8 +1888,8 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
     @torch.jit.unused
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection._set_aux_loss
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
@@ -2164,7 +2164,7 @@ class DetaLoss(nn.Module):
         if self.assign_second_stage:
             self.stg2_assigner = Stage2Assigner(num_queries)
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_labels
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_labels
     def loss_labels(self, outputs, targets, indices, num_boxes):
         """
         Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor
@@ -2199,7 +2199,7 @@ class DetaLoss(nn.Module):
         return losses
 
     @torch.no_grad()
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_cardinality
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_cardinality
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """
         Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
@@ -2215,7 +2215,7 @@ class DetaLoss(nn.Module):
         losses = {"cardinality_error": card_err}
         return losses
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_boxes
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_boxes
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -2240,21 +2240,21 @@ class DetaLoss(nn.Module):
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_source_permutation_idx
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss._get_source_permutation_idx
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_target_permutation_idx
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss._get_target_permutation_idx
     def _get_target_permutation_idx(self, indices):
         # permute targets following indices
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.get_loss
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.get_loss
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
