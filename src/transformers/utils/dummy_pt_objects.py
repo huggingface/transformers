@@ -5700,10 +5700,7 @@ class TrOCRPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-TVLT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class TvltModel(metaclass=DummyObject):
+class Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -5715,16 +5712,23 @@ class TvltForPreTraining(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-        
-        
+
+
 class TvltForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-        
+
 class TvltForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvltModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
