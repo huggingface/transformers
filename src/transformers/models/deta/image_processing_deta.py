@@ -1270,7 +1270,7 @@ class DetaImageProcessor(BaseImageProcessor):
             in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-        bs, n_queries, n_cls = out_logits.shape
+        batch_size, num_queries, num_labels = out_logits.shape
 
         if target_sizes is not None:
             if len(out_logits) != len(target_sizes):
@@ -1280,8 +1280,8 @@ class DetaImageProcessor(BaseImageProcessor):
 
         prob = out_logits.sigmoid()
 
-        all_scores = prob.view(bs, n_queries * n_cls).to(out_logits.device)
-        all_indexes = torch.arange(n_queries * n_cls)[None].repeat(bs, 1).to(out_logits.device)
+        all_scores = prob.view(batch_size, num_queries * num_labels).to(out_logits.device)
+        all_indexes = torch.arange(num_queries * num_labels)[None].repeat(batch_size, 1).to(out_logits.device)
         all_boxes = all_indexes // out_logits.shape[2]
         all_labels = all_indexes % out_logits.shape[2]
 
@@ -1300,7 +1300,7 @@ class DetaImageProcessor(BaseImageProcessor):
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
-        for b in range(bs):
+        for b in range(batch_size):
             box = boxes[b]
             score = all_scores[b]
             lbls = all_labels[b]
