@@ -211,5 +211,6 @@ class MaskFormerConfig(PretrainedConfig):
         """
         output = copy.deepcopy(self.__dict__)
         output["backbone_config"] = self.backbone_config.to_dict()
+        output["decoder_config"] = self.decoder_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
