@@ -71,7 +71,8 @@ if is_torch_neuroncore_available(check_device=False):
         import torch_xla.distributed.xla_backend as xbn
 
         torch.distributed.init_process_group(backend="xla")
-        assert isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla)
+        if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+            raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
 if is_sagemaker_mp_enabled():
