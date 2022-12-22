@@ -781,8 +781,6 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
-        if "base" in str(config_file):
-            continue
         feature_extractor = OriginalMask2FormerConfigToFeatureExtractorConverter()(
             setup_cfg(Args(config_file=config_file))
         )

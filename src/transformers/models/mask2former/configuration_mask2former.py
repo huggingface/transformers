@@ -236,10 +236,10 @@ class Mask2FormerConfig(PretrainedConfig):
                 in_channels=3,
                 patch_size=4,
                 embed_dim=96,
-                depths=[2, 2, 6, 2],
+                depths=[2, 2, 18, 2],
                 num_heads=[3, 6, 12, 24],
                 window_size=7,
-                drop_path_rate=0.1,
+                drop_path_rate=0.3,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
         else:
