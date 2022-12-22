@@ -63,6 +63,8 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder.
         dim_feedforward (`int`, *optional*, defaults to 2048):
             Feature dimension in feedforward network for transformer decoder.
+        pre_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use pre-LayerNorm or not for transformer decoder.
         enforce_input_projection (`bool`, *optional*, defaults to `False`):
             Whether to add an input projection 1x1 convolution even if the input channels and hidden dim are identical
             in the Transformer decoder.
@@ -95,6 +97,7 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
         num_heads: Optional[int] = 8,
         dropout: Optional[float] = 0.1,
         dim_feedforward: Optional[int] = 2048,
+        pre_norm: Optional[bool] = False,
         enforce_input_projection: Optional[bool] = False,
         common_stride: Optional[int] = 4,
         **kwargs
@@ -111,6 +114,7 @@ class Mask2FormerDecoderConfig(PretrainedConfig):
         self.num_heads = num_heads
         self.dropout = dropout
         self.dim_feedforward = dim_feedforward
+        self.pre_norm = pre_norm
         self.enforce_input_projection = enforce_input_projection
         self.common_stride = common_stride
 

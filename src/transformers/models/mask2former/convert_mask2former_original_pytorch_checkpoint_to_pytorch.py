@@ -159,6 +159,7 @@ class OriginalMask2FormerConfigToOursConverter:
                 num_heads=model.MASK_FORMER.NHEADS,
                 dropout=model.MASK_FORMER.DROPOUT,
                 dim_feedforward=model.MASK_FORMER.DIM_FEEDFORWARD,
+                pre_norm=model.MASK_FORMER.PRE_NORM,
                 enforce_input_projection=model.MASK_FORMER.ENFORCE_INPUT_PROJ,
                 common_stride=model.SEM_SEG_HEAD.COMMON_STRIDE,
             ),
