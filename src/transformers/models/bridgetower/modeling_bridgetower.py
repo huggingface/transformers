@@ -404,7 +404,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
     config_class = BridgeTowerConfig
     base_model_prefix = "bridgetower"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention"]
 
     def _init_weights(self, module):

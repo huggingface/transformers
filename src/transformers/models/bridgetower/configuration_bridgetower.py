@@ -376,7 +376,7 @@ class BridgeTowerConfig(PretrainedConfig):
             logger.info("vision_config is None. Initializing the BridgeTowerVisionConfig with default values.")
 
         self.text_config = BridgeTowerTextConfig(**text_config)
-        self.vision_config = BridgeTowerTextConfig(**vision_config)
+        self.vision_config = BridgeTowerVisionConfig(**vision_config)
 
     @classmethod
     def from_text_vision_configs(
