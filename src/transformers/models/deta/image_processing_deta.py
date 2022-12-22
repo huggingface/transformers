@@ -1299,7 +1299,7 @@ class DetaImageProcessor(BaseImageProcessor):
             score = all_scores[b]
             lbls = all_labels[b]
 
-            pre_topk = score.topk(10000).indices
+            pre_topk = score.topk(min(10000, len(score))).indices
             box = box[pre_topk]
             score = score[pre_topk]
             lbls = lbls[pre_topk]
