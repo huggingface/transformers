@@ -470,7 +470,7 @@ class FSMTEncoder(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: torch.Tensor = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -478,11 +478,24 @@ class FSMTEncoder(nn.Module):
     ):
         """
         Args:
-            input_ids (`torch.LongTensor`): tokens in the source language of shape
-                *(batch, src_len)*
-            attention_mask (`torch.LongTensor`): indicating which indices are padding tokens
-            inputs_embeds (`torch.FloatTensor`):
-                embedding vectors of shape *(batch, src_len, embed_dim)*
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary of the source language. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
