@@ -743,7 +743,7 @@ else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
-    _import_structure["models.speecht5"].append("SpeechT5SpectrogramFeatureExtractor")
+    _import_structure["models.speecht5"].extend(["SpeechT5SpectrogramFeatureExtractor", "SpeechT5WaveformFeatureExtractor"])
 
 # Tensorflow-text-specific objects
 try:
@@ -4178,7 +4178,7 @@ if TYPE_CHECKING:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
-        from .models.speecht5 import SpeechT5SpectrogramFeatureExtractor
+        from .models.speecht5 import SpeechT5SpectrogramFeatureExtractor, SpeechT5WaveformFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():

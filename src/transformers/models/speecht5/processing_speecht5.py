@@ -24,16 +24,16 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
     Constructs a SpeechT5 processor which wraps a Wav2Vec2 feature extractor and a SpeechT5 tokenizer into a single
     processor.
 
-    [`SpeechT5ProcessorForSpeechToText`] offers all the functionalities of [`Wav2Vec2FeatureExtractor`] and [`SpeechT5Tokenizer`].
+    [`SpeechT5ProcessorForSpeechToText`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and [`SpeechT5Tokenizer`].
     See the docstring of [`~SpeechT5ProcessorForSpeechToText.__call__`] and [`~SpeechT5ProcessorForSpeechToText.decode`] for more information.
 
     Args:
-        feature_extractor (`Wav2Vec2FeatureExtractor`):
-            An instance of [`Wav2Vec2FeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor (`SpeechT5WaveformFeatureExtractor`):
+            An instance of [`SpeechT5WaveformFeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`SpeechT5Tokenizer`):
             An instance of [`SpeechT5Tokenizer`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "Wav2Vec2FeatureExtractor"
+    feature_extractor_class = "SpeechT5WaveformFeatureExtractor"
     tokenizer_class = "SpeechT5Tokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
@@ -41,8 +41,8 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output.
+        When used in normal mode, this method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
+        [`~SpeechT5WaveformFeatureExtractor.__call__`] and returns its output.
 
         You can process your labels by using the argument `text` (either in the same call as your audio
         inputs, or in a separate call). This forwards its arguments to SpeechT5Tokenizer's
@@ -81,8 +81,8 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.pad`] and returns its output.
+        When used in normal mode, this method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
+        [`~SpeechT5WaveformFeatureExtractor.pad`] and returns its output.
 
         You can process your labels by using the argument `text` (either in the same call as your audio
         inputs, or in a separate call). This forwards its arguments to SpeechT5Tokenizer's
@@ -152,8 +152,8 @@ class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
         [`~SpeechT5Tokenizer.__call__`] and returns its output.
 
         You can process your labels by using the argument `audio` (either in the same call as your text
-        inputs, or in a separate call). This forwards its arguments to  Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.__call__`].
+        inputs, or in a separate call). This forwards its arguments to SpeechT5SpectrogramFeatureExtractor's
+        [`~SpeechT5SpectrogramFeatureExtractor.__call__`].
 
         Please refer to the docstring of the above two methods for more information.
         """

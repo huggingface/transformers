@@ -33,7 +33,7 @@ from transformers import (
     SpeechT5ProcessorForSpeechToText,
     SpeechT5ProcessorForTextToSpeech,
     SpeechT5SpectrogramFeatureExtractor,
-    Wav2Vec2FeatureExtractor,
+    SpeechT5WaveformFeatureExtractor,
     logging,
 )
 from transformers.tokenization_utils import AddedToken
@@ -368,7 +368,7 @@ def convert_speecht5_checkpoint(
             tokenizer.add_tokens(["<ctc_blank>"])
 
         if task in ["s2t", "ctc"]:
-            feature_extractor = Wav2Vec2FeatureExtractor(
+            feature_extractor = SpeechT5WaveformFeatureExtractor(
                 feature_size=1,
                 sampling_rate=16000,
                 padding_value=0.0,

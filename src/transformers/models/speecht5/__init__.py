@@ -45,7 +45,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_speecht5"] = ["SpeechT5SpectrogramFeatureExtractor"]
+    _import_structure["feature_extraction_speecht5"] = ["SpeechT5SpectrogramFeatureExtractor", "SpeechT5WaveformFeatureExtractor"]
 
 try:
     if not (is_speech_available() and is_sentencepiece_available()):
@@ -90,7 +90,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_speecht5 import SpeechT5SpectrogramFeatureExtractor
+        from .feature_extraction_speecht5 import SpeechT5SpectrogramFeatureExtractor, SpeechT5WaveformFeatureExtractor
 
     try:
         if not (is_speech_available() and is_sentencepiece_available()):
