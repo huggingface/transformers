@@ -46,9 +46,9 @@ class TvltProcessor(ProcessorMixin):
         self, visual_inputs=None, audio_inputs=None, visual_inputs_mixed=None, sampling_rate=None, *args, **kwargs
     ):
         """
-        Forwards the `visual_inputs` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`]
-        and the `audio_inputs` argument to TvltFeatureExtractor's [`~TvltFeatureExtractor.__call__`].
-        Please refer to the docstring of the above two methods for more information.
+        Forwards the `visual_inputs` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`] and the
+        `audio_inputs` argument to TvltFeatureExtractor's [`~TvltFeatureExtractor.__call__`]. Please refer to the
+        docstring of the above two methods for more information.
         """
 
         if visual_inputs is None and audio_inputs is None:

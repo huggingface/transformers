@@ -63,9 +63,9 @@ def make_batched(videos) -> List[List[ImageInput]]:
 class TvltImageProcessor(BaseImageProcessor):
     r"""
     Constructs a TVLT image processor.
-    
+
     This processor can input either videos or images by converting images to 1-frame videos.
-    
+
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
@@ -150,8 +150,8 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize an image.
         Args:
+        Resize an image.
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
@@ -180,9 +180,9 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
+        Args:
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `size` along any
         edge, the image is padded with 0's and then center cropped.
-        Args:
             image (`np.ndarray`):
                 Image to center crop.
             size (`Dict[str, int]`):
@@ -203,8 +203,8 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs
     ):
         """
-        Rescale an image by a scale factor. image = image * scale.
         Args:
+        Rescale an image by a scale factor. image = image * scale.
             image (`np.ndarray`):
                 Image to rescale.
             scale (`int` or `float`):
@@ -223,8 +223,8 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Normalize an image. image = (image - image_mean) / image_std.
         Args:
+        Normalize an image. image = (image - image_mean) / image_std.
             image (`np.ndarray`):
                 Image to normalize.
             image_mean (`float` or `List[float]`):
@@ -301,8 +301,8 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> PIL.Image.Image:
         """
-        Preprocess an image or batch of images.
         Args:
+        Preprocess an image or batch of images.
             visual_inputs (`ImageInput`):
                 Images or videos to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
@@ -340,7 +340,7 @@ class TvltImageProcessor(BaseImageProcessor):
                     - Unset: Use the inferred channel dimension format of the input image.
             is_mixed (`bool`, *optional*, if the input video has negative samples.
         """
-        
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
@@ -365,7 +365,9 @@ class TvltImageProcessor(BaseImageProcessor):
 
         # Check number of frames is fewer than maximum frames
         for visual_input in visual_inputs:
-            assert len(visual_input) <= self.num_frames, f"number of frames must not be greater than {self.num_frames}."
+            assert (
+                len(visual_input) <= self.num_frames
+            ), f"number of frames must not be greater than {self.num_frames}."
 
         max_num_frames = max([len(visual_input) for visual_input in visual_inputs])
         num_patches_per_image = (self.size["shortest_edge"] // self.patch_size) ** 2
@@ -375,7 +377,7 @@ class TvltImageProcessor(BaseImageProcessor):
             for visual_input in visual_inputs
         ]
         visual_masks = np.array(visual_masks)
-        
+
         visual_inputs = [
             [
                 self._preprocess_image(
@@ -396,7 +398,7 @@ class TvltImageProcessor(BaseImageProcessor):
             ]
             for visual_input in visual_inputs
         ]
-        
+
         if is_mixed:
             data = {"pixel_values_mixed": visual_inputs, "pixel_masks_mixed": visual_masks}
         else:

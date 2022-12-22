@@ -56,7 +56,7 @@ TVLT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class TvltModelOutput(ModelOutput):
     """
     Class for TvltModel's outputs, with potential hidden states and attentions.
-    
+
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
@@ -120,12 +120,12 @@ class TvltForPreTrainingOutput(ModelOutput):
             Pixel reconstruction loss.
         matching_logits (`torch.FloatTensor` of shape `(batch_size, 1)`):
             Matching objective logits.
-        pixel_logits (`torch.FloatTensor` of shape 
-            `(batch_size, pixel_patch_length, pixel_patch_size ** 3 * pixel_num_channels)`):
-            Pixel reconstruction logits.
-        audio_logits (`torch.FloatTensor` of shape 
-            `(batch_size, audio_patch_length, pixel_patch_size[0] * pixel_patch_size[1])`):
-            Audio reconstruction logits.
+        pixel_logits (`torch.FloatTensor` of shape
+            `(batch_size, pixel_patch_length, pixel_patch_size ** 3 * pixel_num_channels)`): Pixel reconstruction
+            logits.
+        audio_logits (`torch.FloatTensor` of shape
+            `(batch_size, audio_patch_length, pixel_patch_size[0] * pixel_patch_size[1])`): Audio reconstruction
+            logits.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -169,9 +169,8 @@ class TvltPixelEmbeddings(nn.Module):
         mask_ratio=0.75,
     ):
         """
-        Perform per-sample random masking by per-sample shuffling.
-        Per-sample shuffling is done by argsort random noise.
-        sequence: [batch_size, seq_len, hidden_dim], sequence
+        Perform per-sample random masking by per-sample shuffling. Per-sample shuffling is done by argsort random
+        noise. sequence: [batch_size, seq_len, hidden_dim], sequence
         """
         batch_size, seq_len, hidden_dim = sequence.shape
         len_keep = int(seq_len * (1 - mask_ratio))
@@ -239,9 +238,8 @@ class TvltAudioEmbeddings(nn.Module):
 
     def random_masking(self, sequence, attention_masks=None, mask_ratio=0.15):
         """
-        Perform random masking by per-sample shuffling on frame-level.
-        Per-sample shuffling is done by argsort random noise.
-        sequence: [batch_size, seq_len, hidden_dim], sequence
+        Perform random masking by per-sample shuffling on frame-level. Per-sample shuffling is done by argsort random
+        noise. sequence: [batch_size, seq_len, hidden_dim], sequence
         """
 
         batch_size, seq_len, hidden_dim = sequence.shape
@@ -293,107 +291,87 @@ class TvltAudioEmbeddings(nn.Module):
 
         return embeddings, attention_masks, label_masks, ids_restore
 
-    
+
 # Copied from transformers.models.beit.modeling_beit.BeitPatchEmbeddings
 class TvltPixelPatchEmbeddings(nn.Module):
     """
-    Video/Image to Patch Embedding. This module turns a batch of videos/images of shape (batch_size, num_frames, num_channels,
-    height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
-
-    The seq_len (the number of patches) equals number of frames * (height // patch_size) * (width // patch_size).
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
     def __init__(self, config):
         super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        pixel_size = config.pixel_size
-        pixel_patch_size = config.pixel_patch_size
-        num_pixel_channels = config.num_pixel_channels
-        hidden_size = config.hidden_size
-        num_frames = config.num_frames
-
-        pixel_size = pixel_size if isinstance(pixel_size, collections.abc.Iterable) else (pixel_size, pixel_size)
-        pixel_patch_size = (
-            pixel_patch_size
-            if isinstance(pixel_patch_size, collections.abc.Iterable)
-            else (pixel_patch_size, pixel_patch_size)
-        )
-        self.pixel_size = pixel_size
-        self.pixel_patch_size = pixel_patch_size
-        num_patches = (pixel_size[1] // pixel_patch_size[1]) * (pixel_size[0] // pixel_patch_size[0]) * num_frames
-        self.num_pixel_channels = num_pixel_channels
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_patches = num_patches
-        self.projection = nn.Conv2d(
-            in_channels=num_pixel_channels,
-            out_channels=hidden_size,
-            kernel_size=(pixel_patch_size[0], pixel_patch_size[1]),
-            stride=(pixel_patch_size[0], pixel_patch_size[1]),
-        )
+        self.patch_shape = patch_shape
 
-    def forward(self, pixel_values):
-        batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.reshape(batch_size * num_frames, num_channels, height, width)
-        if num_channels != self.num_pixel_channels:
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if height != self.pixel_size[0] or width != self.pixel_size[1]:
+        if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
-                f"Input pixel size ({height}*{width}) doesn't match model ({self.pixel_size[0]}*{self.pixel_size[1]})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+
         return embeddings
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitPatchEmbeddings with BeitPatchEmbedding->TvltAudioPatchEmbeddings
 class TvltAudioPatchEmbeddings(nn.Module):
     """
-    Audio to Patch Embedding. This module turns a batch of audios of shape (batch_size, num_frames, num_channels,
-    height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
-
-    The seq_len (the number of patches) equals (height // patch_size) * (width // patch_size).
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
     def __init__(self, config):
         super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        audio_size = config.audio_size
-        feature_size = config.feature_size
-        audio_patch_size = config.audio_patch_size
-        num_audio_channels = config.num_audio_channels
-        hidden_size = config.hidden_size
-
-        audio_patch_size = (
-            audio_patch_size
-            if isinstance(audio_patch_size, collections.abc.Iterable)
-            else (audio_patch_size, audio_patch_size)
-        )
-        self.audio_size = audio_size
-        self.feature_size = feature_size
-        self.audio_patch_size = audio_patch_size
-        num_patches = (feature_size // audio_patch_size[1]) * (audio_size // audio_patch_size[0])
-        self.num_audio_channels = num_audio_channels
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_patches = num_patches
-        self.projection = nn.Conv2d(
-            in_channels=num_audio_channels,
-            out_channels=hidden_size,
-            kernel_size=(audio_patch_size[0], audio_patch_size[1]),
-            stride=(audio_patch_size[0], audio_patch_size[1]),
-        )
+        self.patch_shape = patch_shape
 
-    def forward(self, audio_values):
-        batch_size, num_channels, height, width = audio_values.shape
-        if num_channels != self.num_audio_channels:
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
             raise ValueError(
-                "Make sure that the channel dimension of the audio values match with the one set in the configuration."
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if width != self.feature_size:
-            raise ValueError(f"Input audio spectrogram width ({width}) doesn't match model ({self.feature_size}).")
-        # permute to (batch_size, num_channels, num_frames, height, width)
-        embeddings = self.projection(audio_values).flatten(2).transpose(1, 2)
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+
         return embeddings
 
-    
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Tvlt
 class TvltSelfAttention(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
@@ -408,9 +386,9 @@ class TvltSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -420,27 +398,18 @@ class TvltSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        keys = self.key(hidden_states)
-        values = self.value(hidden_states)
-        queries = self.query(hidden_states)
+        mixed_query_layer = self.query(hidden_states)
 
-        key_layer = self.transpose_for_scores(keys)
-        value_layer = self.transpose_for_scores(values)
-        query_layer = self.transpose_for_scores(queries)
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -512,11 +481,10 @@ class TvltAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
+        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -543,7 +511,7 @@ class TvltIntermediate(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->TVLT
 class TvltOutput(nn.Module):
-    def __init__(self, config: TvltConfig) -> None:
+    def __init__(self, config: TVLTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -561,26 +529,24 @@ class TvltOutput(nn.Module):
 class TvltLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: TvltConfig) -> None:
+    def __init__(self, config: TVLTConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = TvltAttention(config)
-        self.intermediate = TvltIntermediate(config)
-        self.output = TvltOutput(config)
+        self.attention = TVLTAttention(config)
+        self.intermediate = TVLTIntermediate(config)
+        self.output = TVLTOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in TVLT, layernorm is applied before self-attention
-            attention_mask,
             head_mask,
             output_attentions=output_attentions,
         )
@@ -604,16 +570,15 @@ class TvltLayer(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->TVLT
 class TvltEncoder(nn.Module):
-    def __init__(self, config: TvltConfig) -> None:
+    def __init__(self, config: TVLTConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([TvltLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([TVLTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -639,11 +604,10 @@ class TvltEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
-                    attention_mask,
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -719,20 +683,19 @@ TVLT_INPUTS_DOCSTRING = r"""
             [`TVLTFeatureExtractor.__call__`] for details.
         
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltPixelFeatureExtractor`]. 
+            Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltPixelFeatureExtractor`].
             See [`TvltPixelFeatureExtractor.__call__`] for details.
             
         pixel_masks_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values that mixe positive and negative samples in Tvlt vision-audio matching.  
-            Audio values can be obtained using [`TvltPixelFeatureExtractor`]. 
-            See [`TvltPixelFeatureExtractor.__call__`] for details.
+            Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
+            obtained using [`TvltPixelFeatureExtractor`]. See [`TvltPixelFeatureExtractor.__call__`] for details.
 
         pixel_mask_ratio (`float`): The masking ratio of pixel embeddings.
             
         audio_mask_ratio (`float`): The masking ratio of audio embeddings.
         
         labels (`torch.FloatTensor` of shape `(batch_size, num_labls)`):
-            Number of labels for pretrainings. For example, whether vision and audio match in pretraining. 
+            Number of labels for pretrainings. For example, whether vision and audio match in pretraining.
          
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -796,7 +759,7 @@ class TvltModel(TvltPreTrainedModel):
         Returns:
 
         Examples:
-        
+
         ```python
         >>> from transformers import TvltFeatureExtractor, TvltModel
         >>> import numpy as np
@@ -1336,7 +1299,7 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    
+
 @add_start_docstrings(
     """
     Tvlt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]

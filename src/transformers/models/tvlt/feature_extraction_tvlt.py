@@ -151,6 +151,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
         contain in each frame (smalle waveform), while the hope length defines the step between the beginning of each
         new frame.
+
         Centering is done by reflecting the waveform which is first centered around `frame_idx * hop_length`.
         """
         frames = []
@@ -207,7 +208,6 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             else:
                 fft_signal[:frame_size] = frame
             data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
-
         return data.T
 
     # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor._np_extract_fbank_features
@@ -228,7 +228,8 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
         log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
-        return log_spec.T
+
+        return log_spec
 
     def __call__(
         self,
@@ -243,7 +244,6 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         Main method to prepare for the model one or several audio(s).
 
         Args:
-
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
@@ -253,12 +253,15 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
                 - `'np'`: Return Numpy `np.ndarray` objects.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
-                [What are attention masks?](../glossary#attention-mask)
+                to the specific feature_extractor's default. [What are attention masks?](../glossary#attention-mask)
+
                 <Tip>
+
                 For TvltTransformer models, `attention_mask` should alwys be passed for batched inference, to avoid
                 subtle bugs.
+
                 </Tip>
+
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
@@ -269,14 +272,13 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **audio_values** -- Audio values to be fed to a model, of shape (batch_size, num_channels, height, width).
+            - **audio_values** -- Audio values to be fed to a model, of shape (batch_size, num_channels, height,
+              width).
 
             - **audio_masks** -- Audio masks to be fed to a model, of shape (batch_size, num_audio_channels).
 
-        Main method to featurize and prepare for the model one or several sequence(s).
         Args:
-
-        """
+        Main method to featurize and prepare for the model one or several sequence(s)."""
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
