@@ -19,11 +19,7 @@ import argparse
 import numpy as np
 import torch
 
-from transformers import (
-    SpeechT5HiFiGANConfig,
-    SpeechT5HiFiGAN,
-    logging,
-)
+from transformers import SpeechT5HiFiGAN, SpeechT5HiFiGANConfig, logging
 
 
 logging.set_verbosity_info()

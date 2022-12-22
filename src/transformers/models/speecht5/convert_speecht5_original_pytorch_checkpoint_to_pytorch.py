@@ -24,15 +24,15 @@ import torch
 
 from transformers import (
     SpeechT5Config,
+    SpeechT5CTCTokenizer,
     SpeechT5ForCTC,
     SpeechT5ForPreTraining,
     SpeechT5ForSpeechToText,
     SpeechT5ForTextToSpeech,
-    SpeechT5Tokenizer,
-    SpeechT5CTCTokenizer,
     SpeechT5ProcessorForSpeechToText,
     SpeechT5ProcessorForTextToSpeech,
     SpeechT5SpectrogramFeatureExtractor,
+    SpeechT5Tokenizer,
     SpeechT5WaveformFeatureExtractor,
     logging,
 )

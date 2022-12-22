@@ -234,14 +234,7 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
 
     model_input_names = ["input_values", "attention_mask"]
 
-    def __init__(
-        self,
-        feature_size=80,
-        sampling_rate=16000,
-        num_mel_bins=80,
-        padding_value=0.0,
-        **kwargs
-    ):
+    def __init__(self, feature_size=80, sampling_rate=16000, num_mel_bins=80, padding_value=0.0, **kwargs):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
         self.return_attention_mask = True
@@ -259,7 +252,7 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         features = ta_kaldi.fbank(
             waveform,
             frame_length=64,  # 1024 samples @ 16 kHz
-            frame_shift=16,   # 256 samples @ 16 kHz
+            frame_shift=16,  # 256 samples @ 16 kHz
             high_freq=7600,
             low_freq=80,
             num_mel_bins=self.num_mel_bins,
@@ -271,7 +264,7 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
             use_power=False,
             window_type="hanning",
         )
-        #TODO: this is not equal to the log-mel spectrograms from the original yet!
+        # TODO: this is not equal to the log-mel spectrograms from the original yet!
         return features.numpy()
 
     def __call__(

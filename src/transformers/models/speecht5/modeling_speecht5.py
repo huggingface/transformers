@@ -45,8 +45,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_speecht5 import SpeechT5Config
 from .configuration_hifigan import SpeechT5HiFiGANConfig
+from .configuration_speecht5 import SpeechT5Config
 
 
 logger = logging.get_logger(__name__)

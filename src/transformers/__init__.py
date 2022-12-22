@@ -743,7 +743,9 @@ else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
-    _import_structure["models.speecht5"].extend(["SpeechT5SpectrogramFeatureExtractor", "SpeechT5WaveformFeatureExtractor"])
+    _import_structure["models.speecht5"].extend(
+        ["SpeechT5SpectrogramFeatureExtractor", "SpeechT5WaveformFeatureExtractor"]
+    )
 
 # Tensorflow-text-specific objects
 try:
@@ -3875,11 +3877,11 @@ if TYPE_CHECKING:
     from .models.speecht5 import (
         SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SpeechT5Config,
-        SpeechT5HiFiGANConfig,
-        SpeechT5Tokenizer,
         SpeechT5CTCTokenizer,
+        SpeechT5HiFiGANConfig,
         SpeechT5ProcessorForSpeechToText,
         SpeechT5ProcessorForTextToSpeech,
+        SpeechT5Tokenizer,
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
@@ -5372,9 +5374,9 @@ if TYPE_CHECKING:
             SpeechT5ForPreTraining,
             SpeechT5ForSpeechToText,
             SpeechT5ForTextToSpeech,
+            SpeechT5HiFiGAN,
             SpeechT5Model,
             SpeechT5PreTrainedModel,
-            SpeechT5HiFiGAN,
         )
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,

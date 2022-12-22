@@ -45,7 +45,10 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_speecht5"] = ["SpeechT5SpectrogramFeatureExtractor", "SpeechT5WaveformFeatureExtractor"]
+    _import_structure["feature_extraction_speecht5"] = [
+        "SpeechT5SpectrogramFeatureExtractor",
+        "SpeechT5WaveformFeatureExtractor",
+    ]
 
 try:
     if not (is_speech_available() and is_sentencepiece_available()):
@@ -82,7 +85,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_speecht5 import SpeechT5Tokenizer, SpeechT5CTCTokenizer
+        from .tokenization_speecht5 import SpeechT5CTCTokenizer, SpeechT5Tokenizer
 
     try:
         if not is_speech_available():
@@ -112,9 +115,9 @@ if TYPE_CHECKING:
             SpeechT5ForPreTraining,
             SpeechT5ForSpeechToText,
             SpeechT5ForTextToSpeech,
+            SpeechT5HiFiGAN,
             SpeechT5Model,
             SpeechT5PreTrainedModel,
-            SpeechT5HiFiGAN,
         )
 
 else:
