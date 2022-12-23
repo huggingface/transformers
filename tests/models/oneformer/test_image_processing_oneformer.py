@@ -68,7 +68,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         num_labels=10,
-        reduce_labels=True,
+        reduce_labels=False,
         ignore_index=255,
         repo_path="shi-labs/oneformer_demo",
         class_info_file="ade20k_panoptic.json",
