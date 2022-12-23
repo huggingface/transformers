@@ -122,6 +122,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "OPTDecoderWrapper",
     "TFSegformerDecodeHead",  # Not a regular model.
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+    "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
