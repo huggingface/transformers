@@ -64,12 +64,13 @@ if is_torch_tpu_available(check_device=False):
 if is_torch_neuroncore_available(check_device=False):
     # torchrun support
     # https://github.com/pytorch/xla/pull/3609
-    if os.environ.get("WORLD_SIZE"):
+    if os.environ.get("TORCHELASTIC_RUN_ID"):
         import torch_xla.distributed.xla_backend as xbn
 
-        torch.distributed.init_process_group(backend="xla")
         if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-            raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
+            torch.distributed.init_process_group(backend="xla")
+            if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+                raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
 if is_sagemaker_mp_enabled():
