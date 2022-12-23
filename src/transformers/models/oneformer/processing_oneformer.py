@@ -114,12 +114,15 @@ class OneFormerProcessor(ProcessorMixin):
         elif images is None:
             raise ValueError("You have to specify the image. Found None.")
 
+        if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
+            raise ValueError(f"task_inputs must be semantic, instance, or panoptic.")
+
         encoded_inputs = self.image_processor(images, task_inputs, segmentation_maps, **kwargs)
 
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
 
-        if isinstance(task_inputs, List) and isinstance(task_inputs[0], str):
+        if isinstance(task_inputs, List) and all(isinstance(task_input, str) for task_input in task_inputs):
             task_token_inputs = []
             for task in task_inputs:
                 task_input = f"the task is {task}"
@@ -151,12 +154,15 @@ class OneFormerProcessor(ProcessorMixin):
         elif images is None:
             raise ValueError("You have to specify the image. Found None.")
 
+        if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
+            raise ValueError(f"task_inputs must be semantic, instance, or panoptic.")
+
         encoded_inputs = self.image_processor.encode_inputs(images, task_inputs, segmentation_maps, **kwargs)
 
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
 
-        if isinstance(task_inputs, List) and isinstance(task_inputs[0], str):
+        if isinstance(task_inputs, List) and all(isinstance(task_input, str) for task_input in task_inputs):
             task_token_inputs = []
             for task in task_inputs:
                 task_input = f"the task is {task}"
