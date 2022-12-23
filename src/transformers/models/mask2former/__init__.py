@@ -24,7 +24,6 @@ _import_structure = {
     "configuration_mask2former": [
         "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Mask2FormerConfig",
-        "Mask2FormerDecoderConfig",
     ],
 }
 
@@ -51,11 +50,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mask2former import (
-        MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Mask2FormerConfig,
-        Mask2FormerDecoderConfig,
-    )
+    from .configuration_mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
 
     try:
         if not is_vision_available():

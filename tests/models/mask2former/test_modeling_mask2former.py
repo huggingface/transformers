@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
-from transformers import Mask2FormerConfig, SwinConfig, is_torch_available, is_vision_available
+from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -52,16 +52,7 @@ class Mask2FormerModelTester:
         min_size=32 * 4,
         max_size=32 * 6,
         num_labels=4,
-        hidden_dim=16,
-        mask_feature_size=32,
-        feature_strides=[2, 4, 8, 16],
-        feature_size=64,
-        encoder_feedforward_dim=32,
-        encoder_layers=2,
-        decoder_layers=3,
-        num_decoder_heads=4,
-        dim_feedforward=16,
-        common_stride=4,
+        hidden_dim=64,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -73,15 +64,7 @@ class Mask2FormerModelTester:
         self.max_size = max_size
         self.num_labels = num_labels
         self.hidden_dim = hidden_dim
-        self.mask_feature_size = mask_feature_size
-        self.feature_strides = feature_strides
-        self.feature_size = feature_size
-        self.encoder_feedforward_dim = encoder_feedforward_dim
-        self.encoder_layers = encoder_layers
-        self.decoder_layers = decoder_layers
-        self.num_decoder_heads = num_decoder_heads
-        self.dim_feedforward = dim_feedforward
-        self.common_stride = common_stride
+        self.mask_feature_size = hidden_dim
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -99,30 +82,21 @@ class Mask2FormerModelTester:
         return config, pixel_values, pixel_mask, mask_labels, class_labels
 
     def get_config(self):
-        backbone_config = SwinConfig(
-            image_size=32,
-            in_channels=3,
-            patch_size=4,
-            embed_dim=12,
-            depths=[1, 1, 1, 1],
-            num_heads=[3, 6, 12, 24],
-            window_size=4,
-            drop_path_rate=0.3,
-            out_features=["stage1", "stage2", "stage3", "stage4"],
+        config = Mask2FormerConfig(
+            hidden_size=self.hidden_dim,
         )
-        config = Mask2FormerConfig(backbone_config=backbone_config)
-        config.num_labels = self.num_labels
         config.num_queries = self.num_queries
-        config.feature_strides = self.feature_strides
-        config.decoder_config.feature_size = self.feature_size
-        config.decoder_config.mask_feature_size = self.mask_feature_size
-        config.decoder_config.encoder_layers = self.encoder_layers
-        config.decoder_config.decoder_layers = self.decoder_layers
-        config.decoder_config.num_heads = self.num_decoder_heads
-        config.decoder_config.encoder_feedforward_dim = self.encoder_feedforward_dim
-        config.decoder_config.hidden_dim = self.hidden_dim
-        config.decoder_config.dim_feedforward = self.dim_feedforward
-        config.decoder_config.common_stride = self.common_stride
+        config.num_labels = self.num_labels
+
+        config.backbone_config.window_size = 4
+        config.backbone_config.depths = [1, 1, 1, 1]
+        config.backbone_config.num_channels = self.num_channels
+
+        config.encoder_feedforward_dim = 64
+        config.dim_feedforward = 128
+        config.hidden_dim = self.hidden_dim
+        config.mask_feature_size = self.hidden_dim
+        config.feature_size = self.hidden_dim
         return config
 
     def prepare_config_and_inputs_for_common(self):
@@ -137,7 +111,7 @@ class Mask2FormerModelTester:
 
         self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone_config.depths))
         self.parent.assertTrue(len(pixel_decoder_hidden_states), len(config.backbone_config.depths))
-        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_config.decoder_layers)
+        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_layers)
 
     def create_and_check_mask2former_model(self, config, pixel_values, pixel_mask, output_hidden_states=False):
         with torch.no_grad():
@@ -150,7 +124,7 @@ class Mask2FormerModelTester:
 
         self.parent.assertEqual(
             output.transformer_decoder_last_hidden_state.shape,
-            (self.batch_size, self.num_queries, self.mask_feature_size // 2),
+            (self.batch_size, self.num_queries, self.hidden_dim),
         )
         # let's ensure the other two hidden state exists
         self.parent.assertTrue(output.pixel_decoder_last_hidden_state is not None)
@@ -175,7 +149,7 @@ class Mask2FormerModelTester:
             # due to the encoder compression, masks have a //4 spatial size
             self.parent.assertEqual(
                 result.masks_queries_logits.shape,
-                (self.batch_size, self.num_queries, self.min_size // 8, self.max_size // 8),
+                (self.batch_size, self.num_queries, self.min_size // 4, self.max_size // 4),
             )
             # + 1 for null class
             self.parent.assertEqual(

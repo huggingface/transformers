@@ -317,7 +317,6 @@ _import_structure = {
     "models.mask2former": [
         "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Mask2FormerConfig",
-        "Mask2FormerDecoderConfig",
     ],
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mbart": ["MBartConfig"],
@@ -3665,11 +3664,7 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
-    from .models.mask2former import (
-        MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Mask2FormerConfig,
-        Mask2FormerDecoderConfig,
-    )
+    from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
