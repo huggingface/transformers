@@ -874,6 +874,9 @@ def pipeline(
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
 
+    if torch_dtype is not None:
+        kwargs["torch_dtype"] = torch_dtype
+
     if device is not None:
         kwargs["device"] = device
 
