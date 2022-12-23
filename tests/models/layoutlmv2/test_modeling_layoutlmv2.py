@@ -105,6 +105,33 @@ class LayoutLMv2ModelTester:
         self.scope = scope
         self.range_bbox = range_bbox
 
+    def get_config(self):
+        config = LayoutLMv2Config(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            is_decoder=False,
+            initializer_range=self.initializer_range,
+            image_feature_pool_shape=self.image_feature_pool_shape,
+            coordinate_size=self.coordinate_size,
+            shape_size=self.shape_size,
+        )
+
+        # use smaller resnet backbone to make tests faster
+        config.detectron2_config_args["MODEL.RESNETS.DEPTH"] = 18
+        config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
+        config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
+
+        return config
+
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -140,28 +167,7 @@ class LayoutLMv2ModelTester:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
-        config = LayoutLMv2Config(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            image_feature_pool_shape=self.image_feature_pool_shape,
-            coordinate_size=self.coordinate_size,
-            shape_size=self.shape_size,
-        )
-
-        # use smaller resnet backbone to make tests faster
-        config.detectron2_config_args["MODEL.RESNETS.DEPTH"] = 18
-        config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
-        config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
+        config = self.get_config()
 
         return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
 
