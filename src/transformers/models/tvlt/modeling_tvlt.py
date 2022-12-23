@@ -513,7 +513,7 @@ class TvltIntermediate(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->TVLT
 class TvltOutput(nn.Module):
-    def __init__(self, config: TVLTConfig) -> None:
+    def __init__(self, config: TvltConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -531,7 +531,7 @@ class TvltOutput(nn.Module):
 class TvltLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: TVLTConfig) -> None:
+    def __init__(self, config: TvltConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -572,7 +572,7 @@ class TvltLayer(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->TVLT
 class TvltEncoder(nn.Module):
-    def __init__(self, config: TVLTConfig) -> None:
+    def __init__(self, config: TvltConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([TVLTLayer(config) for _ in range(config.num_hidden_layers)])
