@@ -240,7 +240,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
 
     def postprocess(self, model_outputs, **kwargs):
         model_outputs = dict(model_outputs)
-        logits = model_outputs["logits"]
+        logits = model_outputs.pop("logits", None)
         
         if self.framework == "pt":
             logits = logits.detach().cpu().numpy()
@@ -252,11 +252,11 @@ class DocumentTokenClassificationPipeline(Pipeline):
             logits = logits[0]
         
         # if words is a list of list of strings, get the first one
-        if isinstance(words, list) and isinstance(words[0], list):
+        if isinstance(words, list) and len(words)!=0 and isinstance(words[0], list):
             words = words[0]
             model_outputs["words"] = words
 
-        if isinstance(boxes, list) and isinstance(boxes[0], list):
+        if isinstance(boxes, list) and len(boxes)!=0 and isinstance(boxes[0], list):
             boxes = boxes[0]
             model_outputs["boxes"] = boxes
 
