@@ -1295,7 +1295,6 @@ class BridgeTowerTextLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEncoder with Roberta->BridgeTowerText
 class BridgeTowerTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()

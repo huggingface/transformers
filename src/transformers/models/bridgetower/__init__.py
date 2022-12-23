@@ -50,6 +50,7 @@ else:
         "BridgeTowerForImageAndTextRetrieval",
         "BridgeTowerForMaskedLM",
         "BridgeTowerModel",
+        "BridgeTowerTextModel",
         "BridgeTowerPreTrainedModel",
     ]
 
@@ -82,6 +83,7 @@ if TYPE_CHECKING:
             BridgeTowerForImageAndTextRetrieval,
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
+            BridgeTowerTextModel,
             BridgeTowerPreTrainedModel,
         )
 
