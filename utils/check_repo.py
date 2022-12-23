@@ -43,6 +43,7 @@ PRIVATE_MODELS = [
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
     "MaskFormerSwinPreTrainedModel",
+    "BridgeTowerTextModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
