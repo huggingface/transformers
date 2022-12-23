@@ -82,8 +82,8 @@ LOCALIZED_READMES = {
         "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
         "end_prompt": "1. 新しいモデルを投稿したいですか？",
         "format_model_list": (
-            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
-            " {paper_authors}.{supplements}"
+            "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"
+            " {paper_title_link}"
         ),
     },
     "README_hd.md": {
