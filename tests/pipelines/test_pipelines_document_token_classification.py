@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers import MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING, AutoTokenizer, AutoFeatureExtractor, is_vision_available
+from transformers import MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING, AutoTokenizer, AutoFeatureExtractor, is_vision_available, AutoConfig, AutoModelForDocumentTokenClassification
 from transformers.pipelines import pipeline
 from transformers.models.layoutlmv3.image_processing_layoutlmv3 import apply_tesseract as apply_ocr
 from transformers.testing_utils import (
@@ -102,7 +102,21 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     @require_pytesseract
    # @require_detectron2
     def test_small_model_pt(self):
-        dtc_pipeline = pipeline("document-token-classification", model="hf-internal-testing/tiny-random-LayoutLMv3ForTokenClassification")
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LayoutLMv3ForTokenClassification")
+        config_ms= AutoConfig.from_pretrained("microsoft/layoutlmv3-base")
+        config.update(config_ms.to_dict())
+        model = AutoModelForDocumentTokenClassification.from_config(config)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "microsoft/layoutlmv3-base", revision="07c9b08", add_prefix_space=True
+        )
+        feature_extractor = AutoFeatureExtractor.from_pretrained(
+            "microsoft/layoutlmv3-base", revision="07c9b08"
+        )
+        dtc_pipeline = pipeline("document-token-classification", 
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+        )
         image = INVOICE_URL
 
         expected_output = [
