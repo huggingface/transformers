@@ -237,19 +237,25 @@ class DocumentTokenClassificationPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, **kwargs):
+        model_outputs = dict(model_outputs)
+        logits = model_outputs["logits"]
+        
         if self.framework == "pt":
-            logits = model_outputs["logits"].detach().cpu().numpy()
+            logits = logits.detach().cpu().numpy()
         words = model_outputs["words"]
+        
         # if first dimension is 1, remove it
         if logits.shape[0] == 1:
             logits = logits[0]
+            model_outputs["logits"] = logits
+        
         # if words is a list of list of strings, get the first one
         if isinstance(words, list) and isinstance(words[0], list):
             words = words[0]
             model_outputs["words"] = words
         token_predictions = logits.argmax(-1)
 
-        word_ids = model_outputs["word_ids"]
+        word_ids = model_outputs.pop("word_ids", None)
 
         # Map Token predictions to word predictions
         word_predictions = [None] * len(words)
@@ -262,7 +268,5 @@ class DocumentTokenClassificationPipeline(Pipeline):
 
         word_labels = [self.model.config.id2label[prediction] for prediction in word_predictions]
         model_outputs["word_labels"] = word_labels
-        model_outputs = dict(model_outputs)
         model_outputs.pop("attention_mask", None)
-        model_outputs.pop("logits", None)
         return model_outputs
