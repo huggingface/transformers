@@ -447,6 +447,9 @@ class FeaturesManager:
             "sequence-classification",
             onnx_config_cls="models.perceiver.PerceiverOnnxConfig",
         ),
+        "poolformer": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.poolformer.PoolFormerOnnxConfig"
+        ),
         "rembert": supported_features_mapping(
             "default",
             "masked-lm",
