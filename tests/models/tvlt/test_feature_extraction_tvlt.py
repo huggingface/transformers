@@ -19,10 +19,11 @@ import unittest
 
 import numpy as np
 
+from transformers import is_speech_available
 from transformers.testing_utils import require_torch, require_torchaudio
-from transformers.utils import is_speech_available, is_torch_available
+from transformers.utils.import_utils import is_torch_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
@@ -83,8 +84,8 @@ class TvltFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_torchaudio
-class TvltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-    feature_extraction_class = TvltFeatureExtractor
+class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = TvltFeatureExtractor if is_speech_available() else None
 
     def setUp(self):
         self.feature_extract_tester = TvltFeatureExtractionTester(self)
