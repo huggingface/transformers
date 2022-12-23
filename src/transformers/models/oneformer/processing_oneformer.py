@@ -16,7 +16,7 @@
 Image/Text processor class for OneFormer
 """
 
-from typing import List, Optional
+from typing import List
 
 from transformers.utils import is_torch_available
 
