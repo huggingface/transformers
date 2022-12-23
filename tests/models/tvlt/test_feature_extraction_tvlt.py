@@ -19,7 +19,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.utils import is_speech_available, is_torch_available
 
 from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
@@ -48,6 +48,8 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
+@require_torch
+@require_torchaudio
 class TvltFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
@@ -80,7 +82,7 @@ class TvltFeatureExtractionTester(unittest.TestCase):
 
 
 @require_torch
-@require_vision
+@require_torchaudio
 class TvltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
     feature_extraction_class = TvltFeatureExtractor
 
