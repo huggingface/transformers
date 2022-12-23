@@ -33,15 +33,11 @@ from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
-    PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
     AutoModelForSequenceClassification,
-    AutoProcessor,
     AutoTokenizer,
     DistilBertForSequenceClassification,
-    ImageSegmentationPipeline,
-    OneFormerForUniversalSegmentation,
     TextClassificationPipeline,
     TFAutoModelForSequenceClassification,
     pipeline,
@@ -149,11 +145,7 @@ def get_tiny_tokenizer_from_checkpoint(checkpoint):
 
 def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_extractor_class):
     try:
-        # Feature Extractor is Deprecated for newer models
-        if feature_extractor_class.__name__ == "OneFormerProcessor":
-            feature_extractor = AutoProcessor.from_pretrained(checkpoint)
-        else:
-            feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
     except Exception:
         try:
             if feature_extractor_class is not None:
@@ -267,18 +259,9 @@ class PipelineTestCaseMeta(type):
                             # Need to copy because Conversation object is mutated
                             yield copy.deepcopy(random.choice(examples))
 
-                    if isinstance(pipeline.model, OneFormerForUniversalSegmentation):
-                        task_inputs = ["panoptic"]
-                    else:
-                        task_inputs = None
-
                     out = []
-                    if isinstance(pipeline, ImageSegmentationPipeline):
-                        for item in pipeline(data(10), task_inputs=task_inputs, batch_size=4):
-                            out.append(item)
-                    else:
-                        for item in pipeline(data(10), batch_size=4):
-                            out.append(item)
+                    for item in pipeline(data(10), batch_size=4):
+                        out.append(item)
                     self.assertEqual(len(out), 10)
 
                 run_batch_test(pipeline, examples)
@@ -296,11 +279,7 @@ class PipelineTestCaseMeta(type):
                         checkpoint = get_checkpoint_from_architecture(model_architecture)
                         tiny_config = get_tiny_config_from_class(configuration)
                         tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
-                        # Feature Extractor is Deprecated for newer models
-                        if model_architecture.__name__ == "OneFormerForUniversalSegmentation":
-                            feature_extractor_class = PROCESSOR_MAPPING.get(configuration, None)
-                        else:
-                            feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
+                        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
                         feature_extractor_name = (
                             feature_extractor_class.__name__ if feature_extractor_class else "nofeature_extractor"
                         )
