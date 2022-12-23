@@ -126,20 +126,20 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         outputs = dtc_pipeline(image=image)
         self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
 
-        outputs = dtc_pipeline({"image": image, "question": question}, top_k=2)
+        outputs = dtc_pipeline({"image": image})
         self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
 
         # This image does not detect ANY text in it, meaning layoutlmv2 should fail.
         # Empty answer probably
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        outputs = dtc_pipeline(image=image, question=question, top_k=2)
+        outputs = dtc_pipeline(image=image)
         self.assertEqual(outputs, [1])
 
         # We can optionnally pass directly the words and bounding boxes
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         words = []
         boxes = []
-        outputs = dqa_pipeline(image=image, question=question, words=words, boxes=boxes, top_k=2)
+        outputs = dtc_pipeline(image=image, words=words, boxes=boxes)
         self.assertEqual(outputs, [])
 
 
