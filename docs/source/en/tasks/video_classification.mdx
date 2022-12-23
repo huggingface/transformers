@@ -14,12 +14,12 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Video classification is the task of assigning a label or class to an entire video. Videos are expected to have only one class for each video. Video classification models take a video as input and return a prediction about which class the video belongs to. Video classification models can be used to categorize what a video is all about. A real-world application of video classification is action / activity recognition. Video classification models are used to perform activity recognition which is useful for fitness applications. Activity recognition is also helpful for vision-impaired individuals especially when they're commuting.
+Video classification is the task of assigning a label or class to an entire video. Videos are expected to have only one class for each video. Video classification models take a video as input and return a prediction about which class the video belongs to. These models can be used to categorize what a video is all about. A real-world application of video classification is action / activity recognition which is useful for fitness applications. It is also helpful for vision-impaired individuals especially when they are commuting.
 
 This guide will show you how to:
 
-1. Finetune [VideoMAE](https://huggingface.co/docs/transformers/main/en/model_doc/videomae) on a subset of the [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) dataset.
-2. Use your finetuned model for inference.
+1. Fine-tune [VideoMAE](https://huggingface.co/docs/transformers/main/en/model_doc/videomae) on a subset of the [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) dataset.
+2. Use your fine-tuned model for inference.
 
 <Tip>
 
@@ -33,9 +33,9 @@ Before you begin, make sure you have all the necessary libraries installed:
 pip install -q pytorchvideo transformers evaluate -q
 ```
 
-We'll use [PyTorch Video](https://pytorchvideo.org/) (dubbed as `pytorchvideo`) to process and prepare the videos.
+You will use [PyTorch Video](https://pytorchvideo.org/) (dubbed as `pytorchvideo`) to process and prepare the videos.
 
-We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
+We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
 
 ```py
 >>> from huggingface_hub import notebook_login
@@ -45,7 +45,7 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ## Load UCF101 dataset
 
-Start by loading a subset of the UCF-101 dataset. This'll give you a chance to experiment and make sure everythings works before spending more time training on the full dataset.
+Start by loading a subset of the UCF-101 dataset. This will give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
 
 ```py
 >>> from huggingface_hub import hf_hub_download
@@ -55,7 +55,7 @@ Start by loading a subset of the UCF-101 dataset. This'll give you a chance to e
 >>> file_path = hf_hub_download(repo_id=hf_dataset_identifier, filename=filename, repo_type="dataset")
 ```
 
-After the subset's been downloaded, we need to un-archive it:
+After the subset has been downloaded, you need to un-archive it:
 
 ```py 
 >>> import tarfile
@@ -112,11 +112,11 @@ The (`sorted`) video paths appear like so:
 ...
 ```
 
-We notice that there are video clips belonging to the same group / scene where group is denoted by `g` in the video file paths. `v_ApplyEyeMakeup_g07_c04.avi` and `v_ApplyEyeMakeup_g07_c06.avi`, for example.
+You will notice that there are video clips belonging to the same group / scene where group is denoted by `g` in the video file paths. `v_ApplyEyeMakeup_g07_c04.avi` and `v_ApplyEyeMakeup_g07_c06.avi`, for example.
 
-For the validation and evaluation splits, we wouldn't want to have video clips from the same group / scene to prevent [data leakage](https://www.kaggle.com/code/alexisbcook/data-leakage). The subset that we're using in this tutorial takes this information into account.
+For the validation and evaluation splits, you wouldn't want to have video clips from the same group / scene to prevent [data leakage](https://www.kaggle.com/code/alexisbcook/data-leakage). The subset that you are using in this tutorial takes this information into account.
 
-Next up, you'll derive the set of labels present in the dataset. Let's also create two dictionaries that'll be helpful when initializing the model:
+Next up, you will derive the set of labels present in the dataset. Also, create two dictionaries that'll be helpful when initializing the model:
 
 * `label2id`: maps the class names to integers.
 * `id2label`: maps the integers to class names. 
@@ -131,11 +131,11 @@ Next up, you'll derive the set of labels present in the dataset. Let's also crea
 # Unique classes: ['ApplyEyeMakeup', 'ApplyLipstick', 'Archery', 'BabyCrawling', 'BalanceBeam', 'BandMarching', 'BaseballPitch', 'Basketball', 'BasketballDunk', 'BenchPress'].
 ```
 
-We've got 10 unique classes. For each class we have 30 videos in the training set.
+There are 10 unique classes. For each class, there are 30 videos in the training set.
 
 ## Load a model to fine-tune
 
-We now initialize a video classification model where the encoder is initialized with the pre-trained parameters and the classification head is randomly initialized. We also initialize the feature extractor associated to the model. This will come in handy during writing the preprocessing pipeline for our dataset.
+Instantiate a video classification model from a pretrained checkpoint. The model's encoder comes with pre-trained parameters, and the classification head is randomly initialized. Also, initialize the feature extractor associated to the model. This will come in handy during writing the preprocessing pipeline for our dataset.
 
 ```py 
 >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForVideoClassification
@@ -166,7 +166,7 @@ The warning is telling us we are throwing away some weights (e.g. the weights an
 
 ## Prepare the datasets for training
 
-For preprocessing the videos, we'll leverage the [PyTorch Video library](https://pytorchvideo.org/). We start by importing the dependencies we need. 
+For preprocessing the videos, you will leverage the [PyTorch Video library](https://pytorchvideo.org/). Start by importing the dependencies we need. 
 
 ```py 
 >>> import pytorchvideo.data
@@ -189,14 +189,14 @@ For preprocessing the videos, we'll leverage the [PyTorch Video library](https:/
 ... )
 ```
 
-For the training dataset transformations, we use a combination of uniform temporal subsampling, pixel normalization, random cropping, and random horizontal flipping. For the validation and evaluation dataset transformations, we keep the transformation chain the same except for random cropping and horizontal flipping. To learn more about the details of these transformations check out the [official documentation of PyTorch Video](https://pytorchvideo.org).  
+For the training dataset transformations, use a combination of uniform temporal subsampling, pixel normalization, random cropping, and random horizontal flipping. For the validation and evaluation dataset transformations, keep the same transformation chain except for random cropping and horizontal flipping. To learn more about the details of these transformations check out the [official documentation of PyTorch Video](https://pytorchvideo.org).  
 
-We'll use the `feature_extractor` associated with the pre-trained model to obtain the following information:
+Use the `feature_extractor` associated with the pre-trained model to obtain the following information:
 
 * Image mean and standard deviation with which the video frame pixels will be normalized.
 * Spatial resolution to which the video frames will be resized.
 
-Let's start by defining some constants.
+Start by defining some constants.
 
 ```py
 >>> mean = feature_extractor.image_mean
@@ -209,7 +209,7 @@ Let's start by defining some constants.
 >>> clip_duration = num_frames_to_sample * sample_rate / fps
 ```
 
-Then we can begin defining the dataset-specific transformations and the datasets respectively. Starting with the training set: 
+Now, define the dataset-specific transformations and the datasets respectively. Starting with the training set: 
 
 ```py 
 >>> train_transform = Compose(
@@ -272,9 +272,9 @@ The same sequence of workflow can be applied to the validation and evaluation se
 ... )
 ```
 
-**Note**: The above dataset pipelines are taken from the [official PyTorch Video example](https://pytorchvideo.org/docs/tutorial_classification#dataset). We're using the [`pytorchvideo.data.Ucf101()`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.Ucf101) function because it's tailored for the UCF-101 dataset. Under the hood, it returns a [`pytorchvideo.data.labeled_video_dataset.LabeledVideoDataset`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.LabeledVideoDataset) object. `LabeledVideoDataset` class is the base class for all things video in the PyTorch Video dataset. So, if you wanted to use a custom dataset not supported off-the-shelf by PyTorch Video, you can extend the `LabeledVideoDataset` class accordingly. Refer to the `data` API [documentation to](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html) learn more. Also, if your dataset follows a similar structure (as shown above), then using the `pytorchvideo.data.Ucf101()` should work just fine. 
+**Note**: The above dataset pipelines are taken from the [official PyTorch Video example](https://pytorchvideo.org/docs/tutorial_classification#dataset). We're using the [`pytorchvideo.data.Ucf101()`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.Ucf101) function because it's tailored for the UCF-101 dataset. Under the hood, it returns a [`pytorchvideo.data.labeled_video_dataset.LabeledVideoDataset`](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html#pytorchvideo.data.LabeledVideoDataset) object. `LabeledVideoDataset` class is the base class for all things video in the PyTorch Video dataset. So, if you want to use a custom dataset not supported off-the-shelf by PyTorch Video, you can extend the `LabeledVideoDataset` class accordingly. Refer to the `data` API [documentation to](https://pytorchvideo.readthedocs.io/en/latest/api/data/data.html) learn more. Also, if your dataset follows a similar structure (as shown above), then using the `pytorchvideo.data.Ucf101()` should work just fine. 
 
-We can access the `num_videos` argument to know the number of videos we have in the dataset.
+You can access the `num_videos` argument to know the number of videos in the dataset.
 
 ```py
 >>> print(train_dataset.num_videos, val_dataset.num_videos, test_dataset.num_videos)
@@ -325,9 +325,9 @@ We can access the `num_videos` argument to know the number of videos we have in 
 
 ## Train the model 
 
-We'll leverage [`Trainer`](https://huggingface.co/docs/transformers/main_classes/trainer) from  🤗 Transformers for training the model. To instantiate a `Trainer`, we will need to define the training configuration and an evaluation metric. The most important is the [`TrainingArguments`](https://huggingface.co/transformers/main_classes/trainer.html#transformers.TrainingArguments), which is a class that contains all the attributes to configure the training. It requires an output folder name, which will be used to save the checkpoints of the model. It also helps sync all the information in the model repository on 🤗 Hub.
+Leverage [`Trainer`](https://huggingface.co/docs/transformers/main_classes/trainer) from  🤗 Transformers for training the model. To instantiate a `Trainer`, you need to define the training configuration and an evaluation metric. The most important is the [`TrainingArguments`](https://huggingface.co/transformers/main_classes/trainer.html#transformers.TrainingArguments), which is a class that contains all the attributes to configure the training. It requires an output folder name, which will be used to save the checkpoints of the model. It also helps sync all the information in the model repository on 🤗 Hub.
 
-Most of the training arguments are pretty self-explanatory, but one that is quite important here is `remove_unused_columns=False`. This one will drop any features not used by the model's call function. By default it's `True` because usually it's ideal to drop unused feature columns, making it easier to unpack inputs into the model's call function. But, in our case, we need the unused features ('video' in particular) in order to create `pixel_values` (which is a mandatory key our model expects in its inputs).
+Most of the training arguments are self-explanatory, but one that is quite important here is `remove_unused_columns=False`. This one will drop any features not used by the model's call function. By default it's `True` because usually it's ideal to drop unused feature columns, making it easier to unpack inputs into the model's call function. But, in this case, you need the unused features ('video' in particular) in order to create `pixel_values` (which is a mandatory key our model expects in its inputs).
 
 
 ```py 
@@ -354,9 +354,9 @@ Most of the training arguments are pretty self-explanatory, but one that is quit
 ... )
 ```
 
-There's no need to define `max_steps` when instantiating `TrainingArguments`. Since the dataset returned by `pytorchvideo.data.Ucf101()` doesn't implement the `__len__()` method we had to specify `max_steps`.  
+There is no need to define `max_steps` when instantiating `TrainingArguments`. Since the dataset returned by `pytorchvideo.data.Ucf101()` doesn't implement the `__len__()` method we had to specify `max_steps`.  
 
-Next, we need to define a function for how to compute the metrics from the predictions, which will just use the `metric` we'll load now. The only preprocessing we have to do is to take the argmax of our predicted logits:
+Next, you need to define a function for how to compute the metrics from the predictions, which will just use the `metric` we'll load now. The only preprocessing you have to do is to take the argmax of our predicted logits:
 
 ```py
 import evaluate
@@ -373,7 +373,7 @@ def compute_metrics(eval_pred):
 
 In the [VideoMAE paper](https://arxiv.org/abs/2203.12602), the authors use the following evaluation strategy. They evaluate the model on several clips from test videos and apply different crops to those clips and report the aggregate score. However, in the interest of simplicity and brevity, we don't consider that in this tutorial.
 
-We also define a `collate_fn`, which will be used to batch examples together. Each batch consists of 2 keys, namely `pixel_values` and `labels`.
+Also, define a `collate_fn`, which will be used to batch examples together. Each batch consists of 2 keys, namely `pixel_values` and `labels`.
 
 ```py 
 >>> def collate_fn(examples):
@@ -385,7 +385,7 @@ We also define a `collate_fn`, which will be used to batch examples together. Ea
 ...     return {"pixel_values": pixel_values, "labels": labels}
 ```
 
-Then we just need to pass all of this along with our datasets to the `Trainer`:
+Then you just pass all of this along with the datasets to `Trainer`:
 
 ```py 
 >>> trainer = Trainer(
@@ -399,9 +399,9 @@ Then we just need to pass all of this along with our datasets to the `Trainer`:
 ... )
 ```
 
-You might wonder why we pass along the `feature_extractor` as a tokenizer when we already preprocessed our data. This is only to make sure the feature extractor configuration file (stored as JSON) will also be uploaded to the repo on the hub.
+You might wonder why you passed along the `feature_extractor` as a tokenizer when you preprocessed the data already. This is only to make sure the feature extractor configuration file (stored as JSON) will also be uploaded to the repo on the Hub.
 
-Now we can finetune our model by calling the `train` method:
+Now fine-tune our model by calling the `train` method:
 
 ```py 
 >>> train_results = trainer.train()
@@ -415,7 +415,7 @@ Once training is completed, share your model to the Hub with the [`~transformers
 
 ## Inference
 
-Great, now that you've finetuned a model, you can use it for inference!
+Great, now that you have fine-tuned a model, you can use it for inference!
 
 Load a video for inference:
 
@@ -427,7 +427,7 @@ Load a video for inference:
     <img src="https://i.ibb.co/XJsHp6S/download-1.gif" alt="Teams playing basketball"/>
 </div>
 
-The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`](https://huggingface.co/docs/transformers/main/en/main_classes/pipelines#transformers.VideoClassificationPipeline). Instantiate a `pipeline` for video classification with your model, and pass your image to it:
+The simplest way to try out your fine-tuned model for inference is to use it in a [`pipeline`](https://huggingface.co/docs/transformers/main/en/main_classes/pipelines#transformers.VideoClassificationPipeline). Instantiate a `pipeline` for video classification with your model, and pass your video to it:
 
 ```py
 >>> from transformers import pipeline
