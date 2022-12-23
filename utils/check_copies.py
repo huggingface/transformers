@@ -90,8 +90,8 @@ LOCALIZED_READMES = {
         "start_prompt": "🤗 ट्रांसफॉर्मर वर्तमान में निम्नलिखित आर्किटेक्चर का समर्थन करते हैं",
         "end_prompt": "1. एक नए मॉडल में योगदान देना चाहते हैं?",
         "format_model_list": (
-            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
-            " {paper_authors}.{supplements}"
+            "**[{title}]({model_link})** ({paper_affiliations} से) {paper_authors}.{supplements} द्वारा"
+            "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
 }
