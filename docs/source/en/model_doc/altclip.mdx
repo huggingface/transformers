@@ -51,8 +51,7 @@ encode the text and prepare the images. The following example shows how to get t
 from PIL import Image
 import requests
 
-from modeling_altclip import AltCLIPModel
-from processing_altclip import AltCLIPProcessor
+from transformers import AltCLIPModel, AltCLIPProcessor
 
 model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
