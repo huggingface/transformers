@@ -419,10 +419,8 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-    (
-        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-        " top."
-    ),
+    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+    " top.",
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
