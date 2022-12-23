@@ -113,6 +113,27 @@ class LayoutLMv3ModelTester:
         self.image_seq_length = (image_size // patch_size) ** 2 + 1
         self.seq_length = self.text_seq_length + self.image_seq_length
 
+        self.config = self.prepare_config()
+
+    def prepare_config(self):
+            return LayoutLMv3Config(
+                            vocab_size=self.vocab_size,
+                            hidden_size=self.hidden_size,
+                            num_hidden_layers=self.num_hidden_layers,
+                            num_attention_heads=self.num_attention_heads,
+                            intermediate_size=self.intermediate_size,
+                            hidden_act=self.hidden_act,
+                            hidden_dropout_prob=self.hidden_dropout_prob,
+                            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+                            max_position_embeddings=self.max_position_embeddings,
+                            type_vocab_size=self.type_vocab_size,
+                            initializer_range=self.initializer_range,
+                            coordinate_size=self.coordinate_size,
+                            shape_size=self.shape_size,
+                            input_size=self.image_size,
+                            patch_size=self.patch_size,
+                        )
+    
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.vocab_size)
 
@@ -144,24 +165,6 @@ class LayoutLMv3ModelTester:
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
-
-        self.config = LayoutLMv3Config(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            initializer_range=self.initializer_range,
-            coordinate_size=self.coordinate_size,
-            shape_size=self.shape_size,
-            input_size=self.image_size,
-            patch_size=self.patch_size,
-        )
 
         return self.config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
 
