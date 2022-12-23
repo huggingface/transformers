@@ -322,29 +322,29 @@ Finally, bring everything together, and call `train`:
 Now that you have finetuned a DETR model and uploaded it to the 🤗Hub, you can use it for inference.
 
 ```py
-import requests
+>>> import requests
 
-url = "https://chartwell.com/-/media/Images/blog/2020/04/keeping-staff-and-residents-protected.jpeg?mw=1900&hash=B8A76374D6BD24B0DC8A779D0C985027"
-image = Image.open(requests.get(url, stream=True).raw)
+>>> url = "https://chartwell.com/-/media/Images/blog/2020/04/keeping-staff-and-residents-protected.jpeg?mw=1900&hash=B8A76374D6BD24B0DC8A779D0C985027"
+>>> image = Image.open(requests.get(url, stream=True).raw)
 
-image_processor = DetrImageProcessor.from_pretrained("MariaK/detr-resnet-50_fine_tuned_cppe5")
-model = DetrForObjectDetection.from_pretrained("MariaK/detr-resnet-50_fine_tuned_cppe5")
+>>> image_processor = DetrImageProcessor.from_pretrained("MariaK/detr-resnet-50_fine_tuned_cppe5")
+>>> model = DetrForObjectDetection.from_pretrained("MariaK/detr-resnet-50_fine_tuned_cppe5")
 
-inputs = image_processor(images=image, return_tensors="pt")
-outputs = model(**inputs)
+>>> inputs = image_processor(images=image, return_tensors="pt")
+>>> outputs = model(**inputs)
 
-# convert outputs (bounding boxes and class logits) to COCO API
-target_sizes = torch.tensor([image.size[::-1]])
-results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
-    0
-]
+>>> # convert outputs (bounding boxes and class logits) to COCO API
+>>> target_sizes = torch.tensor([image.size[::-1]])
+>>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+>>>     0
+>>> ]
 
-for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-    box = [round(i, 2) for i in box.tolist()]
-    print(
-        f"Detected {model.config.id2label[label.item()]} with confidence "
-        f"{round(score.item(), 3)} at location {box}"
-    )
+>>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+>>>     box = [round(i, 2) for i in box.tolist()]
+>>>     print(
+>>>         f"Detected {model.config.id2label[label.item()]} with confidence "
+>>>         f"{round(score.item(), 3)} at location {box}"
+>>>     )
 ```
 
 
