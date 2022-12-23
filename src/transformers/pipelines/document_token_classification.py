@@ -222,18 +222,20 @@ class DocumentTokenClassificationPipeline(Pipeline):
         # Fields that help with post-processing
         encoded_inputs["word_ids"] = encoded_inputs.word_ids()
         encoded_inputs["words"] = words if words is not None else features["words"]
+        encoded_inputs["boxes"] = boxes if boxes is not None else features["boxes"]
 
         return encoded_inputs
 
     def _forward(self, model_inputs):
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
+        boxes = model_inputs.pop("boxes", None)
 
         model_outputs = self.model(**model_inputs)
 
         model_outputs["word_ids"] = word_ids
         model_outputs["words"] = words
-        model_outputs["attention_mask"] = model_inputs.get("attention_mask", None)
+        model_outputs["boxes"] = boxes
         return model_outputs
 
     def postprocess(self, model_outputs, **kwargs):
@@ -243,16 +245,21 @@ class DocumentTokenClassificationPipeline(Pipeline):
         if self.framework == "pt":
             logits = logits.detach().cpu().numpy()
         words = model_outputs["words"]
+        boxes = model_outputs["boxes"]
         
         # if first dimension is 1, remove it
         if logits.shape[0] == 1:
             logits = logits[0]
-            model_outputs["logits"] = logits
         
         # if words is a list of list of strings, get the first one
         if isinstance(words, list) and isinstance(words[0], list):
             words = words[0]
             model_outputs["words"] = words
+
+        if isinstance(boxes, list) and isinstance(boxes[0], list):
+            boxes = boxes[0]
+            model_outputs["boxes"] = boxes
+
         token_predictions = logits.argmax(-1)
 
         word_ids = model_outputs.pop("word_ids", None)
@@ -268,5 +275,4 @@ class DocumentTokenClassificationPipeline(Pipeline):
 
         word_labels = [self.model.config.id2label[prediction] for prediction in word_predictions]
         model_outputs["word_labels"] = word_labels
-        model_outputs.pop("attention_mask", None)
         return model_outputs
