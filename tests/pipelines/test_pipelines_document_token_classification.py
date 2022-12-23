@@ -118,29 +118,30 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             feature_extractor=feature_extractor,
         )
         image = INVOICE_URL
-
-        expected_output = [
-            {"score": 0.0001, "answer": "oy 2312/2019", "start": 38, "end": 39},
-            {"score": 0.0001, "answer": "oy 2312/2019 DUE", "start": 38, "end": 40},
-        ]
         outputs = dtc_pipeline(image=image)
-        self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
+        self.assertEqual(len(outputs["words"]), 95)
+        self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
 
         outputs = dtc_pipeline({"image": image})
-        self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
+        self.assertEqual(len(outputs["words"]), 95)
+        self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
 
         # This image does not detect ANY text in it, meaning layoutlmv2 should fail.
         # Empty answer probably
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         outputs = dtc_pipeline(image=image)
-        self.assertEqual(outputs, [1])
+        self.assertEqual(outputs["words"], [])
+        self.assertEqual(outputs["boxes"], [])
+        self.assertEqual(outputs["word_labels"], [])
 
-        # We can optionnally pass directly the words and bounding boxes
+        # We can optionally pass directly the words and bounding boxes
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         words = []
         boxes = []
         outputs = dtc_pipeline(image=image, words=words, boxes=boxes)
-        self.assertEqual(outputs, [])
+        self.assertEqual(outputs["words"], [])
+        self.assertEqual(outputs["boxes"], [])
+        self.assertEqual(outputs["word_labels"], [])
 
 
     @slow
@@ -151,7 +152,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         tokenizer = AutoTokenizer.from_pretrained(
             "impira/layoutlm-document-qa", revision="3dc6de3", add_prefix_space=True
         )
-        dqa_pipeline = pipeline(
+        dtc_pipeline = pipeline(
             "document-question-answering",
             model="impira/layoutlm-document-qa",
             tokenizer=tokenizer,
@@ -160,7 +161,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         image = INVOICE_URL
         question = "What is the invoice number?"
 
-        outputs = dqa_pipeline(image=image, question=question, top_k=2)
+        outputs = dtc_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -178,7 +179,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             ],
         )
 
-        outputs = dqa_pipeline(
+        outputs = dtc_pipeline(
             [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
         )
         self.assertEqual(
@@ -195,7 +196,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         word_boxes = list(zip(*apply_ocr(load_image(image), None, "")))
 
         # This model should also work if `image` is set to None
-        outputs = dqa_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
+        outputs = dtc_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -224,7 +225,6 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             max_seq_len=50,
         )
         image = INVOICE_URL
-        question = "What is the invoice number?"
 
         outputs = dtc_pipeline(image=image)
         self.assertEqual(
