@@ -113,9 +113,7 @@ class LayoutLMv3ModelTester:
         self.image_seq_length = (image_size // patch_size) ** 2 + 1
         self.seq_length = self.text_seq_length + self.image_seq_length
 
-        self.config = self.prepare_config()
-
-    def prepare_config(self):
+    def get_config(self):
             return LayoutLMv3Config(
                             vocab_size=self.vocab_size,
                             hidden_size=self.hidden_size,
@@ -165,11 +163,10 @@ class LayoutLMv3ModelTester:
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
+        
+        config = self.get_config()
 
-        return self.config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
-
-    def get_config(self):
-        return self.config
+        return config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
     
     def create_and_check_model(
         self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
