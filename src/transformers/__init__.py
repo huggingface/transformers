@@ -3542,6 +3542,8 @@ if TYPE_CHECKING:
         BridgeTowerConfig,
         BridgeTowerImageProcessor,
         BridgeTowerProcessor,
+        BridgeTowerTextConfig,
+        BridgeTowerVisionConfig,
     )
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
