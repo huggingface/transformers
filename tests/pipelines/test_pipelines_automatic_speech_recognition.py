@@ -145,6 +145,19 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
+    @slow
+    @require_torch
+    def test_whisper_fp16(self):
+        if not torch.cuda.is_available():
+            self.skipTest("Cuda is necessary for this test")
+        speech_recognizer = pipeline(
+            model="openai/whisper-base",
+            device=0,
+            torch_dtype=torch.float16,
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        speech_recognizer(waveform)
+
     @require_torch
     def test_small_model_pt_seq2seq(self):
         speech_recognizer = pipeline(
