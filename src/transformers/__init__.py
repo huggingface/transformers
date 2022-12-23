@@ -1142,7 +1142,6 @@ else:
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
             "BridgeTowerPreTrainedModel",
-            "BridgeTowerTextModel",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -4378,7 +4377,6 @@ if TYPE_CHECKING:
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
-            BridgeTowerTextModel,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
