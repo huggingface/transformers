@@ -780,7 +780,7 @@ class OriginalOneFormerCheckpointToOursConverter:
         for i in range(3):
             renamed_keys.extend(
                 rename_keys_for_weight_bias(
-                    f"{src_prefix}.mask_embed.layers.{i}", f"{dst_prefix}.decoder.mask_embed.{i}.0"
+                    f"{src_prefix}.mask_embed.layers.{i}", f"{dst_prefix}.decoder.mask_embed.layers.{i}.0"
                 )
             )
 
@@ -827,7 +827,7 @@ class OriginalOneFormerCheckpointToOursConverter:
 
         for i in range(2):
             renamed_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.layers.{i}", f"{dst_prefix}.task_mlp.{i}.0")
+                rename_keys_for_weight_bias(f"{src_prefix}.layers.{i}", f"{dst_prefix}.task_mlp.layers.{i}.0")
             )
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)

@@ -115,7 +115,7 @@ class OneFormerProcessor(ProcessorMixin):
             raise ValueError("You have to specify the image. Found None.")
 
         if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
-            raise ValueError(f"task_inputs must be semantic, instance, or panoptic.")
+            raise ValueError("task_inputs must be semantic, instance, or panoptic.")
 
         encoded_inputs = self.image_processor(images, task_inputs, segmentation_maps, **kwargs)
 
@@ -155,7 +155,7 @@ class OneFormerProcessor(ProcessorMixin):
             raise ValueError("You have to specify the image. Found None.")
 
         if not all(task in ["semantic", "instance", "panoptic"] for task in task_inputs):
-            raise ValueError(f"task_inputs must be semantic, instance, or panoptic.")
+            raise ValueError("task_inputs must be semantic, instance, or panoptic.")
 
         encoded_inputs = self.image_processor.encode_inputs(images, task_inputs, segmentation_maps, **kwargs)
 

@@ -321,7 +321,7 @@ def get_oneformer_resize_output_image_size(
 
 def prepare_metadata(repo_path, class_info_file):
     with open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r") as f:
-        class_info = json.load(f.read())
+        class_info = json.load(f)
     metadata = {}
     class_names = []
     thing_ids = []
