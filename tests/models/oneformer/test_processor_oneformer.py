@@ -41,8 +41,8 @@ if is_vision_available():
     from PIL import Image
 
 
-def prepare_metadata(class_info_file):
-    class_info = json.load(open(hf_hub_download("shi-labs/oneformer_demo", class_info_file, repo_type="dataset"), "r"))
+def prepare_metadata(class_info_file, repo_path="shi-labs/oneformer_demo"):
+    class_info = json.load(open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r"))
     metadata = {}
     class_names = []
     thing_ids = []
@@ -76,7 +76,7 @@ class OneFormerProcessorTester(unittest.TestCase):
         ignore_index=255,
         max_seq_length=77,
         task_seq_length=77,
-        repo_path="shi-labs/oneformer_ade20k_swin_tiny",
+        model_repo="shi-labs/oneformer_ade20k_swin_tiny",
         class_info_file="ade20k_panoptic.json",
         num_text=10,
     ):
@@ -95,7 +95,7 @@ class OneFormerProcessorTester(unittest.TestCase):
         self.class_info_file = class_info_file
         self.metadata = prepare_metadata(class_info_file)
         self.num_text = num_text
-        self.repo_path = repo_path
+        self.model_repo = model_repo
 
         # for the post_process_functions
         self.batch_size = 2
@@ -123,7 +123,7 @@ class OneFormerProcessorTester(unittest.TestCase):
         }
 
         image_processor = OneFormerImageProcessor(**image_processor_dict)
-        tokenizer = CLIPTokenizer.from_pretrained(self.repo_path)
+        tokenizer = CLIPTokenizer.from_pretrained(self.model_repo)
 
         return {
             "image_processor": image_processor,
@@ -134,8 +134,9 @@ class OneFormerProcessorTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to OneFormerImageProcessor,
-        assuming do_resize is set to True with a scalar size.
+        This function computes the expected height and width when providing images to OneFormerProcessor,
+        assuming do_resize is set to True with a scalar size. It also provides the expected sequence length
+        for the task_inputs and text_list_input.
         """
         if not batched:
             image = image_inputs[0]
@@ -450,7 +451,7 @@ class OneFormerProcessingTest(unittest.TestCase):
                 self.assertEqual(mask_label.shape[0], class_label.shape[0])
                 # this ensure padding has happened
                 self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
-                self.assertEqual(text_inputs.shape[1], self.processing_tester.num_text)
+                self.assertEqual(text_input.shape[0], self.processing_tester.num_text)
 
         common()
         common(is_instance_map=True)

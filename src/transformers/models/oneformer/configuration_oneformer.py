@@ -205,13 +205,10 @@ class OneFormerConfig(PretrainedConfig):
                 use_absolute_embeddings=False,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
-        else:
-            backbone_model_type = (
-                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
-            )
-            if isinstance(backbone_config, dict):
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
 
