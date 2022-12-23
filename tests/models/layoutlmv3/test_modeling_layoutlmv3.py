@@ -145,7 +145,7 @@ class LayoutLMv3ModelTester:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
 
-        config = LayoutLMv3Config(
+        self.config = LayoutLMv3Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -163,8 +163,11 @@ class LayoutLMv3ModelTester:
             patch_size=self.patch_size,
         )
 
-        return config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+        return self.config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
 
+    def get_config(self):
+        return self.config
+    
     def create_and_check_model(
         self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
     ):
