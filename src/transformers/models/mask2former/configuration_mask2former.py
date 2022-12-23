@@ -20,7 +20,6 @@ from typing import Dict, List, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
-from ..swin import SwinConfig
 
 
 MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -231,7 +230,7 @@ class Mask2FormerConfig(PretrainedConfig):
 
         if backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
-            backbone_config = SwinConfig(
+            backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
                 in_channels=3,
                 patch_size=4,
@@ -242,29 +241,19 @@ class Mask2FormerConfig(PretrainedConfig):
                 drop_path_rate=0.3,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
-        else:
-            # verify that the backbone is supported
-            backbone_model_type = (
-                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
-            )
-            if backbone_model_type not in self.backbones_supported:
-                raise ValueError(
-                    f"Backbone {backbone_model_type} not supported, please use one of"
-                    f" {','.join(self.backbones_supported)}"
-                )
-            if isinstance(backbone_config, dict):
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         if decoder_config is None:
-            self.decoder_config = Mask2FormerDecoderConfig()
-            logger.info("decoder_config is None. Initializing the Mask2FormerDecoderConfig with default values.")
+            logger.info("`decoder_config` is `None`. Initializing the decoder config with default values.")
+            decoder_config = Mask2FormerDecoderConfig()
         elif isinstance(decoder_config, dict):
-            self.decoder_config = Mask2FormerDecoderConfig(**decoder_config)
-        else:
-            raise TypeError("Please pass in decoder configuration settings as a dictionary.")
+            decoder_config = Mask2FormerDecoderConfig.from_dict(decoder_config)
 
         self.backbone_config = backbone_config
+        self.decoder_config = decoder_config
         self.ignore_value = ignore_value
         self.num_queries = num_queries
         self.no_object_weight = no_object_weight

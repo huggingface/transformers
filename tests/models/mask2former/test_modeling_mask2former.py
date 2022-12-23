@@ -99,9 +99,7 @@ class Mask2FormerModelTester:
         return config, pixel_values, pixel_mask, mask_labels, class_labels
 
     def get_config(self):
-        config = Mask2FormerConfig()
-        config.num_labels = self.num_labels
-        config.backbone_config = SwinConfig(
+        backbone_config = SwinConfig(
             image_size=32,
             in_channels=3,
             patch_size=4,
@@ -112,15 +110,17 @@ class Mask2FormerModelTester:
             drop_path_rate=0.3,
             out_features=["stage1", "stage2", "stage3", "stage4"],
         )
+        config = Mask2FormerConfig(backbone_config=backbone_config)
+        config.num_labels = self.num_labels
         config.num_queries = self.num_queries
         config.feature_strides = self.feature_strides
         config.decoder_config.feature_size = self.feature_size
         config.decoder_config.mask_feature_size = self.mask_feature_size
-        config.decoder_config.hidden_dim = self.hidden_dim
-        config.decoder_config.encoder_feedforward_dim = self.encoder_feedforward_dim
         config.decoder_config.encoder_layers = self.encoder_layers
         config.decoder_config.decoder_layers = self.decoder_layers
         config.decoder_config.num_heads = self.num_decoder_heads
+        config.decoder_config.encoder_feedforward_dim = self.encoder_feedforward_dim
+        config.decoder_config.hidden_dim = self.hidden_dim
         config.decoder_config.dim_feedforward = self.dim_feedforward
         config.decoder_config.common_stride = self.common_stride
         return config
@@ -308,8 +308,7 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
         config.output_hidden_states = True
         config.output_attentions = True
 
-        model = model_class(config)
-        model.to(torch_device)
+        model = model_class(config).to(torch_device)
         model.train()
 
         outputs = model(pixel_values, mask_labels=mask_labels, class_labels=class_labels)

@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
@@ -27,8 +28,8 @@ from torch import Tensor, nn
 import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
-from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
+from huggingface_hub import hf_hub_download
 from transformers import (
     Mask2FormerConfig,
     Mask2FormerForUniversalSegmentation,
@@ -110,8 +111,25 @@ def setup_cfg(args: Args):
 class OriginalMask2FormerConfigToOursConverter:
     def __call__(self, original_config: object) -> Mask2FormerConfig:
         model = original_config.MODEL
-        dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST[0])
-        id2label = {idx: label for idx, label in enumerate(dataset_catalog.thing_classes)}
+
+        repo_id = "huggingface/label-files"
+        if model.SEM_SEG_HEAD.NUM_CLASSES == 847:
+            filename = "mask2former-ade20k-full-id2label.json"
+        elif model.SEM_SEG_HEAD.NUM_CLASSES == 150:
+            filename = "ade20k-id2label.json"
+        elif model.SEM_SEG_HEAD.NUM_CLASSES == 80:
+            filename = "coco-detection-mmdet-id2label.json"
+        elif model.SEM_SEG_HEAD.NUM_CLASSES == 171:
+            filename = "mask2former-coco-stuff-id2label.json"
+        elif model.SEM_SEG_HEAD.NUM_CLASSES == 133:
+            filename = "coco-panoptic-id2label.json"
+        elif model.SEM_SEG_HEAD.NUM_CLASSES == 10:
+            filename = "cityscapes-id2label.json"
+        elif model.SEM_SEG_HEAD.NUM_CLASSES == 65:
+            filename = "mapillary-vistas-id2label.json"
+
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
         label2id = {label: idx for idx, label in id2label.items()}
 
         if model.SWIN.EMBED_DIM == 96:
@@ -119,8 +137,12 @@ class OriginalMask2FormerConfigToOursConverter:
                 "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
             )
         elif model.SWIN.EMBED_DIM == 128:
-            backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-base-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
+            backbone_config = SwinConfig(
+                embed_dim=128,
+                window_size=12,
+                depths=(2, 2, 18, 2),
+                num_heads=(4, 8, 16, 32),
+                out_features=["stage1", "stage2", "stage3", "stage4"],
             )
         elif model.SWIN.EMBED_DIM == 192:
             backbone_config = SwinConfig.from_pretrained(
@@ -149,19 +171,6 @@ class OriginalMask2FormerConfigToOursConverter:
             use_auxiliary_loss=model.MASK_FORMER.DEEP_SUPERVISION,
             feature_strides=[4, 8, 16, 32],
             backbone_config=backbone_config,
-            decoder_config=dict(
-                feature_size=model.SEM_SEG_HEAD.CONVS_DIM,
-                mask_feature_size=model.SEM_SEG_HEAD.MASK_DIM,
-                hidden_dim=model.MASK_FORMER.HIDDEN_DIM,
-                encoder_layers=model.SEM_SEG_HEAD.TRANSFORMER_ENC_LAYERS,
-                encoder_feedforward_dim=1024,
-                decoder_layers=model.MASK_FORMER.DEC_LAYERS,
-                num_heads=model.MASK_FORMER.NHEADS,
-                dropout=model.MASK_FORMER.DROPOUT,
-                dim_feedforward=model.MASK_FORMER.DIM_FEEDFORWARD,
-                enforce_input_projection=model.MASK_FORMER.ENFORCE_INPUT_PROJ,
-                common_stride=model.SEM_SEG_HEAD.COMMON_STRIDE,
-            ),
             id2label=id2label,
             label2id=label2id,
         )
@@ -206,8 +215,8 @@ class OriginalMask2FormerCheckpointToOursConverter:
             (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.embeddings.norm.weight"),
             (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.embeddings.norm.bias"),
         ]
-        num_layers = len(config.backbone_config.depths)
-        for layer_idx in range(num_layers):
+
+        for layer_idx in range(len(config.backbone_config.depths)):
             for block_idx in range(config.backbone_config.depths[layer_idx]):
                 renamed_keys.extend(
                     [  # src, dst
@@ -316,7 +325,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
                     ]
                 )
 
-            if layer_idx < num_layers - 1:
+            if layer_idx < 3:
                 # patch merging
                 renamed_keys.extend(
                     [
@@ -802,14 +811,10 @@ if __name__ == "__main__":
         mask2former_for_segmentation.model = mask2former
 
         mask2former_for_segmentation = converter.convert_universal_segmentation(mask2former_for_segmentation)
-
         test(original_model, mask2former_for_segmentation, feature_extractor)
 
         model_name = get_model_name(checkpoint_file)
-        logger.info(f"🪄 Saving {model_name}")
-
-        feature_extractor.save_pretrained(save_directory / model_name)
-        mask2former_for_segmentation.save_pretrained(save_directory / model_name)
+        logger.info(f"🪄 Pushing {model_name} to hub...")
 
         feature_extractor.push_to_hub(model_name)
         mask2former_for_segmentation.push_to_hub(model_name)
