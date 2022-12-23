@@ -47,6 +47,7 @@ logger = logging.get_logger(__name__)
 
 class ModelType(ExplicitEnum):
     LayoutLMv3 = "layoutlmv3"
+    LayoutLMv2 = "layoutlmv2"
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -72,6 +73,10 @@ class DocumentTokenClassificationPipeline(Pipeline):
         self.image_processor.apply_ocr = False
         if self.model.config.model_type == "layoutlmv3":
             self.model_type = ModelType.LayoutLMv3
+        elif self.model.config.model_type == "layoutlmv2":
+            self.model_type = ModelType.LayoutLMv2
+        else:
+            raise ValueError(f"Model type {self.model.config.model_type} is not supported by this pipeline.")
 
     def _sanitize_parameters(
         self,
@@ -146,8 +151,6 @@ class DocumentTokenClassificationPipeline(Pipeline):
             TODO max_seq_len (`int`, *optional*, defaults to 384):
                 The maximum length of the total sentence (context + question) in tokens of each chunk passed to the
                 model. The context will be split in several chunks (using `doc_stride` as overlap) if needed.
-            TODO max_question_len (`int`, *optional*, defaults to 64):
-                The maximum length of the question after tokenization. It will be truncated if needed.
             lang (`str`, *optional*):
                 Language to use while running OCR. Defaults to english.
             tesseract_config (`str`, *optional*):
@@ -163,6 +166,12 @@ class DocumentTokenClassificationPipeline(Pipeline):
             inputs = {
                 "image": image,
                 "word_boxes": word_boxes,
+            }
+        elif words is not None and boxes is not None:
+            inputs = {
+                "image": image,
+                "words": words,
+                "boxes": boxes,
             }
         else:
             inputs = image
@@ -204,9 +213,13 @@ class DocumentTokenClassificationPipeline(Pipeline):
             **kwargs,
         )
 
-        # add pixel values
-        images = features.pop("pixel_values")
-        encoded_inputs["pixel_values"] = images
+        if self.model_type == ModelType.LayoutLMv3:
+            image_field = "pixel_values"
+        elif self.model_type == ModelType.LayoutLMv2:
+            image_field = "image"
+        encoded_inputs[image_field] = features.pop("pixel_values")
+
+        # Fields that help with post-processing
         encoded_inputs["word_ids"] = encoded_inputs.word_ids()
         encoded_inputs["words"] = words if words is not None else features["words"]
 
