@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 SHI Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 """OneFormer model configuration"""
 import copy
 from typing import Dict, Optional
-
-from transformers import SwinConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -148,52 +146,52 @@ class OneFormerConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config: Optional[Dict] = None,
-        ignore_value: Optional[int] = 255,
-        num_queries: Optional[int] = 150,
-        no_object_weight: Optional[int] = 0.1,
-        class_weight: Optional[float] = 2.0,
-        mask_weight: Optional[float] = 5.0,
-        dice_weight: Optional[float] = 5.0,
-        contrastive_weight: Optional[float] = 0.5,
-        contrastive_temperature: Optional[float] = 0.07,
-        train_num_points: Optional[int] = 12544,
-        oversample_ratio: Optional[float] = 3.0,
-        importance_sample_ratio: Optional[float] = 0.75,
-        init_std: Optional[float] = 0.02,
-        init_xavier_std: Optional[float] = 1.0,
-        layer_norm_eps: Optional[float] = 1e-05,
-        is_training: Optional[bool] = False,
-        use_auxiliary_loss: Optional[bool] = True,
-        output_auxiliary_logits: Optional[bool] = True,
+        ignore_value: int = 255,
+        num_queries: int = 150,
+        no_object_weight: int = 0.1,
+        class_weight: float = 2.0,
+        mask_weight: float = 5.0,
+        dice_weight: float = 5.0,
+        contrastive_weight: float = 0.5,
+        contrastive_temperature: float = 0.07,
+        train_num_points: int = 12544,
+        oversample_ratio: float = 3.0,
+        importance_sample_ratio: float = 0.75,
+        init_std: float = 0.02,
+        init_xavier_std: float = 1.0,
+        layer_norm_eps: float = 1e-05,
+        is_training: bool = False,
+        use_auxiliary_loss: bool = True,
+        output_auxiliary_logits: bool = True,
         strides: Optional[list] = [4, 8, 16, 32],
-        task_seq_len: Optional[int] = 77,
-        max_seq_len: Optional[int] = 77,
-        text_encoder_width: Optional[int] = 256,
-        text_encoder_context_length: Optional[int] = 77,
-        text_encoder_num_layers: Optional[int] = 6,
-        text_encoder_vocab_size: Optional[int] = 49408,
-        text_encoder_proj_layers: Optional[int] = 2,
-        text_encoder_n_ctx: Optional[int] = 16,
-        conv_dim: Optional[int] = 256,
-        mask_dim: Optional[int] = 256,
-        hidden_dim: Optional[int] = 256,
-        encoder_feedforward_dim: Optional[int] = 1024,
-        norm: Optional[str] = "GN",
-        encoder_layers: Optional[int] = 6,
-        decoder_layers: Optional[int] = 10,
-        use_task_norm: Optional[bool] = True,
-        num_attention_heads: Optional[int] = 8,
-        dropout: Optional[float] = 0.1,
-        dim_feedforward: Optional[int] = 2048,
-        pre_norm: Optional[bool] = False,
-        enforce_input_proj: Optional[bool] = False,
-        query_dec_layers: Optional[int] = 2,
-        common_stride: Optional[int] = 4,
+        task_seq_len: int = 77,
+        max_seq_len: int = 77,
+        text_encoder_width: int = 256,
+        text_encoder_context_length: int = 77,
+        text_encoder_num_layers: int = 6,
+        text_encoder_vocab_size: int = 49408,
+        text_encoder_proj_layers: int = 2,
+        text_encoder_n_ctx: int = 16,
+        conv_dim: int = 256,
+        mask_dim: int = 256,
+        hidden_dim: int = 256,
+        encoder_feedforward_dim: int = 1024,
+        norm: str = "GN",
+        encoder_layers: int = 6,
+        decoder_layers: int = 10,
+        use_task_norm: bool = True,
+        num_attention_heads: int = 8,
+        dropout: float = 0.1,
+        dim_feedforward: int = 2048,
+        pre_norm: bool = False,
+        enforce_input_proj: bool = False,
+        query_dec_layers: int = 2,
+        common_stride: int = 4,
         **kwargs,
     ):
         if backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
-            backbone_config = SwinConfig(
+            logger.info("`backbone_config` is unset. Initializing the config with the default `Swin` backbone.")
+            backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
                 in_channels=3,
                 patch_size=4,

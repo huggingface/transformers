@@ -39,7 +39,8 @@ if is_vision_available():
 
 
 def prepare_metadata(class_info_file, repo_path="shi-labs/oneformer_demo"):
-    class_info = json.load(open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r"))
+    with open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r") as f:
+        class_info = json.load(f.read())
     metadata = {}
     class_names = []
     thing_ids = []
@@ -350,6 +351,29 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
 
     def test_init_without_params(self):
         pass
+
+    def test_call_with_segmentation_maps(self):
+        def common(is_instance_map=False, segmentation_type=None):
+            inputs = self.comm_get_image_processor_inputs(
+                with_segmentation_maps=True, is_instance_map=is_instance_map, segmentation_type=segmentation_type
+            )
+
+            mask_labels = inputs["mask_labels"]
+            class_labels = inputs["class_labels"]
+            pixel_values = inputs["pixel_values"]
+            text_inputs = inputs["text_inputs"]
+
+            # check the batch_size
+            for mask_label, class_label, text_input in zip(mask_labels, class_labels, text_inputs):
+                self.assertEqual(mask_label.shape[0], class_label.shape[0])
+                # this ensure padding has happened
+                self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
+                self.assertEqual(len(text_input), self.image_processing_tester.num_text)
+
+        common()
+        common(is_instance_map=True)
+        common(is_instance_map=False, segmentation_type="pil")
+        common(is_instance_map=True, segmentation_type="pil")
 
     def test_binary_mask_to_rle(self):
         fake_binary_mask = np.zeros((20, 50))

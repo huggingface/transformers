@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2022 SHI Labs and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,12 +48,7 @@ class OneFormerProcessor(ProcessorMixin):
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        max_seq_length: Optional[int] = 77,
-        task_seq_length: int = 77,
-        **kwargs
+        self, image_processor=None, tokenizer=None, max_seq_length: int = 77, task_seq_length: int = 77, **kwargs
     ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")

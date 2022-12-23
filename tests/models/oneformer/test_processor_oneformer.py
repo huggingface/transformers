@@ -42,7 +42,8 @@ if is_vision_available():
 
 
 def prepare_metadata(class_info_file, repo_path="shi-labs/oneformer_demo"):
-    class_info = json.load(open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r"))
+    with open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r") as f:
+        class_info = json.load(f.read())
     metadata = {}
     class_names = []
     thing_ids = []

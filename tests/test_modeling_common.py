@@ -405,6 +405,7 @@ class ModelTesterMixin:
             base_class = base_class[0]
 
         for model_class in self.all_model_classes:
+
             if model_class == base_class:
                 continue
 
@@ -692,6 +693,7 @@ class ModelTesterMixin:
 
     # This is copied from `torch/testing/_internal/jit_utils.py::clear_class_registry`
     def clear_torch_jit_class_registry(self):
+
         torch._C._jit_clear_class_registry()
         torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
         # torch 1.8 has no `_clear_class_state` in `torch.jit._state`
@@ -1497,6 +1499,7 @@ class ModelTesterMixin:
             base_model_prefix = model.base_model_prefix
 
             if hasattr(model, base_model_prefix):
+
                 extra_params = {k: v for k, v in model.named_parameters() if not k.startswith(base_model_prefix)}
                 extra_params.update({k: v for k, v in model.named_buffers() if not k.startswith(base_model_prefix)})
                 # Some models define this as None
@@ -1838,6 +1841,7 @@ class ModelTesterMixin:
             )
 
     def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
+
         tf_inputs_dict = {}
         for key, tensor in pt_inputs_dict.items():
             # skip key that does not exist in tf
@@ -1858,6 +1862,7 @@ class ModelTesterMixin:
         return tf_inputs_dict
 
     def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
+
         tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
 
         # send pytorch inputs to the correct device
@@ -1889,6 +1894,7 @@ class ModelTesterMixin:
         import transformers
 
         for model_class in self.all_model_classes:
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
@@ -2525,6 +2531,7 @@ class ModelTesterMixin:
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+
                     config.problem_type = problem_type["title"]
                     config.num_labels = problem_type["num_labels"]
 

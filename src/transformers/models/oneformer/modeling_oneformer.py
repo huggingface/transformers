@@ -17,7 +17,6 @@ import copy
 import math
 import warnings
 from dataclasses import dataclass
-from numbers import Number
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -209,12 +208,12 @@ def calculate_uncertainty(logits: Tensor) -> Tensor:
         foreground class in `classes`.
 
     Args:
-        logits (Tensor): A tensor of shape (R, 1, ...) for class-specific or
-            class-agnostic, where R is the total number of predicted masks in all images and C is the number of
-            foreground classes. The values are logits.
+        logits (`torch.Tensor` of shape `(R, 1, ...)`):
+            Class-specific or class-agnostic, where R is the total number of\ predicted masks in all images and C is
+            the number of foreground classes. The values are logits.
     Returns:
-        scores (Tensor): A tensor of shape (R, 1, ...) that contains uncertainty scores with
-            the most uncertain locations having the highest uncertainty score.
+        scores (`torch.Tensor` of shape `(R, 1, ...)`):
+            Contains uncertainty scores with the most uncertain locations having the highest uncertainty score.
     """
     if not logits.shape[1] == 1:
         raise ValueError(f"logits shape at dimension 1 must be 1, found {logits.shape[1]}")
@@ -228,12 +227,13 @@ def point_sample(input: Tensor, point_coords: Tensor, **kwargs) -> Tensor:
     it assumes `point_coords` to lie inside [0, 1] x [0, 1] square.
 
     Args:
-        input (`Tensor` of shape `(batch_size, num_channels, height, width)`):
+        input (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Contains features map on a height x width grid.
-        point_coords (`Tensor` of shape `(batch_size, num_points, 2)`):
+        point_coords (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
             Contains [0, 1] x [0, 1] normalized point coordinates.
     Returns:
-        output (`Tensor` of shape `(batch_size, num_channels, points)` or `(batch_size, num_channels,height, width`)
+        output (`torch.Tensor` of shape `(batch_size, num_channels, points)` or `(batch_size, num_channels,height,
+        width`):
             Contains features for points in `point_coords`. The features are obtained via bilinear interplation from
             `input` the same way as `nn.functional.grid_sample`.
     """
@@ -262,15 +262,20 @@ def get_uncertain_point_coords_with_randomness(
         See PointRend paper for details.
 
     Args:
-        coarse_logits (Tensor): A tensor of shape (N, C, Hmask, Wmask) or (N, 1, Hmask, Wmask) for
-            class-specific or class-agnostic prediction.
-        uncertainty_func: A function that takes a Tensor of shape (N, C, P) or (N, 1, P) that
-            contains logit predictions for P points and returns their uncertainties as a Tensor of shape (N, 1, P).
-        num_points (int): The number of points P to sample. oversample_ratio (int): Oversampling parameter.
-        importance_sample_ratio (float): Ratio of points that are sampled via importnace sampling.
+        coarse_logits (`torch.Tensor` of shape `(batch_size, num_channels, height, width)` or `(batch_size, 1, height, width)`):
+            Class-specific or class-agnostic prediction. uncertainty_func(function that takes a `torch.Tensor` of shape
+            `(batch_size, num_channels, num_points)` or `(batch_size, 1, num_points)` that contains logit predictions
+            for `num_points` points and returns their uncertainties as a `torch.Tensor` of shape `(batch_size, 1,
+            num_points)`.
+        num_points (`int`):
+            The number of points `num_points` to sample.
+        oversample_ratio (`int`):
+            Oversampling parameter.
+        importance_sample_ratio (`float`):
+            Ratio of points that are sampled via importnace sampling.
     Returns:
-        point_coords (Tensor): A tensor of shape (N, P, 2) that contains the coordinates of P
-            sampled points.
+        point_coords (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
+            Contains the coordinates of `num_points` sampled points.
     """
     if not oversample_ratio >= 1:
         raise ValueError(f"oversample ratio must be greater than 1, found value: {oversample_ratio}")
@@ -596,23 +601,15 @@ class OneFormerLoss(nn.Module):
             # sample point_coords
             point_coords = get_uncertain_point_coords_with_randomness(
                 pred_masks,
-                lambda logits: calculate_uncertainty(logits),
+                calculate_uncertainty,
                 self.num_points,
                 self.oversample_ratio,
                 self.importance_sample_ratio,
             )
-            # get gt labels
-            point_labels = point_sample(
-                target_masks,
-                point_coords,
-                align_corners=False,
-            ).squeeze(1)
+            # get ground-truth labels
+            point_labels = point_sample(target_masks, point_coords, align_corners=False).squeeze(1)
 
-        point_logits = point_sample(
-            pred_masks,
-            point_coords,
-            align_corners=False,
-        ).squeeze(1)
+        point_logits = point_sample(pred_masks, point_coords, align_corners=False).squeeze(1)
 
         losses = {
             "loss_mask": sigmoid_ce_loss(point_logits, point_labels, num_masks),
@@ -682,7 +679,7 @@ class OneFormerLoss(nn.Module):
         # retrieve the matching between the outputs of the last layer and the labels
         indices = self.matcher(masks_queries_logits, class_queries_logits, mask_labels, class_labels)
         # compute the average number of target masks for normalization purposes
-        num_masks: Number = self.get_num_masks(class_labels, device=class_labels[0].device)
+        num_masks = self.get_num_masks(class_labels, device=class_labels[0].device)
         # get all the losses
         losses: Dict[str, Tensor] = {
             **self.loss_masks(masks_queries_logits, mask_labels, indices, num_masks),
@@ -1803,22 +1800,14 @@ class OneFormerMLPPredictionHead(nn.Module):
 
         self.layers = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
-            activation = nn.ReLU() if i < num_layers - 1 else nn.Identity()
-            layer = PredictionBlock(in_dim, out_dim, activation=activation)
-            self.layers.append(layer)
-            # Provide backwards compatibility from when the class inherited from nn.Sequential
-            # In nn.Sequential subclasses, the name given to the layer is its index in the sequence.
-            # In nn.Module subclasses they derived from the instance attribute they are assigned to e.g.
-            # self.my_layer_name = Layer()
-            # We can't give instance attributes integer names i.e. self.0 is not permitted and so need to register
-            # explicitly
-            self.add_module(str(i), layer)
+            self.layers.append(
+                PredictionBlock(in_dim, out_dim, activation=nn.ReLU() if i < num_layers - 1 else nn.Identity())
+            )
+
+        self.layers = nn.Sequential(*self.layers)
 
     def forward(self, input: Tensor) -> Tensor:
-        hidden_state = input
-        for layer in self.layers:
-            hidden_state = layer(hidden_state)
-        return hidden_state
+        return self.layers(input)
 
 
 # refactored from original implementation
@@ -1996,9 +1985,8 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
         query_pos: Optional[Tensor] = None,
     ):
         q = k = self.with_pos_embed(output, query_pos)
-        output2 = self.self_attn(q, k, value=output, attn_mask=output_mask, key_padding_mask=output_key_padding_mask)[
-            0
-        ]
+        output2 = self.self_attn(q, k, value=output, attn_mask=output_mask, key_padding_mask=output_key_padding_mask)
+        output2 = output2[0]
         output = output + self.dropout1(output2)
         output = self.norm1(output)
         output2 = self.multihead_attn(
@@ -2007,7 +1995,8 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
             value=memory,
             attn_mask=memory_mask,
             key_padding_mask=memory_key_padding_mask,
-        )[0]
+        )
+        output2 = output2[0]
         output = output + self.dropout2(output2)
         output = self.norm2(output)
         output2 = self.linear2(self.dropout(self.activation(self.linear1(output))))
@@ -2028,9 +2017,8 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
     ):
         output2 = self.norm1(output)
         q = k = self.with_pos_embed(output2, query_pos)
-        output2 = self.self_attn(q, k, value=output2, attn_mask=output_mask, key_padding_mask=output_key_padding_mask)[
-            0
-        ]
+        output2 = self.self_attn(q, k, value=output2, attn_mask=output_mask, key_padding_mask=output_key_padding_mask)
+        output2 = output2[0]
         output = output + self.dropout1(output2)
         output2 = self.norm2(output)
         output2 = self.multihead_attn(
@@ -2039,7 +2027,8 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
             value=memory,
             attn_mask=memory_mask,
             key_padding_mask=memory_key_padding_mask,
-        )[0]
+        )
+        output2 = output2[0]
         output = output + self.dropout2(output2)
         output2 = self.norm3(output)
         output2 = self.linear2(self.dropout(self.activation(self.linear1(output2))))
@@ -2109,11 +2098,10 @@ class OneFormerTransformerDecoderQueryTransformer(nn.Module):
         self.nhead = nhead
 
     def forward(self, src, mask, query_embed, pos_embed, task_token=None):
-        # flatten NxCxHxW to HWxNxC
-        bs, c, h, w = src.shape
+        batch_size = src.shape[0]
         src = src.flatten(2).permute(2, 0, 1)
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
+        query_embed = query_embed.unsqueeze(1).repeat(1, batch_size, 1)
         if mask is not None:
             mask = mask.flatten(1)
 
@@ -2343,7 +2331,7 @@ class OneFormerTransformerModule(nn.Module):
 
         query_features = self.position_embedder(mask_features, None)
 
-        decoder_output: OneFormerTransformerDecoderOutput = self.decoder(
+        return self.decoder(
             task_token=task_token,
             multi_stage_features=multi_stage_features,
             multi_stage_positional_embeddings=multi_stage_positional_embeddings,
@@ -2354,7 +2342,6 @@ class OneFormerTransformerModule(nn.Module):
             size_list=size_list,
             output_attentions=output_attentions,
         )
-        return decoder_output
 
 
 # Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with Mask->One
@@ -2833,14 +2820,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, OneFormerTextEncoder):
             nn.init.normal_(module.token_embedding.weight, std=0.02)
             nn.init.normal_(module.positional_embedding, std=0.01)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
         if hasattr(module, "reference_points"):
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
@@ -2940,9 +2919,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=pixel_values.device)
 
-        pixel_level_module_output: OneFormerPixelLevelModuleOutput = self.pixel_level_module(
-            pixel_values, output_hidden_states
-        )
+        pixel_level_module_output = self.pixel_level_module(pixel_values, output_hidden_states)
 
         multi_scale_features = pixel_level_module_output.decoder_features
         mask_features = pixel_level_module_output.decoder_last_feature
@@ -2954,7 +2931,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         else:
             text_queries = None
 
-        transformer_module_output: OneFormerTransformerDecoderOutput = self.transformer_module(
+        transformer_module_output = self.transformer_module(
             multi_scale_features=multi_scale_features,
             mask_features=mask_features,
             task_token=task_token,
