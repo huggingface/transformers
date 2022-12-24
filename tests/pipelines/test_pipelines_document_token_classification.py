@@ -56,51 +56,9 @@ INVOICE_URL = (
 @require_vision
 class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING
-
-    @require_pytesseract
-    @require_vision
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        dtc_pipeline = pipeline(
-            "document-token-classification", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
-        )
-
-        image = INVOICE_URL
-        word_boxes = list(zip(*apply_ocr(load_image(image), None, "")))
-        question = "What is the placebo?"
-        examples = [
-            {
-                "image": load_image(image),
-            },
-            {
-                "image": image,
-            },
-            {
-                "image": image,
-                "word_boxes": word_boxes,
-            },
-            {
-                "image": None,
-                "word_boxes": word_boxes,
-            },
-        ]
-        return dtc_pipeline, examples
-
-    def run_pipeline_test(self, dtc_pipeline, examples):
-        outputs = dtc_pipeline(examples)
-        self.assertEqual(
-            outputs,
-            [
-                [
-                    {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
-                    {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
-                ]
-            ]
-            * 4,
-        )
-
+    
     @require_torch
     @require_pytesseract
-   # @require_detectron2
     def test_small_model_pt(self):
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LayoutLMv3ForTokenClassification")
         config_ms= AutoConfig.from_pretrained("microsoft/layoutlmv3-base")
@@ -121,20 +79,21 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         outputs = dtc_pipeline(image=image)
         self.assertEqual(len(outputs["words"]), 95)
         self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
+        self.assertEqual(set(outputs["word_labels"]), set(['LABEL_0', 'LABEL_1']))
 
         outputs = dtc_pipeline({"image": image})
         self.assertEqual(len(outputs["words"]), 95)
         self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
+        self.assertEqual(set(outputs["word_labels"]), set(['LABEL_0', 'LABEL_1']))
 
-        # This image does not detect ANY text in it, meaning layoutlmv2 should fail.
-        # Empty answer probably
+        # No text detected -> empty list
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         outputs = dtc_pipeline(image=image)
         self.assertEqual(outputs["words"], [])
         self.assertEqual(outputs["boxes"], [])
         self.assertEqual(outputs["word_labels"], [])
 
-        # We can optionally pass directly the words and bounding boxes
+        # We can pass the words and bounding boxes directly
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         words = []
         boxes = []
@@ -144,122 +103,58 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         self.assertEqual(outputs["word_labels"], [])
 
 
-    @slow
-    @require_torch
-    @require_pytesseract
-    @require_vision
-    def test_large_model_pt_layoutlm(self):
-        tokenizer = AutoTokenizer.from_pretrained(
-            "impira/layoutlm-document-qa", revision="3dc6de3", add_prefix_space=True
-        )
-        dtc_pipeline = pipeline(
-            "document-question-answering",
-            model="impira/layoutlm-document-qa",
-            tokenizer=tokenizer,
-            revision="3dc6de3",
-        )
-        image = INVOICE_URL
-        question = "What is the invoice number?"
-
-        outputs = dtc_pipeline(image=image, question=question, top_k=2)
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
-            ],
-        )
-
-        outputs = dqa_pipeline({"image": image, "question": question}, top_k=2)
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
-            ],
-        )
-
-        outputs = dtc_pipeline(
-            [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
-        )
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                [
-                    {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
-                    {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
-                ]
-            ]
-            * 2,
-        )
-
-        word_boxes = list(zip(*apply_ocr(load_image(image), None, "")))
-
-        # This model should also work if `image` is set to None
-        outputs = dtc_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
-            ],
-        )
-
 #    @slow
     @require_torch
     @require_pytesseract
     @require_vision
-    def test_large_model_pt_layoutlm_chunk(self):
-        tokenizer = AutoTokenizer.from_pretrained(
-            "microsoft/layoutlmv3-base", revision="07c9b08", add_prefix_space=True
-        )
-        feature_extractor = AutoFeatureExtractor.from_pretrained(
-            "microsoft/layoutlmv3-base", revision="07c9b08"
-        )
+    def test_large_model_pt_layoutlm(self):
         dtc_pipeline = pipeline(
             "document-token-classification",
-            model="microsoft/layoutlmv3-base",
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            revision="07c9b08",
-            max_seq_len=50,
+            model="Theivaprakasham/layoutlmv3-finetuned-invoice",
         )
         image = INVOICE_URL
 
         outputs = dtc_pipeline(image=image)
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
-            ],
-        )
+        self.assertEqual(len(outputs["words"]), 95)
+        self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
+        self.assertEqual(set(outputs["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
+        self.assertEqual(outputs["word_labels"].count("B-BILLER_POST_CODE"), 2)
+        self.assertEqual(outputs["word_labels"].count("B-BILLER"), 2)
+        self.assertEqual(outputs["word_labels"].count("B-GST"), 7)
+        self.assertEqual(outputs["word_labels"].count("O"), 80)
+        self.assertEqual(outputs["word_labels"].count("B-TOTAL"), 4)
+
+
+        outputs = dtc_pipeline({"image": image})
+        self.assertEqual(len(outputs["words"]), 95)
+        self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
+        self.assertEqual(set(outputs["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
+        self.assertEqual(outputs["word_labels"].count("B-BILLER_POST_CODE"), 2)
+        self.assertEqual(outputs["word_labels"].count("B-BILLER"), 2)
+        self.assertEqual(outputs["word_labels"].count("B-GST"), 7)
+        self.assertEqual(outputs["word_labels"].count("O"), 80)
+        self.assertEqual(outputs["word_labels"].count("B-TOTAL"), 4)
 
         outputs = dtc_pipeline(
-            [{"image": image, "question": question}, {"image": image, "question": question}],
+            [{"image": image}, {"image": image}]
         )
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                [
-                    {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
-                    {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
-                ]
-            ]
-            * 2,
-        )
+        self.assertEqual(len(outputs[0]["words"]), 95)
+        self.assertEqual(len(outputs[0]["words"]), len(outputs[0]["word_labels"]))
+        self.assertEqual(set(outputs[0]["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
+        self.assertEqual(outputs[0]["word_labels"].count("B-BILLER_POST_CODE"), 2)
+        self.assertEqual(outputs[0]["word_labels"].count("B-BILLER"), 2)
+        self.assertEqual(outputs[0]["word_labels"].count("B-GST"), 7)
+        self.assertEqual(outputs[0]["word_labels"].count("O"), 80)
+        self.assertEqual(outputs[0]["word_labels"].count("B-TOTAL"), 4)
 
-        word_boxes = list(zip(*apply_ocr(load_image(image), None, "")))
-
-        # This model should also work if `image` is set to None
-        outputs = dtc_pipeline({"image": None, "word_boxes": word_boxes})
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
-            ],
-        )
+        self.assertEqual(len(outputs[1]["words"]), 95)
+        self.assertEqual(len(outputs[1]["words"]), len(outputs[1]["word_labels"]))
+        self.assertEqual(set(outputs[1]["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
+        self.assertEqual(outputs[1]["word_labels"].count("B-BILLER_POST_CODE"), 2)
+        self.assertEqual(outputs[1]["word_labels"].count("B-BILLER"), 2)
+        self.assertEqual(outputs[1]["word_labels"].count("B-GST"), 7)
+        self.assertEqual(outputs[1]["word_labels"].count("O"), 80)
+        self.assertEqual(outputs[1]["word_labels"].count("B-TOTAL"), 4)
 
     @require_tf
     @unittest.skip("Document Token Classification not implemented in TF")
