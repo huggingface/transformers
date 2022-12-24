@@ -199,7 +199,7 @@ pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[sklearn,tf-cpu,testing,sentencepiece]",
+        "pip install .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install tensorflow_probability",
     ],
     pytest_options={"rA": None},
