@@ -240,10 +240,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
 
     def postprocess(self, model_outputs, **kwargs):
         model_outputs = dict(model_outputs)
-        logits = model_outputs.pop("logits", None)
-        
-        if self.framework == "pt":
-            logits = logits.detach().cpu().numpy()
+        logits = np.asarray(model_outputs.pop("logits", None))
         words = model_outputs["words"]
         boxes = model_outputs["boxes"]
         
