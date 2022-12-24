@@ -21,15 +21,10 @@ import unittest
 from transformers import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
-    VOCAB_FILES_NAMES,
-    BertJapaneseTokenizer,
-    CharacterTokenizer,
-    JumanppTokenizer,
-    MecabTokenizer,
-    SudachiTokenizer,
-    WordpieceTokenizer,
-)
-from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi
+    VOCAB_FILES_NAMES, BertJapaneseTokenizer, CharacterTokenizer,
+    JumanppTokenizer, MecabTokenizer, SudachiTokenizer, WordpieceTokenizer)
+from transformers.testing_utils import (custom_tokenizers, require_jumanpp,
+                                        require_sudachi)
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -316,6 +311,15 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
             ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れた", "。"],
+        )
+        
+    @require_jumanpp
+    def test_jumanpp_tokenizer_ext(self):
+        tokenizer = JumanppTokenizer()
+
+        self.assertListEqual(
+            tokenizer.tokenize("ありがとうございますm(_ _)ｍ見つけるのが大変です。"),
+            ["ありがとう", "ございます", "m", "(_ _)", "ｍ", "見つける", "の", "が", "大変です", "。"],
         )
 
     def test_wordpiece_tokenizer(self):

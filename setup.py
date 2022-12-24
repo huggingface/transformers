@@ -75,7 +75,6 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
-
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
 if stale_egg_info.exists():
@@ -176,7 +175,7 @@ _deps = [
     "beautifulsoup4",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
-    "pyknp>=0.6.1",
+    "rhoknp>=1.0.2",
 ]
 
 
@@ -245,7 +244,7 @@ class DepsTableUpdateCommand(Command):
 
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "pyknp")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")

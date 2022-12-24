@@ -21,9 +21,9 @@ import os
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils import (PreTrainedTokenizer, _is_control,
+                                   _is_punctuation, _is_whitespace)
 from ...utils import is_sentencepiece_available, logging
-
 
 if is_sentencepiece_available():
     import sentencepiece as spm
@@ -647,14 +647,14 @@ class JumanppTokenizer:
         self.trim_whitespace = trim_whitespace
 
         try:
-            import pyknp
+            import rhoknp
         except ImportError:
             raise ImportError(
-                "You need to install pyknp to use JumanppTokenizer. "
-                "See https://github.com/ku-nlp/pyknp for installation."
+                "You need to install rhoknp to use JumanppTokenizer. "
+                "See https://github.com/ku-nlp/rhoknp for installation."
             )
 
-        self.juman = pyknp.Juman(jumanpp=True)
+        self.juman = rhoknp.Jumanpp()
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
@@ -664,8 +664,8 @@ class JumanppTokenizer:
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
 
-        for mrph in self.juman.analysis(text).mrph_list():
-            token = mrph.midasi
+        for mrph in self.juman.apply_to_sentence(text).morphemes:
+            token = mrph
 
             if self.do_lower_case and token not in never_split:
                 token = token.lower()
