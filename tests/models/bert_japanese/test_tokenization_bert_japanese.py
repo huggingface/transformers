@@ -21,10 +21,15 @@ import unittest
 from transformers import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
-    VOCAB_FILES_NAMES, BertJapaneseTokenizer, CharacterTokenizer,
-    JumanppTokenizer, MecabTokenizer, SudachiTokenizer, WordpieceTokenizer)
-from transformers.testing_utils import (custom_tokenizers, require_jumanpp,
-                                        require_sudachi)
+    VOCAB_FILES_NAMES,
+    BertJapaneseTokenizer,
+    CharacterTokenizer,
+    JumanppTokenizer,
+    MecabTokenizer,
+    SudachiTokenizer,
+    WordpieceTokenizer
+)
+from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
