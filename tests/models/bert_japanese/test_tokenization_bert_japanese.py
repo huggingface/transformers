@@ -27,7 +27,7 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
     JumanppTokenizer,
     MecabTokenizer,
     SudachiTokenizer,
-    WordpieceTokenizer
+    WordpieceTokenizer,
 )
 from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi
 
