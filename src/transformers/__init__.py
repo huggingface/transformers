@@ -2223,6 +2223,7 @@ else:
             "TvltForPreTraining",
             "TvltForQuestionAnswering",
             "TvltForSequenceClassification",
+            "TvltPreTrainedModel",
         ]
     )
     _import_structure["models.unispeech"].extend(
@@ -5244,10 +5245,11 @@ if TYPE_CHECKING:
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.tvlt import (
             Tvlt_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvltModel,
             TvltForPreTraining,
             TvltForQuestionAnswering,
             TvltForSequenceClassification,
-            TvltModel,
+            TvltPreTrainedModel,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
