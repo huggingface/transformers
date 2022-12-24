@@ -356,7 +356,7 @@ Most of the training arguments are self-explanatory, but one that is quite impor
 
 There is no need to define `max_steps` when instantiating `TrainingArguments`. Since the dataset returned by `pytorchvideo.data.Ucf101()` doesn't implement the `__len__()` method we had to specify `max_steps`.  
 
-Next, you need to define a function for how to compute the metrics from the predictions, which will just use the `metric` we'll load now. The only preprocessing you have to do is to take the argmax of our predicted logits:
+Next, you need to define a function to compute the metrics from the predictions, which will use the `metric` you'll load now. The only preprocessing you have to do is to take the argmax of our predicted logits:
 
 ```py
 import evaluate
