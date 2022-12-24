@@ -56,6 +56,43 @@ INVOICE_URL = (
 @require_vision
 class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING
+
+
+    @require_pytesseract
+    @require_vision
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        dtc_pipeline = pipeline(
+            "document-token-classification", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
+
+        image = INVOICE_URL
+        word_boxes = list(zip(*apply_ocr(load_image(image), None, "")))
+        examples = [
+            {
+                "image": load_image(image),
+            },
+            {
+                "image": image,
+            },
+            {
+                "image": image,
+                "word_boxes": word_boxes,
+            },
+        ]
+        return dtc_pipeline, examples
+
+    def run_pipeline_test(self, dtc_pipeline, examples):
+        outputs = dtc_pipeline(examples)
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
+                    {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
+                ]
+            ]
+            * 4,
+        )
     
     @require_torch
     @require_pytesseract
