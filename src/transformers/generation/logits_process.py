@@ -121,6 +121,39 @@ class MinLengthLogitsProcessor(LogitsProcessor):
         return scores
 
 
+class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] enforcing a min-length of new tokens by setting EOS probability to 0.
+    Args:
+        min_length (`int`):
+            The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
+    """
+
+    def __init__(self, min_length: int, eos_token_id: int):
+        if not isinstance(min_length, int) or min_length < 0:
+            raise ValueError(f"`min_length` has to be a positive integer, but is {min_length}")
+
+        if not isinstance(eos_token_id, int) or eos_token_id < 0:
+            raise ValueError(f"`eos_token_id` has to be a positive integer, but is {eos_token_id}")
+
+        self.min_length = min_length
+        self.eos_token_id = eos_token_id
+
+        self.prompt_length_to_skip = None
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.prompt_length_to_skip is None:
+            self.prompt_length_to_skip = input_ids.shape[-1]
+
+        current_length = input_ids.shape[-1] - self.prompt_length_to_skip
+        if current_length < self.min_length:
+            scores[:, self.eos_token_id] = -float("inf")
+
+        return scores
+
+
 class TemperatureLogitsWarper(LogitsWarper):
     r"""
     [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
