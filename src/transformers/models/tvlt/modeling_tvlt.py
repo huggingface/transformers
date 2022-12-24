@@ -21,11 +21,10 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Set, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput
@@ -511,7 +510,7 @@ class TvltIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->TVLT
+# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->Tvlt
 class TvltOutput(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
         super().__init__()
@@ -527,7 +526,7 @@ class TvltOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->TVLT
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Tvlt
 class TvltLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -535,9 +534,9 @@ class TvltLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = TVLTAttention(config)
-        self.intermediate = TVLTIntermediate(config)
-        self.output = TVLTOutput(config)
+        self.attention = TvltAttention(config)
+        self.intermediate = TvltIntermediate(config)
+        self.output = TvltOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -570,12 +569,12 @@ class TvltLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->TVLT
+# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->Tvlt
 class TvltEncoder(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([TVLTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([TvltLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -670,19 +669,19 @@ TVLT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`TvltPixelFeatureExtractor`]. See
-            [`TVLTFeatureExtractor.__call__`] for details.
-            
+            [`TvltFeatureExtractor.__call__`] for details.
+
         audio_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Audio values. Audio values can be obtained using [`TvltAudioFeatureExtractor`]. See
-            [`TVLTFeatureExtractor.__call__`] for details.
-            
+            [`TvltFeatureExtractor.__call__`] for details.
+
         pixel_masks (`torch.FloatTensor` of shape `(batch_size, num_pixel_patches)`):
             Pixel masks. Pixel masks can be obtained using [`TvltPixelFeatureExtractor`]. See
-            [`TVLTFeatureExtractor.__call__`] for details.
-            
+            [`TvltFeatureExtractor.__call__`] for details.
+
         audio_masks (`torch.FloatTensor` of shape `(batch_size, num_audio_patches)`):
             Audio masks. Audio masks can be obtained using [`TvltAudioFeatureExtractor`]. See
-            [`TVLTFeatureExtractor.__call__`] for details.
+            [`TvltFeatureExtractor.__call__`] for details.
         
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltPixelFeatureExtractor`].
@@ -940,7 +939,6 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
             self.decoder = TvltDecoder(config)
 
-            hidden_size = config.hidden_size
             decoder_hidden_size = config.decoder_hidden_size
 
             num_frames = config.num_frames
@@ -1165,7 +1163,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
             total_loss += loss
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (matching_logits, pixel_logits, audio_logits) + outputs[1:]
             return ((total_loss,) + output) if loss is not None else output
 
         return TvltForPreTrainingOutput(
