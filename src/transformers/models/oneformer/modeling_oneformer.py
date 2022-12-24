@@ -1798,13 +1798,13 @@ class OneFormerMLPPredictionHead(nn.Module):
         in_dims = [input_dim] + [hidden_dim] * (num_layers - 1)
         out_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
 
-        self.layers = []
+        layers = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
-            self.layers.append(
+            layers.append(
                 PredictionBlock(in_dim, out_dim, activation=nn.ReLU() if i < num_layers - 1 else nn.Identity())
             )
 
-        self.layers = nn.Sequential(*self.layers)
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, input: Tensor) -> Tensor:
         return self.layers(input)
