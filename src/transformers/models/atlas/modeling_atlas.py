@@ -168,7 +168,7 @@ class AtlasModel(AtlasPreTrainedModel):
         def encode_passages(batch, tokenizer, max_length):
             bsz = len(batch)
             n = max([len(example) for example in batch])
-            batch = [example + [""] * (n - len(example)) for example in batch]
+            batch = [example + [""] *  (n - len(example)) for example in batch]
             batch = reduce(lambda a, b: a + b, batch)
             tokens = tokenizer(
                 batch,
@@ -180,7 +180,6 @@ class AtlasModel(AtlasPreTrainedModel):
             tokens = {k: v.view(bsz, n, -1) for k, v in tokens.items()}
             
             return tokens
-
 
         reader_tokens = encode_passages(passages, self.generator_tokenizer, 512)
         labels = self.generator_tokenizer(target, return_tensors="pt", padding=True, truncation=True, max_length=512)['input_ids'].to(self.device)
