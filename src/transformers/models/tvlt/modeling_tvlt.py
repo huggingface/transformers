@@ -682,30 +682,30 @@ TVLT_INPUTS_DOCSTRING = r"""
         audio_masks (`torch.FloatTensor` of shape `(batch_size, num_audio_patches)`):
             Audio masks. Audio masks can be obtained using [`TvltAudioFeatureExtractor`]. See
             [`TvltFeatureExtractor.__call__`] for details.
-        
+
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltPixelFeatureExtractor`].
             See [`TvltPixelFeatureExtractor.__call__`] for details.
-            
+
         pixel_masks_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
             obtained using [`TvltPixelFeatureExtractor`]. See [`TvltPixelFeatureExtractor.__call__`] for details.
 
         pixel_mask_ratio (`float`): The masking ratio of pixel embeddings.
-            
+
         audio_mask_ratio (`float`): The masking ratio of audio embeddings.
-        
+
         labels (`torch.FloatTensor` of shape `(batch_size, num_labls)`):
             Number of labels for pretrainings. For example, whether vision and audio match in pretraining.
-         
+
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-            
+
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-            
+
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
