@@ -924,7 +924,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         self.task_matching = config.task_matching
         self.task_mae = config.task_mae
-        assert (self.task_matching or self.task_mae) == True
+        assert (self.task_matching or self.task_mae) is True, "Must set at least one of matching task and MAE task to true"
 
         self.tvlt = TvltModel(config)
 
