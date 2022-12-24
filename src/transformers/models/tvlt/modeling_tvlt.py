@@ -445,7 +445,7 @@ class TvltSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        
+
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -491,7 +491,7 @@ class TvltAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-    
+
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->Tvlt
 class TvltIntermediate(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
@@ -503,7 +503,7 @@ class TvltIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        
+
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -547,7 +547,7 @@ class TvltLayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in TVLT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -557,7 +557,7 @@ class TvltLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in TVLT, layernorm is also applied after self-attention
+        # layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
 
