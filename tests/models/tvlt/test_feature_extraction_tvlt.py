@@ -56,9 +56,7 @@ class TvltFeatureExtractionTester(unittest.TestCase):
         self,
         parent,
         batch_size=7,
-        min_seq_length=128,
-        max_seq_length=2048,
-        audio_size=1024,
+        audio_size=2048,
         num_channels=1,
         feature_size=128,
         sampling_rate=44100,
@@ -68,8 +66,6 @@ class TvltFeatureExtractionTester(unittest.TestCase):
         self.parent = parent
         self.batch_size = batch_size
 
-        self.min_seq_length = min_seq_length
-        self.max_seq_length = max_seq_length
         self.audio_size = audio_size
         self.num_channels = num_channels
         self.hop_length = hop_length
@@ -78,8 +74,24 @@ class TvltFeatureExtractionTester(unittest.TestCase):
 
     def prepare_feat_extract_dict(self):
         return {
-            "audio_size": self.audio_size,
+            "max_seq_length": self.max_seq_length,
         }
+
+    def prepare_inputs_for_common(self, equal_length=False, numpify=False):
+        def _flatten(list_of_lists):
+            return list(itertools.chain(*list_of_lists))
+
+        if equal_length:
+            speech_inputs = [floats_list((self.audio_size, self.feature_size)) for _ in range(self.batch_size)]
+        else:
+            # make sure that inputs increase in size
+            speech_inputs = [
+                floats_list((x, self.feature_size))
+                for x in range(0, self.audio_size, self.audio_size // self.batch_size)
+            ]
+        if numpify:
+            speech_inputs = [np.asarray(x) for x in speech_inputs]
+        return speech_inputs
 
 
 @require_torch
