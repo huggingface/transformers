@@ -21,9 +21,9 @@ import os
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...tokenization_utils import (PreTrainedTokenizer, _is_control,
-                                   _is_punctuation, _is_whitespace)
+from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import is_sentencepiece_available, logging
+
 
 if is_sentencepiece_available():
     import sentencepiece as spm
