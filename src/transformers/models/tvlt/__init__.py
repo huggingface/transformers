@@ -67,7 +67,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_tvlt import Tvlt_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
+    from .configuration_tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
     from .processing_tvlt import TvltProcessor
 
     try:
