@@ -5703,7 +5703,7 @@ class TrOCRPreTrainedModel(metaclass=DummyObject):
 TVLT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class TvltForAudioVisualClassification(metaclass=DummyObject):
+class TvltModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -5724,7 +5724,7 @@ class TvltForQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class TvltModel(metaclass=DummyObject):
+class TvltForAudioVisualClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
