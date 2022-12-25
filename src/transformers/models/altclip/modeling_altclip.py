@@ -1043,9 +1043,6 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        # if isinstance(module, CLIPTextEmbeddings):
-        #     module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        #     module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
         if isinstance(module, AltCLIPVisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
@@ -1095,7 +1092,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# CLIP_->ALTCLIP_,CLIP->AltCLIP
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVisionTransformer->AltCLIPVisionTransformer,CLIPVisionConfig->AltCLIPVisionConfig,CLIPVisionEmbeddings->AltCLIPVisionEmbeddings,CLIPEncoder->AltCLIPEncoder,CLIP_VISION_INPUTS_DOCSTRING->ALTCLIP_VISION_INPUTS_DOCSTRING
 class AltCLIPVisionTransformer(nn.Module):
     def __init__(self, config: AltCLIPVisionConfig):
         super().__init__()
