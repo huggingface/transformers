@@ -346,7 +346,6 @@ TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 TF_MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
-        ("layoutlm", "TFLayoutLMForTokenClassification"),
         ("layoutlmv3", "TFLayoutLMv3ForTokenClassification"),
     ]
 )
