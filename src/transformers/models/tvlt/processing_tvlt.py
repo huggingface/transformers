@@ -43,7 +43,15 @@ class TvltProcessor(ProcessorMixin):
         self.current_feature_extractor = feature_extractor
 
     def __call__(
-        self, visual_inputs=None, audio_inputs=None, visual_inputs_mixed=None, sampling_rate=None, *args, **kwargs
+        self,
+        visual_inputs=None,
+        audio_inputs=None,
+        visual_inputs_mixed=None,
+        sampling_rate=None,
+        mask_audio=False,
+        mask_pixel=False,
+        *args,
+        **kwargs
     ):
         """
         Forwards the `visual_inputs` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`] and the
@@ -55,7 +63,7 @@ class TvltProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `visual_inputs` or `audio_inputs` input to process.")
 
         if visual_inputs is not None:
-            visual_inputs_dict = self.current_image_processor(visual_inputs, *args, **kwargs)
+            visual_inputs_dict = self.current_image_processor(visual_inputs, mask_pixel=mask_pixel, *args, **kwargs)
             visual_inputs_mixed_dict = None
         if visual_inputs_mixed is not None:
             visual_inputs_mixed_dict = self.current_image_processor(
@@ -63,7 +71,7 @@ class TvltProcessor(ProcessorMixin):
             )
         if audio_inputs is not None:
             audio_inputs_dict = self.current_feature_extractor(
-                audio_inputs, *args, sampling_rate=sampling_rate, **kwargs
+                audio_inputs, *args, sampling_rate=sampling_rate, mask_audio=mask_audio, **kwargs
             )
 
         if audio_inputs is None:

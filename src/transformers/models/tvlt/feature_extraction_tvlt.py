@@ -22,13 +22,10 @@ import torch
 from numpy.fft import fft
 
 from ...feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
-from ...utils import TensorType, is_speech_available, logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-if is_speech_available():
-    import torchaudio
 
 
 class TvltFeatureExtractor(SequenceFeatureExtractor):
@@ -47,6 +44,8 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             The patch size of audio patch embedding.
         feature_size (`int`, defaults to 128):
             The feature dimension of the extracted audio spectrogram.
+        masking_type (`str`, defaults to 'frame-level'):
+            The masking type of MAE on audio with choices in ['frame-level', 'patch-level']
         sampling_rate (`int`, defaults to 41000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         hop_length (`int`, defaults to 512):
@@ -60,7 +59,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             Padding value used to pad the audio. Should correspond to silences.
     """
 
-    model_input_names = ["audio_values", "audio_masks"]
+    model_input_names = ["audio_values", "audio_masks", "audio_mask_pos_perm"]
 
     def __init__(
         self,
@@ -68,11 +67,12 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         num_channels=1,
         patch_size=[16, 16],
         feature_size=128,
+        masking_type="frame-level",
         sampling_rate=44100,
         hop_length=512,
         chunk_length=30,
         n_fft=2048,
-        padding_value=-1.0,
+        padding_value=0.0,
         **kwargs
     ):
         super().__init__(
@@ -86,6 +86,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.freq_len = feature_size // self.patch_size[1]
+        self.masking_type = "frame-level"
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.chunk_length = chunk_length
@@ -238,6 +239,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: Optional[bool] = True,
         sampling_rate: Optional[int] = None,
         resample: bool = False,
+        mask_audio: bool = False,
         **kwargs
     ) -> BatchFeature:
         """
@@ -282,16 +284,11 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
-                if resample:
-                    raise ValueError(
-                        f"The model corresponding to this feature extractor: {self} was trained using a sampling rate"
-                        f" of {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled"
-                        f" with {self.sampling_rate} and not {sampling_rate}."
-                    )
-                else:
-                    raw_speech = torchaudio.functional.resample(
-                        torch.tensor(raw_speech), orig_freq=sampling_rate, new_freq=self.sampling_rate
-                    ).numpy()
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate"
+                    f" of {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled"
+                    f" with {self.sampling_rate} and not {sampling_rate}."
+                )
         else:
             logger.warning(
                 "It is strongly recommended to pass the `sampling_rate` argument to this function. "
@@ -315,7 +312,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [np.asarray([raw_speech]).T]
 
         audio_features = [
-            self._np_extract_fbank_features(waveform.squeeze())[: self.audio_size] for waveform in raw_speech
+            self._np_extract_fbank_features(waveform.squeeze()).T[: self.audio_size] for waveform in raw_speech
         ]
         if isinstance(audio_features[0], List):
             audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
@@ -344,6 +341,24 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             data = {"audio_values": padded_audio_features, "audio_masks": audio_masks}
         else:
             data = {"audio_values": padded_audio_features}
+
+        # return masking tensor
+        if mask_audio:
+            batch_size = len(padded_audio_features)
+            if self.masking_type == "frame-level":
+                num_time_patches = max_patch_len // self.freq_len
+                noise = (
+                    torch.rand(batch_size, num_time_patches)
+                    .unsqueeze(-1)
+                    .repeat(1, 1, self.freq_len)
+                    .view(batch_size, max_patch_len)
+                )  # noise in [0, 1]
+            elif self.masking_type == "patch-level":
+                noise = torch.rand(batch_size, max_patch_len)  # noise in [0, 1]
+            # sort noise for each sample
+            ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+            data.update({"audio_mask_pos_perm": ids_shuffle})
+
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs

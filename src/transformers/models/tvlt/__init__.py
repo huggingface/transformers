@@ -42,7 +42,7 @@ else:
         "TvltModel",
         "TvltForPreTraining",
         "TvltForQuestionAnswering",
-        "TvltForSequenceClassification",
+        "TvltForAudioVisualClassification",
         "TvltPreTrainedModel",
     ]
 
@@ -78,9 +78,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_tvlt import (
             TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvltForAudioVisualClassification,
             TvltForPreTraining,
             TvltForQuestionAnswering,
-            TvltForSequenceClassification,
             TvltModel,
             TvltPreTrainedModel,
         )

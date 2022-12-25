@@ -16,6 +16,7 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import torch
 
 from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
@@ -104,7 +105,13 @@ class TvltImageProcessor(BaseImageProcessor):
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
-    model_input_names = ["pixel_values", "pixel_masks", "pixel_values_mixed", "pixel_masks_mixed"]
+    model_input_names = [
+        "pixel_values",
+        "pixel_masks",
+        "pixel_values_mixed",
+        "pixel_masks_mixed",
+        "pixel_mask_pos_perm",
+    ]
 
     def __init__(
         self,
@@ -298,6 +305,7 @@ class TvltImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         is_mixed: bool = False,
+        mask_pixel: bool = False,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -403,4 +411,14 @@ class TvltImageProcessor(BaseImageProcessor):
             data = {"pixel_values_mixed": visual_inputs, "pixel_masks_mixed": visual_masks}
         else:
             data = {"pixel_values": visual_inputs, "pixel_masks": visual_masks}
+
+        # return masking tensor
+        if mask_pixel:
+            batch_size = len(visual_inputs)
+            max_patch_len = num_patches_per_image * max_num_frames
+            noise = torch.rand(batch_size, max_patch_len)  # noise in [0, 1]
+            # sort noise for each sample
+            ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+            data.update({"pixel_mask_pos_perm": ids_shuffle})
+
         return BatchFeature(data=data, tensor_type=return_tensors)
