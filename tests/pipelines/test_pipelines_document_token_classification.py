@@ -86,12 +86,8 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         self.assertEqual(
             outputs,
             [
-                [
-                    {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
-                    {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
-                ]
+                    {"words": ANY(list), "word_labels": ANY(list), "boxes": ANY(list)} for _ in examples
             ]
-            * 4,
         )
     
     @require_torch
@@ -115,12 +111,14 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         image = INVOICE_URL
         outputs = dtc_pipeline(image=image)
         self.assertEqual(len(outputs["words"]), 95)
-        self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
+        self.assertEqual(len(outputs["word_labels"]), 95)
+        self.assertEqual(len(outputs["boxes"]), 95)
         self.assertEqual(set(outputs["word_labels"]), set(['LABEL_0', 'LABEL_1']))
 
         outputs = dtc_pipeline({"image": image})
         self.assertEqual(len(outputs["words"]), 95)
-        self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
+        self.assertEqual(len(outputs["word_labels"]), 95)
+        self.assertEqual(len(outputs["boxes"]), 95)
         self.assertEqual(set(outputs["word_labels"]), set(['LABEL_0', 'LABEL_1']))
 
         # No text detected -> empty list
@@ -153,7 +151,8 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
 
         outputs = dtc_pipeline(image=image)
         self.assertEqual(len(outputs["words"]), 95)
-        self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
+        self.assertEqual(len(outputs["word_labels"]), 95)
+        self.assertEqual(len(outputs["boxes"]), 95)
         self.assertEqual(set(outputs["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
         self.assertEqual(outputs["word_labels"].count("B-BILLER_POST_CODE"), 2)
         self.assertEqual(outputs["word_labels"].count("B-BILLER"), 2)
@@ -164,7 +163,8 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
 
         outputs = dtc_pipeline({"image": image})
         self.assertEqual(len(outputs["words"]), 95)
-        self.assertEqual(len(outputs["words"]), len(outputs["word_labels"]))
+        self.assertEqual(len(outputs["word_labels"]), 95)
+        self.assertEqual(len(outputs["boxes"]), 95)
         self.assertEqual(set(outputs["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
         self.assertEqual(outputs["word_labels"].count("B-BILLER_POST_CODE"), 2)
         self.assertEqual(outputs["word_labels"].count("B-BILLER"), 2)
@@ -176,7 +176,8 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             [{"image": image}, {"image": image}]
         )
         self.assertEqual(len(outputs[0]["words"]), 95)
-        self.assertEqual(len(outputs[0]["words"]), len(outputs[0]["word_labels"]))
+        self.assertEqual(len(outputs[0]["word_labels"]), 95)
+        self.assertEqual(len(outputs[0]["boxes"]), 95)
         self.assertEqual(set(outputs[0]["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
         self.assertEqual(outputs[0]["word_labels"].count("B-BILLER_POST_CODE"), 2)
         self.assertEqual(outputs[0]["word_labels"].count("B-BILLER"), 2)
@@ -185,7 +186,8 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         self.assertEqual(outputs[0]["word_labels"].count("B-TOTAL"), 4)
 
         self.assertEqual(len(outputs[1]["words"]), 95)
-        self.assertEqual(len(outputs[1]["words"]), len(outputs[1]["word_labels"]))
+        self.assertEqual(len(outputs[1]["word_labels"]), 95)
+        self.assertEqual(len(outputs[1]["boxes"]), 95)
         self.assertEqual(set(outputs[1]["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
         self.assertEqual(outputs[1]["word_labels"].count("B-BILLER_POST_CODE"), 2)
         self.assertEqual(outputs[1]["word_labels"].count("B-BILLER"), 2)
