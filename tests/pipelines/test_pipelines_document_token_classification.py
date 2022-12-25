@@ -109,7 +109,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             feature_extractor=feature_extractor,
         )
         image = INVOICE_URL
-        outputs = dtc_pipeline(image=image)
+        outputs = dtc_pipeline(inputs=image)
         self.assertEqual(len(outputs["words"]), 95)
         self.assertEqual(len(outputs["word_labels"]), 95)
         self.assertEqual(len(outputs["boxes"]), 95)
@@ -123,7 +123,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
 
         # No text detected -> empty list
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        outputs = dtc_pipeline(image=image)
+        outputs = dtc_pipeline(inputs=image)
         self.assertEqual(outputs["words"], [])
         self.assertEqual(outputs["boxes"], [])
         self.assertEqual(outputs["word_labels"], [])
@@ -132,7 +132,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         words = []
         boxes = []
-        outputs = dtc_pipeline(image=image, words=words, boxes=boxes)
+        outputs = dtc_pipeline({"image":image, "words":words, "boxes":boxes})
         self.assertEqual(outputs["words"], [])
         self.assertEqual(outputs["boxes"], [])
         self.assertEqual(outputs["word_labels"], [])
@@ -149,7 +149,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         )
         image = INVOICE_URL
 
-        outputs = dtc_pipeline(image=image)
+        outputs = dtc_pipeline(inputs=image)
         self.assertEqual(len(outputs["words"]), 95)
         self.assertEqual(len(outputs["word_labels"]), 95)
         self.assertEqual(len(outputs["boxes"]), 95)
