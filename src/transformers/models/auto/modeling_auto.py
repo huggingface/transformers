@@ -718,7 +718,6 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
-        ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
         ("layoutlmv3", "LayoutLMv3ForTokenClassification"),
     ]
 )
