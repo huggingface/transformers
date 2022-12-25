@@ -55,7 +55,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             sequences.
         n_fft (`int`, defaults to 2048):
             Size of the Fourier transform.
-        padding_value (`float`, *optional*, defaults to -1.0):
+        padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
     """
 
