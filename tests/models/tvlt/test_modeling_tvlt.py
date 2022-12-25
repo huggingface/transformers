@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch TVLT model. """
 
 import copy
+import inspect
 import unittest
 
 import numpy as np
@@ -27,7 +28,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_vision, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -36,8 +37,9 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
-    from transformers import TvltForPreTraining, TvltForQuestionAnswering, TvltForSequenceClassification, TvltModel
+    from transformers import TvltForAudioVisualClassification, TvltForPreTraining, TvltForQuestionAnswering, TvltModel
     from transformers.models.tvlt.modeling_tvlt import TVLT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 else:
@@ -87,8 +89,8 @@ class TvltModelTester:
         audio_mask_ratio=0.15,
         task_matching=True,
         task_mae=True,
-        num_question_answering_labels=300,
-        num_labels=2,
+        num_qa_labels=1,
+        num_labels=1,
         is_training=True,
     ):
         self.parent = parent
@@ -124,7 +126,7 @@ class TvltModelTester:
 
         self.task_matching = task_matching
         self.task_mae = task_mae
-        self.num_question_answering_labels = num_question_answering_labels
+        self.num_qa_labels = num_qa_labels
         self.num_labels = num_labels
 
         self.expected_pixel_seq_len = (self.pixel_size // self.pixel_patch_size) ** 2 * self.num_frames
@@ -161,6 +163,19 @@ class TvltModelTester:
         pixel_masks = floats_tensor([self.batch_size, self.expected_pixel_seq_len])
         audio_masks = floats_tensor([self.batch_size, self.expected_audio_seq_len])
 
+        pixel_mask_pos_perm = torch.argsort(
+            floats_tensor(
+                [self.batch_size, self.expected_pixel_seq_len],
+            ),
+            dim=1,
+        )
+        audio_mask_pos_perm = torch.argsort(
+            floats_tensor(
+                [self.batch_size, self.expected_audio_seq_len],
+            ),
+            dim=1,
+        )
+
         pixel_values_mixed = floats_tensor(
             [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
         )
@@ -174,6 +189,8 @@ class TvltModelTester:
             audio_values,
             pixel_masks,
             audio_masks,
+            pixel_mask_pos_perm,
+            audio_mask_pos_perm,
             pixel_values_mixed,
             pixel_masks_mixed,
             labels,
@@ -209,7 +226,7 @@ class TvltModelTester:
             audio_mask_ratio=self.audio_mask_ratio,
             task_matching=self.task_matching,
             task_mae=self.task_mae,
-            num_question_answering_labels=self.num_question_answering_labels,
+            num_qa_labels=self.num_qa_labels,
             num_labels=self.num_labels,
         )
 
@@ -231,10 +248,10 @@ class TvltModelTester:
         result = model(pixel_values, audio_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_sequence_classification(
+    def create_and_check_for_audiovisual_classification(
         self, config, pixel_values, audio_values, pixel_masks, audio_masks
     ):
-        model = TvltForSequenceClassification(config=config)
+        model = TvltForAudioVisualClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, audio_values, pixel_masks=pixel_masks, audio_masks=audio_masks)
@@ -248,6 +265,8 @@ class TvltModelTester:
         audio_values,
         pixel_masks,
         audio_masks,
+        pixel_mask_pos_perm,
+        audio_mask_pos_perm,
         pixel_values_mixed,
         pixel_masks_mixed,
         labels,
@@ -260,11 +279,12 @@ class TvltModelTester:
             audio_values,
             pixel_masks,
             audio_masks,
+            pixel_mask_pos_perm=pixel_mask_pos_perm,
+            audio_mask_pos_perm=audio_mask_pos_perm,
             pixel_values_mixed=pixel_values_mixed,
             pixel_masks_mixed=pixel_masks_mixed,
             labels=labels,
         )
-        result = model(pixel_values, audio_values, pixel_values_mixed=pixel_values_mixed, labels=labels)
         self.parent.assertEqual(
             result.pixel_logits.shape, (self.batch_size, self.expected_pixel_seq_len, self.pixel_mae_output_dim)
         )
@@ -296,17 +316,20 @@ class TvltModelTester:
 @unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "TVLT is only available in torch v1.10+")
 class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TvltModel, TvltForPreTraining, TvltForQuestionAnswering, TvltForSequenceClassification)
+        (TvltModel, TvltForPreTraining, TvltForQuestionAnswering, TvltForAudioVisualClassification)
         if is_torch_available()
         else ()
     )
+
+    fx_compatible = False
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
     test_resize_embeddings = False
+    main_input_name = "pixel_values"
 
-    # TvltForQuestionAnswering, TvltForSequenceClassification and TvltForPreTraining require special treatment
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+    # TvltForQuestionAnswering, TvltForAudioVisualClassification and TvltForPreTraining require special treatment
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=True):
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
@@ -314,13 +337,29 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
                 )
-            elif model_class.__name__ == "TvltForSequenceClassification":
+            elif model_class.__name__ == "TvltForAudioVisualClassification":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
                 )
             elif model_class.__name__ == "TvltForPreTraining":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size,), dtype=torch.float, device=torch_device
+                )
+                inputs_dict["pixel_mask_pos_perm"] = torch.argsort(
+                    torch.zeros(
+                        (self.model_tester.batch_size, self.model_tester.expected_pixel_seq_len),
+                        dtype=torch.float,
+                        device=torch_device,
+                    ),
+                    dim=1,
+                )
+                inputs_dict["audio_mask_pos_perm"] = torch.argsort(
+                    torch.zeros(
+                        (self.model_tester.batch_size, self.model_tester.expected_audio_seq_len),
+                        dtype=torch.float,
+                        device=torch_device,
+                    ),
+                    dim=1,
                 )
                 inputs_dict["pixel_values_mixed"] = torch.zeros(
                     (
@@ -348,6 +387,34 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="TVLT does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            input_embeddings = model.get_input_embeddings()
+            self.assertIsInstance(input_embeddings, (tuple))
+            for embedding in input_embeddings:
+                self.assertIsInstance(embedding, (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values", "audio_values"]
+            self.assertListEqual(arg_names[:2], expected_arg_names)
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -356,16 +423,17 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
-    def test_for_sequence_classification(self):
+    def test_for_audiovisual_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_audiovisual_classification(*config_and_inputs)
 
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pretraining()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
+    @slow
     def test_model_from_pretrained(self):
-        for model_name in TVLT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TVLT_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = TvltModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -380,7 +448,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(inputs_dict, model_class)
             for k, v in inputs.items():
                 print(k, v.shape)
             loss = model(**inputs).loss
@@ -399,7 +467,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.gradient_checkpointing_enable()
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(inputs_dict, model_class)
             loss = model(**inputs).loss
             loss.backward()
 
@@ -538,8 +606,8 @@ class TvltModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-    def test_inference_for_sequence_classification(self):
-        model = TvltForSequenceClassification.from_pretrained("TVLT/tvlt-base").to(torch_device)
+    def test_inference_for_audiovisual_classification(self):
+        model = TvltForAudioVisualClassification.from_pretrained("TVLT/tvlt-base").to(torch_device)
 
         image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()
@@ -565,9 +633,9 @@ class TvltModelIntegrationTest(unittest.TestCase):
         video = prepare_video()
         video_mixed = prepare_video()
         audio = prepare_audio()
-        video_inputs = image_processor(video, return_tensors="pt").to(torch_device)
+        video_inputs = image_processor(video, return_tensors="pt", mask_pixel=True).to(torch_device)
         video_mixed_inputs = image_processor(video_mixed, is_mixed=True, return_tensors="pt").to(torch_device)
-        audio_inputs = audio_feature_extractor(audio, return_tensors="pt").to(torch_device)
+        audio_inputs = audio_feature_extractor(audio, return_tensors="pt", mask_audio=True).to(torch_device)
         labels = torch.tensor([[0.0]], device=torch_device)
         inputs = dict()
         inputs.update(video_inputs)
