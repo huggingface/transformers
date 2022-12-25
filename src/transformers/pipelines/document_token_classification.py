@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict
 
 import numpy as np
 
@@ -25,7 +25,7 @@ from ..utils import (
     is_vision_available,
     logging,
 )
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import PIPELINE_INIT_ARGS, Pipeline, ArgumentHandler, Dataset, types
 
 if is_vision_available():
     from PIL import Image
@@ -50,6 +50,26 @@ class ModelType(ExplicitEnum):
     LayoutLMv2 = "layoutlmv2"
 
 
+class DocumentTokenClassificationArgumentHandler(ArgumentHandler):
+    """
+    Handles arguments for token classification.
+    """
+
+    def __call__(self, inputs: Union[str, List[str]], **kwargs):
+
+        if inputs is not None and (
+            (isinstance(inputs, (list, tuple)) and len(inputs) > 0) or isinstance(inputs, types.GeneratorType)
+        ):
+            inputs = list(inputs)
+        elif isinstance(inputs, str):
+            inputs = [inputs]
+        elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
+            return inputs
+        else:
+            raise ValueError("At least one input is required.")
+        return inputs
+
+
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class DocumentTokenClassificationPipeline(Pipeline):
     # TODO: Update task_summary docs to include an example with document token classification
@@ -66,11 +86,12 @@ class DocumentTokenClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=document-token-classification).
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, args_parser=DocumentTokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING)
         self.image_processor = self.feature_extractor
         self.image_processor.apply_ocr = False
+        self._args_parser = args_parser
         if self.model.config.model_type == "layoutlmv3":
             self.model_type = ModelType.LayoutLMv3
         elif self.model.config.model_type == "layoutlmv2":
@@ -103,10 +124,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
 
     def __call__(
         self,
-        image: Union["Image.Image", str],
-        word_boxes: Tuple[str, List[float]] = None,
-        words: List[str] = None,
-        boxes: List[List[float]] = None,
+        inputs: Union["Image.Image", List["Image.Image"], str, Dict, List[dict]],
         **kwargs,
     ):
         """
@@ -117,65 +135,26 @@ class DocumentTokenClassificationPipeline(Pipeline):
 
         You can invoke the pipeline several ways:
 
-        - `pipeline(image=image, word_boxes=word_boxes)`
-        - `pipeline(image=image, words=words, boxes=boxes)`
-        - `pipeline(image=image)`
+        - `pipeline(inputs=image)`
+        - `pipeline(inputs=[image])`
+        - `pipeline(inputs={"image": image})`
+        - `pipeline(inputs={"image": image, "word_boxes": word_boxes})`
+        - `pipeline(inputs={"image": image, "words": words, "boxes": boxes})`
+        - `pipeline(inputs=[{"image": image}])`
+        - `pipeline(inputs=[{"image": image, "word_boxes": word_boxes}])`
+        - `pipeline(inputs=[{"image": image, "words": words, "boxes": boxes}])`
 
         Args:
-            image (`str` or `PIL.Image`):
-                The pipeline handles three types of images:
-
-                - A string containing a http link pointing to an image
-                - A string containing a local path to an image
-                - An image loaded in PIL directly
-
-                The pipeline accepts either a single image or a batch of images. If given a single image, it can be
-                broadcasted to multiple questions.
-            word_boxes (`List[str, Tuple[float, float, float, float]]`, *optional*):
-                A list of words and bounding boxes (normalized 0->1000). If you provide this optional input, then the
-                pipeline will use these words and boxes instead of running OCR on the image to derive them for models
-                that need them (e.g. LayoutLM). This allows you to reuse OCR'd results across many invocations of the
-                pipeline without having to re-run it each time.
-            words (`List[str]`, *optional*):
-                A list of words. If you provide this optional input, then the pipeline will use these words instead of
-                running OCR on the image to derive them for models that need them (e.g. LayoutLM). This allows you to
-                reuse OCR'd results across many invocations of the pipeline without having to re-run it each time.
-            boxes (`List[Tuple[float, float, float, float]]`, *optional*):
-                A list of bounding boxes (normalized 0->1000). If you provide this optional input, then the pipeline will
-                use these boxes instead of running OCR on the image to derive them for models that need them (e.g.
-                LayoutLM). This allows you to reuse OCR'd results across many invocations of the pipeline without having
-                to re-run it each time.
-            TODO doc_stride (`int`, *optional*, defaults to 128):
-                If the words in the document are too long to fit with the question for the model, it will be split in
-                several chunks with some overlap. This argument controls the size of that overlap.
-            TODO max_seq_len (`int`, *optional*, defaults to 384):
-                The maximum length of the total sentence (context + question) in tokens of each chunk passed to the
-                model. The context will be split in several chunks (using `doc_stride` as overlap) if needed.
-            lang (`str`, *optional*):
-                Language to use while running OCR. Defaults to english.
-            tesseract_config (`str`, *optional*):
-                Additional flags to pass to tesseract while running OCR.
+            inputs (:obj:`str`, :obj:`List[str]`, :obj:`PIL.Image`, :obj:`List[PIL.Image]`, :obj:`Dict`, :obj:`List[Dict]`):
 
         Return:
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
-            - **logits** - (`List[float]`) - The list of raw logits for each word in the document.
-            - **labels** - (`List[str]`) - The list of predicted labels for each word in the document.
+            - **words** (:obj:`List[str]`) -- The words in the document.
+            - **boxes** (:obj:`List[List[int]]`) -- The boxes of the words in the document.
+            - **word_labels** (:obj:`List[str]`) -- The predicted labels for each word.
         """
-        if word_boxes is not None:
-            inputs = {
-                "image": image,
-                "word_boxes": word_boxes,
-            }
-        elif words is not None and boxes is not None:
-            inputs = {
-                "image": image,
-                "words": words,
-                "boxes": boxes,
-            }
-        else:
-            inputs = image
-            self.image_processor.apply_ocr = True
+        inputs = self._args_parser(inputs)
         return super().__call__(inputs, **kwargs)
 
     def preprocess(self, input, lang=None, tesseract_config="", **kwargs):
@@ -187,6 +166,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
             image = load_image(input["image"])
 
         words, boxes = None, None
+        self.image_processor.apply_ocr = False
         if "words" in input and "boxes" in input:
             words = input["words"]
             boxes = input["boxes"]
@@ -198,6 +178,8 @@ class DocumentTokenClassificationPipeline(Pipeline):
                 "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract,"
                 " but pytesseract is not available"
             )
+        else:
+            self.image_processor.apply_ocr = True
 
         # first, apply the image processor
         features = self.image_processor(
@@ -243,17 +225,17 @@ class DocumentTokenClassificationPipeline(Pipeline):
         logits = np.asarray(model_outputs.pop("logits", None))
         words = model_outputs["words"]
         boxes = model_outputs["boxes"]
-        
+
         # if first dimension is 1, remove it
         if logits.shape[0] == 1:
             logits = logits[0]
-        
+
         # if words is a list of list of strings, get the first one
-        if isinstance(words, list) and len(words)!=0 and isinstance(words[0], list):
+        if isinstance(words, list) and len(words) != 0 and isinstance(words[0], list):
             words = words[0]
             model_outputs["words"] = words
 
-        if isinstance(boxes, list) and len(boxes)!=0 and isinstance(boxes[0], list):
+        if isinstance(boxes, list) and len(boxes) != 0 and isinstance(boxes[0], list):
             boxes = boxes[0]
             model_outputs["boxes"] = boxes
 
