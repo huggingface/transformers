@@ -1092,7 +1092,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIP_->ALTCLIP,CLIP->AltCLIP
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVisionTransformer->AltCLIPVisionTransformer,CLIPVisionConfig->AltCLIPVisionConfig,CLIPVisionEmbeddings->AltCLIPVisionEmbeddings,CLIPEncoder->AltCLIPEncoder,CLIP_VISION_INPUTS_DOCSTRING->ALTCLIP_VISION_INPUTS_DOCSTRING
 class AltCLIPVisionTransformer(nn.Module):
     def __init__(self, config: AltCLIPVisionConfig):
         super().__init__()
@@ -1104,7 +1104,7 @@ class AltCLIPVisionTransformer(nn.Module):
         self.encoder = AltCLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
-    @add_start_docstrings_to_model_forward(ALTAltCLIPVISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ALTCLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AltCLIPVisionConfig)
     def forward(
         self,
