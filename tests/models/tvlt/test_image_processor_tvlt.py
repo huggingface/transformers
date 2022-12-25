@@ -67,7 +67,7 @@ class TvltImageProcessorTester(unittest.TestCase):
         self.image_std = image_std
         self.crop_size = crop_size
 
-    def prepare_image_processor_dict(self):
+    def prepare_feat_extract_dict(self):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -81,128 +81,128 @@ class TvltImageProcessorTester(unittest.TestCase):
 @require_torch
 @require_vision
 class TvltImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-    image_processor_class = TvltImageProcessor if is_vision_available() else None
+    feature_extraction_class = TvltImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.image_processor_tester = TvltImageProcessorTester(self)
+        self.feature_extraction_tester = TvltImageProcessorTester(self)
 
     @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    def feat_extract_dict(self):
+        return self.feature_extraction_tester.prepare_feat_extract_dict()
 
     def test_feat_extract_properties(self):
-        image_processor = self.image_processor_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processor, "image_mean"))
-        self.assertTrue(hasattr(image_processor, "image_std"))
-        self.assertTrue(hasattr(image_processor, "do_normalize"))
-        self.assertTrue(hasattr(image_processor, "do_resize"))
-        self.assertTrue(hasattr(image_processor, "do_center_crop"))
-        self.assertTrue(hasattr(image_processor, "size"))
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        self.assertTrue(hasattr(feature_extractor, "image_mean"))
+        self.assertTrue(hasattr(feature_extractor, "image_std"))
+        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
+        self.assertTrue(hasattr(feature_extractor, "do_resize"))
+        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "size"))
 
     def test_batch_feature(self):
         pass
 
     def test_call_pil(self):
-        # Initialize image_processor
-        image_processor = self.image_processor_class(**self.image_processor_dict)
+        # Initialize feature_extraction
+        feature_extraction = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL videos
-        video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False)
+        video_inputs = prepare_video_inputs(self.feature_extraction_tester, equal_resolution=False)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], Image.Image)
 
         # Test not batched input
-        encoded_videos = image_processor(video_inputs[0], return_tensors="pt").pixel_values
+        encoded_videos = feature_extraction(video_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_videos.shape,
             (
                 1,
-                self.image_processor_tester.num_frames,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
+                self.feature_extraction_tester.num_frames,
+                self.feature_extraction_tester.num_channels,
+                self.feature_extraction_tester.crop_size["height"],
+                self.feature_extraction_tester.crop_size["width"],
             ),
         )
 
         # Test batched
-        encoded_videos = image_processor(video_inputs, return_tensors="pt").pixel_values
+        encoded_videos = feature_extraction(video_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_videos.shape,
             (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_frames,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
+                self.feature_extraction_tester.batch_size,
+                self.feature_extraction_tester.num_frames,
+                self.feature_extraction_tester.num_channels,
+                self.feature_extraction_tester.crop_size["height"],
+                self.feature_extraction_tester.crop_size["width"],
             ),
         )
 
     def test_call_numpy(self):
-        # Initialize image_processor
-        image_processor = self.image_processor_class(**self.image_processor_dict)
+        # Initialize feature_extraction
+        feature_extraction = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
-        video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
+        video_inputs = prepare_video_inputs(self.feature_extraction_tester, equal_resolution=False, numpify=True)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], np.ndarray)
 
         # Test not batched input
-        encoded_videos = image_processor(video_inputs[0], return_tensors="pt").pixel_values
+        encoded_videos = feature_extraction(video_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_videos.shape,
             (
                 1,
-                self.image_processor_tester.num_frames,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
+                self.feature_extraction_tester.num_frames,
+                self.feature_extraction_tester.num_channels,
+                self.feature_extraction_tester.crop_size["height"],
+                self.feature_extraction_tester.crop_size["width"],
             ),
         )
 
         # Test batched
-        encoded_videos = image_processor(video_inputs, return_tensors="pt").pixel_values
+        encoded_videos = feature_extraction(video_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_videos.shape,
             (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_frames,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
+                self.feature_extraction_tester.batch_size,
+                self.feature_extraction_tester.num_frames,
+                self.feature_extraction_tester.num_channels,
+                self.feature_extraction_tester.crop_size["height"],
+                self.feature_extraction_tester.crop_size["width"],
             ),
         )
 
     def test_call_pytorch(self):
-        # Initialize image_processor
-        image_processor = self.image_processor_class(**self.image_processor_dict)
+        # Initialize feature_extraction
+        feature_extraction = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PyTorch tensors
-        video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
+        video_inputs = prepare_video_inputs(self.feature_extraction_tester, equal_resolution=False, torchify=True)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], torch.Tensor)
 
         # Test not batched input
-        encoded_videos = image_processor(video_inputs[0], return_tensors="pt").pixel_values
+        encoded_videos = feature_extraction(video_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_videos.shape,
             (
                 1,
-                self.image_processor_tester.num_frames,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
+                self.feature_extraction_tester.num_frames,
+                self.feature_extraction_tester.num_channels,
+                self.feature_extraction_tester.crop_size["height"],
+                self.feature_extraction_tester.crop_size["width"],
             ),
         )
 
         # Test batched
-        encoded_videos = image_processor(video_inputs, return_tensors="pt").pixel_values
+        encoded_videos = feature_extraction(video_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_videos.shape,
             (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_frames,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
+                self.feature_extraction_tester.batch_size,
+                self.feature_extraction_tester.num_frames,
+                self.feature_extraction_tester.num_channels,
+                self.feature_extraction_tester.crop_size["height"],
+                self.feature_extraction_tester.crop_size["width"],
             ),
         )
