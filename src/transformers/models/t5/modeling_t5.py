@@ -1319,7 +1319,6 @@ class T5Model(T5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         self.device_map = device_map
-        assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
         self.decoder.parallelize(self.device_map)
         self.model_parallel = True
