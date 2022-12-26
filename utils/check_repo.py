@@ -112,6 +112,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
+    "TFRobertaPreLayerNormForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "TFWhisperEncoder",  # Building part of bigger (tested) model.
     "TFWhisperDecoder",  # Building part of bigger (tested) model.
@@ -120,6 +121,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
     "OPTDecoderWrapper",
     "TFSegformerDecodeHead",  # Not a regular model.
+    "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -146,6 +148,13 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "BlipForConditionalGeneration",
+    "BlipForImageTextRetrieval",
+    "BlipForQuestionAnswering",
+    "BlipVisionModel",
+    "BlipTextLMHeadModel",
+    "BlipTextModel",
+    "Swin2SRForImageSuperResolution",
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
@@ -202,6 +211,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaImageModel",
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
+    "GPTSw3DoubleHeadsModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
@@ -238,7 +248,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
-    "MaskFormerForInstanceSegmentation",
     "XCLIPVisionModel",
     "XCLIPTextModel",
 ]
@@ -676,8 +685,11 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "MaskFormerSwinBackbone",
     "ResNetBackbone",
     "AutoBackbone",
+    "DinatBackbone",
+    "NatBackbone",
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
+    "SwinBackbone",
 ]
 
 
