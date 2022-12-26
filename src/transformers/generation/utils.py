@@ -1406,6 +1406,7 @@ class GenerationMixin:
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
                 num_beams=generation_config.num_beams,
+                max_length=stopping_criteria.max_length,
                 device=inputs_tensor.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
@@ -1442,6 +1443,7 @@ class GenerationMixin:
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size * generation_config.num_return_sequences,
                 num_beams=generation_config.num_beams,
+                max_length=stopping_criteria.max_length,
                 device=inputs_tensor.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
@@ -1577,6 +1579,7 @@ class GenerationMixin:
                 constraints=final_constraints,
                 batch_size=batch_size,
                 num_beams=generation_config.num_beams,
+                max_length=stopping_criteria.max_length,
                 device=inputs_tensor.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
@@ -2534,6 +2537,7 @@ class GenerationMixin:
         >>> # instantiate beam scorer
         >>> beam_scorer = BeamSearchScorer(
         ...     batch_size=1,
+        ...     max_length=model.config.max_length,
         ...     num_beams=num_beams,
         ...     device=model.device,
         ... )
@@ -3543,7 +3547,11 @@ class GenerationMixin:
 
         >>> # instantiate beam scorer
         >>> beam_scorer = ConstrainedBeamSearchScorer(
-        ...     batch_size=1, num_beams=num_beams, device=model.device, constraints=constraints
+        ...     batch_size=1,
+        ...     num_beams=num_beams,
+        ...     max_length=model.config.max_length,
+        ...     device=model.device,
+        ...     constraints=constraints
         ... )
 
         >>> # instantiate logits processors

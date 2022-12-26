@@ -3066,7 +3066,10 @@ class TFGenerationMixin:
             not_max_length_yet = cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = running_scores[:, :1] / (max_length**length_penalty)
+            if length_penalty < 0.0:
+                best_running_score = running_scores[:, :1] / (max_length**length_penalty)
+            else:
+                best_running_score = running_scores[:, :1] / (tf.cast(cur_len, dtype=tf.float32)**length_penalty)
             worst_finished_score = tf.where(
                 is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e9
             )
@@ -3075,7 +3078,7 @@ class TFGenerationMixin:
             # 3. is there still a beam that has not finished?
             still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & early_stopping)
 
-            return not_max_length_yet & (still_open_beam | improvement_still_possible)
+            return not_max_length_yet & still_open_beam & improvement_still_possible
 
         def beam_search_body_fn(
             cur_len,

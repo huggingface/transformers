@@ -66,6 +66,7 @@ class BeamSearchTester:
         return BeamSearchScorer(
             batch_size=kwargs.get("batch_size", self.batch_size),
             num_beams=kwargs.get("num_beams", self.num_beams),
+            max_length=kwargs.get("max_length", self.max_length),
             device=torch_device,
             length_penalty=kwargs.get("length_penalty", self.length_penalty),
             do_early_stopping=kwargs.get("do_early_stopping", self.do_early_stopping),
@@ -291,6 +292,7 @@ class ConstrainedBeamSearchTester:
             constraints=kwargs.get("constraints", self.constraints),
             batch_size=kwargs.get("batch_size", self.batch_size),
             num_beams=kwargs.get("num_beams", self.num_beams),
+            max_length=kwargs.get("max_length", self.max_length),
             device=torch_device,
             length_penalty=kwargs.get("length_penalty", self.length_penalty),
             do_early_stopping=kwargs.get("do_early_stopping", self.do_early_stopping),

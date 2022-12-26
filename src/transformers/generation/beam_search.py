@@ -156,6 +156,7 @@ class BeamSearchScorer(BeamScorer):
         self,
         batch_size: int,
         num_beams: int,
+        max_length: int,
         device: torch.device,
         length_penalty: Optional[float] = 1.0,
         do_early_stopping: Optional[bool] = False,
@@ -167,6 +168,7 @@ class BeamSearchScorer(BeamScorer):
         self.device = device
         self.length_penalty = length_penalty
         self.do_early_stopping = do_early_stopping
+        self.max_length = max_length
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
         self.num_beam_groups = num_beam_groups
         self.group_size = self.num_beams // self.num_beam_groups
@@ -177,6 +179,7 @@ class BeamSearchScorer(BeamScorer):
                 num_beams=self.num_beams,
                 length_penalty=self.length_penalty,
                 early_stopping=self.do_early_stopping,
+                max_length=self.max_length,
             )
             for _ in range(batch_size)
         ]
@@ -192,13 +195,6 @@ class BeamSearchScorer(BeamScorer):
             raise ValueError(
                 "`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` has to be"
                 f" divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
-            )
-
-        if "max_length" in kwargs:
-            warnings.warn(
-                "Passing `max_length` to BeamSearchScorer is deprecated and has no effect. "
-                "`max_length` should be passed directly to `beam_search(...)`, `beam_sample(...)`"
-                ", or `group_beam_search(...)`."
             )
 
     @property
@@ -424,6 +420,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         self,
         batch_size: int,
         num_beams: int,
+        max_length: int,
         constraints: List[Constraint],
         device: torch.device,
         length_penalty: Optional[float] = 1.0,
@@ -436,6 +433,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         self.device = device
         self.length_penalty = length_penalty
         self.do_early_stopping = do_early_stopping
+        self.max_length = max_length,
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
         self.num_beam_groups = num_beam_groups
         self.group_size = self.num_beams // self.num_beam_groups
@@ -447,6 +445,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 num_beams=self.num_beams,
                 length_penalty=self.length_penalty,
                 early_stopping=self.do_early_stopping,
+                max_length=self.max_length,
             )
             for _ in range(batch_size)
         ]
@@ -462,13 +461,6 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             raise ValueError(
                 "`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` has to be"
                 f" divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
-            )
-
-        if "max_length" in kwargs:
-            warnings.warn(
-                "Passing `max_length` to ConstrainedBeamSearchScorer is deprecated and has no effect. "
-                "`max_length` should be passed directly to `beam_search(...)`, `beam_sample(...)`"
-                ", or `group_beam_search(...)`."
             )
 
     @property
@@ -851,12 +843,13 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
 
 class BeamHypotheses:
-    def __init__(self, num_beams: int, length_penalty: float, early_stopping: bool):
+    def __init__(self, num_beams: int, length_penalty: float, early_stopping: bool, max_length: int):
         """
         Initialize n-best list of hypotheses.
         """
         self.length_penalty = length_penalty
         self.early_stopping = early_stopping
+        self.max_length = max_length
         self.num_beams = num_beams
         self.beams = []
         self.worst_score = 1e9
@@ -892,6 +885,9 @@ class BeamHypotheses:
         elif self.early_stopping:
             return True
         else:
-            cur_score = best_sum_logprobs / cur_len**self.length_penalty
+            if self.length_penalty < 0.0:
+                cur_score = best_sum_logprobs / self.max_length**self.length_penalty
+            else:
+                cur_score = best_sum_logprobs / cur_len**self.length_penalty
             ret = self.worst_score >= cur_score
             return ret

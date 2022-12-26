@@ -1562,6 +1562,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
                 num_beams=generation_config.num_beams,
+                max_length=generation_config.max_length,
                 device=self.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,

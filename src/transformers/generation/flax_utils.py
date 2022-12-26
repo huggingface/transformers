@@ -797,7 +797,10 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
+            if length_penalty < 0.0:
+                best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
+            else:
+                best_running_score = state.running_scores[:, -1:] / (state.cur_len**length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
