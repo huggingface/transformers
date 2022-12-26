@@ -16,7 +16,6 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import torch
 
 from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
@@ -416,9 +415,9 @@ class TvltImageProcessor(BaseImageProcessor):
         if mask_pixel:
             batch_size = len(visual_inputs)
             max_patch_len = num_patches_per_image * max_num_frames
-            noise = torch.rand(batch_size, max_patch_len)  # noise in [0, 1]
+            noise = np.random.rand(batch_size, max_patch_len)  # noise in [0, 1]
             # sort noise for each sample
-            ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+            ids_shuffle = np.argsort(noise, dim=1)  # ascend: small is keep, large is remove
             data.update({"pixel_mask_pos_perm": ids_shuffle})
 
         return BatchFeature(data=data, tensor_type=return_tensors)
