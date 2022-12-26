@@ -1851,6 +1851,16 @@ class TFModelTesterMixin:
             config.eos_token_id = None  # Generate until max length
             config.do_sample = False
 
+            # fix config for models with additional sequence-length limiting settings
+            for var_name in ["max_position_embeddings", "max_target_positions"]:
+                if hasattr(config, var_name):
+                    try:
+                        setattr(config, var_name, generate_kwargs["max_new_tokens"])
+                    except NotImplementedError:
+                        # xlnet will raise an exception when trying to set
+                        # max_position_embeddings.
+                        pass
+
             model = model_class(config)
 
             if model.supports_xla_generation:
