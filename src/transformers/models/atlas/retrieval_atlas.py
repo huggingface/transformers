@@ -655,6 +655,8 @@ class AtlasRetrieverIndex:
 
         queries = self.generator_tokenizer.batch_decode(generator_input_ids, skip_special_tokens=True)
 
+        # todo: this should be configurable
+        # todo: possible to re-use tokenized generator input ids here
         passages = [[f'{queries[i]} context: {passage}' for passage in doc["text"]] for i, doc in enumerate(docs)]
 
 
