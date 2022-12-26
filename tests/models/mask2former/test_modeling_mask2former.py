@@ -245,8 +245,9 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
             "mask_labels": torch.randn((2, 10, *size), device=torch_device),
             "class_labels": torch.zeros(2, 10, device=torch_device).long(),
         }
+        config = self.model_tester.get_config()
 
-        model = Mask2FormerForUniversalSegmentation(Mask2FormerConfig()).to(torch_device)
+        model = Mask2FormerForUniversalSegmentation(config).to(torch_device)
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
 
@@ -293,8 +294,8 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
         pixel_decoder_hidden_states = outputs.pixel_decoder_hidden_states[0]
         pixel_decoder_hidden_states.retain_grad()
 
-        hidden_states = outputs.hidden_states[0]
-        hidden_states.retain_grad()
+        transformer_decoder_hidden_states = outputs.transformer_decoder_hidden_states[0]
+        transformer_decoder_hidden_states.retain_grad()
 
         attentions = outputs.attentions[0]
         attentions.retain_grad()
@@ -303,7 +304,7 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(pixel_decoder_hidden_states.grad)
-        self.assertIsNotNone(hidden_states.grad)
+        self.assertIsNotNone(transformer_decoder_hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
 

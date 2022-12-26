@@ -427,7 +427,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         renamed_keys.extend([(f"{src_prefix}.transformer.level_embed", f"{dst_prefix}.level_embed")])
 
         # layers
-        for layer_idx in range(self.config.decoder_config.encoder_layers):
+        for layer_idx in range(self.config.encoder_layers):
             renamed_keys.extend(
                 rename_keys_for_encoder_layer(
                     f"{src_prefix}.transformer.encoder.layers.{layer_idx}", f"{dst_prefix}.encoder.layers.{layer_idx}"
@@ -449,20 +449,8 @@ class OriginalMask2FormerCheckpointToOursConverter:
         src_prefix: str = "sem_seg_head.predictor"
 
         rename_keys = []
-        for i in range(self.config.decoder_config.decoder_layers - 1):
+        for i in range(self.config.decoder_layers - 1):
 
-            rename_keys.append(
-                (
-                    f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_weight",
-                    f"{dst_prefix}.layers.{i}.self_attn.in_proj_weight",
-                )
-            )
-            rename_keys.append(
-                (
-                    f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_bias",
-                    f"{dst_prefix}.layers.{i}.self_attn.in_proj_bias",
-                )
-            )
             rename_keys.append(
                 (
                     f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.out_proj.weight",
@@ -585,6 +573,25 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
+    def replace_keys_qkv_transformer_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+        dst_prefix: str = "transformer_module.decoder.layers"
+        src_prefix: str = "sem_seg_head.predictor"
+        for i in range(self.config.decoder_layers - 1):
+            # read in weights + bias of input projection layer of self-attention
+            in_proj_weight = src_state_dict.pop(
+                f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_weight"
+            )
+            in_proj_bias = src_state_dict.pop(
+                f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_bias"
+            )
+            # next, add query, keys and values (in that order) to the state dict
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+
     def replace_transformer_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module"
         src_prefix: str = "sem_seg_head.predictor"
@@ -598,6 +605,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         ]
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
+        self.replace_keys_qkv_transformer_decoder(dst_state_dict, src_state_dict)
 
     def replace_universal_segmentation_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = ""

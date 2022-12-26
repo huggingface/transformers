@@ -152,8 +152,6 @@ class Mask2FormerModelOutput(ModelOutput):
     Class for outputs of [`Mask2FormerModel`]. This class returns all the needed hidden states to compute the logits.
 
     Args:
-        masks_queries_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
-            Mask Predictions from the last layer in the transformer decoder.
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
             Last hidden states (final feature map) of the last stage of the encoder model (backbone). Returned when
             `output_hidden_states=True` is passed.
@@ -176,6 +174,8 @@ class Mask2FormerModelOutput(ModelOutput):
         transformer_decoder_intermediate_states (`tuple(torch.FloatTensor)` of shape `(num_queries, 1, hidden_size)`):
             Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
             layernorm.
+        masks_queries_logits (`tuple(torch.FloatTensor)` of shape `(batch_size, num_queries, height, width)`)
+            Mask Predictions from each layer in the transformer decoder.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -186,7 +186,6 @@ class Mask2FormerModelOutput(ModelOutput):
             `output_attentions=True` is passed.
     """
 
-    masks_queries_logits: torch.FloatTensor = None
     encoder_last_hidden_state: torch.FloatTensor = None
     pixel_decoder_last_hidden_state: torch.FloatTensor = None
     transformer_decoder_last_hidden_state: torch.FloatTensor = None
@@ -194,6 +193,7 @@ class Mask2FormerModelOutput(ModelOutput):
     pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     transformer_decoder_intermediate_states: Tuple[torch.FloatTensor] = None
+    masks_queries_logits: Tuple[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1571,7 +1571,13 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
         self.config = config
         self.embed_dim = self.config.hidden_dim
         self.pre_norm = self.config.pre_norm
-        self.self_attn = nn.MultiheadAttention(self.embed_dim, self.config.num_attention_heads, self.config.dropout)
+        self.self_attn = Mask2FormerAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.num_attention_heads,
+            dropout=config.dropout,
+            is_decoder=True,
+        )
+
         self.dropout = self.config.dropout
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.activation_dropout = self.config.dropout
@@ -1619,10 +1625,11 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
         # Self Attention Block
         residual = hidden_states
 
-        query = key = self.with_pos_embed(hidden_states, query_position_embeddings)
-
         hidden_states, self_attn_weights = self.self_attn(
-            query=query, key=key, value=hidden_states, attn_mask=None, key_padding_mask=None
+            hidden_states=hidden_states,
+            position_embeddings=query_position_embeddings,
+            attention_mask=None,
+            output_attentions=True,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1681,9 +1688,11 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
 
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        query = key = self.with_pos_embed(hidden_states, query_position_embeddings)
         hidden_states, self_attn_weights = self.self_attn(
-            query=query, key=key, value=hidden_states, attn_mask=None, key_padding_mask=None
+            hidden_states=hidden_states,
+            position_embeddings=query_position_embeddings,
+            attention_mask=None,
+            output_attentions=True,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1933,7 +1942,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
                 if v is not None
             )
         return Mask2FormerMaskedAttentionDecoderOutput(
-            last_hidden_state=hidden_states,
+            last_hidden_state=hidden_states.transpose(1, 0),
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             intermediate_hidden_states=intermediate,
@@ -2319,16 +2328,14 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         if output_hidden_states:
             encoder_hidden_states = pixel_level_module_output.encoder_hidden_states
             pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states
-            transformer_decoder_hidden_states = tuple(
-                [state.transpose(1, 0) for state in transformer_module_output.hidden_states]
-            )
+            transformer_decoder_hidden_states = transformer_module_output.hidden_states
             transformer_decoder_intermediate_states = transformer_module_output.intermediate_hidden_states
             hidden_states = encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states
 
         output = Mask2FormerModelOutput(
             encoder_last_hidden_state=pixel_level_module_output.encoder_last_hidden_state,
             pixel_decoder_last_hidden_state=pixel_level_module_output.decoder_last_hidden_state,
-            transformer_decoder_last_hidden_state=transformer_module_output.last_hidden_state.transpose(1, 0),
+            transformer_decoder_last_hidden_state=transformer_module_output.last_hidden_state,
             encoder_hidden_states=encoder_hidden_states,
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
@@ -2498,10 +2505,12 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
 
         encoder_hidden_states = None
         pixel_decoder_hidden_states = None
+        transformer_decoder_hidden_states = None
 
         if output_hidden_states:
             encoder_hidden_states = outputs.encoder_hidden_states
             pixel_decoder_hidden_states = outputs.pixel_decoder_hidden_states
+            transformer_decoder_hidden_states = outputs.transformer_decoder_hidden_states
 
         output_auxiliary_logits = (
             self.config.use_auxiliary_loss if output_auxiliary_logits is None else output_auxiliary_logits
@@ -2519,6 +2528,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             transformer_decoder_last_hidden_state=outputs.transformer_decoder_last_hidden_state,
             encoder_hidden_states=encoder_hidden_states,
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
+            transformer_decoder_hidden_states=transformer_decoder_hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
