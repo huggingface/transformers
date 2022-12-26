@@ -26,18 +26,18 @@ logger = logging.get_logger(__name__)
 
 
 class AtlasTokenizer:
-    def __init__(self, query_encoder, generator):
-        self.query_encoder = query_encoder
+    def __init__(self, retriever, generator):
+        self.retriever = retriever
         self.generator = generator
-        self.current_tokenizer = self.query_encoder
+        self.current_tokenizer = self.retriever
 
     def save_pretrained(self, save_directory):
         if os.path.isfile(save_directory):
             raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
         os.makedirs(save_directory, exist_ok=True)
-        query_encoder_path = os.path.join(save_directory, "query_encoder_tokenizer")
+        retriever_path = os.path.join(save_directory, "retriever_tokenizer")
         generator_path = os.path.join(save_directory, "generator_tokenizer")
-        self.query_encoder.save_pretrained(query_encoder_path)
+        self.retriever.save_pretrained(retriever_path)
         self.generator.save_pretrained(generator_path)
 
     @classmethod
@@ -50,13 +50,13 @@ class AtlasTokenizer:
         if config is None:
             config = AtlasConfig.from_pretrained(pretrained_model_name_or_path)
 
-        query_encoder = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path, config=config.query_encoder, subfolder="query_encoder_tokenizer"
+        retriever = AutoTokenizer.from_pretrained(
+            pretrained_model_name_or_path, config=config.retriever, subfolder="retriever_tokenizer"
         )
         generator = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path, config=config.generator, subfolder="generator_tokenizer"
         )
-        return cls(query_encoder=query_encoder, generator=generator)
+        return cls(retriever=retriever, generator=generator)
 
     def __call__(self, *args, **kwargs):
         return self.current_tokenizer(*args, **kwargs)
@@ -68,7 +68,7 @@ class AtlasTokenizer:
         return self.generator.decode(*args, **kwargs)
 
     def _switch_to_input_mode(self):
-        self.current_tokenizer = self.query_encoder
+        self.current_tokenizer = self.retriever
 
     def _switch_to_target_mode(self):
         self.current_tokenizer = self.generator

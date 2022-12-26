@@ -114,16 +114,16 @@ class AtlasConfig(PretrainedConfig):
             **kwargs,
         )
         assert (
-            "query_passage_encoder" in kwargs and "generator" in kwargs
-        ), "Config has to be initialized with query_passage_encoder and generator config"
-        query_passage_encoder_config = kwargs.pop("query_passage_encoder")
-        query_passage_encoder_model_type = query_passage_encoder_config.pop("model_type")
+            "retriever" in kwargs and "generator" in kwargs
+        ), "Config has to be initialized with retriever and generator config"
+        retriever_config = kwargs.pop("retriever")
+        retriever_model_type = retriever_config.pop("model_type")
         decoder_config = kwargs.pop("generator")
         decoder_model_type = decoder_config.pop("model_type")
 
         from ..auto.configuration_auto import AutoConfig
 
-        self.query_passage_encoder = AutoConfig.for_model(query_passage_encoder_model_type, **query_passage_encoder_config)
+        self.retriever = AutoConfig.for_model(retriever_model_type, **retriever_config)
         self.generator = AutoConfig.for_model(decoder_model_type, **decoder_config)
 
         self.n_docs = n_docs
@@ -145,8 +145,8 @@ class AtlasConfig(PretrainedConfig):
         #     self.forced_eos_token_id = getattr(self.generator, "forced_eos_token_id", None)
 
     @classmethod
-    def from_query_passage_encoder_generator_configs(
-        cls, query_passage_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
+    def from_retriever_generator_configs(
+        cls, retriever_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
         Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
@@ -155,7 +155,7 @@ class AtlasConfig(PretrainedConfig):
         Returns:
             [`EncoderDecoderConfig`]: An instance of a configuration object
         """
-        return cls(query_passage_encoder=query_passage_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
+        return cls(retriever=retriever_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
@@ -165,7 +165,7 @@ class AtlasConfig(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        output["query_passage_encoder"] = self.query_passage_encoder.to_dict()
+        output["retriever"] = self.retriever.to_dict()
         output["generator"] = self.generator.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

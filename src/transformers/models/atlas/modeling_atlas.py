@@ -72,32 +72,32 @@ class AtlasModel(AtlasPreTrainedModel):
     def __init__(
         self,
         config: Optional[PretrainedConfig] = None,
-        query_passage_encoder: Optional[PreTrainedModel] = None,
+        retriever: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         index: Optional[Dataset] = None,
         **kwargs,
     ):
         requires_backends(self, ["datasets", "faiss"])
         assert config is not None or (
-            query_passage_encoder is not None and generator is not None
-        ), "Either a configuration or an query_passage_encoder and a generator has to be provided."
+            retriever is not None and generator is not None
+        ), "Either a configuration or an retriever and a generator has to be provided."
 
         if config is None:
             config = AtlasConfig.from_pretrained_query_passage_generator(
-                query_passage_encoder.config, generator.config, **kwargs
+                retriever.config, generator.config, **kwargs
             )
         else:
             assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
         
         super().__init__(config)
         
-        if query_passage_encoder is None:
+        if retriever is None:
             from ..auto.modeling_auto import AutoModel
-            contriever = Contriever(config.query_passage_encoder)
+            contriever = Contriever(config.retriever)
             if config.query_side_retriever_training:
-                query_passage_encoder = UntiedDualEncoderRetriever(config, contriever)
+                retriever = UntiedDualEncoderRetriever(config, contriever)
             else:
-                query_passage_encoder = DualEncoderRetriever(config, contriever)
+                retriever = DualEncoderRetriever(config, contriever)
 
         if generator is None:
             from ..auto.modeling_auto import AutoModelForSeq2SeqLM
@@ -107,7 +107,7 @@ class AtlasModel(AtlasPreTrainedModel):
         if self.index is not None:
             self.set_index(index)
 
-        self.query_passage_encoder = query_passage_encoder
+        self.retriever = retriever
         self.generator = generator
 
     def set_index(self, dataset_with_index: Dataset):
@@ -137,7 +137,7 @@ class AtlasModel(AtlasPreTrainedModel):
         def reindex(examples):
             tokenized = self.tokenizer(examples['text'], return_tensors="pt", padding=True, truncation=True, max_length=512)
 
-            hidden_states = self.query_passage_encoder.embed_passages(
+            hidden_states = self.retriever.embed_passages(
                 input_ids=tokenized["input_ids"].to(self.device),
                 attention_mask=tokenized["attention_mask"].to(self.device)
             )
@@ -147,6 +147,10 @@ class AtlasModel(AtlasPreTrainedModel):
         self.index = self.index.index.map(reindex, batched=True, batch_size=batch_size)
         self.index.add_faiss_index("embeddings", device=device, string_factory=string_factory, metric_type=metric_type)
 
+    # todo
+    # - tokenize query with both tokenizers as input rather than in forward pass
+    #    - this is especially ugly currently, as tokenizer might be on different device, shouldn't be us managing it
+    # - make it possible to separate the retrieval and generation steps
     def forward(
         self,
         queries,
@@ -156,14 +160,17 @@ class AtlasModel(AtlasPreTrainedModel):
     ):
         bsz = len(queries)
 
-        queries_tokens = self.query_encoder_tokenizer(queries, return_tensors="pt", padding=True, truncation=True, max_length=512)
+        queries_tokens = self.retriever_tokenizer(queries, return_tensors="pt", padding=True, truncation=True, max_length=512)
 
-        query_hidden_states = self.query_passage_encoder(input_ids=queries_tokens["input_ids"].to(self.device), attention_mask=queries_tokens["attention_mask"].to(self.device))
+        query_hidden_states = self.retriever(input_ids=queries_tokens["input_ids"].to(self.device), attention_mask=queries_tokens["attention_mask"].to(self.device))
 
         query_hidden_states = query_hidden_states.cpu().detach().numpy()
         _, passage_ids = self.index.search_batch("embeddings", query_hidden_states, topk)
         docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
+
+        # todo: move this out to retriever - it's not the model's job to do this and it should be configurable
         passages = [[f'{queries[i]} context: {passage}' for passage in doc["text"]] for i, doc in enumerate(docs)]
+
 
         def encode_passages(batch, tokenizer, max_length):
             bsz = len(batch)
@@ -180,13 +187,40 @@ class AtlasModel(AtlasPreTrainedModel):
             tokens = {k: v.view(bsz, n, -1) for k, v in tokens.items()}
             
             return tokens
-
+        
         reader_tokens = encode_passages(passages, self.generator_tokenizer, 512)
+
+        # <EXTRACT TO CALLER>
         labels = self.generator_tokenizer(target, return_tensors="pt", padding=True, truncation=True, max_length=512)['input_ids'].to(self.device)
         labels[labels == self.generator_tokenizer.pad_token_id] = -100
+        # </EXTRACT TO CALLER>
 
         reader_ids = reader_tokens["input_ids"].to(self.device)  # FIXME (Not added by ae99, TODO figure out why)
         reader_mask = reader_tokens["attention_mask"].bool().to(self.device)
+
+
+        # retriever_loss = None
+        # if train_retriever:
+
+        #     if self.opt.use_gradient_checkpoint_retriever:
+        #         self.retriever.gradient_checkpointing_enable()
+
+        #     query_emb = self.retriever(**query_enc, is_passages=False)
+
+        #     retriever_tokens = {k: v.reshape(-1, v.size(-1)) for k, v in retriever_tokens.items()}
+
+        #     passage_emb = self.retriever(**retriever_tokens, is_passages=True).to(query_emb)
+        #     passage_emb = passage_emb.view(bsz, -1, passage_emb.size(-1))
+        #     retriever_score = torch.einsum("id, ijd->ij", [query_emb, passage_emb])
+
+        #     if self.opt.use_gradient_checkpoint_retriever:
+        #         self.retriever.gradient_checkpointing_disable()
+
+        #     gold_score = self.perplexity_score(reader_ids, reader_mask, decoder_input_ids, labels, cfg, bsz)
+
+        #     if self.training:
+        #         self.reader.train()
+
 
         n_context_training = min(topk, reader_ids.size(1))
         cfg = self.generator.encoder.config
@@ -199,7 +233,7 @@ class AtlasModel(AtlasPreTrainedModel):
         reader_ids_training = reader_ids_training.view(reader_ids.size(0), -1)
         reader_mask_training = reader_mask_training.view(reader_mask.size(0), -1)
 
-        return self.generator(
+        generator_output = self.generator(
             input_ids=reader_ids_training,
             attention_mask=reader_mask_training,
             decoder_input_ids=None,
@@ -207,3 +241,75 @@ class AtlasModel(AtlasPreTrainedModel):
             use_cache=False,
         )
 
+        reader_loss = generator_output[0]
+
+
+        # if train_retriever:
+        #     retriever_score = retriever_score / np.sqrt(query_emb.size(-1))
+
+        #     if gold_score is not None:
+        #         gold_score = gold_score.float()
+        #         retriever_score = retriever_score.float()
+    #             retriever_loss = self.kldivloss(retriever_score, gold_score)
+
+        def kldivloss(self, score, gold_score):
+            gold_score = torch.softmax(gold_score / self.opt.temperature_gold, dim=-1)
+            score = torch.nn.functional.log_softmax(score / self.opt.temperature_score, dim=-1)
+            return torch.nn.KLDivLoss()(score, gold_score)
+    
+    @torch.no_grad()
+    def generate(self, tokens, query, choices=None):
+        cfg = self.reader.encoder.config
+        cfg.bsz = tokens["input_ids"].size(0)
+        cfg.n_context = min(self.opt.n_context, tokens["input_ids"].size(1))
+
+        tokens = {k: v.view(v.size(0), -1) for k, v in tokens.items()}
+
+        bos_token_id = None
+
+        prefix_allowed_tokens_fn = None
+        if self.opt.decoder_prompt_format is not None:
+            prefix_str = [self.opt.decoder_prompt_format.format_map({"query": q}) for q in query]
+            prefix_allowed_tokens_fn = self.get_prefix_allowed_tokens_fn(prefix_str)
+
+        outputs = self.generator.generate(
+            input_ids=tokens["input_ids"].cuda(),
+            attention_mask=tokens["attention_mask"].cuda(),
+            num_return_sequences=1,
+            max_length=self.opt.generation_max_length,
+            min_length=self.opt.generation_min_length,
+            num_beams=self.opt.generation_num_beams,
+            length_penalty=self.opt.generation_length_penalty,
+            forced_bos_token_id=bos_token_id,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+        )
+
+        return outputs
+
+    def perplexity_score(self, reader_ids, reader_mask, decoder_input_ids, labels, cfg, bsz):
+        with torch.no_grad():
+            self.reader.eval()
+            total_context = reader_ids.size(1)
+            cfg.n_context = 1
+            cfg.bsz = bsz * total_context
+            reader_ids_score = reader_ids.view(bsz * total_context, -1)
+            reader_mask_score = reader_mask.view(bsz * total_context, -1)
+            repeated_decoder_input_ids = torch.repeat_interleave(decoder_input_ids, total_context, dim=0)
+            repeated_labels = torch.repeat_interleave(labels, total_context, dim=0)
+            reader_output = self.reader(
+                input_ids=reader_ids_score.cuda(),
+                attention_mask=reader_mask_score.cuda(),
+                decoder_input_ids=repeated_decoder_input_ids,
+                labels=repeated_labels,
+                use_cache=False,
+            )
+            token_loss = nn.functional.cross_entropy(
+                reader_output.logits.view(-1, reader_output.logits.size(-1)),
+                repeated_labels.flatten(),
+                reduction="none",
+            )
+            gold_score = token_loss.view(bsz, total_context, -1)
+            z = (repeated_labels.view(bsz, total_context, -1) > -1).sum(dim=-1)
+            gold_score = -gold_score.sum(dim=-1) / z
+
+            return gold_score
