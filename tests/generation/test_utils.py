@@ -2882,7 +2882,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             num_beams=num_beams,
             max_length=model.config.max_length,
             device=model.device,
-            constraints=constraints
+            constraints=constraints,
         )
 
         # instantiate logits processors

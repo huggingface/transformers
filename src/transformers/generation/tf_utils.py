@@ -3069,11 +3069,11 @@ class TFGenerationMixin:
             if length_penalty < 0.0:
                 best_running_score = running_scores[:, :1] / (max_length**length_penalty)
             else:
-                best_running_score = running_scores[:, :1] / (tf.cast(cur_len, dtype=tf.float32)**length_penalty)
+                best_running_score = running_scores[:, :1] / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
             worst_finished_score = tf.where(
                 is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e9
             )
-            improvement_still_possible = tf.math.reduce_all(worst_finished_score < best_running_score)
+            improvement_still_possible = tf.math.reduce_any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
             still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & early_stopping)

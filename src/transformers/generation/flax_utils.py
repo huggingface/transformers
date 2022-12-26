@@ -804,7 +804,7 @@ class FlaxGenerationMixin:
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
-            improvement_still_possible = jnp.all(worst_finished_score < best_running_score)
+            improvement_still_possible = jnp.any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
             still_open_beam = ~(jnp.all(state.is_sent_finished) & early_stopping)

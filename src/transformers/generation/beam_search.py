@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from abc import ABC, abstractmethod
 from collections import UserDict
 from typing import List, Optional, Tuple
@@ -433,7 +432,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         self.device = device
         self.length_penalty = length_penalty
         self.do_early_stopping = do_early_stopping
-        self.max_length = max_length,
+        self.max_length = (max_length,)
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
         self.num_beam_groups = num_beam_groups
         self.group_size = self.num_beams // self.num_beam_groups

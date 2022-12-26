@@ -1853,7 +1853,8 @@ class TFModelTesterMixin:
 
             # fix config for models with additional sequence-length limiting settings
             for var_name in ["max_position_embeddings", "max_target_positions"]:
-                if hasattr(config, var_name):
+                attr = getattr(config, var_name, None)
+                if attr is not None and attr < generate_kwargs["max_new_tokens"]:
                     try:
                         setattr(config, var_name, generate_kwargs["max_new_tokens"])
                     except NotImplementedError:

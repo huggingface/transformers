@@ -670,12 +670,10 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         hypotheses_batch = hf.generate(
             input_ids=dct["input_ids"],
             attention_mask=dct["attention_mask"],
-            num_beams=2,
         )
 
         assert hypotheses_batch[:, 1].numpy().tolist() == [0, 0, 0, 0]  # test force_bos_token_to_be_generated
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        breakpoint()
         expected_batch = [
             EXPECTED_SUMMARY_FRANCE,
             EXPECTED_SUMMARY_SHORTER,
