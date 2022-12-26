@@ -438,14 +438,14 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         create using from_dict and kwargs e.g. `MaskFormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
         """
+        image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
             warnings.warn(
                 "The `max_size` parameter is deprecated and will be removed in v4.27. "
                 "Please specify in `size['longest_edge'] instead`.",
                 FutureWarning,
             )
-            max_size = kwargs.pop("max_size")
-            image_processor_dict["max_size"] = max_size
+            image_processor_dict["max_size"] = kwargs.pop("max_size")
 
         if "size_divisibility" in kwargs:
             warnings.warn(
@@ -453,8 +453,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 "Please specify `size_divisor` instead`.",
                 FutureWarning,
             )
-            size_divisibility = kwargs.pop("size_divisibility")
-            image_processor_dict["size_divisor"] = size_divisibility
+            image_processor_dict["size_divisor"] = kwargs.pop("size_divisibility")
 
         return super().from_dict(image_processor_dict, **kwargs)
 

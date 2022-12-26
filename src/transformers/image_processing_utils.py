@@ -316,6 +316,7 @@ class ImageProcessingMixin(PushToHubMixin):
             [`~image_processing_utils.ImageProcessingMixin`]: The image processor object instantiated from those
             parameters.
         """
+        image_processor_dict = image_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         # The `size` parameter is a dict and was previously an int or tuple in feature extractors.

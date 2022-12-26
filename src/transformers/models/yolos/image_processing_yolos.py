@@ -733,15 +733,14 @@ class YolosImageProcessor(BaseImageProcessor):
         create using from_dict and kwargs e.g. `YolosImageProcessor.from_pretrained(checkpoint, size=600,
         max_size=800)`
         """
+        image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
             warnings.warn(
                 "The `max_size` parameter is deprecated and will be removed in v4.27. "
                 "Please specify in `size['longest_edge'] instead`.",
                 FutureWarning,
             )
-            max_size = kwargs.pop("max_size")
-            image_processor_dict["max_size"] = max_size
-
+            image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
                 "The `pad_and_return_pixel_mask` parameter is deprecated and will be removed in v4.27. "
@@ -749,6 +748,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 FutureWarning,
             )
             image_processor_dict["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
+
         return super().from_dict(image_processor_dict, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation

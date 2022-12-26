@@ -191,6 +191,7 @@ class ViltImageProcessor(BaseImageProcessor):
         Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
         is create using from_dict and kwargs e.g. `ViltImageProcessor.from_pretrained(checkpoint, reduce_labels=True)`
         """
+        image_processor_dict = image_processor_dict.copy()
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
                 "The `pad_and_return_pixel_mask` parameter is deprecated and will be removed in v4.27. "

@@ -299,6 +299,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         create using from_dict and kwargs e.g. `FlavaImageProcessor.from_pretrained(checkpoint, codebook_size=600)`
         """
+        image_processor_dict = image_processor_dict.copy()
         if "codebook_size" in kwargs:
             image_processor_dict["codebook_size"] = kwargs.pop("codebook_size")
         if "codebook_crop_size" in kwargs:

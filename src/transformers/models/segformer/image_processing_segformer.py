@@ -126,6 +126,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         is create using from_dict and kwargs e.g. `SegformerImageProcessor.from_pretrained(checkpoint,
         reduce_labels=True)`
         """
+        image_processor_dict = image_processor_dict.copy()
         if "reduce_labels" in kwargs:
             warnings.warn(
                 "The `reduce_labels` parameter is deprecated and will be removed in v4.27. "
@@ -133,6 +134,7 @@ class SegformerImageProcessor(BaseImageProcessor):
                 FutureWarning,
             )
             image_processor_dict["do_reduce_labels"] = kwargs.pop("reduce_labels")
+
         return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(

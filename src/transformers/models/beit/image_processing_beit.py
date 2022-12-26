@@ -137,6 +137,7 @@ class BeitImageProcessor(BaseImageProcessor):
         Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
         is create using from_dict and kwargs e.g. `BeitImageProcessor.from_pretrained(checkpoint, reduce_labels=True)`
         """
+        image_processor_dict = image_processor_dict.copy()
         if "reduce_labels" in kwargs:
             warnings.warn(
                 "The `reduce_labels` parameter is deprecated and will be removed in v4.27. "
@@ -144,6 +145,7 @@ class BeitImageProcessor(BaseImageProcessor):
                 FutureWarning,
             )
             image_processor_dict["do_reduce_labels"] = kwargs.pop("reduce_labels")
+
         return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
