@@ -23,7 +23,14 @@ from transformers.testing_utils import require_tf, slow
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import AutoTokenizer, TFAutoModelForCausalLM, TFAutoModelForSeq2SeqLM, tf_top_k_top_p_filtering
+    from transformers import (
+        AutoTokenizer,
+        GPT2Tokenizer,
+        TFAutoModelForCausalLM,
+        TFAutoModelForSeq2SeqLM,
+        TFGPT2LMHeadModel,
+        tf_top_k_top_p_filtering,
+    )
 
 
 @require_tf
@@ -181,3 +188,38 @@ class TFGenerationIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "foo"):
             fake_model_kwargs = {"foo": "bar"}
             model.generate(input_ids, **fake_model_kwargs)
+
+    def test_cache_limit_model_kwargs(self):
+        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        def cache_to_tensor(cache) -> tf.Tensor:
+            return tf.stack([tf.stack([kv for kv in layer]) for layer in cache])
+
+        def tf_tensors_equal(x1: tf.Tensor, x2: tf.Tensor) -> bool:
+            return tf.math.reduce_all(tf.equal(x1, x2))
+
+        starting_text = ["The soldiers, who had", "The child was taken to"]
+        batch_size = len(starting_text)
+        cache_limit = 4
+
+        input_ids1 = tokenizer(starting_text, return_tensors="tf").input_ids
+        position_ids1 = tf.expand_dims(tf.range(input_ids1.shape[1]), axis=0)
+        attention_mask1 = tf.ones_like(input_ids1)
+        model_kwargs1 = {"position_ids": position_ids1, "attention_mask": attention_mask1}
+        outputs1 = model(input_ids1, **model_kwargs1)
+
+        model_kwargs2 = model._update_model_kwargs_for_generation(outputs1, model_kwargs1, cache_limit=cache_limit)
+
+        self.assertEqual(
+            tf_tensors_equal(
+                cache_to_tensor(outputs1.past_key_values)[..., -cache_limit:, :],
+                cache_to_tensor(model_kwargs2["past"]),
+            ),
+            True,
+        )
+        self.assertEqual(
+            tf_tensors_equal(tf.ones((batch_size, cache_limit + 1), dtype=tf.int32), model_kwargs2["attention_mask"]),
+            True,
+        )
+        self.assertEqual(tf_tensors_equal(position_ids1[:, -1:] + 1, model_kwargs2["position_ids"]), True)

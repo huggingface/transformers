@@ -483,6 +483,7 @@ class TFGenerationMixin:
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        cache_limit=None,
         output_scores=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -579,6 +580,9 @@ class TFGenerationMixin:
             use_cache (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -714,6 +718,7 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 decoder_start_token_id=decoder_start_token_id,
                 use_cache=use_cache,
+                cache_limit=cache_limit,
                 seed=seed,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
@@ -787,9 +792,16 @@ class TFGenerationMixin:
             model_kwargs["encoder_hidden_states"] = None
 
         if input_ids is not None:
-            batch_size = shape_list(input_ids)[0]  # overridden by the input batch_size
+            batch_size, seq_len = shape_list(input_ids)[:2]  # overridden by the input batch_size
         else:
-            batch_size = 1
+            batch_size = seq_len = 1
+
+        if "position_ids" in set(inspect.signature(self.call).parameters) and "position_ids" not in model_kwargs:
+            if "past" in model_kwargs and model_kwargs["past"] is not None:
+                cache_l = shape_list(model_kwargs["past"][0][0])[-2]
+            else:
+                cache_l = 0
+            model_kwargs["position_ids"] = tf.expand_dims(tf.range(cache_l, cache_l + seq_len, dtype=tf.int32), axis=0)
 
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
         assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
@@ -963,6 +975,7 @@ class TFGenerationMixin:
             encoder_outputs=encoder_outputs,
             attention_mask=attention_mask,
             use_cache=use_cache,
+            cache_limit=cache_limit,
             forced_bos_token_id=forced_bos_token_id,
             forced_eos_token_id=forced_eos_token_id,
             return_dict_in_generate=return_dict_in_generate,
@@ -993,6 +1006,7 @@ class TFGenerationMixin:
         encoder_outputs,
         attention_mask,
         use_cache,
+        cache_limit,
         forced_bos_token_id,
         forced_eos_token_id,
         return_dict_in_generate,
@@ -1260,14 +1274,26 @@ class TFGenerationMixin:
             cur_len = cur_len + 1
 
             # re-order internal states
+            cache_exceeding_limit = self._is_cache_exceeding_limit(past, cache_limit)
             if past is not None:
                 past = self._reorder_cache(past, beam_idx)
+                if cache_exceeding_limit:
+                    past = [layer[..., -cache_limit:, :] for layer in past]
+                # increment position_ids values
+                if "position_ids" in kwargs:
+                    if shape_list(kwargs["position_ids"])[1] != 1:  # after the first decoding step
+                        kwargs["position_ids"] = kwargs["position_ids"][..., -1:]  # for the token just predicted
+                    kwargs["position_ids"] += 1
+            else:
+                kwargs["position_ids"] = tf.concat([kwargs["position_ids"], kwargs["position_ids"][:, -1:] + 1])
 
             # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = tf.concat(
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
+                if cache_exceeding_limit:
+                    attention_mask = attention_mask[:, -cache_limit - 1 :]  # -1 for input_id
 
         # finalize all open beam hypotheses and end to generated hypotheses
         for batch_idx in range(batch_size):
@@ -1483,6 +1509,7 @@ class TFGenerationMixin:
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        cache_limit=None,
         seed=None,
         output_scores=None,
         output_attentions=None,
@@ -1754,7 +1781,7 @@ class TFGenerationMixin:
         # 3. Define model inputs
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)
         # inputs_ids now has to be defined and cannot be None anymore
-        batch_size = shape_list(input_ids)[0]
+        batch_size, seq_len = shape_list(input_ids)[:2]
 
         # 4. Prepare other model kwargs
         if output_attentions is not None:
@@ -1765,6 +1792,12 @@ class TFGenerationMixin:
             model_kwargs["use_cache"] = use_cache
         if attention_mask is not None:
             model_kwargs["attention_mask"] = attention_mask
+        if "position_ids" in set(inspect.signature(self.call).parameters) and "position_ids" not in model_kwargs:
+            if "past" in model_kwargs and model_kwargs["past"] is not None:
+                cache_l = shape_list(model_kwargs["past"][0][0])[-2]
+            else:
+                cache_l = 0
+            model_kwargs["position_ids"] = tf.expand_dims(tf.range(cache_l, cache_l + seq_len, dtype=tf.int32), axis=0)
 
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
@@ -1867,6 +1900,7 @@ class TFGenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                cache_limit=cache_limit,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
@@ -1886,6 +1920,7 @@ class TFGenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                cache_limit=cache_limit,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
@@ -1910,6 +1945,7 @@ class TFGenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                cache_limit=cache_limit,
                 seed=seed,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
@@ -1942,6 +1978,7 @@ class TFGenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                cache_limit=cache_limit,
                 length_penalty=length_penalty,
                 early_stopping=early_stopping,
                 logits_processor=logits_processor,
@@ -2094,19 +2131,49 @@ class TFGenerationMixin:
             past = outputs.past_buckets_states
         return past
 
+    @staticmethod
+    def _is_cache_exceeding_limit(cache: Tuple[tf.Tensor], cache_limit: int):
+        if cache is None or cache_limit is None:
+            return False
+        if cache[0][0].shape[-2] > cache_limit:
+            return True
+        return False
+
     def _update_model_kwargs_for_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
+        self,
+        outputs: ModelOutput,
+        model_kwargs: Dict[str, Any],
+        is_encoder_decoder: bool = False,
+        cache_limit: int = None,
     ) -> Dict[str, Any]:
         # update past
         model_kwargs["past"] = self._extract_past_from_model_output(outputs)
+
+        # update the cache if a size limit was given and it exceeds it
+        cache_exceeding_limit = self._is_cache_exceeding_limit(model_kwargs["past"], cache_limit)
+        if cache_exceeding_limit:
+            model_kwargs["past"] = [[kv[..., -cache_limit:, :] for kv in layer] for layer in model_kwargs["past"]]
+        # increment position_ids values
+        if "position_ids" in model_kwargs:
+            if model_kwargs["past"] is not None:
+                if shape_list(model_kwargs["position_ids"])[1] != 1:
+                    model_kwargs["position_ids"] = model_kwargs["position_ids"][..., -1:]  # for the tok just predicted
+                model_kwargs["position_ids"] += 1
+            else:
+                model_kwargs["position_ids"] = tf.concat(
+                    [model_kwargs["position_ids"], model_kwargs["position_ids"][:, -1:] + 1]
+                )
 
         # update attention mask
         if not is_encoder_decoder:
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
-                model_kwargs["attention_mask"] = tf.concat(
+                attention_mask = tf.concat(
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
+                if cache_exceeding_limit:  # keep the size of the mask to cover cache + input
+                    attention_mask = attention_mask[:, -cache_limit - 1 :]  # -1 for input_id
+                model_kwargs["attention_mask"] = attention_mask
 
         return model_kwargs
 
@@ -2329,6 +2396,7 @@ class TFGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2351,6 +2419,9 @@ class TFGenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2509,7 +2580,10 @@ class TFGenerationMixin:
                 )
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
-                    model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                    model_outputs,
+                    model_kwargs,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    cache_limit=cache_limit,
                 )
                 # if we don't cache past key values we need the whole input
                 if model_kwargs.get("past", None) is None:
@@ -2581,6 +2655,7 @@ class TFGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         seed: Optional[Tuple[int, int]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2607,6 +2682,9 @@ class TFGenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             seed (`List[int]`, *optional*):
                 Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
                 `seed` argument from stateless functions in `tf.random`.
@@ -2787,7 +2865,10 @@ class TFGenerationMixin:
                 )
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
-                    model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                    model_outputs,
+                    model_kwargs,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    cache_limit=cache_limit,
                 )
                 # if we don't cache past key values we need the whole input
                 if model_kwargs.get("past", None) is None:
@@ -2857,6 +2938,7 @@ class TFGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         length_penalty: Optional[float] = None,
         early_stopping: Optional[bool] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
@@ -2879,6 +2961,9 @@ class TFGenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             length_penalty (`float`, *optional*, defaults to 1.0):
                 Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
                 to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
@@ -3235,7 +3320,10 @@ class TFGenerationMixin:
                 )
             else:
                 next_model_kwargs = self._update_model_kwargs_for_generation(
-                    model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                    model_outputs,
+                    model_kwargs,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    cache_limit=cache_limit,
                 )
 
                 # if we don't cache past key values we need the whole input
@@ -3332,6 +3420,7 @@ class TFGenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -3362,6 +3451,9 @@ class TFGenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -3494,7 +3586,10 @@ class TFGenerationMixin:
                     )
                 else:
                     model_kwargs = self._update_model_kwargs_for_generation(
-                        outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                        outputs,
+                        model_kwargs,
+                        is_encoder_decoder=self.config.is_encoder_decoder,
+                        cache_limit=cache_limit,
                     )
 
                 # Expands model inputs top_k times, for batched forward passes (akin to beam search).
@@ -3646,7 +3741,7 @@ class TFGenerationMixin:
                 )
             else:
                 model_kwargs = self._update_model_kwargs_for_generation(
-                    outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                    outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, cache_limit=cache_limit
                 )
 
             next_step_cached_variables = {
