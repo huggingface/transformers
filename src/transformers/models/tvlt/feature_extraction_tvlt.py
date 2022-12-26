@@ -270,6 +270,8 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
                 pipeline.
             resample (`bool`, *optional*):
                 If the sampling rate is not matched, resample the input audio to match.
+            mask_audio (`bool`, *optional*):
+                Whether or not to mask input audio for MAE task.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -277,10 +279,11 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             - **audio_values** -- Audio values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
 
-            - **audio_masks** -- Audio masks to be fed to a model, of shape (batch_size, num_audio_channels).
+            - **audio_masks** -- Audio masks to be fed to a model, of shape (batch_size, num_audio_patches).
 
-        Args:
-        Main method to featurize and prepare for the model one or several sequence(s)."""
+            - **audio_mask_pos_perm** -- Audio MAE masks position permutation to be fed to a model, of shape
+              (batch_size, num_audio_patches).
+        """
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -299,28 +302,27 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             isinstance(raw_speech, (list, tuple))
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
         )
-
         if is_batched:
             raw_speech = [np.asarray([speech], dtype=np.float32).T for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float32)
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
             raw_speech = raw_speech.astype(np.float32)
-
         # always return batch
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
 
+        # Convert audio signals to log mel spectrograms, truncate by time axis
         audio_features = [
             self._np_extract_fbank_features(waveform.squeeze()).T[: self.audio_size] for waveform in raw_speech
         ]
         if isinstance(audio_features[0], List):
             audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
 
+        # Create audio attention mask
         max_patch_len = max(
             [ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len for feature in audio_features]
-        )
-        max_time_len = max_patch_len // self.freq_len * self.patch_size[0]
+        )  # The maximum number of audio patches in a batch
         if return_attention_mask:
             audio_masks = [
                 (ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len) * [1]
@@ -330,6 +332,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             audio_masks = np.array(audio_masks).astype(np.float32)
 
         # convert into correct format for padding
+        max_time_len = max_patch_len // self.freq_len * self.patch_size[0]  # The maximum audio size in a batch
         padded_audio_features = np.ones([len(audio_features), 1, max_time_len, 128]).astype(np.float32)
         padded_audio_features = padded_audio_features * self.padding_value
         for i in range(len(audio_features)):
@@ -342,7 +345,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         else:
             data = {"audio_values": padded_audio_features}
 
-        # return masking tensor
+        # return masking tensor for MAE objective
         if mask_audio:
             batch_size = len(padded_audio_features)
             if self.masking_type == "frame-level":
@@ -360,5 +363,4 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             data.update({"audio_mask_pos_perm": ids_shuffle})
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
         return encoded_inputs

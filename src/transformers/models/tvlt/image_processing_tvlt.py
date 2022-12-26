@@ -308,8 +308,9 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> PIL.Image.Image:
         """
+        Preprocess an videos or image or batch of videos or images.
+
         Args:
-        Preprocess an image or batch of images.
             visual_inputs (`ImageInput`):
                 Images or videos to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
@@ -345,7 +346,27 @@ class TvltImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                     - Unset: Use the inferred channel dimension format of the input image.
-            is_mixed (`bool`, *optional*, if the input video has negative samples.
+            is_mixed (`bool`, *optional*):
+                If the input video has negative samples.
+            mask_pixel (`bool`, *optional*):
+                Whether or not to mask input videos or images for MAE task.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
+              width).
+
+            - **pixel_masks** -- Pixel masks to be fed to a model, of shape (batch_size, num_pixel_patches).
+
+            - **pixel_values_mixed** -- Pixel values with both postive or negative to be fed to a model, of shape
+              (batch_size, num_channels, height, width).
+
+            - **pixel_masks_mixed** -- Pixel masks with both postive or negative to be fed to a model, of shape
+              (batch_size, num_pixel_patches).
+
+            - **pixel_mask_pos_perm** -- Pixel MAE masks position permutation to be fed to a model, of shape
+              (batch_size, num_pixel_patches).
         """
 
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -406,6 +427,7 @@ class TvltImageProcessor(BaseImageProcessor):
             for visual_input in visual_inputs
         ]
 
+        # If videos contain both positive/negative, use mixed key for video-audio matching task
         if is_mixed:
             data = {"pixel_values_mixed": visual_inputs, "pixel_masks_mixed": visual_masks}
         else:

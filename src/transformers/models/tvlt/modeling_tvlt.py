@@ -435,7 +435,6 @@ class TvltSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -488,7 +487,6 @@ class TvltIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -748,7 +746,7 @@ class TvltModel(TvltPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TvltFeatureExtractor, TvltModel
+        >>> from transformers import TvltProcessor, TvltModel
         >>> import numpy as np
         >>> import torch
 
@@ -756,10 +754,10 @@ class TvltModel(TvltPreTrainedModel):
         >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> feature_extractor = TvltFeatureExtractor.from_pretrained("TVLT/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TvltModel.from_pretrained("TVLT/tvlt-base")
 
-        >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
+        >>> input_dict = processor(pixel, audio, sampling_rate=44100, return_tensors="pt")
 
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss
@@ -845,27 +843,6 @@ class TvltDecoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-        r"""
-        Returns:
-
-        Examples:
-        ```python
-        >>> from transformers import TvltProcessor, TvltForPreTraining
-        >>> import numpy as np
-        >>> import torch
-
-        >>> num_frames = 8
-        >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
-        >>> audio = list(np.random.randn(10000))
-
-        >>> feature_extractor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
-        >>> model = TvltForPreTraining.from_pretrained("TVLT/tvlt-base")
-
-        >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
-
-        >>> outputs = model(**input_dict)
-        >>> loss = outputs.loss
-        ```"""
         # apply Transformer layers (blocks)
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1071,12 +1048,15 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         >>> num_frames = 8
         >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> pixel_mixed = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> feature_extractor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TvltForPreTraining.from_pretrained("TVLT/tvlt-base")
 
-        >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
+        >>> input_dict = processor(
+        ...     pixel, audio, pixel_mixed, sampling_rate=44100, mask_pixel=True, mask_audio=True, return_tensors="pt"
+        ... )
 
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss
@@ -1107,7 +1087,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
         if self.task_mae:
             assert (
                 pixel_mask_pos_perm is not None and audio_mask_pos_perm is not None
-            ), "MAE task requires pixel masks and audio masks"
+            ), "MAE task requires pixel masks and audio masks, set mask_audio and mask_pixel to True in TvltProcessor"
 
             outputs = self.tvlt(
                 pixel_values,
@@ -1257,10 +1237,10 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
         >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> feature_extractor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TvltForQuestionAnswering.from_pretrained("TVLT/tvlt-base")
 
-        >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
+        >>> input_dict = processor(pixel, audio, sampling_rate=44100, return_tensors="pt")
 
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss
@@ -1346,10 +1326,10 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> feature_extractor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TvltForAudioVisualClassification.from_pretrained("TVLT/tvlt-base")
 
-        >>> input_dict = feature_extractor(pixel, audio, return_tensors="pt")
+        >>> input_dict = processor(pixel, audio, sampling_rate=44100, return_tensors="pt")
 
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss

@@ -51,7 +51,7 @@ class TvltConfig(PretrainedConfig):
         num_audio_channels (`int`, *optional*, defaults to 1):
             The number of input audio channels.
         num_frames (`int`, *optional*, defaults to 16):
-            The number of frames in each video.
+            The maximum number of frames for an input video.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -83,8 +83,6 @@ class TvltConfig(PretrainedConfig):
             Number of hidden layers in the decoder.
         decoder_intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
-        norm_pix_loss (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the target patch pixels.
         pixel_mask_ratio (`float`, *optional*, defaults to `0.75`):
             Pixel patch masking ratio.
         audio_mask_ratio (`float`, *optional*, defaults to `0.15`):
@@ -139,7 +137,6 @@ class TvltConfig(PretrainedConfig):
         decoder_hidden_size=512,
         decoder_num_hidden_layers=8,
         decoder_intermediate_size=2048,
-        norm_pix_loss=True,
         pixel_mask_ratio=0.75,
         audio_mask_ratio=0.15,
         task_matching=True,
@@ -175,7 +172,6 @@ class TvltConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.decoder_intermediate_size = decoder_intermediate_size
-        self.norm_pix_loss = norm_pix_loss
         self.pixel_mask_ratio = pixel_mask_ratio
         self.audio_mask_ratio = audio_mask_ratio
 
