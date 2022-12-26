@@ -128,7 +128,7 @@ class CPMAntModelTester:
         model.to(torch_device)
         model.eval()
 
-        logits, hidden_states = model(**input_ids)
+        logits, hidden_states, _ = model(**input_ids)
         self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
         self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
 
@@ -222,7 +222,7 @@ class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
         input_ids = tokenizer.get_model_input(texts)
-        logits, hidden = model(**input_ids)
+        logits, hidden, _ = model(**input_ids)
         vocab_size = 30720
         expected_shape = torch.Size((1, 38, vocab_size))
 

@@ -1144,54 +1144,9 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         self.input_embedding = CPMAntEmbeddings(vocab_size=config.vocab_size)
         self.position_bias = CPMAntSegmentPositionEmbedding()
         self.prompt_length = config.prompt_length
+        self.lm_head = self.input_embedding.projection
 
     def forward(
-        self,
-        input: torch.Tensor,
-        length: torch.Tensor,
-        context: torch.Tensor,
-        position: torch.Tensor,
-        segment: torch.Tensor,
-        span: torch.Tensor,
-    ):
-        """
-        Args:
-            input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
-            length (`torch.Tensor`): length of input, shape = `(batch)`
-            context (`torch.Tensor`): context determines whether model predicts, shape = `(batch, seq_len)`
-            position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
-            segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
-            span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
-        """
-        batch = input.size(0)
-        seqlen = input.size(1)
-        input_prompt = input[:, : self.prompt_length].contiguous()
-        input_ids = input[:, self.prompt_length :].contiguous()
-
-        prompt_states = self.prompt_embedding(input_prompt)
-        hidden_states = self.input_embedding(input_ids)
-        segment_states = self.segment_embedding(segment)
-        hidden_states = torch.cat([prompt_states, hidden_states], 1) + segment_states
-
-        with torch.no_grad():
-            device = input.device
-            directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(
-                -1, 1
-            )
-            attention_mask = context[:, None, :] | (
-                context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
-            )
-            attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
-            mask_1d = torch.arange(seqlen, device=device)[None, :].repeat(batch, 1) < length[:, None]
-            attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
-
-        position_bias = self.position_bias(position, position, segment, segment)
-
-        hidden_states = self.encoder(hidden_states, attention_mask, position_bias)
-        logits = self.input_embedding.projection(hidden_states)
-        return logits, hidden_states
-
-    def inference(
         self,
         input: torch.Tensor,
         length: torch.Tensor,
@@ -1254,23 +1209,22 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         hidden_states, present_key_values = self.encoder(
             hidden_states, attention_mask, position_bias, True, past_key_values
         )
-        logits = self.input_embedding.projection(hidden_states)
+        logits = self.lm_head(hidden_states)
         return logits, hidden_states, present_key_values
 
     def get_input_embeddings(self):
-        embeddings = {
-            "prompt": self.prompt_embedding,
-            "segment": self.segment_embedding,
-            "input": self.input_embedding,
-            "position": self.position_bias,
-        }
-        return embeddings
+        return self.lm_head
 
     def set_input_embeddings(self, embeddings, **kwargs):
-        self.prompt_embedding = embeddings["prompt"]
-        self.segment_embedding = embeddings["segment"]
-        self.input_embedding = embeddings["input"]
-        self.position_bias = embeddings["position"]
+        self.lm_head = embeddings
+
+    def prepare_inputs_for_generation(self, input_ids):
+        input_tensors = list(map(self._convert_to_tensors, input_ids))
+        keys = set(input_tensors[0].keys())
+        padded = {}
+        for key in keys:
+            padded[key] = self.pad(input_tensors, key, padding_side="left")
+        return padded
 
     def _convert_to_tensors(self, input_ids, task_id=2):
         model_inputs = {}
@@ -1334,20 +1288,12 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
 
         return tensor
 
-    def _process_texts(self, input_ids):
-        input_tensors = list(map(self._convert_to_tensors, input_ids))
-        keys = set(input_tensors[0].keys())
-        padded = {}
-        for key in keys:
-            padded[key] = self.pad(input_tensors, key, padding_side="left")
-        return padded
-
     def generate(self, input_ids, **kwargs):
         if isinstance(input_ids, torch.Tensor):
             input_ids = input_ids.detach().tolist()
         if not isinstance(input_ids[0], list):
             input_ids = [input_ids]
-        model_inputs = self._process_texts(input_ids)
+        model_inputs = self.prepare_inputs_for_generation(input_ids)
         with torch.inference_mode():
             output_ids = self._decode(model_inputs, **kwargs)
         result = [ii + oi for ii, oi in zip(input_ids, output_ids)]
@@ -1431,7 +1377,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         past_key_values = None
         for i in range(max_length + 1):
             if i == 0:
-                logits, _, past_key_values = self.inference(
+                logits, _, past_key_values = self(
                     input=input,
                     length=length,
                     context=context,
@@ -1441,7 +1387,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                     past_key_values=past_key_values,
                 )
             else:
-                logits, _, past_key_values = self.inference(
+                logits, _, past_key_values = self(
                     input=input[:, -1:],
                     length=length,
                     context=context,
