@@ -96,6 +96,9 @@ class GenerationConfig(PushToHubMixin):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
+        cache_limit (`int`, *optional*, defaults to `None`):
+            A limit for the size of the cache. If given, the cache will keep the key/values of the last `cache_limit`
+            positions. This can be useful in some conditions to prevent "out of memory" errors.
 
         > Parameters for manipulation of the model output logits
 
@@ -215,6 +218,7 @@ class GenerationConfig(PushToHubMixin):
         self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
         self.use_cache = kwargs.pop("use_cache", True)
+        self.cache_limit = kwargs.pop("cache_limit", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)

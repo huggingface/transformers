@@ -807,6 +807,53 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(output_sample.tolist(), output_generate.tolist())
 
+    def test_sample_generate_with_cache_limit(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            model = model_class(config).to(torch_device).eval()
+
+            cache_limit = 10
+            if model.config.is_encoder_decoder:
+                max_length = 4
+
+            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                model.config.eos_token_id,
+                forced_bos_token_id=model.config.forced_bos_token_id,
+                forced_eos_token_id=model.config.forced_eos_token_id,
+                max_length=max_length,
+            )
+            process_kwargs["cache_limit"] = cache_limit
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+
+            # check `generate()` and `sample()` are equal
+            output_sample, output_generate = self._sample_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                num_return_sequences=1,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
+                logits_warper_kwargs=logits_warper_kwargs,
+                process_kwargs=process_kwargs,
+            )
+            self.assertListEqual(output_sample.tolist(), output_generate.tolist())
+
+            # check `generate()` and `sample()` yield equal results for `num_return_sequences`
+            output_sample, output_generate = self._sample_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                num_return_sequences=3,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
+                logits_warper_kwargs=logits_warper_kwargs,
+                process_kwargs=process_kwargs,
+            )
+            self.assertListEqual(output_sample.tolist(), output_generate.tolist())
+
     def test_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             # disable cache
@@ -2021,6 +2068,39 @@ class GenerationIntegrationTests(unittest.TestCase):
                 max_length=max_length,
                 **model_kwargs,
             )
+
+    def test_cache_limit_model_kwargs(self):
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        def cache_to_tensor(cache) -> torch.Tensor:
+            return torch.stack([torch.stack([kv for kv in layer]) for layer in cache])
+
+        starting_text = ["The soldiers, who had", "The child was taken to"]
+        batch_size = len(starting_text)
+        cache_limit = 4
+
+        input_ids1 = tokenizer(starting_text, return_tensors="pt").input_ids.to(torch_device)
+        position_ids1 = torch.arange(input_ids1.shape[1], dtype=torch.long).unsqueeze(0).to(torch_device)
+        attention_mask1 = torch.ones_like(input_ids1).to(torch_device)
+        model_kwargs1 = {"position_ids": position_ids1.clone(), "attention_mask": attention_mask1}
+        outputs1 = model(input_ids1, **model_kwargs1)
+
+        # input_ids2 = torch.cat([input_ids1, torch.argmax(outputs1.logits[:, -1:], dim=-1)], dim=1)
+        model_kwargs2 = model._update_model_kwargs_for_generation(outputs1, model_kwargs1, cache_limit=cache_limit)
+
+        self.assertEqual(
+            torch.equal(
+                cache_to_tensor(outputs1.past_key_values)[..., -cache_limit:, :],
+                cache_to_tensor(model_kwargs2["past"]),
+            ),
+            True,
+        )
+        self.assertEqual(
+            torch.equal(torch.ones((batch_size, cache_limit + 1)).to(torch_device), model_kwargs2["attention_mask"]),
+            True,
+        )
+        self.assertEqual(torch.equal(position_ids1[:, -1:] + 1, model_kwargs2["position_ids"]), True)
 
     def test_beam_search_warning_if_max_length_is_passed(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""

@@ -690,6 +690,7 @@ class GenerationMixin:
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
+        cache_limit: int = None,
     ) -> Dict[str, Any]:
         # update past
         model_kwargs["past"] = self._extract_past_from_model_output(
@@ -701,13 +702,35 @@ class GenerationMixin:
             token_type_ids = model_kwargs["token_type_ids"]
             model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
 
+        # update the cache if a size limit was given and it exceeds it
+        cache_exceeding_limit = (
+            model_kwargs["past"] is not None
+            and cache_limit is not None
+            and model_kwargs["past"][0][0].shape[-2] > cache_limit
+        )
+        if cache_exceeding_limit:
+            model_kwargs["past"] = [[kv[..., -cache_limit:, :] for kv in layer] for layer in model_kwargs["past"]]
+        # increment position_ids values
+        if "position_ids" in model_kwargs:
+            if model_kwargs["past"] is not None:
+                if model_kwargs["position_ids"].shape[1] != 1:
+                    model_kwargs["position_ids"] = model_kwargs["position_ids"][..., -1:]  # for the tok just predicted
+                model_kwargs["position_ids"] += 1
+            else:
+                model_kwargs["position_ids"] = torch.cat(
+                    [model_kwargs["position_ids"], model_kwargs["position_ids"][:, -1:] + 1], dim=1
+                )
+
         # update attention mask
         if not is_encoder_decoder:
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
-                model_kwargs["attention_mask"] = torch.cat(
+                attention_mask = torch.cat(
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
                 )
+                if cache_exceeding_limit:  # keep the size of the mask to cover cache + input
+                    attention_mask = attention_mask[:, -cache_limit - 1 :]  # -1 for input_id
+                model_kwargs["attention_mask"] = attention_mask
 
         return model_kwargs
 
@@ -1167,12 +1190,20 @@ class GenerationMixin:
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
-        batch_size = inputs_tensor.shape[0]
+        batch_size, seq_len = inputs_tensor.shape[:2]
 
         # 4. Define other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
         model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
         model_kwargs["use_cache"] = generation_config.use_cache
+        if "position_ids" in set(inspect.signature(self.forward).parameters) and "position_ids" not in model_kwargs:
+            cache_l = (
+                model_kwargs["past"][0][0].shape[-2]
+                if "past" in model_kwargs and model_kwargs["past"] is not None
+                else 0
+            )
+            position_ids = torch.arange(cache_l, cache_l + seq_len, device=inputs_tensor.device).long()
+            model_kwargs["position_ids"] = position_ids.unsqueeze(0).view(-1, seq_len)
 
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
@@ -1341,6 +1372,7 @@ class GenerationMixin:
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
+                cache_limit=generation_config.cache_limit,
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
@@ -1363,6 +1395,7 @@ class GenerationMixin:
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
+                cache_limit=generation_config.cache_limit,
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
@@ -1389,6 +1422,7 @@ class GenerationMixin:
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
+                cache_limit=generation_config.cache_limit,
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
@@ -1426,6 +1460,7 @@ class GenerationMixin:
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
+                cache_limit=generation_config.cache_limit,
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
@@ -1464,6 +1499,7 @@ class GenerationMixin:
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
+                cache_limit=generation_config.cache_limit,
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
@@ -1510,6 +1546,7 @@ class GenerationMixin:
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
+                cache_limit=generation_config.cache_limit,
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
@@ -1597,6 +1634,7 @@ class GenerationMixin:
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
+                cache_limit=generation_config.cache_limit,
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
@@ -1614,6 +1652,7 @@ class GenerationMixin:
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -1646,6 +1685,9 @@ class GenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -1697,6 +1739,7 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        cache_limit = cache_limit if cache_limit is not None else self.generation_config.cache_limit
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -1768,6 +1811,7 @@ class GenerationMixin:
                     model_kwargs,
                     is_encoder_decoder=self.config.is_encoder_decoder,
                     standardize_cache_format=True,
+                    cache_limit=cache_limit,
                 )
 
                 # Expands model inputs top_k times, for batched forward passes (akin to beam search).
@@ -1914,7 +1958,7 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, cache_limit=cache_limit
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -1957,6 +2001,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -1985,6 +2030,9 @@ class GenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2056,6 +2104,7 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        cache_limit = cache_limit if cache_limit is not None else self.generation_config.cache_limit
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2146,7 +2195,7 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, cache_limit=cache_limit
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2190,6 +2239,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2221,6 +2271,9 @@ class GenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2309,6 +2362,7 @@ class GenerationMixin:
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        cache_limit = cache_limit if cache_limit is not None else self.generation_config.cache_limit
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2402,7 +2456,7 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, cache_limit=cache_limit
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2446,6 +2500,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2476,6 +2531,9 @@ class GenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2565,6 +2623,7 @@ class GenerationMixin:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        cache_limit = cache_limit if cache_limit is not None else self.generation_config.cache_limit
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2694,7 +2753,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, cache_limit=cache_limit
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
@@ -2760,6 +2819,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2794,6 +2854,9 @@ class GenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2889,6 +2952,7 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        cache_limit = cache_limit if cache_limit is not None else self.generation_config.cache_limit
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -3014,7 +3078,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, cache_limit=cache_limit
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
@@ -3079,6 +3143,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -3109,6 +3174,9 @@ class GenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -3202,6 +3270,7 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        cache_limit = cache_limit if cache_limit is not None else self.generation_config.cache_limit
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -3382,7 +3451,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, cache_limit=cache_limit
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
@@ -3445,6 +3514,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        cache_limit: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -3480,6 +3550,9 @@ class GenerationMixin:
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
+            cache_limit (`int`, *optional*, default to `None`):
+                A limit for the size of the cache. If given, the cache will keep the key/values of the last
+                `cache_limit` positions. This can be useful in some conditions to prevent "out of memory" errors.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -3575,6 +3648,7 @@ class GenerationMixin:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        cache_limit = cache_limit if cache_limit is not None else self.generation_config.cache_limit
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -3702,7 +3776,7 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, cache_limit=cache_limit
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
