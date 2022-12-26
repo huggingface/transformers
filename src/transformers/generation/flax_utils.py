@@ -797,7 +797,7 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            if length_penalty < 0.0:
+            if length_penalty > 0.0:
                 best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
             else:
                 best_running_score = state.running_scores[:, -1:] / (state.cur_len**length_penalty)

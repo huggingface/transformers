@@ -1996,6 +1996,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
             num_beams=num_beams,
+            max_length=max_length,
             device=torch_device,
         )
         with self.assertWarns(UserWarning):

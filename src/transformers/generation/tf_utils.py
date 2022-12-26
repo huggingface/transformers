@@ -3066,7 +3066,7 @@ class TFGenerationMixin:
             not_max_length_yet = cur_len < max_length
 
             # 2. can the new beams still improve?
-            if length_penalty < 0.0:
+            if length_penalty > 0.0:
                 best_running_score = running_scores[:, :1] / (max_length**length_penalty)
             else:
                 best_running_score = running_scores[:, :1] / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
