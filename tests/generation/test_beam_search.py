@@ -82,7 +82,7 @@ class BeamSearchTester:
 
     def check_beam_hypotheses(self, input_ids, *args):
         # check that correct number of beam hypotheses is set in beam scorer
-        beam_scorer = self.prepare_beam_scorer(do_early_stopping=True)
+        beam_scorer = self.prepare_beam_scorer(do_early_stopping=True, max_length=input_ids.shape[-1])
         beam_hyp = beam_scorer._beam_hyps[0]
 
         self.parent.assertEqual(len(beam_scorer._beam_hyps), self.batch_size)
@@ -101,7 +101,7 @@ class BeamSearchTester:
         self.parent.assertTrue(beam_hyp.is_done(-10.0, 5))
 
         # re-init
-        beam_scorer = self.prepare_beam_scorer(do_early_stopping=False)
+        beam_scorer = self.prepare_beam_scorer(do_early_stopping=False, max_length=input_ids.shape[-1])
         beam_hyp = beam_scorer._beam_hyps[0]
 
         # add `num_beams + 1` beams to change `worst_score`
@@ -311,7 +311,9 @@ class ConstrainedBeamSearchTester:
 
     def check_beam_hypotheses(self, input_ids, *args):
         # check that correct number of beam hypotheses is set in beam scorer
-        constrained_beam_scorer = self.prepare_constrained_beam_scorer(do_early_stopping=True)
+        constrained_beam_scorer = self.prepare_constrained_beam_scorer(
+            do_early_stopping=True, max_length=input_ids.shape[-1]
+        )
         beam_hyp = constrained_beam_scorer._beam_hyps[0]
 
         self.parent.assertEqual(len(constrained_beam_scorer._beam_hyps), self.batch_size)
@@ -330,7 +332,9 @@ class ConstrainedBeamSearchTester:
         self.parent.assertTrue(beam_hyp.is_done(-10.0, 5))
 
         # re-init
-        constrained_beam_scorer = self.prepare_constrained_beam_scorer(do_early_stopping=False)
+        constrained_beam_scorer = self.prepare_constrained_beam_scorer(
+            do_early_stopping=False, max_length=input_ids.shape[-1]
+        )
         beam_hyp = constrained_beam_scorer._beam_hyps[0]
 
         # add `num_beams + 1` beams to change `worst_score`
