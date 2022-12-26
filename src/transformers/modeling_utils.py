@@ -609,7 +609,6 @@ def _load_state_dict_into_meta_model(
             param_name = param_name[len(start_prefix) :]
 
         module_name = param_name
-        force_upcast_dtype = None
         set_module_kwargs = {}
 
         # We convert floating dtypes to the `dtype` passed. We want to keep the buffers/params
@@ -621,11 +620,11 @@ def _load_state_dict_into_meta_model(
                 and dtype == torch.float16
             ):
                 param = param.to(torch.float32)
-                force_upcast_dtype = torch.float32
 
                 # For backward compatibility with older versions of `accelerate`
-                if set_module_tensor_to_device.__code__.co_argcount == 5:
-                    set_module_kwargs["dtype"] = force_upcast_dtype
+                # TODO: @sgugger replace this check with version check at the next `accelerate` release
+                if "dtype" in list(inspect.signature(set_module_tensor_to_device).parameters):
+                    set_module_kwargs["dtype"] = torch.float32
             else:
                 param = param.to(dtype)
 
