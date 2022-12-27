@@ -167,19 +167,3 @@ class EfficientFormerConfig(PretrainedConfig):
         self.distillation = distillation
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
-
-
-class EfficientFormerOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4

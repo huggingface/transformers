@@ -24,7 +24,6 @@ _import_structure = {
     "configuration_efficientformer": [
         "EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "EfficientFormerConfig",
-        "EfficientFormerOnnxConfig",
     ]
 }
 
