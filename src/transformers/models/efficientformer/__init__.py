@@ -53,7 +53,6 @@ if TYPE_CHECKING:
     from .configuration_efficientformer import (
         EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         EfficientFormerConfig,
-        EfficientFormerOnnxConfig,
     )
 
     try:
