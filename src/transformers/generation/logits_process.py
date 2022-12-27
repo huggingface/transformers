@@ -126,7 +126,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     [`LogitsProcessor`] enforcing a min-length of new tokens by setting EOS probability to 0.
     Args:
         prompt_length_to_skip (`int`):
-            The input token length.
+            The input tokens length.
         min_new_tokens (`int`):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
         eos_token_id (`int`):
