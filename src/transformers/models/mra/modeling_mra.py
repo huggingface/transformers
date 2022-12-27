@@ -52,14 +52,16 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 def load_cuda_kernels():
+    global cuda_kernel
     try:
         curr_path = os.path.dirname(os.path.realpath(__file__))
         src_files = ['cuda_kernel.cu', 'cuda_launch.cu', 'torch_extension.cpp']
         src_files = [os.path.join(curr_path, file) for file in src_files]
-        cuda_kernel = load('cuda_kernel', src_files, verbose = True)
+        mra_cuda_kernel = load('cuda_kernel', src_files, verbose = True)
 
-        import cuda_kernel
+        import mra_cuda_kernel as cuda_kernel
     except Exception:
+        cuda_kernel = None
         print("Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of PyTorch and CUDA Toolkit are installed.")
 
 def sparse_max(sparse_C, indices, A_num_block, B_num_block):
