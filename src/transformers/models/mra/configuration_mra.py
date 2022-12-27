@@ -67,6 +67,14 @@ class MRAConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`.
+        block_per_row (`int`, *optional*, defaults to 4):
+            Used to set the budget for the high resolution scale. 
+        approx_mode (`str`, *optional*, defaults to `"full"`):
+            Controls whether both low and high resolution approximations are used. Set to `"full"` for both low and high resolution and `"sparse"` for only low resolution.
+        initial_prior_first_n_blocks (`int`, *optional*, defaults to 0):
+            The initial number of blocks for which high resolution is used. 
+        initial_prior_diagonal_n_blocks (`int`, *optional*, defaults to 0):
+            The number of diagonal blocks for which high resolution is used. 
 
     Example:
 
