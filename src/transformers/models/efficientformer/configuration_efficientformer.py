@@ -14,13 +14,9 @@
 # limitations under the License.
 """ EfficientFormer model configuration"""
 
-from collections import OrderedDict
-from typing import List, Mapping
-
-from packaging import version
+from typing import List
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 

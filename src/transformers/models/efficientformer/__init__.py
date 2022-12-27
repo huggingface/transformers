@@ -50,10 +50,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_efficientformer import (
-        EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        EfficientFormerConfig,
-    )
+    from .configuration_efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
 
     try:
         if not is_vision_available():
