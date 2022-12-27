@@ -296,7 +296,9 @@ def get_low_resolution_logit(Q, K, block_size, mask=None, V=None):
     return low_resolution_logit, token_count, low_resolution_logit_row_max, V_hat
 
 
-def get_block_idxes(low_resolution_logit, num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks):
+def get_block_idxes(
+    low_resolution_logit, num_blocks, approx_mode, initial_prior_first_n_blocks, initial_prior_diagonal_n_blocks
+):
     """
     Compute the indices of the subset of components to be used in the approximation.
     """
@@ -332,7 +334,17 @@ def get_block_idxes(low_resolution_logit, num_blocks, approx_mode, initial_prior
     return indices, high_resolution_mask
 
 
-def mra2_attention(Q, K, V, mask, num_blocks, approx_mode, block_size=32, initial_prior_first_n_blocks=0, initial_prior_diagonal_n_blocks=0,):
+def mra2_attention(
+    Q,
+    K,
+    V,
+    mask,
+    num_blocks,
+    approx_mode,
+    block_size=32,
+    initial_prior_first_n_blocks=0,
+    initial_prior_diagonal_n_blocks=0,
+):
     """
     Use MRA to approximate self-attention.
     """
