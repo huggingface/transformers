@@ -372,10 +372,10 @@ execution which can be helpful to better split logical components from
 one another and to have faster debugging cycles as intermediate results
 can be stored. Also, notebooks are often easier to share with other
 contributors, which might be very helpful if you want to ask the Hugging
-Face team for help. If you are familiar with Jupiter notebooks, we
+Face team for help. If you are familiar with Jupyter notebooks, we
 strongly recommend you to work with them.
 
-The obvious disadvantage of Jupyther notebooks is that if you are not
+The obvious disadvantage of Jupyter notebooks is that if you are not
 used to working with them you will have to spend some time adjusting to
 the new programming environment and that you might not be able to use
 your known debugging tools anymore, like `ipdb`.
