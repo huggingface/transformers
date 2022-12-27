@@ -3203,9 +3203,9 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         if self.prep_type != "patches":
             # move channels to last dimension, as the _build_network_inputs method below expects this
             if inputs.ndim == 4:
-                inputs = torch.permute(inputs, (0, 2, 3, 1))
+                inputs = inputs.permute(0, 2, 3, 1)
             elif inputs.ndim == 5:
-                inputs = torch.permute(inputs, (0, 1, 3, 4, 2))
+                inputs = inputs.permute(0, 1, 3, 4, 2)
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
 

@@ -33,11 +33,18 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...pytorch_utils import is_torch_less_than_1_9
 from ...utils import logging
 from .configuration_mctct import MCTCTConfig
 
 
 logger = logging.get_logger(__name__)
+
+if not is_torch_less_than_1_9:
+    logger.warning(
+        f"You are using torch=={torch.__version__}, but torch>=1.9.0 is required to use MCTCTModel. Please upgrade"
+        " torch."
+    )
 
 _HIDDEN_STATES_START_POSITION = 1
 
