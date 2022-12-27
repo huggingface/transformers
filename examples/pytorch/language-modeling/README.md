@@ -72,6 +72,19 @@ python run_clm_no_trainer.py \
     --model_name_or_path gpt2 \
     --output_dir /tmp/test-clm
 ```
+Note: the above example trains the model on only 1 GPU unlike the Trainer example which defaults to multi-gpu training. To enable multi-gpu training with HuggingFace Accelerate run:
+```bash
+pip install accelerate
+accelerate config
+```
+setup accelerate from the prompts on your terminal screen. To launch distributed training, run:
+```bash
+accelerate launch run_clm_no_trainer.py \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-2-raw-v1 \
+    --model_name_or_path gpt2 \
+    --output_dir /tmp/test-clm
+```
 
 ### RoBERTa/BERT/DistilBERT and masked language modeling
 
