@@ -78,13 +78,12 @@ class LogitsProcessorTest(unittest.TestCase):
         batch_size = 4
         eos_token_id = 0
 
-        new_min_dist_processor = MinNewTokensLengthLogitsProcessor(min_length=3, eos_token_id=eos_token_id)
-
-        # check that prompt length now is None
-        self.assertTrue(new_min_dist_processor.prompt_length_to_skip is None)
-
         # check that first input is skipped (min new length applying)
         input_ids = ids_tensor((batch_size, 5), vocab_size=20)
+        new_min_dist_processor = MinNewTokensLengthLogitsProcessor(prompt_length_to_skip=input_ids.shape[-1],
+                                                                   min_new_tokens=3,
+                                                                   eos_token_id=eos_token_id)
+
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_before_min_length = new_min_dist_processor(input_ids, scores)
         self.assertListEqual(scores_before_min_length[:, eos_token_id].tolist(), batch_size * [-float("inf")])
