@@ -81,10 +81,10 @@ def box_iou(boxes1, boxes2):
 
 class OwlViTImageProcessor(BaseImageProcessor):
     r"""
-    Constructs an OWL-ViT feature extractor.
+    Constructs an OWL-ViT image processor.
 
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
-    should refer to this superclass for more information regarding those methods.
+    This image processor inherits from [`ImageProcessingMixin`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -115,7 +115,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image_std (`List[int]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
-
     model_input_names = ["pixel_values"]
 
     def __init__(
@@ -139,7 +138,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         crop_size = get_size_dict(crop_size, default_to_square=True)
 
         # Early versions of the OWL-ViT config on the hub had "rescale" as a flag. This clashes with the
-        # vision feature extractor method `rescale` as it would be set as an attribute during the super().__init__
+        # vision image processor method `rescale` as it would be set as an attribute during the super().__init__
         # call. This is for backwards compatibility.
         if "rescale" in kwargs:
             rescale_val = kwargs.pop("rescale")

@@ -58,6 +58,7 @@ from . import (
     T5Config,
     TFAlbertForPreTraining,
     TFBartForConditionalGeneration,
+    TFBartForSequenceClassification,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
@@ -136,6 +137,7 @@ MODEL_CLASSES = {
     "bart": (
         BartConfig,
         TFBartForConditionalGeneration,
+        TFBartForSequenceClassification,
         BartForConditionalGeneration,
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),

@@ -399,9 +399,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
             self.language = self.language.lower()
             if self.language in TO_LANGUAGE_CODE:
                 language_id = TO_LANGUAGE_CODE[self.language]
+            elif self.language in TO_LANGUAGE_CODE.values():
+                language_id = self.language
             else:
+                is_language_code = len(self.language) == 2
                 raise ValueError(
-                    f"Unsupported language: {self.language}. Language should be in: {TO_LANGUAGE_CODE.keys()}"
+                    f"Unsupported language: {self.language}. Language should be one of:"
+                    f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
                 )
 
         if self.task is not None:
@@ -577,3 +581,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if len(input_ids) > self.model_max_length:
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
+
+    def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
+        self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
+        # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>
+        # we don't want to force the bos token at position 1, as this is the starting token
+        # when we generate, so we slice the prefix tokens to: <|lang_id|> <|task|> <|notimestamps|>
+        # to get the forced tokens
+        forced_tokens = self.prefix_tokens[1:]
+        forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_tokens)]
+        return forced_decoder_ids

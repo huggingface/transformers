@@ -16,6 +16,7 @@ if is_torch_available():
         MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
         MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
         MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
+        MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
     )
 
 
@@ -75,6 +76,7 @@ class ImageSegmentationPipeline(Pipeline):
                 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()
                 + MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items()
                 + MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items()
+                + MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING.items()
             )
         )
 
