@@ -327,6 +327,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
+    "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MRAConfig"],
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
@@ -472,7 +473,6 @@ _import_structure = {
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
     "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
-    "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MRAConfig"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -1781,6 +1781,19 @@ else:
             "MPNetPreTrainedModel",
         ]
     )
+    _import_structure["models.mra"].extend(
+        [
+            "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MRAForMaskedLM",
+            "MRAForMultipleChoice",
+            "MRAForQuestionAnswering",
+            "MRAForSequenceClassification",
+            "MRAForTokenClassification",
+            "MRALayer",
+            "MRAModel",
+            "MRAPreTrainedModel",
+        ]
+    )
     _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
     _import_structure["models.mvp"].extend(
         [
@@ -2455,19 +2468,6 @@ else:
             "YosoLayer",
             "YosoModel",
             "YosoPreTrainedModel",
-        ]
-    )
-    _import_structure["models.mra"].extend(
-        [
-            "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MRAForMaskedLM",
-            "MRAForMultipleChoice",
-            "MRAForQuestionAnswering",
-            "MRAForSequenceClassification",
-            "MRAForTokenClassification",
-            "MRALayer",
-            "MRAModel",
-            "MRAPreTrainedModel",
         ]
     )
     _import_structure["optimization"] = [
