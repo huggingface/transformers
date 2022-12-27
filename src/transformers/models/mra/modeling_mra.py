@@ -57,9 +57,9 @@ def load_cuda_kernels():
         curr_path = os.path.dirname(os.path.realpath(__file__))
         src_files = ['cuda_kernel.cu', 'cuda_launch.cu', 'torch_extension.cpp']
         src_files = [os.path.join(curr_path, file) for file in src_files]
-        mra_cuda_kernel = load('cuda_kernel', src_files, verbose = True)
+        cuda_kernel = load('cuda_kernel', src_files, verbose = True)
 
-        import mra_cuda_kernel as cuda_kernel
+        import cuda_kernel 
     except Exception:
         cuda_kernel = None
         print("Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of PyTorch and CUDA Toolkit are installed.")
