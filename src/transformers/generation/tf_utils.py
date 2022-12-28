@@ -435,8 +435,7 @@ class TFGenerationMixin:
           `top_k>1`
         - *multinomial sampling* by calling [`~generation.TFGenerationMixin.sample`] if `num_beams=1` and
           `do_sample=True`.
-        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1` and
-          `do_sample=False`.
+        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`.
     """
 
     _seed_generator = None
@@ -449,15 +448,6 @@ class TFGenerationMixin:
         return self._seed_generator
 
     supports_xla_generation = True
-
-    def _use_cache(self, outputs, use_cache):
-        """During generation, decide whether to pass the `past` variable to the next forward pass."""
-        use_cache = getattr(self.config, "use_cache", False)
-        if len(outputs) <= 1 or use_cache is False:
-            return False
-        if hasattr(self.config, "mem_len") and self.config.mem_len == 0:
-            return False
-        return True
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
@@ -1976,7 +1966,7 @@ class TFGenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         **model_kwargs,
-    ) -> Union[TFBeamSearchOutput, tf.Tensor]:
+    ) -> Union[TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
         Generates sequences for models with a language modeling head using beam search. If `do_sample` is `False`, uses
         a greedy approach, otherwise does multinomial sampling without replacement.
@@ -2427,7 +2417,8 @@ class TFGenerationMixin:
                     model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
                 )
 
-                return TFBeamSearchEncoderDecoderOutput(
+                output_cls = TFBeamSampleEncoderDecoderOutput if do_sample else TFBeamSearchEncoderDecoderOutput
+                return output_cls(
                     sequences=sequences,
                     scores=scores,
                     encoder_attentions=encoder_attentions,
@@ -2437,7 +2428,8 @@ class TFGenerationMixin:
                     decoder_hidden_states=decoder_hidden_states,
                 )
             else:
-                return TFBeamSearchDecoderOnlyOutput(
+                output_cls = TFBeamSampleDecoderOnlyOutput if do_sample else TFBeamSearchDecoderOnlyOutput
+                return output_cls(
                     sequences=sequences,
                     scores=scores,
                     attentions=decoder_attentions,
@@ -2838,79 +2830,6 @@ class TFGenerationMixin:
             return generated
 
 
-def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
-    # create logit penalties for already seen input_ids
-    token_penalties = np.ones(shape_list(logits))
-    prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
-    for i, prev_input_id in enumerate(prev_input_ids):
-        logit_penalized = logits[i].numpy()[prev_input_id]
-        logit_penalties = np.zeros(logit_penalized.shape)
-        # if previous logit score is < 0 then multiply repetition penalty else divide
-        logit_penalties[logit_penalized < 0] = repetition_penalty
-        logit_penalties[logit_penalized > 0] = 1 / repetition_penalty
-        np.put(token_penalties[i], prev_input_id, logit_penalties)
-    return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
-
-
-def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
-    # Copied from fairseq for no_repeat_ngram in beam_search
-    if cur_len + 1 < no_repeat_ngram_size:
-        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
-        return [[] for _ in range(num_hypos)]
-    generated_ngrams = [{} for _ in range(num_hypos)]
-    for idx in range(num_hypos):
-        gen_tokens = prev_input_ids[idx].numpy().tolist()
-        generated_ngram = generated_ngrams[idx]
-        for ngram in zip(*[gen_tokens[i:] for i in range(no_repeat_ngram_size)]):
-            prev_ngram_tuple = tuple(ngram[:-1])
-            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
-
-    def _get_generated_ngrams(hypo_idx):
-        # Before decoding the next token, prevent decoding of ngrams that have already appeared
-        start_idx = cur_len + 1 - no_repeat_ngram_size
-        ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
-        return generated_ngrams[hypo_idx].get(ngram_idx, [])
-
-    banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
-    return banned_tokens
-
-
-def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
-    banned_tokens = []
-
-    def _tokens_match(prev_tokens, tokens):
-        if len(tokens) == 0:
-            # if bad word tokens is just one token always ban it
-            return True
-        if len(tokens) > len(prev_tokens):
-            # if bad word tokens are longer than prev tokens they can't be equal
-            return False
-
-        if prev_tokens[-len(tokens) :] == tokens:
-            # if tokens match
-            return True
-        else:
-            return False
-
-    for prev_input_ids_slice in prev_input_ids:
-        banned_tokens_slice = []
-
-        for banned_token_seq in bad_words_ids:
-            assert (
-                len(banned_token_seq) > 0
-            ), f"Banned words token sequences { bad_words_ids} cannot have an empty list"
-
-            if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
-                # if tokens do not match continue
-                continue
-
-            banned_tokens_slice.append(banned_token_seq[-1])
-
-        banned_tokens.append(banned_tokens_slice)
-
-    return banned_tokens
-
-
 def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
     """
     Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
@@ -2984,53 +2903,6 @@ def sample_without_replacement(logits, num_samples):
     z = -tf.math.log(-tf.math.log(tf.random.uniform(shape_list(logits), 0, 1)))
     _, indices = tf.nn.top_k(logits + z, num_samples)
     return indices
-
-
-class BeamHypotheses(object):
-    def __init__(self, num_beams, max_length, length_penalty, early_stopping):
-        """
-        Initialize n-best list of hypotheses.
-        """
-        self.max_length = max_length - 1  # ignoring bos_token
-        self.length_penalty = length_penalty
-        self.early_stopping = early_stopping
-        self.num_beams = num_beams
-        self.beams = []
-        self.worst_score = 1e9
-
-    def __len__(self):
-        """
-        Number of hypotheses in the list.
-        """
-        return len(self.beams)
-
-    def add(self, hyp, sum_logprobs):
-        """
-        Add a new hypothesis to the list.
-        """
-        score = sum_logprobs / len(hyp) ** self.length_penalty
-        if len(self) < self.num_beams or score > self.worst_score:
-            self.beams.append((score, hyp))
-            if len(self) > self.num_beams:
-                sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.beams)])
-                del self.beams[sorted_scores[0][1]]
-                self.worst_score = sorted_scores[1][0]
-            else:
-                self.worst_score = min(score, self.worst_score)
-
-    def is_done(self, best_sum_logprobs, cur_len):
-        """
-        If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
-        one in the heap, then we are done with this sentence.
-        """
-        if len(self) < self.num_beams:
-            return False
-        elif self.early_stopping:
-            return True
-        else:
-            cur_score = best_sum_logprobs / cur_len**self.length_penalty
-            ret = self.worst_score >= cur_score
-            return ret
 
 
 def _ranking_fast(
