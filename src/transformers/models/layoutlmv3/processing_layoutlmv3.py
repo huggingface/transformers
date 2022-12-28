@@ -124,16 +124,19 @@ class LayoutLMv3Processor(ProcessorMixin):
         # add pixel values
         images = features.pop("pixel_values")
         if return_overflowing_tokens is True:
-            images = self.get_overflowing_images(images, encoded_inputs["overflow_to_sample_mapping"])
+            images = self.get_overflowing_images(images, encoded_inputs["overflow_to_sample_mapping"], return_tensors)
         encoded_inputs["pixel_values"] = images
 
         return encoded_inputs
 
-    def get_overflowing_images(self, images, overflow_to_sample_mapping):
+    def get_overflowing_images(self, images, overflow_to_sample_mapping, tensor_type):
         # in case there's an overflow, ensure each `input_ids` sample is mapped to its corresponding image
-        images_with_overflow = []
-        for sample_idx in overflow_to_sample_mapping:
-            images_with_overflow.append(images[sample_idx])
+        if tensor_type is None:
+            images_with_overflow = []
+            for sample_idx in overflow_to_sample_mapping:
+                images_with_overflow.append(images[sample_idx])
+        else:
+            images_with_overflow = images[overflow_to_sample_mapping]
 
         if len(images_with_overflow) != len(overflow_to_sample_mapping):
             raise ValueError(
