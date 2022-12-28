@@ -1,0 +1,478 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Object detection
+
+[[open-in-colab]]
+
+Object detection is a computer vision task of detecting instances of semantic objects that belong to a particular
+class (such as humans, buildings, or cars) in parts of an image. Object detection models receive an image as input and output
+coordinates of the bounding boxes and associated labels of the detected objects. An image can contain multiple objects,
+each with its own bounding box and a label. Similarly, several instances of the same class may
+be present in different parts of an image.
+This task is commonly used in autonomous driving for detecting things like pedestrians, road signs, and traffic lights.
+Other applications include counting objects in images, image search, and more.
+
+ <Tip>
+ Check out the [object detection task page](https://huggingface.co/tasks/object-detection) to learn about use cases,
+ models, metrics, and datasets associated with this task.
+ </Tip>
+
+In this guide, you will learn how to:
+
+ 1. Finetune [DETR](https://huggingface.co/docs/transformers/model_doc/detr), a model that combines a convolutional
+ backbone with an encoder-decoder Transformer, on the [CPPE-5](https://huggingface.co/datasets/cppe-5)
+ dataset.
+ 2. Use your finetuned model for inference.
+
+Before you begin, make sure you have all the necessary libraries installed:
+
+```bash
+pip install -q datasets transformers evaluate timm albumentations opencv-python
+```
+
+We encourage you to share your model with the community. Log in to your Hugging Face account to upload it to Hub.
+When prompted, enter your token to log in:
+
+```py
+>>> from huggingface_hub import notebook_login
+
+>>> notebook_login()
+```
+
+## Load the CPPE-5 dataset
+
+In this guide, you'll use the [CPPE-5 dataset](https://huggingface.co/datasets/cppe-5) that contains images with
+annotations identifying medical personal protective equipment (PPE) in the context of the COVID-19 pandemic.
+
+Start by loading the dataset:
+
+```py
+>>> from datasets import load_dataset
+
+>>> cppe5 = load_dataset("cppe-5")
+>>> cppe5
+```
+
+You'll see that this dataset already comes with a training set containing 1000 images and a test set with 29 images.
+
+To get familiar with the data, explore what the examples look like.
+
+```py
+>>> cppe5['train'][0]
+```
+
+The examples in the dataset have the following fields:
+- `image_id`: the example image id
+- `image`: a `PIL.Image.Image` object containing the image
+- `width`: width of the image
+- `height`: height of the image
+- `objects`: A dictionary containing bounding box metadata for the objects in the image:
+  - `id`: The annotation id.
+  - `area`: The area of the bounding box.
+  - `bbox`: The object's bounding box (in the [COCO](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco) format).
+  - `category`: The object's category, with possible values including `Coverall (0)`, `Face_Shield (1)`, `Gloves (2)`, `Goggles (3)` and `Mask (4)`.
+
+You may notice that the `bbox` field follows the COCO format, which is the format that DETR model expects.
+However, the way grouping of the fields inside `objects` differs from the annotations format DETR requires. You will
+need to apply some preprocessing transformations before using this data for training.
+
+To get an even better understanding of the data, visualize a random example in the dataset.
+
+```py
+>>> import numpy as np
+>>> import os
+>>> from PIL import Image, ImageDraw
+
+>>> # based on https://github.com/woctezuma/finetune-detr/blob/master/finetune_detr.ipynb
+>>> image_ids = cppe5['train']['image_id']
+>>> # let's pick a random image
+>>> image_id = image_ids[np.random.randint(0, len(image_ids))]
+>>> print('Image n°{}'.format(image_id))
+
+>>> image = cppe5['train'][image_id]['image']
+>>> annotations = cppe5['train'][image_id]['objects']
+>>> draw = ImageDraw.Draw(image, "RGBA")
+
+>>> # Retrieve the categories from the dataset's metadata.
+>>> categories = cppe5['train'].features['objects'].feature['category'].names
+
+>>> id2label = {index: x for index, x in enumerate(categories, start=0)}
+>>> label2id = {v: k for k, v in id2label.items()}
+
+>>> for i in range(len(annotations['id'])):
+>>>   box = annotations['bbox'][i-1]
+>>>   class_idx = annotations['category'][i-1]
+>>>   x,y,w,h = tuple(box)
+>>>   draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
+>>>   draw.text((x, y), id2label[class_idx], fill='white')
+
+>>> image
+```
+
+To visualize the bounding boxes with associated labels, you can get the labels from the dataset's metadata, specifically
+the `category` field.
+You'll also want to create dictionaries that map a label id to a label class (`id2label`) and the other way around (`label2id`).
+You'll need them later when setting up your model.
+
+As a final step of getting familiar with the data, explore it for potential issues. One common problem with datasets for
+object detection is bounding boxes that "stretch" beyond the edge of the image. Such "runaway" bounding boxes can raise
+errors during training and should be addressed at this stage. There are a few examples with this issue in this dataset.
+To keep things simple, remove these images from the data.
+
+```py
+>>> remove_idx = [590, 821, 822, 875, 876, 878, 879]
+>>> keep = [i for i in range(len(cppe5["train"])) if i not in remove_idx]
+>>> cppe5["train"] = cppe5["train"].select(keep)
+```
+
+## Preprocess the data
+
+To finetune a model, you must preprocess the data you plan to use to match precisely the approach used for the pre-trained model.
+For DETR models, `DetrImageProcessor` takes care of processing image data to create `pixel_values`, `pixel_mask`, and
+`labels` that a DETR model can train with. The preprocessor has some attributes that you won't have to worry about:
+
+- `image_mean = [0.485, 0.456, 0.406 ]`
+- `image_std = [0.229, 0.224, 0.225]`
+
+These are the mean and standard deviation used to normalize images during the model training. These values are crucial
+to replicate when doing inference or finetuning a pre-trained image model.
+
+Instantiate the `DetrImageProcessor` from the same checkpoint as the model you want to finetune.
+
+```py
+>>> from transformers import DetrImageProcessor
+
+>>> checkpoint = "facebook/detr-resnet-50"
+>>> image_processor = DetrImageProcessor.from_pretrained(checkpoint)
+```
+
+Before passing the images to the `DetrImageProcessor`, apply two preprocessing transformations to the dataset:
+- Augmenting images
+- Re-formatting annotations to meet DETR expectations
+
+First, to make sure the model does not overfit on the training data, you can apply image augmentation with [Albumentations](https://albumentations.ai/docs/).
+This library ensures that transformations affect the image and update the bounding boxes accordingly.
+The 🤗 Datasets library documentation has a detailed [guide on how to augment images for object detection](https://huggingface.co/docs/datasets/object_detection),
+and it uses the exact same dataset as an example. Apply the same approach here, i.e., resize each image to (480, 480),
+flip it horizontally, and brighten it:
+
+```py
+>>> import albumentations as A
+>>> import numpy as np
+>>> import torch
+
+>>> transform = A.Compose([
+>>>     A.Resize(480, 480),
+>>>     A.HorizontalFlip(p=1.0),
+>>>     A.RandomBrightnessContrast(p=1.0),
+>>> ], bbox_params=A.BboxParams(format='coco',  label_fields=['category']))
+```
+
+`DetrImageProcessor` expects the annotations to be in the following format: `{‘image_id’: int, ‘annotations’: List[Dict]}`,
+ where each `Dict` is a COCO object annotation. Building up gradually, add a function to reformat annotations for a single example:
+
+```py
+>>> def formatted_anns(image_id, category, area, bbox):
+
+>>>   annotations = []
+>>>   for i in range(0,len(category)):
+>>>     new_ann = {"image_id": image_id,
+>>>           "category_id": category[i],
+>>>           "isCrowd": 0,
+>>>           "area": area[i],
+>>>           "bbox": list(bbox[i])}
+>>>     annotations.append(new_ann)
+
+>>>   return annotations
+```
+
+Now you can combine the image and annotation transformations to use on a batch of examples:
+
+```py
+>>> # transforming a batch
+>>> def transform_aug_ann(examples):
+>>>   image_ids = examples["image_id"]
+>>>   images, bboxes, area, categories = [], [], [], []
+>>>   for image, objects in zip(examples['image'], examples['objects']):
+>>>     image = np.array(image.convert("RGB"))[:, :, ::-1]
+>>>     out = transform(
+>>>         image=image,
+>>>         bboxes=objects['bbox'],
+>>>         category=objects['category']
+>>>         )
+
+>>>     area.append(objects['area'])
+>>>     images.append(torch.tensor(out['image']).flip(-1).permute(2, 0, 1))
+>>>     bboxes.append(out['bboxes'])
+>>>     categories.append(out['category'])
+
+>>>   targets = [
+>>>       {"image_id": id_, "annotations": formatted_anns(id_, cat_, ar_, box_)} for id_, cat_, ar_, box_  in zip(image_ids, categories, area, bboxes)
+>>>   ]
+
+>>>   return image_processor(images=images, annotations=targets, return_tensors="pt")
+```
+
+Apply this preprocessing function to the entire dataset using 🤗 Datasets `with_transform` method. This method applies
+transformations on the fly when you load an element of the dataset.
+
+At this point, you can check what an example from the dataset looks like after the transformations. You should see a tensor
+with `pixel_values`, a tensor with `pixel_mask`, and `labels`.
+
+```py
+>>> cppe5["train"] = cppe5["train"].with_transform(transform_aug_ann)
+>>> cppe5["train"][15]
+```
+
+You have successfully augmented the individual images and prepared their annotations. However, preprocessing isn't
+complete yet. In the final step, create a custom `collate_fn` to batch images together.
+Pad images (which are now `pixel_values`) to the largest image in a batch, and create a corresponding `pixel_mask`
+to indicate which pixels are real (1) and which are padding (0).
+
+```py
+>>> def collate_fn(batch):
+>>>   pixel_values = [item['pixel_values'] for item in batch]
+>>>   encoding = image_processor.pad_and_create_pixel_mask(pixel_values, return_tensors="pt")
+>>>   labels = [item['labels'] for item in batch]
+>>>   batch = {}
+>>>   batch['pixel_values'] = encoding['pixel_values']
+>>>   batch['pixel_mask'] = encoding['pixel_mask']
+>>>   batch['labels'] = labels
+>>>   return batch
+```
+
+## Training the DERT model
+You have done most of the heavy lifting in the previous sections, so now you are ready to train your model!
+The images in this dataset are still quite large, even after resizing. This means that finetuning this model will
+require at least one GPU.
+
+```py
+>>> import torch
+>>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+```
+
+Training involves the following steps:
+1. Load the model with `DetrForObjectDetection.from_pretrained` using the same checkpoint as in the preprocessing.
+2. Define your training hyperparameters in `TrainingArguments`.
+3. Pass the training arguments to `Trainer` along with the model, dataset, image processor, and data collator.
+4. Call `train()`` to finetune your model.
+
+When loading the model from the same checkpoint that you used for the preprocessing, remember to pass the label to
+id and id to label maps that you created earlier from the dataset's metadata.
+
+```py
+>>> from transformers import DetrForObjectDetection
+
+>>> model = DetrForObjectDetection.from_pretrained(
+>>>     checkpoint,
+>>>     id2label=id2label,
+>>>     label2id=label2id,
+>>>     ignore_mismatched_sizes=True,
+>>> )
+```
+
+In the `TrainingArguments` use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit.
+An important note: do not remove unused columns because this will drop the image column. Without the image column, you
+can't create `pixel_values`. For this reason, set `remove_unused_columns` to `False`.
+If you wish to share your model by pushing to the Hub, set `push_to_hub` to `True` (you must be signed in to Hugging
+Face to upload your model).
+
+```py
+>>> from transformers import TrainingArguments
+
+>>> training_args = TrainingArguments(
+>>>     output_dir="detr-resnet-50_fine_tuned_cppe5",
+>>>     per_device_train_batch_size=8,
+>>>     num_train_epochs=10,
+>>>     fp16=False,
+>>>     save_steps=200,
+>>>     logging_steps=50,
+>>>     learning_rate=1e-5,
+>>>     save_total_limit=2,
+>>>     remove_unused_columns=False,
+>>>     push_to_hub=True,
+>>> )
+```
+
+Finally, bring everything together, and call `train`:
+
+```py
+>>> from transformers import Trainer
+
+>>> trainer = Trainer(
+>>>     model=model,
+>>>     args=training_args,
+>>>     data_collator=collate_fn,
+>>>     train_dataset=cppe5["train"],
+>>>     tokenizer=image_processor,
+>>> )
+
+>>>trainer.train()
+```
+
+## Evaluate
+Object detection models are commonly evaluated with a set of [COCO-style metrics](https://cocodataset.org/#detection-eval).
+You can use one of the existing metrics implementations, here you'll use the one from `torchvision`.
+
+Save your trained model to use for evaluation. Alternatively, you can evaluate the model that you have pushed to the Hub.
+
+```py
+>>> trainer.save_model("./detr-resnet-50_fine_tuned_cppe5")
+```
+
+To use the `torchvision` evaluator, you'll need to prepare a ground truth COCO dataset. The API to build a COCO dataset
+requires the data to be stored in a certain format, so you'll need to save images and annotations to disk first. Just like
+when you prepared your data for training, the annotations from the `cppe5["test"]` need to be formatted. However, images
+should stay as they are.
+
+The following example shows how you can:
+- Create a torchvision CocoDetection dataset
+- Reformat annotations from the `cppe5["test"]`
+- Save images and annotations into files that you can create an instance of CocoDetection dataset from
+- Use `cocoevaluate` metric to compute the [COCO metrics](https://cocodataset.org/#detection-eval).
+
+```py
+import os
+import json
+import evaluate
+import torchvision
+import numpy as np
+from tqdm import tqdm
+
+class CocoDetection(torchvision.datasets.CocoDetection):
+    def __init__(self, img_folder, feature_extractor, ann_file):
+        super(CocoDetection, self).__init__(img_folder, ann_file)
+        self.feature_extractor = feature_extractor
+
+    def __getitem__(self, idx):
+        # read in PIL image and target in COCO format
+        img, target = super(CocoDetection, self).__getitem__(idx)
+
+        # preprocess image and target (converting target to DETR format, resizing + normalization of both image and target)
+        image_id = self.ids[idx]
+        target = {'image_id': image_id, 'annotations': target}
+        encoding = self.feature_extractor(images=img, annotations=target, return_tensors="pt")
+        pixel_values = encoding["pixel_values"].squeeze() # remove batch dimension
+        target = encoding["labels"][0] # remove batch dimension
+
+        return {"pixel_values":pixel_values, "labels":target}
+
+im_processor = DetrImageProcessor.from_pretrained("./detr-resnet-50_fine_tuned_cppe5")
+model = DetrForObjectDetection.from_pretrained("./detr-resnet-50_fine_tuned_cppe5")
+
+# prepare the test dataset
+def val_formatted_anns(image_id, objects):
+  annotations = []
+  for i in range(0,len(objects["id"])):
+    new_ann = {"id": objects["id"][i],
+          "category_id": objects["category"][i],
+          "iscrowd": 0,
+          "image_id": image_id,
+          "area": objects["area"][i],
+          "bbox": objects["bbox"][i]}
+    annotations.append(new_ann)
+
+  return annotations
+
+# CocoDetection expects to read the data from files in a certain format
+def save_cppe5_annotation_file_images(cppe5):
+  output_json = {}
+  path_output_cppe5 = f"{os.getcwd()}/cppe5/"
+
+  if not os.path.exists(path_output_cppe5):
+    os.makedirs(path_output_cppe5)
+
+  path_anno = os.path.join(path_output_cppe5, "cppe5_ann.json")
+  categories_json = [{"supercategory": "none", "id": id, "name": id2label[id]} for id in id2label ]
+  output_json["images"] = []
+  output_json["annotations"] = []
+  for batch in cppe5:
+      ann = val_formatted_anns(batch["image_id"], batch["objects"])
+      output_json["images"].append(
+        {
+          "id": batch["image_id"],
+          "width": batch["image"].width,
+          "height": batch["image"].height,
+          "file_name": f"{batch['image_id']}.png"
+        }
+      )
+      output_json["annotations"].extend(ann)
+  output_json["categories"] = categories_json
+
+  with open(path_anno, "w") as file:
+      json.dump(output_json, file, ensure_ascii=False, indent=4)
+
+  for im, img_id in zip(cppe5["image"], cppe5["image_id"]):
+      path_img = os.path.join(path_output_cppe5, f"{img_id}.png")
+      im.save(path_img)
+
+  return path_output_cppe5, path_anno
+
+path_output_cppe5, path_anno = save_cppe5_annotation_file_images(cppe5["test"])
+
+dummy = CocoDetection(path_output_cppe5, im_processor, path_anno)
+module = evaluate.load("ybelkada/cocoevaluate", coco=dummy.coco)
+val_dataloader = torch.utils.data.DataLoader(dummy, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn)
+
+with torch.no_grad():
+  for idx, batch in enumerate(tqdm(val_dataloader)):
+      pixel_values = batch["pixel_values"]
+      pixel_mask = batch["pixel_mask"]
+
+      labels = [{k: v for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
+
+      # forward pass
+      outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+      orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+      results = im_processor.post_process(outputs, orig_target_sizes) # convert outputs of model to COCO api
+
+      module.add(prediction=results, reference=labels)
+      del batch
+
+results = module.compute()
+print(results)
+```
+
+## Inference
+Now that you have finetuned a DETR model, evaluated it and uploaded it to the 🤗Hub, you can use it for inference.
+
+```py
+>>> import requests
+
+>>> url = "https://chartwell.com/-/media/Images/blog/2020/04/keeping-staff-and-residents-protected.jpeg?mw=1900&hash=B8A76374D6BD24B0DC8A779D0C985027"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> image_processor = DetrImageProcessor.from_pretrained("MariaK/detr-resnet-50_fine_tuned_cppe5")
+>>> model = DetrForObjectDetection.from_pretrained("MariaK/detr-resnet-50_fine_tuned_cppe5")
+
+>>> inputs = image_processor(images=image, return_tensors="pt")
+>>> outputs = model(**inputs)
+
+>>> # convert outputs (bounding boxes and class logits) to COCO API
+>>> target_sizes = torch.tensor([image.size[::-1]])
+>>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+>>>     0
+>>> ]
+
+>>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+>>>     box = [round(i, 2) for i in box.tolist()]
+>>>     print(
+>>>         f"Detected {model.config.id2label[label.item()]} with confidence "
+>>>         f"{round(score.item(), 3)} at location {box}"
+>>>     )
+```
+
+
+
+
