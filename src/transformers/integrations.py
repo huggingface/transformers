@@ -518,7 +518,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
 
 def get_available_reporting_integrations():
     integrations = []
-    if is_azureml_available():
+    if is_azureml_available() and not is_mlflow_available():
         integrations.append("azure_ml")
     if is_comet_available():
         integrations.append("comet_ml")
