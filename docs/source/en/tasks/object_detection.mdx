@@ -19,6 +19,8 @@ class (such as humans, buildings, or cars) in parts of an image. Object detectio
 coordinates of the bounding boxes and associated labels of the detected objects. An image can contain multiple objects,
 each with its own bounding box and a label. Similarly, several instances of the same class may
 be present in different parts of an image.
+This task is commonly used in autonomous driving for detecting things like pedestrians, road signs, and traffic lights.
+Other applications include counting objects in images, image search, and more.
 
  <Tip>
  Check out the [object detection task page](https://huggingface.co/tasks/object-detection) to learn about use cases,
@@ -443,7 +445,7 @@ print(results)
 ```
 
 ## Inference
-Now that you have finetuned a DETR model, evaluated it, and uploaded it to the 🤗Hub, you can use it for inference.
+Now that you have finetuned a DETR model, evaluated it and uploaded it to the 🤗Hub, you can use it for inference.
 
 ```py
 >>> import requests
