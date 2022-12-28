@@ -74,7 +74,7 @@ class AtlasModel(AtlasPreTrainedModel):
         config: Optional[PretrainedConfig] = None,
         retriever: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
-        index: Optional[Dataset] = None,
+        # index: Optional[Dataset] = None,
         **kwargs,
     ):
         requires_backends(self, ["datasets", "faiss"])
@@ -103,49 +103,49 @@ class AtlasModel(AtlasPreTrainedModel):
             from ..auto.modeling_auto import AutoModelForSeq2SeqLM
             generator = FiD(config.generator)
 
-        self.index = index
-        if self.index is not None:
-            self.set_index(index)
+        # self.index = index
+        # if self.index is not None:
+        #     self.set_index(index)
 
         self.retriever = retriever
         self.generator = generator
 
-    def set_index(self, dataset_with_index: Dataset):
-        assert isinstance(
-            dataset_with_index, Dataset
-        ), f"`dataset_with_index` is of type {type(dataset_with_index)}, but should be of type `Dataset`"
-        if len({"id", "text", "embeddings"} - set(dataset_with_index.column_names)) > 0:
-            raise ValueError(
-                "Dataset should be a dataset with the following columns: "
-                "id (str), text (str) and embeddings (arrays of dimension vector_size), "
-                f"but got columns {dataset_with_index.column_names}"
-            )
-        if "embeddings" not in dataset_with_index.list_indexes():
-            raise ValueError(
-                "Missing faiss index in the dataset. Make sure you called `dataset.add_faiss_index` to compute it "
-                "or `dataset.load_faiss_index` to load one from the disk."
-            )
-        self.index = dataset_with_index
-        self.index.set_format("numpy", columns=["embeddings"], output_all_columns=True, dtype="float32")
+    # def set_index(self, dataset_with_index: Dataset):
+    #     assert isinstance(
+    #         dataset_with_index, Dataset
+    #     ), f"`dataset_with_index` is of type {type(dataset_with_index)}, but should be of type `Dataset`"
+    #     if len({"id", "text", "embeddings"} - set(dataset_with_index.column_names)) > 0:
+    #         raise ValueError(
+    #             "Dataset should be a dataset with the following columns: "
+    #             "id (str), text (str) and embeddings (arrays of dimension vector_size), "
+    #             f"but got columns {dataset_with_index.column_names}"
+    #         )
+    #     if "embeddings" not in dataset_with_index.list_indexes():
+    #         raise ValueError(
+    #             "Missing faiss index in the dataset. Make sure you called `dataset.add_faiss_index` to compute it "
+    #             "or `dataset.load_faiss_index` to load one from the disk."
+    #         )
+    #     self.index = dataset_with_index
+    #     self.index.set_format("numpy", columns=["embeddings"], output_all_columns=True, dtype="float32")
     
-    def reindex(self, batch_size: int = 16):
-        old_index = self.index.get_index("embeddings")
-        device = old_index.device
-        string_factory = old_index.string_factory
-        metric_type = old_index.metric_type
+    # def reindex(self, batch_size: int = 16):
+    #     old_index = self.index.get_index("embeddings")
+    #     device = old_index.device
+    #     string_factory = old_index.string_factory
+    #     metric_type = old_index.metric_type
 
-        def reindex(examples):
-            tokenized = self.tokenizer(examples['text'], return_tensors="pt", padding=True, truncation=True, max_length=512)
+    #     def reindex(examples):
+    #         tokenized = self.tokenizer(examples['text'], return_tensors="pt", padding=True, truncation=True, max_length=512)
 
-            hidden_states = self.retriever.embed_passages(
-                input_ids=tokenized["input_ids"].to(self.device),
-                attention_mask=tokenized["attention_mask"].to(self.device)
-            )
-            examples['embeddings'] = hidden_states.cpu().detach().numpy()
-            return examples
+    #         hidden_states = self.retriever.embed_passages(
+    #             input_ids=tokenized["input_ids"].to(self.device),
+    #             attention_mask=tokenized["attention_mask"].to(self.device)
+    #         )
+    #         examples['embeddings'] = hidden_states.cpu().detach().numpy()
+    #         return examples
 
-        self.index = self.index.index.map(reindex, batched=True, batch_size=batch_size)
-        self.index.add_faiss_index("embeddings", device=device, string_factory=string_factory, metric_type=metric_type)
+    #     self.index = self.index.index.map(reindex, batched=True, batch_size=batch_size)
+    #     self.index.add_faiss_index("embeddings", device=device, string_factory=string_factory, metric_type=metric_type)
 
     # todo
     # - tokenize query with both tokenizers as input rather than in forward pass
@@ -159,36 +159,35 @@ class AtlasModel(AtlasPreTrainedModel):
         topk,
     ):
         bsz = len(queries)
-
-        queries_tokens = self.retriever_tokenizer(queries, return_tensors="pt", padding=True, truncation=True, max_length=512)
+        #queries_tokens = self.retriever_tokenizer(queries, return_tensors="pt", padding=True, truncation=True, max_length=512)
 
         query_hidden_states = self.retriever(input_ids=queries_tokens["input_ids"].to(self.device), attention_mask=queries_tokens["attention_mask"].to(self.device))
 
-        query_hidden_states = query_hidden_states.cpu().detach().numpy()
-        _, passage_ids = self.index.search_batch("embeddings", query_hidden_states, topk)
-        docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
+        #query_hidden_states = query_hidden_states.cpu().detach().numpy()
+        #_, passage_ids = self.index.search_batch("embeddings", query_hidden_states, topk)
+        #docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
 
-        # todo: move this out to retriever - it's not the model's job to do this and it should be configurable
-        passages = [[f'{queries[i]} context: {passage}' for passage in doc["text"]] for i, doc in enumerate(docs)]
+        ## todo: move this out to retriever - it's not the model's job to do this and it should be configurable
+        #passages = [[f'{queries[i]} context: {passage}' for passage in doc["text"]] for i, doc in enumerate(docs)]
 
 
-        def encode_passages(batch, tokenizer, max_length):
-            bsz = len(batch)
-            n = max([len(example) for example in batch])
-            batch = [example + [""] *  (n - len(example)) for example in batch]
-            batch = reduce(lambda a, b: a + b, batch)
-            tokens = tokenizer(
-                batch,
-                padding=True,
-                max_length=max_length,
-                return_tensors="pt",
-                truncation=True,
-            )
-            tokens = {k: v.view(bsz, n, -1) for k, v in tokens.items()}
+        # def encode_passages(batch, tokenizer, max_length):
+        #     bsz = len(batch)
+        #     n = max([len(example) for example in batch])
+        #     batch = [example + [""] *  (n - len(example)) for example in batch]
+        #     batch = reduce(lambda a, b: a + b, batch)
+        #     tokens = tokenizer(
+        #         batch,
+        #         padding=True,
+        #         max_length=max_length,
+        #         return_tensors="pt",
+        #         truncation=True,
+        #     )
+        #     tokens = {k: v.view(bsz, n, -1) for k, v in tokens.items()}
             
-            return tokens
+        #     return tokens
         
-        reader_tokens = encode_passages(passages, self.generator_tokenizer, 512)
+        # reader_tokens = encode_passages(passages, self.generator_tokenizer, 512)
 
         # <EXTRACT TO CALLER>
         labels = self.generator_tokenizer(target, return_tensors="pt", padding=True, truncation=True, max_length=512)['input_ids'].to(self.device)
@@ -199,11 +198,8 @@ class AtlasModel(AtlasPreTrainedModel):
         reader_mask = reader_tokens["attention_mask"].bool().to(self.device)
 
 
-        # retriever_loss = None
+        retriever_loss = None
         # if train_retriever:
-
-        #     if self.opt.use_gradient_checkpoint_retriever:
-        #         self.retriever.gradient_checkpointing_enable()
 
         #     query_emb = self.retriever(**query_enc, is_passages=False)
 
@@ -213,10 +209,11 @@ class AtlasModel(AtlasPreTrainedModel):
         #     passage_emb = passage_emb.view(bsz, -1, passage_emb.size(-1))
         #     retriever_score = torch.einsum("id, ijd->ij", [query_emb, passage_emb])
 
-        #     if self.opt.use_gradient_checkpoint_retriever:
-        #         self.retriever.gradient_checkpointing_disable()
-
         #     gold_score = self.perplexity_score(reader_ids, reader_mask, decoder_input_ids, labels, cfg, bsz)
+        #     retriever_score = retriever_score / np.sqrt(query_emb.size(-1))
+        #     gold_score = gold_score.float()
+        #     retriever_score = retriever_score.float()
+        #     retriever_loss = self.kldivloss(retriever_score, gold_score)
 
         #     if self.training:
         #         self.reader.train()
@@ -243,19 +240,10 @@ class AtlasModel(AtlasPreTrainedModel):
 
         reader_loss = generator_output[0]
 
-
-        # if train_retriever:
-        #     retriever_score = retriever_score / np.sqrt(query_emb.size(-1))
-
-        #     if gold_score is not None:
-        #         gold_score = gold_score.float()
-        #         retriever_score = retriever_score.float()
-    #             retriever_loss = self.kldivloss(retriever_score, gold_score)
-
-        def kldivloss(self, score, gold_score):
-            gold_score = torch.softmax(gold_score / self.opt.temperature_gold, dim=-1)
-            score = torch.nn.functional.log_softmax(score / self.opt.temperature_score, dim=-1)
-            return torch.nn.KLDivLoss()(score, gold_score)
+    def kldivloss(self, score, gold_score):
+        gold_score = torch.softmax(gold_score / self.opt.temperature_gold, dim=-1)
+        score = torch.nn.functional.log_softmax(score / self.opt.temperature_score, dim=-1)
+        return torch.nn.KLDivLoss()(score, gold_score)
     
     @torch.no_grad()
     def generate(self, tokens, query, choices=None):
