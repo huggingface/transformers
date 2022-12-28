@@ -68,7 +68,7 @@ You'll see that this dataset already comes with a training set containing 1000 i
 To get familiar with the data, explore what the examples look like.
 
 ```py
->>> cppe5['train'][0]
+>>> cppe5["train"][0]
 ```
 
 The examples in the dataset have the following fields:
@@ -94,27 +94,27 @@ To get an even better understanding of the data, visualize a random example in t
 >>> from PIL import Image, ImageDraw
 
 >>> # based on https://github.com/woctezuma/finetune-detr/blob/master/finetune_detr.ipynb
->>> image_ids = cppe5['train']['image_id']
+>>> image_ids = cppe5["train"]["image_id"]
 >>> # let's pick a random image
 >>> image_id = image_ids[np.random.randint(0, len(image_ids))]
->>> print('Image n°{}'.format(image_id))
+>>> print("Image n°{}".format(image_id))
 
->>> image = cppe5['train'][image_id]['image']
->>> annotations = cppe5['train'][image_id]['objects']
+>>> image = cppe5["train"][image_id]["image"]
+>>> annotations = cppe5["train"][image_id]["objects"]
 >>> draw = ImageDraw.Draw(image, "RGBA")
 
 >>> # Retrieve the categories from the dataset's metadata.
->>> categories = cppe5['train'].features['objects'].feature['category'].names
+>>> categories = cppe5["train"].features["objects"].feature["category"].names
 
 >>> id2label = {index: x for index, x in enumerate(categories, start=0)}
 >>> label2id = {v: k for k, v in id2label.items()}
 
->>> for i in range(len(annotations['id'])):
->>>   box = annotations['bbox'][i-1]
->>>   class_idx = annotations['category'][i-1]
->>>   x,y,w,h = tuple(box)
->>>   draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
->>>   draw.text((x, y), id2label[class_idx], fill='white')
+>>> for i in range(len(annotations["id"])):
+...     box = annotations["bbox"][i - 1]
+...     class_idx = annotations["category"][i - 1]
+...     x, y, w, h = tuple(box)
+...     draw.rectangle((x, y, x + w, y + h), outline="red", width=1)
+...     draw.text((x, y), id2label[class_idx], fill="white")
 
 >>> image
 ```
@@ -171,11 +171,14 @@ flip it horizontally, and brighten it:
 >>> import numpy as np
 >>> import torch
 
->>> transform = A.Compose([
->>>     A.Resize(480, 480),
->>>     A.HorizontalFlip(p=1.0),
->>>     A.RandomBrightnessContrast(p=1.0),
->>> ], bbox_params=A.BboxParams(format='coco',  label_fields=['category']))
+>>> transform = A.Compose(
+...     [
+...         A.Resize(480, 480),
+...         A.HorizontalFlip(p=1.0),
+...         A.RandomBrightnessContrast(p=1.0),
+...     ],
+...     bbox_params=A.BboxParams(format="coco", label_fields=["category"]),
+... )
 ```
 
 `DetrImageProcessor` expects the annotations to be in the following format: `{‘image_id’: int, ‘annotations’: List[Dict]}`,
@@ -184,16 +187,18 @@ flip it horizontally, and brighten it:
 ```py
 >>> def formatted_anns(image_id, category, area, bbox):
 
->>>   annotations = []
->>>   for i in range(0,len(category)):
->>>     new_ann = {"image_id": image_id,
->>>           "category_id": category[i],
->>>           "isCrowd": 0,
->>>           "area": area[i],
->>>           "bbox": list(bbox[i])}
->>>     annotations.append(new_ann)
+...     annotations = []
+...     for i in range(0, len(category)):
+...         new_ann = {
+...             "image_id": image_id,
+...             "category_id": category[i],
+...             "isCrowd": 0,
+...             "area": area[i],
+...             "bbox": list(bbox[i]),
+...         }
+...         annotations.append(new_ann)
 
->>>   return annotations
+...     return annotations
 ```
 
 Now you can combine the image and annotation transformations to use on a batch of examples:
@@ -201,26 +206,23 @@ Now you can combine the image and annotation transformations to use on a batch o
 ```py
 >>> # transforming a batch
 >>> def transform_aug_ann(examples):
->>>   image_ids = examples["image_id"]
->>>   images, bboxes, area, categories = [], [], [], []
->>>   for image, objects in zip(examples['image'], examples['objects']):
->>>     image = np.array(image.convert("RGB"))[:, :, ::-1]
->>>     out = transform(
->>>         image=image,
->>>         bboxes=objects['bbox'],
->>>         category=objects['category']
->>>         )
+...     image_ids = examples["image_id"]
+...     images, bboxes, area, categories = [], [], [], []
+...     for image, objects in zip(examples["image"], examples["objects"]):
+...         image = np.array(image.convert("RGB"))[:, :, ::-1]
+...         out = transform(image=image, bboxes=objects["bbox"], category=objects["category"])
 
->>>     area.append(objects['area'])
->>>     images.append(torch.tensor(out['image']).flip(-1).permute(2, 0, 1))
->>>     bboxes.append(out['bboxes'])
->>>     categories.append(out['category'])
+...         area.append(objects["area"])
+...         images.append(torch.tensor(out["image"]).flip(-1).permute(2, 0, 1))
+...         bboxes.append(out["bboxes"])
+...         categories.append(out["category"])
 
->>>   targets = [
->>>       {"image_id": id_, "annotations": formatted_anns(id_, cat_, ar_, box_)} for id_, cat_, ar_, box_  in zip(image_ids, categories, area, bboxes)
->>>   ]
+...     targets = [
+...         {"image_id": id_, "annotations": formatted_anns(id_, cat_, ar_, box_)}
+...         for id_, cat_, ar_, box_ in zip(image_ids, categories, area, bboxes)
+...     ]
 
->>>   return image_processor(images=images, annotations=targets, return_tensors="pt")
+...     return image_processor(images=images, annotations=targets, return_tensors="pt")
 ```
 
 Apply this preprocessing function to the entire dataset using 🤗 Datasets `with_transform` method. This method applies
@@ -241,14 +243,14 @@ to indicate which pixels are real (1) and which are padding (0).
 
 ```py
 >>> def collate_fn(batch):
->>>   pixel_values = [item['pixel_values'] for item in batch]
->>>   encoding = image_processor.pad_and_create_pixel_mask(pixel_values, return_tensors="pt")
->>>   labels = [item['labels'] for item in batch]
->>>   batch = {}
->>>   batch['pixel_values'] = encoding['pixel_values']
->>>   batch['pixel_mask'] = encoding['pixel_mask']
->>>   batch['labels'] = labels
->>>   return batch
+...     pixel_values = [item["pixel_values"] for item in batch]
+...     encoding = image_processor.pad_and_create_pixel_mask(pixel_values, return_tensors="pt")
+...     labels = [item["labels"] for item in batch]
+...     batch = {}
+...     batch["pixel_values"] = encoding["pixel_values"]
+...     batch["pixel_mask"] = encoding["pixel_mask"]
+...     batch["labels"] = labels
+...     return batch
 ```
 
 ## Training the DERT model
@@ -258,6 +260,7 @@ require at least one GPU.
 
 ```py
 >>> import torch
+
 >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ```
 
@@ -274,11 +277,11 @@ id and id to label maps that you created earlier from the dataset's metadata.
 >>> from transformers import DetrForObjectDetection
 
 >>> model = DetrForObjectDetection.from_pretrained(
->>>     checkpoint,
->>>     id2label=id2label,
->>>     label2id=label2id,
->>>     ignore_mismatched_sizes=True,
->>> )
+...     checkpoint,
+...     id2label=id2label,
+...     label2id=label2id,
+...     ignore_mismatched_sizes=True,
+... )
 ```
 
 In the `TrainingArguments` use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit.
@@ -291,17 +294,17 @@ Face to upload your model).
 >>> from transformers import TrainingArguments
 
 >>> training_args = TrainingArguments(
->>>     output_dir="detr-resnet-50_fine_tuned_cppe5",
->>>     per_device_train_batch_size=8,
->>>     num_train_epochs=10,
->>>     fp16=False,
->>>     save_steps=200,
->>>     logging_steps=50,
->>>     learning_rate=1e-5,
->>>     save_total_limit=2,
->>>     remove_unused_columns=False,
->>>     push_to_hub=True,
->>> )
+...     output_dir="detr-resnet-50_fine_tuned_cppe5",
+...     per_device_train_batch_size=8,
+...     num_train_epochs=10,
+...     fp16=False,
+...     save_steps=200,
+...     logging_steps=50,
+...     learning_rate=1e-5,
+...     save_total_limit=2,
+...     remove_unused_columns=False,
+...     push_to_hub=True,
+... )
 ```
 
 Finally, bring everything together, and call `train`:
@@ -310,14 +313,14 @@ Finally, bring everything together, and call `train`:
 >>> from transformers import Trainer
 
 >>> trainer = Trainer(
->>>     model=model,
->>>     args=training_args,
->>>     data_collator=collate_fn,
->>>     train_dataset=cppe5["train"],
->>>     tokenizer=image_processor,
->>> )
+...     model=model,
+...     args=training_args,
+...     data_collator=collate_fn,
+...     train_dataset=cppe5["train"],
+...     tokenizer=image_processor,
+... )
 
->>>trainer.train()
+>>> rainer.train()
 ```
 
 ## Evaluate
@@ -349,6 +352,7 @@ import torchvision
 import numpy as np
 from tqdm import tqdm
 
+
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, feature_extractor, ann_file):
         super(CocoDetection, self).__init__(img_folder, ann_file)
@@ -360,63 +364,68 @@ class CocoDetection(torchvision.datasets.CocoDetection):
 
         # preprocess image and target (converting target to DETR format, resizing + normalization of both image and target)
         image_id = self.ids[idx]
-        target = {'image_id': image_id, 'annotations': target}
+        target = {"image_id": image_id, "annotations": target}
         encoding = self.feature_extractor(images=img, annotations=target, return_tensors="pt")
-        pixel_values = encoding["pixel_values"].squeeze() # remove batch dimension
-        target = encoding["labels"][0] # remove batch dimension
+        pixel_values = encoding["pixel_values"].squeeze()  # remove batch dimension
+        target = encoding["labels"][0]  # remove batch dimension
 
-        return {"pixel_values":pixel_values, "labels":target}
+        return {"pixel_values": pixel_values, "labels": target}
+
 
 im_processor = DetrImageProcessor.from_pretrained("./detr-resnet-50_fine_tuned_cppe5")
 model = DetrForObjectDetection.from_pretrained("./detr-resnet-50_fine_tuned_cppe5")
 
 # prepare the test dataset
 def val_formatted_anns(image_id, objects):
-  annotations = []
-  for i in range(0,len(objects["id"])):
-    new_ann = {"id": objects["id"][i],
-          "category_id": objects["category"][i],
-          "iscrowd": 0,
-          "image_id": image_id,
-          "area": objects["area"][i],
-          "bbox": objects["bbox"][i]}
-    annotations.append(new_ann)
+    annotations = []
+    for i in range(0, len(objects["id"])):
+        new_ann = {
+            "id": objects["id"][i],
+            "category_id": objects["category"][i],
+            "iscrowd": 0,
+            "image_id": image_id,
+            "area": objects["area"][i],
+            "bbox": objects["bbox"][i],
+        }
+        annotations.append(new_ann)
 
-  return annotations
+    return annotations
+
 
 # CocoDetection expects to read the data from files in a certain format
 def save_cppe5_annotation_file_images(cppe5):
-  output_json = {}
-  path_output_cppe5 = f"{os.getcwd()}/cppe5/"
+    output_json = {}
+    path_output_cppe5 = f"{os.getcwd()}/cppe5/"
 
-  if not os.path.exists(path_output_cppe5):
-    os.makedirs(path_output_cppe5)
+    if not os.path.exists(path_output_cppe5):
+        os.makedirs(path_output_cppe5)
 
-  path_anno = os.path.join(path_output_cppe5, "cppe5_ann.json")
-  categories_json = [{"supercategory": "none", "id": id, "name": id2label[id]} for id in id2label ]
-  output_json["images"] = []
-  output_json["annotations"] = []
-  for batch in cppe5:
-      ann = val_formatted_anns(batch["image_id"], batch["objects"])
-      output_json["images"].append(
-        {
-          "id": batch["image_id"],
-          "width": batch["image"].width,
-          "height": batch["image"].height,
-          "file_name": f"{batch['image_id']}.png"
-        }
-      )
-      output_json["annotations"].extend(ann)
-  output_json["categories"] = categories_json
+    path_anno = os.path.join(path_output_cppe5, "cppe5_ann.json")
+    categories_json = [{"supercategory": "none", "id": id, "name": id2label[id]} for id in id2label]
+    output_json["images"] = []
+    output_json["annotations"] = []
+    for batch in cppe5:
+        ann = val_formatted_anns(batch["image_id"], batch["objects"])
+        output_json["images"].append(
+            {
+                "id": batch["image_id"],
+                "width": batch["image"].width,
+                "height": batch["image"].height,
+                "file_name": f"{batch['image_id']}.png",
+            }
+        )
+        output_json["annotations"].extend(ann)
+    output_json["categories"] = categories_json
 
-  with open(path_anno, "w") as file:
-      json.dump(output_json, file, ensure_ascii=False, indent=4)
+    with open(path_anno, "w") as file:
+        json.dump(output_json, file, ensure_ascii=False, indent=4)
 
-  for im, img_id in zip(cppe5["image"], cppe5["image_id"]):
-      path_img = os.path.join(path_output_cppe5, f"{img_id}.png")
-      im.save(path_img)
+    for im, img_id in zip(cppe5["image"], cppe5["image_id"]):
+        path_img = os.path.join(path_output_cppe5, f"{img_id}.png")
+        im.save(path_img)
 
-  return path_output_cppe5, path_anno
+    return path_output_cppe5, path_anno
+
 
 path_output_cppe5, path_anno = save_cppe5_annotation_file_images(cppe5["test"])
 
@@ -425,20 +434,22 @@ module = evaluate.load("ybelkada/cocoevaluate", coco=dummy.coco)
 val_dataloader = torch.utils.data.DataLoader(dummy, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn)
 
 with torch.no_grad():
-  for idx, batch in enumerate(tqdm(val_dataloader)):
-      pixel_values = batch["pixel_values"]
-      pixel_mask = batch["pixel_mask"]
+    for idx, batch in enumerate(tqdm(val_dataloader)):
+        pixel_values = batch["pixel_values"]
+        pixel_mask = batch["pixel_mask"]
 
-      labels = [{k: v for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
+        labels = [
+            {k: v for k, v in t.items()} for t in batch["labels"]
+        ]  # these are in DETR format, resized + normalized
 
-      # forward pass
-      outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        # forward pass
+        outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
 
-      orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-      results = im_processor.post_process(outputs, orig_target_sizes) # convert outputs of model to COCO api
+        orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+        results = im_processor.post_process(outputs, orig_target_sizes)  # convert outputs of model to COCO api
 
-      module.add(prediction=results, reference=labels)
-      del batch
+        module.add(prediction=results, reference=labels)
+        del batch
 
 results = module.compute()
 print(results)
@@ -461,16 +472,14 @@ Now that you have finetuned a DETR model, evaluated it and uploaded it to the �
 
 >>> # convert outputs (bounding boxes and class logits) to COCO API
 >>> target_sizes = torch.tensor([image.size[::-1]])
->>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
->>>     0
->>> ]
+>>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[0]
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
->>>     box = [round(i, 2) for i in box.tolist()]
->>>     print(
->>>         f"Detected {model.config.id2label[label.item()]} with confidence "
->>>         f"{round(score.item(), 3)} at location {box}"
->>>     )
+...     box = [round(i, 2) for i in box.tolist()]
+...     print(
+...         f"Detected {model.config.id2label[label.item()]} with confidence "
+...         f"{round(score.item(), 3)} at location {box}"
+...     )
 ```
 
 
