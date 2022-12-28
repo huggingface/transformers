@@ -657,6 +657,8 @@ class FlaubertModel(FlaubertPreTrainedModel):
 )
 # Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["pred_layer.proj.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = FlaubertModel(config)

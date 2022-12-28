@@ -531,6 +531,8 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = OpenAIGPTModel(config)
@@ -621,6 +623,8 @@ input sequence).
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 

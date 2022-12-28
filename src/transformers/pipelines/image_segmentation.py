@@ -16,6 +16,7 @@ if is_torch_available():
         MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
         MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
         MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
+        MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
     )
 
 
@@ -31,6 +32,30 @@ class ImageSegmentationPipeline(Pipeline):
     """
     Image segmentation pipeline using any `AutoModelForXXXSegmentation`. This pipeline predicts masks of objects and
     their classes.
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> segmenter = pipeline(model="facebook/detr-resnet-50-panoptic")
+    >>> segments = segmenter("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
+    >>> len(segments)
+    2
+
+    >>> segments[0]["label"]
+    'bird'
+
+    >>> segments[1]["label"]
+    'bird'
+
+    >>> type(segments[0]["mask"])  # This is a black and white mask showing where is the bird on the original image.
+    <class 'PIL.Image.Image'>
+
+    >>> segments[0]["mask"].size
+    (768, 512)
+    ```
+
 
     This image segmentation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"image-segmentation"`.
@@ -51,6 +76,7 @@ class ImageSegmentationPipeline(Pipeline):
                 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()
                 + MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items()
                 + MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items()
+                + MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING.items()
             )
         )
 

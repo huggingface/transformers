@@ -45,6 +45,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_videomae"] = ["VideoMAEFeatureExtractor"]
+    _import_structure["image_processing_videomae"] = ["VideoMAEImageProcessor"]
 
 if TYPE_CHECKING:
     from .configuration_videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
@@ -70,6 +71,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_videomae import VideoMAEFeatureExtractor
+        from .image_processing_videomae import VideoMAEImageProcessor
 
 else:
     import sys

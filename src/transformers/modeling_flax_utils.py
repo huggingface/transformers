@@ -33,7 +33,7 @@ from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation_flax_utils import FlaxGenerationMixin
+from .generation import FlaxGenerationMixin
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import (
     FLAX_WEIGHTS_INDEX_NAME,
@@ -1073,9 +1073,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 FlaxPreTrainedModel.push_to_hub = copy_func(FlaxPreTrainedModel.push_to_hub)
-FlaxPreTrainedModel.push_to_hub.__doc__ = FlaxPreTrainedModel.push_to_hub.__doc__.format(
-    object="model", object_class="FlaxAutoModel", object_files="model checkpoint"
-)
+if FlaxPreTrainedModel.push_to_hub.__doc__ is not None:
+    FlaxPreTrainedModel.push_to_hub.__doc__ = FlaxPreTrainedModel.push_to_hub.__doc__.format(
+        object="model", object_class="FlaxAutoModel", object_files="model checkpoint"
+    )
 
 
 def overwrite_call_docstring(model_class, docstring):

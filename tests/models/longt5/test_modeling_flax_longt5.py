@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 

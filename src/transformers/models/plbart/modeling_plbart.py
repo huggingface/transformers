@@ -196,7 +196,14 @@ class PLBartAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -559,7 +566,7 @@ PLBART_GENERATION_EXAMPLE = r"""
     >>> values, predictions = probs.topk(5)
 
     >>> tokenizer.decode(predictions).split()
-    ['same', 'first', 'highest', 'result', 'Fib']
+    ['first', 'same', 'highest', 'result', 'number']
     ```
 """
 
@@ -1125,6 +1132,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
     PLBART_START_DOCSTRING,
 )
 class PLBartModel(PLBartPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
 
@@ -1174,7 +1183,7 @@ class PLBartModel(PLBartPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1247,6 +1256,8 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: PLBartConfig):
@@ -1411,6 +1422,8 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     PLBART_START_DOCSTRING,
 )
 class PLBartForSequenceClassification(PLBartPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config: PLBartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = PLBartModel(config)
@@ -1483,7 +1496,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         )
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = input_ids.eq(self.config.eos_token_id)
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
@@ -1548,6 +1561,8 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart, facebook/bart-base->uclanlp/plbart-base
 class PLBartForCausalLM(PLBartPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True

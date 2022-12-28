@@ -308,6 +308,12 @@ class T5DenseGatedActDense(nn.Module):
         hidden_linear = self.wi_1(hidden_states)
         hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states)
+
+        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
+        # See https://github.com/huggingface/transformers/issues/20287
+        if hidden_states.dtype != self.wo.weight.dtype:
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
+
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -489,6 +495,12 @@ class T5Attention(nn.Module):
                     # self-attn
                     # (batch_size, n_heads, key_length, dim_per_head)
                     hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+                elif past_key_value.shape[2] != key_value_states.shape[1]:
+                    # checking that the `sequence_length` of the `past_key_value` is the same as
+                    # the provided `key_value_states` to support prefix tuning
+                    # cross-attn
+                    # (batch_size, n_heads, seq_length, dim_per_head)
+                    hidden_states = shape(proj_layer(key_value_states))
                 else:
                     # cross-attn
                     hidden_states = past_key_value
@@ -751,6 +763,7 @@ class T5PreTrainedModel(PreTrainedModel):
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5Block"]
+    _keep_in_fp32_modules = ["wo"]
 
     @property
     def dummy_inputs(self):
@@ -1758,9 +1771,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     T5_START_DOCSTRING,
 )
 class T5EncoderModel(T5PreTrainedModel):
-    authorized_missing_keys = [
-        r"encoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
 
     def __init__(self, config: T5Config):
         super().__init__(config)

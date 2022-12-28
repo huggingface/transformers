@@ -74,8 +74,10 @@ else:
                 ),
             ),
             ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),
+            ("biogpt", ("BioGptTokenizer", None)),
             ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
+            ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
             ("byt5", ("ByT5Tokenizer", None)),
             (
@@ -86,8 +88,16 @@ else:
                 ),
             ),
             ("canine", ("CanineTokenizer", None)),
+            ("chinese_clip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "clip",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "clipseg",
                 (
                     "CLIPTokenizer",
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
@@ -127,6 +137,7 @@ else:
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
+            ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neox", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
@@ -136,6 +147,7 @@ else:
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("jukebox", ("JukeboxTokenizer", None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
@@ -241,6 +253,11 @@ else:
             ),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "roberta-prelayernorm",
+                ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None),
+            ),
+            ("roc_bert", ("RoCBertTokenizer", None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
@@ -248,6 +265,13 @@ else:
             (
                 "squeezebert",
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
+            ),
+            (
+                "switch_transformers",
+                (
+                    "T5Tokenizer" if is_sentencepiece_available() else None,
+                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                ),
             ),
             (
                 "t5",
@@ -348,6 +372,7 @@ def get_tokenizer_config(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    subfolder: str = "",
     **kwargs,
 ):
     """
@@ -383,6 +408,9 @@ def get_tokenizer_config(
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
+        subfolder (`str`, *optional*, defaults to `""`):
+            In case the tokenizer config is located inside a subfolder of the model repo on huggingface.co, you can
+            specify the folder name here.
 
     <Tip>
 
@@ -419,6 +447,7 @@ def get_tokenizer_config(
         use_auth_token=use_auth_token,
         revision=revision,
         local_files_only=local_files_only,
+        subfolder=subfolder,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
         _commit_hash=commit_hash,
@@ -496,7 +525,9 @@ class AutoTokenizer:
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
                 facebook/rag-token-base), specify it here.
             use_fast (`bool`, *optional*, defaults to `True`):
-                Whether or not to try to load the fast version of the tokenizer.
+                Use a [fast Rust-based tokenizer](https://huggingface.co/docs/tokenizers/index) if it is supported for
+                a given model. If a fast tokenizer is not available for a given model, a normal Python-based tokenizer
+                is returned instead.
             tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
@@ -545,9 +576,14 @@ class AutoTokenizer:
 
             tokenizer_class_name, tokenizer_fast_class_name = tokenizer_class_tuple
 
-            if use_fast and tokenizer_fast_class_name is not None:
-                tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
-
+            if use_fast:
+                if tokenizer_fast_class_name is not None:
+                    tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
+                else:
+                    logger.warning(
+                        "`use_fast` is set to `True` but the tokenizer class does not have a fast version. "
+                        " Falling back to the slow version."
+                    )
             if tokenizer_class is None:
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
 

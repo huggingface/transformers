@@ -35,11 +35,13 @@ from ...file_utils import (
     is_scipy_available,
     is_timm_available,
     is_torch_cuda_available,
+    is_vision_available,
     replace_return_docstrings,
     requires_backends,
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
@@ -57,6 +59,9 @@ if is_torch_cuda_available() and is_ninja_available():
         MultiScaleDeformableAttention = None
 else:
     MultiScaleDeformableAttention = None
+
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -236,7 +241,7 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoFeatureExtractor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~AutoImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -1068,8 +1073,7 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoFeatureExtractor`]. See [`AutoFeatureExtractor.__call__`] for
-            details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1140,9 +1144,10 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
 
-            ref_y, ref_x = torch.meshgrid(
+            ref_y, ref_x = meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, level, 1] * height)
@@ -1551,9 +1556,10 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = torch.meshgrid(
+            grid_y, grid_x = meshgrid(
                 torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
                 torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 
@@ -1596,17 +1602,17 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, DeformableDetrModel
+        >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
 
@@ -1788,6 +1794,9 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
     DEFORMABLE_DETR_START_DOCSTRING,
 )
 class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    _keys_to_ignore_on_load_missing = ["bbox_embed\.[1-9]\d*", "class_embed\.[1-9]\d*"]
+
     def __init__(self, config: DeformableDetrConfig):
         super().__init__(config)
 
@@ -1863,24 +1872,24 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, DeformableDetrForObjectDetection
+        >>> from transformers import AutoImageProcessor, DeformableDetrForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(
-        ...     outputs, threshold=0.5, target_sizes=target_sizes
-        ... )[0]
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+        ...     0
+        ... ]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(
@@ -2412,17 +2421,6 @@ def generalized_box_iou(boxes1, boxes2):
     area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
-
-
-# Copied from transformers.models.detr.modeling_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
 
 
 # Copied from transformers.models.detr.modeling_detr._max_by_axis

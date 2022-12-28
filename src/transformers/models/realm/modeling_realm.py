@@ -296,6 +296,7 @@ class RealmSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
+        use_cache = past_key_value is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -310,10 +311,16 @@ class RealmSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
+            if use_cache:
+                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
+                    -1, 1
+                )
+            else:
+                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
+
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
@@ -1140,6 +1147,8 @@ class RealmBertModel(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmEmbedder(RealmPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1157,16 +1166,16 @@ class RealmEmbedder(RealmPreTrainedModel):
     @replace_return_docstrings(output_type=RealmEmbedderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, RealmEmbedderOutput]:
         r"""
         Returns:
 
@@ -1239,20 +1248,20 @@ class RealmScorer(RealmPreTrainedModel):
     @replace_return_docstrings(output_type=RealmScorerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        candidate_input_ids=None,
-        candidate_attention_mask=None,
-        candidate_token_type_ids=None,
-        candidate_inputs_embeds=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        candidate_input_ids: Optional[torch.LongTensor] = None,
+        candidate_attention_mask: Optional[torch.FloatTensor] = None,
+        candidate_token_type_ids: Optional[torch.LongTensor] = None,
+        candidate_inputs_embeds: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, RealmScorerOutput]:
         r"""
         candidate_input_ids (`torch.LongTensor` of shape `(batch_size, num_candidates, sequence_length)`):
             Indices of candidate input sequence tokens in the vocabulary.
@@ -1352,7 +1361,7 @@ class RealmScorer(RealmPreTrainedModel):
         # [batch_size, num_candidates, retriever_proj_size]
         candidate_score = candidate_score.view(-1, self.config.num_candidates, self.config.retriever_proj_size)
         # [batch_size, num_candidates]
-        relevance_score = torch.einsum("BD,BND->BN", query_score, candidate_score)
+        relevance_score = torch.einsum("bd,bnd->bn", query_score, candidate_score)
 
         if not return_dict:
             return relevance_score, query_score, candidate_score
@@ -1368,6 +1377,8 @@ class RealmScorer(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
+
     def __init__(self, config):
         super().__init__(config)
         self.realm = RealmBertModel(self.config)
@@ -1392,19 +1403,19 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        relevance_score=None,
-        labels=None,
-        mlm_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        relevance_score: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        mlm_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         relevance_score (`torch.FloatTensor` of shape `(batch_size, num_candidates)`, *optional*):
             Relevance score derived from RealmScorer, must be specified if you want to compute the masked language
@@ -1533,21 +1544,21 @@ class RealmReader(RealmPreTrainedModel):
     @replace_return_docstrings(output_type=RealmReaderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        relevance_score=None,
-        block_mask=None,
-        start_positions=None,
-        end_positions=None,
-        has_answers=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        relevance_score: Optional[torch.FloatTensor] = None,
+        block_mask: Optional[torch.BoolTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        has_answers: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, RealmReaderOutput]:
         r"""
         relevance_score (`torch.FloatTensor` of shape `(searcher_beam_size,)`, *optional*):
             Relevance score, which must be specified if you want to compute the logits and marginal log loss.
@@ -1759,12 +1770,12 @@ class RealmForOpenQA(RealmPreTrainedModel):
     @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
-        attention_mask=None,
-        token_type_ids=None,
-        answer_ids=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor],
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        answer_ids: Optional[torch.LongTensor] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, RealmForOpenQAOutput]:
         r"""
         Returns:
 

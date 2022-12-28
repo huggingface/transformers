@@ -24,31 +24,46 @@ from ...processing_utils import ProcessorMixin
 
 class DonutProcessor(ProcessorMixin):
     r"""
-    Constructs a Donut processor which wraps a Donut feature extractor and an XLMRoBERTa tokenizer into a single
+    Constructs a Donut processor which wraps a Donut image processor and an XLMRoBERTa tokenizer into a single
     processor.
 
-    [`DonutProcessor`] offers all the functionalities of [`DonutFeatureExtractor`] and
+    [`DonutProcessor`] offers all the functionalities of [`DonutImageProcessor`] and
     [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. See the [`~DonutProcessor.__call__`] and
     [`~DonutProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`DonutFeatureExtractor`]):
-            An instance of [`DonutFeatureExtractor`]. The feature extractor is a required input.
+        image_processor ([`DonutImageProcessor`]):
+            An instance of [`DonutImageProcessor`]. The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "AutoFeatureExtractor"
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
-        [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
+        [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
         [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
         [`~DonutTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
         """
@@ -66,7 +81,7 @@ class DonutProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            inputs = self.feature_extractor(images, *args, **kwargs)
+            inputs = self.image_processor(images, *args, **kwargs)
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 
@@ -105,13 +120,16 @@ class DonutProcessor(ProcessorMixin):
         self._in_target_context_manager = True
         self.current_processor = self.tokenizer
         yield
-        self.current_processor = self.feature_extractor
+        self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
-    def token2json(self, tokens, is_inner_value=False):
+    def token2json(self, tokens, is_inner_value=False, added_vocab=None):
         """
         Convert a (generated) token sequence into an ordered JSON format.
         """
+        if added_vocab is None:
+            added_vocab = self.tokenizer.get_added_vocab()
+
         output = dict()
 
         while tokens:
@@ -131,7 +149,7 @@ class DonutProcessor(ProcessorMixin):
                 if content is not None:
                     content = content.group(1).strip()
                     if r"<s_" in content and r"</s_" in content:  # non-leaf node
-                        value = self.token2json(content, is_inner_value=True)
+                        value = self.token2json(content, is_inner_value=True, added_vocab=added_vocab)
                         if value:
                             if len(value) == 1:
                                 value = value[0]
@@ -140,7 +158,7 @@ class DonutProcessor(ProcessorMixin):
                         output[key] = []
                         for leaf in content.split(r"<sep/>"):
                             leaf = leaf.strip()
-                            if leaf in self.tokenizer.get_added_vocab() and leaf[0] == "<" and leaf[-2:] == "/>":
+                            if leaf in added_vocab and leaf[0] == "<" and leaf[-2:] == "/>":
                                 leaf = leaf[1:-2]  # for categorical special tokens
                             output[key].append(leaf)
                         if len(output[key]) == 1:
@@ -148,9 +166,25 @@ class DonutProcessor(ProcessorMixin):
 
                 tokens = tokens[tokens.find(end_token) + len(end_token) :].strip()
                 if tokens[:6] == r"<sep/>":  # non-leaf nodes
-                    return [output] + self.token2json(tokens[6:], is_inner_value=True)
+                    return [output] + self.token2json(tokens[6:], is_inner_value=True, added_vocab=added_vocab)
 
         if len(output):
             return [output] if is_inner_value else output
         else:
             return [] if is_inner_value else {"text_sequence": tokens}
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor

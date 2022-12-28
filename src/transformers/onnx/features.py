@@ -408,6 +408,16 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
         ),
+        "mobilenet-v1": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilenet_v1.MobileNetV1OnnxConfig",
+        ),
+        "mobilenet-v2": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilenet_v2.MobileNetV2OnnxConfig",
+        ),
         "mobilevit": supported_features_mapping(
             "default",
             "image-classification",
@@ -436,6 +446,19 @@ class FeaturesManager:
             "masked-lm",
             "sequence-classification",
             onnx_config_cls="models.perceiver.PerceiverOnnxConfig",
+        ),
+        "poolformer": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.poolformer.PoolFormerOnnxConfig"
+        ),
+        "rembert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls="models.rembert.RemBertOnnxConfig",
         ),
         "resnet": supported_features_mapping(
             "default",

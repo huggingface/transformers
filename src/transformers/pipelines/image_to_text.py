@@ -30,6 +30,18 @@ class ImageToTextPipeline(Pipeline):
     """
     Image To Text pipeline using a `AutoModelForVision2Seq`. This pipeline predicts a caption for a given image.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> captioner = pipeline(model="ydshieh/vit-gpt2-coco-en")
+    >>> captioner("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
+    [{'generated_text': 'two birds are standing next to each other '}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This image to text pipeline can currently be loaded from pipeline() using the following task identifier:
     "image-to-text".
 
@@ -94,7 +106,7 @@ class ImageToTextPipeline(Pipeline):
     def _forward(self, model_inputs, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
-        # FIXME: We need to pop here due to a difference in how `generation_utils.py` and `generation_tf_utils.py`
+        # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
         #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
         #  in the `_prepare_model_inputs` method.

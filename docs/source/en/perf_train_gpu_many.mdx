@@ -11,7 +11,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 # Efficient Training on Multiple GPUs
 
-When training on a single GPU is too slow or the model weights don't fit in a single GPUs memory we use a mutli-GPU setup. Switching from a single GPU to multiple requires some form of parallelism as the work needs to be distributed. There are several techniques to achieve parallism such as data, tensor, or pipeline parallism. However, there is no one solution to fit them all and which settings works best depends on the hardware you are running on. While the main concepts most likely will apply to any other framework, this article is focused on PyTorch-based implementations.
+When training on a single GPU is too slow or the model weights don't fit in a single GPUs memory we use a multi-GPU setup. Switching from a single GPU to multiple requires some form of parallelism as the work needs to be distributed. There are several techniques to achieve parallism such as data, tensor, or pipeline parallism. However, there is no one solution to fit them all and which settings works best depends on the hardware you are running on. While the main concepts most likely will apply to any other framework, this article is focused on PyTorch-based implementations.
 
 <Tip>
 
@@ -31,7 +31,7 @@ The following is the brief description of the main concepts that will be describ
 4. **Zero Redundancy Optimizer (ZeRO)** - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
 5. **Sharded DDP** - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
 
-Before diving deeper into the specifics of each concept we first have a look at the rough decision process when training large models on a large infrastructure. 
+Before diving deeper into the specifics of each concept we first have a look at the rough decision process when training large models on a large infrastructure.
 
 ## Scalability Strategy
 

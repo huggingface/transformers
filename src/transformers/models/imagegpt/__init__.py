@@ -32,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_imagegpt"] = ["ImageGPTFeatureExtractor"]
+    _import_structure["image_processing_imagegpt"] = ["ImageGPTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_imagegpt import ImageGPTFeatureExtractor
+        from .image_processing_imagegpt import ImageGPTImageProcessor
 
     try:
         if not is_torch_available():

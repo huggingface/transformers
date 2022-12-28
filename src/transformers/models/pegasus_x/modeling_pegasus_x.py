@@ -203,7 +203,14 @@ class PegasusXAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -1375,6 +1382,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
     PEGASUS_X_START_DOCSTRING,
 )
 class PegasusXModel(PegasusXPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
 
@@ -1522,6 +1531,8 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
         r"decoder.version",
         r"lm_head.weight",
         r"embed_positions.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: PegasusXConfig):

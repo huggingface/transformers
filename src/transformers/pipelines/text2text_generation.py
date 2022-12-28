@@ -27,6 +27,21 @@ class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> generator = pipeline(model="mrm8488/t5-base-finetuned-question-generation-ap")
+    >>> generator(
+    ...     "answer: Manuel context: Manuel has created RuPERTa-base with the support of HF-Transformers and Google"
+    ... )
+    [{'generated_text': 'question: Who created the RuPERTa-base?'}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
+
     This Text2TextGenerationPipeline pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"text2text-generation"`.
 
@@ -34,7 +49,7 @@ class Text2TextGenerationPipeline(Pipeline):
     up-to-date list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=text2text-generation). For a list of available
     parameters, see the [following
-    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate)
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
 
     Usage:
 
@@ -206,7 +221,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     currently, '*bart-large-cnn*', '*t5-small*', '*t5-base*', '*t5-large*', '*t5-3b*', '*t5-11b*'. See the up-to-date
     list of available models on [huggingface.co/models](https://huggingface.co/models?filter=summarization). For a list
     of available parameters, see the [following
-    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate)
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
 
     Usage:
 
@@ -274,7 +289,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
     up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=translation).
     For a list of available parameters, see the [following
-    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate)
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
 
     Usage:
 

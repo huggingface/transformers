@@ -38,6 +38,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_convnext"] = ["ConvNextFeatureExtractor"]
+    _import_structure["image_processing_convnext"] = ["ConvNextImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -74,6 +75,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_convnext import ConvNextFeatureExtractor
+        from .image_processing_convnext import ConvNextImageProcessor
 
     try:
         if not is_torch_available():

@@ -225,7 +225,7 @@ batch) leads to very slow training on TPU.
 
 ## Inference
 
-At inference time, it is recommended to use [`~generation_utils.GenerationMixin.generate`]. This
+At inference time, it is recommended to use [`~generation.GenerationMixin.generate`]. This
 method takes care of encoding the input and feeding the encoded hidden states via cross-attention layers to the decoder
 and auto-regressively generates the decoder output. Check out [this blog post](https://huggingface.co/blog/how-to-generate) to know all the details about generating text with Transformers.
 There's also [this blog post](https://huggingface.co/blog/encoder-decoder#encoder-decoder) which explains how
@@ -244,7 +244,7 @@ Das Haus ist wunderbar.
 ```
 
 Note that T5 uses the `pad_token_id` as the `decoder_start_token_id`, so when doing generation without using
-[`~generation_utils.GenerationMixin.generate`], make sure you start it with the `pad_token_id`.
+[`~generation.GenerationMixin.generate`], make sure you start it with the `pad_token_id`.
 
 The example above only shows a single example. You can also do batched inference, like so:
 

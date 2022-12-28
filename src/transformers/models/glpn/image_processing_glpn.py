@@ -42,7 +42,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*, defaults to 32):
             When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
             multiple of `size_divisor`. Can be overridden by `size_divisor` in `preprocess`.
-        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Can be
@@ -80,7 +80,7 @@ class GLPNImageProcessor(BaseImageProcessor):
                 The image is resized so its height and width are rounded down to the closest multiple of
                 `size_divisor`.
             resample:
-                `PIL.Image` resampling filter to use when resizing the image e.g. `PIL.Image.Resampling.BILINEAR`.
+                `PIL.Image` resampling filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If `None`, the channel dimension format of the input
                 image is used. Can be one of:
@@ -142,8 +142,8 @@ class GLPNImageProcessor(BaseImageProcessor):
                 When `do_resize` is `True`, images are resized so their height and width are rounded down to the
                 closest multiple of `size_divisor`.
             resample (`PIL.Image` resampling filter, *optional*, defaults to `self.resample`):
-                `PIL.Image` resampling filter to use if resizing the image e.g. `PIL.Image.Resampling.BILINEAR`. Only
-                has an effect if `do_resize` is set to `True`.
+                `PIL.Image` resampling filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
+                an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.).
             return_tensors (`str` or `TensorType`, *optional*):

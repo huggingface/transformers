@@ -253,12 +253,12 @@ class FlavaImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"height": 224, "width": 224}
         size = get_size_dict(size)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         codebook_size = codebook_size if codebook_size is not None else {"height": 112, "width": 112}
-        codebook_size = get_size_dict(codebook_size)
+        codebook_size = get_size_dict(codebook_size, param_name="codebook_size")
         codebook_crop_size = codebook_crop_size if codebook_crop_size is not None else {"height": 112, "width": 112}
-        codebook_crop_size = get_size_dict(codebook_crop_size)
+        codebook_crop_size = get_size_dict(codebook_crop_size, param_name="codebook_crop_size")
 
         self.do_resize = do_resize
         self.size = size
@@ -360,6 +360,8 @@ class FlavaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The size dictionary must contain 'height' and 'width' keys. Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
@@ -580,7 +582,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size")
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -612,7 +614,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         )
         codebook_do_resize = codebook_do_resize if codebook_do_resize is not None else self.codebook_do_resize
         codebook_size = codebook_size if codebook_size is not None else self.codebook_size
-        codebook_size = get_size_dict(codebook_size)
+        codebook_size = get_size_dict(codebook_size, param_name="codebook_size")
         codebook_resample = codebook_resample if codebook_resample is not None else self.codebook_resample
         codebook_do_rescale = codebook_do_rescale if codebook_do_rescale is not None else self.codebook_do_rescale
         codebook_rescale_factor = (
@@ -622,7 +624,7 @@ class FlavaImageProcessor(BaseImageProcessor):
             codebook_do_center_crop if codebook_do_center_crop is not None else self.codebook_do_center_crop
         )
         codebook_crop_size = codebook_crop_size if codebook_crop_size is not None else self.codebook_crop_size
-        codebook_crop_size = get_size_dict(codebook_crop_size)
+        codebook_crop_size = get_size_dict(codebook_crop_size, param_name="codebook_crop_size")
         codebook_do_map_pixels = (
             codebook_do_map_pixels if codebook_do_map_pixels is not None else self.codebook_do_map_pixels
         )

@@ -40,7 +40,7 @@ This model was contributed by [beltagy](https://huggingface.co/beltagy). The Aut
 
 Longformer self attention employs self attention on both a "local" context and a "global" context. Most tokens only
 attend "locally" to each other meaning that each token attends to its \\(\frac{1}{2} w\\) previous tokens and
-\\(\frac{1}{2} w\\) succeding tokens with \\(w\\) being the window length as defined in
+\\(\frac{1}{2} w\\) succeeding tokens with \\(w\\) being the window length as defined in
 `config.attention_window`. Note that `config.attention_window` can be of type `List` to define a
 different \\(w\\) for each layer. A selected few tokens attend "globally" to all other tokens, as it is
 conventionally done for all tokens in `BertSelfAttention`.

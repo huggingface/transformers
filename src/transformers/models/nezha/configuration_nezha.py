@@ -48,6 +48,8 @@ class NezhaConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         classifier_dropout (`float`, optional, defaults to 0.1):
             The dropout ratio for attached classifiers.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
 
     Example:
 

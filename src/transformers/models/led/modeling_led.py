@@ -392,7 +392,7 @@ class LEDEncoderSelfAttention(nn.Module):
         return chunked_hidden_states
 
     @staticmethod
-    def _chunk(hidden_states, window_overlap, onnx_export=False):
+    def _chunk(hidden_states, window_overlap, onnx_export: bool = False):
         """convert into overlapping chunks. Chunk size = 2w, overlap size = w"""
         if not onnx_export:
             # non-overlapping chunks of size = 2w
@@ -411,29 +411,26 @@ class LEDEncoderSelfAttention(nn.Module):
             return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
         # When exporting to ONNX, use this separate logic
-        if hidden_states.size(1) == window_overlap * 2:
-            # simplest case
-            return hidden_states.unsqueeze(1)
-        else:
-            # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
+        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
 
-            # TODO replace this with
-            # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
-            # once `unfold` is supported
+        # TODO replace this with
+        # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
+        # once `unfold` is supported
+        # the case hidden_states.size(1) == window_overlap * 2 can also simply return hidden_states.unsqueeze(1), but that's control flow
 
-            chunk_size = [
-                hidden_states.size(0),
-                hidden_states.size(1) // window_overlap - 1,
-                window_overlap * 2,
-                hidden_states.size(2),
+        chunk_size = [
+            hidden_states.size(0),
+            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
+            window_overlap * 2,
+            hidden_states.size(2),
+        ]
+
+        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
+        for chunk in range(chunk_size[1]):
+            overlapping_chunks[:, chunk, :, :] = hidden_states[
+                :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
             ]
-
-            overlapping_chunks = torch.empty(chunk_size)
-            for chunk in range(chunk_size[1]):
-                overlapping_chunks[:, chunk, :, :] = hidden_states[
-                    :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
-                ]
-            return overlapping_chunks
+        return overlapping_chunks
 
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
@@ -2212,6 +2209,8 @@ class LEDDecoder(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDModel(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: LEDConfig):
         super().__init__(config)
 
@@ -2341,6 +2340,8 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: LEDConfig):
@@ -2528,6 +2529,8 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: LEDConfig, **kwargs):
         warnings.warn(
             "The `transformers.LEDForSequenceClassification` class is deprecated and will be removed in version 5 of"
@@ -2605,7 +2608,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         )
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = input_ids.eq(self.config.eos_token_id)
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
@@ -2662,6 +2665,8 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForQuestionAnswering(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 

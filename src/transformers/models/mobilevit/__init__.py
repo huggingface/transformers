@@ -37,6 +37,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_mobilevit"] = ["MobileViTFeatureExtractor"]
+    _import_structure["image_processing_mobilevit"] = ["MobileViTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -76,6 +77,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_mobilevit import MobileViTFeatureExtractor
+        from .image_processing_mobilevit import MobileViTImageProcessor
 
     try:
         if not is_torch_available():
@@ -90,14 +92,6 @@ if TYPE_CHECKING:
             MobileViTModel,
             MobileViTPreTrainedModel,
         )
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_mobilevit import MobileViTFeatureExtractor
 
     try:
         if not is_tf_available():

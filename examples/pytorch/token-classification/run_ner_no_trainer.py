@@ -55,7 +55,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.25.0.dev0")
+check_min_version("4.26.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
@@ -232,7 +232,7 @@ def parse_args():
         default="all",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
             "Only applicable when `--with_tracking` is passed."
         ),
     )
@@ -766,10 +766,11 @@ def main():
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
-        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump(
-                {"eval_accuracy": eval_metric["accuracy"], "train_loss": total_loss.item() / len(train_dataloader)}, f
-            )
+            all_results = {f"eval_{k}": v for k, v in eval_metric.items()}
+            if args.with_tracking:
+                all_results.update({"train_loss": total_loss.item() / len(train_dataloader)})
+            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                json.dump(all_results, f)
 
 
 if __name__ == "__main__":

@@ -1073,8 +1073,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 Number of beams for beam search. 1 means no beam search.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the `generator`'s `[`~generation_utils.GenerationMixin.generate`] function,
-                where we set `num_return_sequences` to `num_beams`. decoder_start_token_id (`int`, *optional*): If an
+                is not the value we pass to the `generator`'s `[`~generation.GenerationMixin.generate`] function, where
+                we set `num_return_sequences` to `num_beams`. decoder_start_token_id (`int`, *optional*): If an
                 encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
@@ -1676,8 +1676,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         **model_kwargs
     ):
         """
-        Implements RAG sequence "thorough" decoding. Read the [`~generation_utils.GenerationMixin.generate`]`
-        documentation for more information on how to set other generate input parameters
+        Implements RAG sequence "thorough" decoding. Read the [`~generation.GenerationMixin.generate`]` documentation
+        for more information on how to set other generate input parameters
 
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1705,14 +1705,14 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 to be set to `False` if used while training with distributed backend.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the `generator`'s `[`~generation_utils.GenerationMixin.generate`]`
-                function, where we set `num_return_sequences` to `num_beams`.
+                is not the value we pass to the `generator`'s `[`~generation.GenerationMixin.generate`]` function,
+                where we set `num_return_sequences` to `num_beams`.
             num_beams (`int`, *optional*, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
             kwargs:
-                Additional kwargs will be passed to [`~generation_utils.GenerationMixin.generate`]
+                Additional kwargs will be passed to [`~generation.GenerationMixin.generate`]
 
         Return:
             `tf.Tensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated sequences. The

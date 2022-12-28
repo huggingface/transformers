@@ -15,7 +15,7 @@
 """ Classes to support Speech-Encoder-Text-Decoder architectures"""
 
 
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -443,22 +443,22 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        input_values=None,
-        input_features=None,
-        return_dict=None,
+        inputs: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        input_values: Optional[torch.FloatTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
-    ):
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         Returns:
 

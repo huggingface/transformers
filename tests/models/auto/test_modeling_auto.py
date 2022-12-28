@@ -22,13 +22,12 @@ from pathlib import Path
 
 import pytest
 
-from transformers import BertConfig, GPT2Model, is_torch_available
+from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     RequestCounter,
-    require_scatter,
     require_torch,
     slow,
 )
@@ -103,7 +102,10 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertModel)
 
             self.assertEqual(len(loading_info["missing_keys"]), 0)
-            self.assertEqual(len(loading_info["unexpected_keys"]), 8)
+            # When using PyTorch checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
+            # installed), the expected value becomes `7`.
+            EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7 if is_safetensors_available() else 8
+            self.assertEqual(len(loading_info["unexpected_keys"]), EXPECTED_NUM_OF_UNEXPECTED_KEYS)
             self.assertEqual(len(loading_info["mismatched_keys"]), 0)
             self.assertEqual(len(loading_info["error_msgs"]), 0)
 
@@ -119,8 +121,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForPreTraining)
             # Only one value should not be initialized and in the missing keys.
-            missing_keys = loading_info.pop("missing_keys")
-            self.assertListEqual(["cls.predictions.decoder.bias"], missing_keys)
             for key, value in loading_info.items():
                 self.assertEqual(len(value), 0)
 
@@ -199,7 +199,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForQuestionAnswering)
 
     @slow
-    @require_scatter
     def test_table_question_answering_model_from_pretrained(self):
         for model_name in TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
             config = AutoConfig.from_pretrained(model_name)

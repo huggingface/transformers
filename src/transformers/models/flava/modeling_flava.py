@@ -943,7 +943,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1039,7 +1039,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1142,7 +1142,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1729,6 +1729,14 @@ class FlavaGlobalContrastiveHead(nn.Module):
     FLAVA_START_DOCSTRING.format(config="FlavaConfig") + FLAVA_PRETRAINING_START_DOCSTRING_EXTRA,
 )
 class FlavaForPreTraining(FlavaPreTrainedModel):
+    # Those are linked to xxx.bias
+    _keys_to_ignore_on_load_missing = [
+        "mmm_text_head.decoder.bias",
+        "mmm_image_head.decoder.bias",
+        "mlm_head.decoder.bias",
+        "mim_head.decoder.bias",
+    ]
+
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):
         super().__init__(config)
         self.flava = FlavaModel(config)
@@ -1787,7 +1795,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple[torch.Tensor], FlavaForPreTrainingOutput]:
         """
         Examples:
         ```python

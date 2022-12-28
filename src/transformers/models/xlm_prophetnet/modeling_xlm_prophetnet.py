@@ -876,11 +876,7 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
     ):
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
 
-        assert list(hidden_states.size()) == [
-            batch_size,
-            ngram_sequence_length,
-            hidden_size,
-        ], (
+        assert list(hidden_states.size()) == [batch_size, ngram_sequence_length, hidden_size], (
             f"`hidden_states` should be of shape {batch_size, ngram_sequence_length, hidden_size}, but is of shape"
             f" {hidden_states.shape}"
         )
@@ -1798,6 +1794,8 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
 )
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetModel with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.word_embeddings.weight", "encoder.word_embeddings.weight"]
+
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -1926,6 +1924,12 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
 )
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForConditionalGeneration with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        "decoder.word_embeddings.weight",
+        "encoder.word_embeddings.weight",
+        "lm_head.weight",
+    ]
+
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
         self.prophetnet = XLMProphetNetModel(config)
@@ -2139,6 +2143,8 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
 )
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForCausalLM with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config: XLMProphetNetConfig):
         # set config for CLM
         config = copy.deepcopy(config)

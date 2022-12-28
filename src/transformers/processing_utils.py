@@ -37,6 +37,7 @@ transformers_module = spec.loader.load_module()
 AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoTokenizer": "PreTrainedTokenizerBase",
     "AutoFeatureExtractor": "FeatureExtractionMixin",
+    "AutoImageProcessor": "ImageProcessingMixin",
 }
 
 
@@ -56,7 +57,7 @@ class ProcessorMixin(PushToHubMixin):
         # Sanitize args and kwargs
         for key in kwargs:
             if key not in self.attributes:
-                raise TypeError(f"Unexepcted keyword argument {key}.")
+                raise TypeError(f"Unexpected keyword argument {key}.")
         for arg, attribute_name in zip(args, self.attributes):
             if attribute_name in kwargs:
                 raise TypeError(f"Got multiple values for argument {attribute_name}.")
@@ -157,7 +158,8 @@ class ProcessorMixin(PushToHubMixin):
         <Tip>
 
         This class method is simply calling the feature extractor
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and the tokenizer
+        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], image processor
+        [`~image_processing_utils.ImageProcessingMixin`] and the tokenizer
         [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`] methods. Please refer to the docstrings of the
         methods above for more information.
 
@@ -226,8 +228,14 @@ class ProcessorMixin(PushToHubMixin):
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
 
+    @property
+    def model_input_names(self):
+        first_attribute = getattr(self, self.attributes[0])
+        return getattr(first_attribute, "model_input_names", None)
+
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
-ProcessorMixin.push_to_hub.__doc__ = ProcessorMixin.push_to_hub.__doc__.format(
-    object="processor", object_class="AutoProcessor", object_files="processor files"
-)
+if ProcessorMixin.push_to_hub.__doc__ is not None:
+    ProcessorMixin.push_to_hub.__doc__ = ProcessorMixin.push_to_hub.__doc__.format(
+        object="processor", object_class="AutoProcessor", object_files="processor files"
+    )

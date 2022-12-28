@@ -24,10 +24,12 @@ import huggingface_hub
 
 from .. import (
     FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoProcessor,
     AutoTokenizer,
     is_datasets_available,
@@ -202,6 +204,8 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             processor = AutoProcessor.from_pretrained(self._local_dir)
             if model_config_class in TOKENIZER_MAPPING and processor.tokenizer.pad_token is None:
                 processor.tokenizer.pad_token = processor.tokenizer.eos_token
+        elif model_config_class in IMAGE_PROCESSOR_MAPPING:
+            processor = AutoImageProcessor.from_pretrained(self._local_dir)
         elif model_config_class in FEATURE_EXTRACTOR_MAPPING:
             processor = AutoFeatureExtractor.from_pretrained(self._local_dir)
         elif model_config_class in TOKENIZER_MAPPING:

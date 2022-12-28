@@ -16,7 +16,7 @@
 
 import itertools
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "LevitConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "LevitFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "LevitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/levit-128S"
@@ -523,8 +523,8 @@ LEVIT_START_DOCSTRING = r"""
 LEVIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -561,7 +561,7 @@ class LevitModel(LevitPreTrainedModel):
         pixel_values: torch.FloatTensor = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -630,7 +630,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -722,7 +722,7 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
         pixel_values: torch.FloatTensor = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, LevitForImageClassificationWithTeacherOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)

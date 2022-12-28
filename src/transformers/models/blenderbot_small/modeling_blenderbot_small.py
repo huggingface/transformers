@@ -177,7 +177,14 @@ class BlenderbotSmallAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -1081,6 +1088,8 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
     BLENDERBOT_SMALL_START_DOCSTRING,
 )
 class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
 
@@ -1213,6 +1222,8 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: BlenderbotSmallConfig):
@@ -1387,6 +1398,8 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-base->facebook/blenderbot_small-90M
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True

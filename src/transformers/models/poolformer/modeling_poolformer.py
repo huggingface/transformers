@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "PoolFormerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "PoolFormerFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "PoolFormerImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "sail/poolformer_s12"
@@ -79,8 +79,8 @@ class PoolFormerDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -302,8 +302,8 @@ POOLFORMER_START_DOCSTRING = r"""
 POOLFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`PoolFormerFeatureExtractor`]. See
-            [`PoolFormerFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`PoolFormerImageProcessor`]. See
+            [`PoolFormerImageProcessor.__call__`] for details.
 """
 
 

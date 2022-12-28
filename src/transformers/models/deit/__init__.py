@@ -35,6 +35,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_deit"] = ["DeiTFeatureExtractor"]
+    _import_structure["image_processing_deit"] = ["DeiTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -77,6 +78,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_deit import DeiTFeatureExtractor
+        from .image_processing_deit import DeiTImageProcessor
 
     try:
         if not is_torch_available():

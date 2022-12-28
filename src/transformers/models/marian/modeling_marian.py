@@ -194,7 +194,14 @@ class MarianAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -1087,6 +1094,8 @@ class MarianDecoder(MarianPreTrainedModel):
     "The bare Marian Model outputting raw hidden-states without any specific head on top.", MARIAN_START_DOCSTRING
 )
 class MarianModel(MarianPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config: MarianConfig):
         super().__init__(config)
 
@@ -1278,6 +1287,8 @@ class MarianMTModel(MarianPreTrainedModel):
         r"decoder.version",
         r"lm_head.weight",
         r"embed_positions",
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
     ]
 
     _keys_to_ignore_on_save = ["model.encoder.embed_positions.weight", "model.decoder.embed_positions.weight"]
@@ -1540,6 +1551,8 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
 class MarianForCausalLM(MarianPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True

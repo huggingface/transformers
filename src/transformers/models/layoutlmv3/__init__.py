@@ -83,6 +83,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_layoutlmv3"] = ["LayoutLMv3FeatureExtractor"]
+    _import_structure["image_processing_layoutlmv3"] = ["LayoutLMv3ImageProcessor"]
 
 
 if TYPE_CHECKING:
@@ -139,6 +140,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_layoutlmv3 import LayoutLMv3FeatureExtractor
+        from .image_processing_layoutlmv3 import LayoutLMv3ImageProcessor
 
 else:
     import sys

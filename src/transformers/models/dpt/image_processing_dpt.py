@@ -345,13 +345,15 @@ class DPTImageProcessor(BaseImageProcessor):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
-        Args:
         Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
             outputs ([`DPTForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
+
         Returns:
             semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is

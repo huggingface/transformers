@@ -49,6 +49,7 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     TestCasePlus,
+    is_flaky,
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     is_staging_test,
@@ -90,7 +91,9 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
         MODEL_FOR_AUDIO_XVECTOR_MAPPING,
+        MODEL_FOR_BACKBONE_MAPPING,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
@@ -222,6 +225,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
                 *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
@@ -252,28 +256,35 @@ class ModelTesterMixin:
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        def check_save_load(out1, out2):
+            # make sure we don't have nans
+            out_2 = out2.cpu().numpy()
+            out_2[np.isnan(out_2)] = 0
+
+            out_1 = out1.cpu().numpy()
+            out_1[np.isnan(out_1)] = 0
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+
         for model_class in self.all_model_classes:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            out_2 = outputs[0].cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
                 with torch.no_grad():
-                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                    second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    check_save_load(tensor1, tensor2)
+            else:
+                check_save_load(first, second)
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -340,6 +351,7 @@ class ModelTesterMixin:
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
 
+    @is_flaky()
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
@@ -449,6 +461,15 @@ class ModelTesterMixin:
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_determinism(first, second):
+            out_1 = first.cpu().numpy()
+            out_2 = second.cpu().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+
         for model_class in self.all_model_classes:
             model = model_class(config)
             model.to(torch_device)
@@ -457,12 +478,11 @@ class ModelTesterMixin:
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
                 second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
-            out_1 = first.cpu().numpy()
-            out_2 = second.cpu().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    check_determinism(tensor1, tensor2)
+            else:
+                check_determinism(first, second)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -498,7 +518,10 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class in [
+                *get_values(MODEL_MAPPING),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING),
+            ]:
                 continue
 
             model = model_class(config)
@@ -517,7 +540,10 @@ class ModelTesterMixin:
             config.use_cache = False
             config.return_dict = True
 
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class in [*get_values(MODEL_MAPPING), *get_values(MODEL_FOR_BACKBONE_MAPPING)]
+                or not model_class.supports_gradient_checkpointing
+            ):
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -528,6 +554,9 @@ class ModelTesterMixin:
             loss.backward()
 
     def test_attention_outputs(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
@@ -667,7 +696,9 @@ class ModelTesterMixin:
 
         torch._C._jit_clear_class_registry()
         torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
-        torch.jit._state._clear_class_state()
+        # torch 1.8 has no `_clear_class_state` in `torch.jit._state`
+        if hasattr(torch.jit._state, "_clear_class_state"):
+            torch.jit._state._clear_class_state()
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -1468,11 +1499,24 @@ class ModelTesterMixin:
             base_model_prefix = model.base_model_prefix
 
             if hasattr(model, base_model_prefix):
+
+                extra_params = {k: v for k, v in model.named_parameters() if not k.startswith(base_model_prefix)}
+                extra_params.update({k: v for k, v in model.named_buffers() if not k.startswith(base_model_prefix)})
+                # Some models define this as None
+                if model._keys_to_ignore_on_load_missing:
+                    for key in model._keys_to_ignore_on_load_missing:
+                        extra_params.pop(key, None)
+
+                if not extra_params:
+                    # In that case, we *are* on a head model, but every
+                    # single key is not actual parameters and this is
+                    # tested in `test_tied_model_weights_key_ignore` test.
+                    continue
+
                 with tempfile.TemporaryDirectory() as temp_dir_name:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
-                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+                    self.assertGreater(len(loading_info["missing_keys"]), 0, model.__class__.__name__)
 
     def test_tie_model_weights(self):
         if not self.test_torchscript:
@@ -1521,6 +1565,54 @@ class ModelTesterMixin:
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+    def test_tied_model_weights_key_ignore(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                model_tied.save_pretrained(d)
+
+                # We are nuking ALL weights on file, so every parameter should
+                # yell on load. We're going to detect if we yell too much, or too little.
+                with open(os.path.join(d, "pytorch_model.bin"), "wb") as f:
+                    torch.save({}, f)
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+
+                # ! Actually we could use `state_dict()` and check iteratively the tensors which are the same (for instance using `tensor.data_ptr()`). to detect the duplicates.
+                # ```python
+                # model = GPT2LMHeadModel.from_pretrained("gpt2")
+                # "lm_head.weight" in model.state_dict().keys()  # True
+                # "lm_head.weight" in model.named_parameters() # False
+                # In [6]: model.lm_head.weight.data_ptr()
+                # Out[6]: 139901378371648
+                # In [9]: model.transformer.wte.weight.data_ptr()
+                # Out[9]: 139901378371648  # Same PTR, it's the same DATA ! we would need to check for stride too to be 100% accurate.
+                # ```
+
+                prefix = f"{model_reloaded.base_model_prefix}."
+                params = dict(model_reloaded.named_parameters())
+                params.update(dict(model_reloaded.named_buffers()))
+                # param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
+                param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
+
+                missing_keys = set(infos["missing_keys"])
+
+                extra_missing = missing_keys - param_names
+                # missed_missing = param_names - missing_keys
+
+                self.assertEqual(
+                    extra_missing,
+                    set(),
+                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing}",
+                )
+
+                # self.assertEqual(
+                #     missed_missing,
+                #     set(),
+                #     f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real"
+                #     " parameters",
+                # )
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

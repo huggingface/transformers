@@ -23,6 +23,7 @@ Remember, architecture refers to the skeleton of the model and checkpoints are t
 In this tutorial, learn to:
 
 * Load a pretrained tokenizer.
+* Load a pretrained image processor
 * Load a pretrained feature extractor.
 * Load a pretrained processor.
 * Load a pretrained model.
@@ -49,9 +50,20 @@ Then tokenize your input as shown below:
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
+## AutoImageProcessor
+
+For vision tasks, an image processor processes the image into the correct input format.
+
+```py
+>>> from transformers import AutoImageProcessor
+
+>>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+```
+
+
 ## AutoFeatureExtractor
 
-For audio and vision tasks, a feature extractor processes the audio signal or image into the correct input format.
+For audio tasks, a feature extractor processes the audio signal the correct input format.
 
 Load a feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 
@@ -65,7 +77,7 @@ Load a feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 
 ## AutoProcessor
 
-Multimodal tasks require a processor that combines two types of preprocessing tools. For example, the [LayoutLMV2](model_doc/layoutlmv2) model requires a feature extractor to handle images and a tokenizer to handle text; a processor combines both of them.
+Multimodal tasks require a processor that combines two types of preprocessing tools. For example, the [LayoutLMV2](model_doc/layoutlmv2) model requires an image processor to handle images and a tokenizer to handle text; a processor combines both of them.
 
 Load a processor with [`AutoProcessor.from_pretrained`]:
 
@@ -103,7 +115,7 @@ TensorFlow and Flax checkpoints are not affected, and can be loaded within PyTor
 
 </Tip>
 
-Generally, we recommend using the `AutoTokenizer` class and the `AutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, feature extractor and processor to preprocess a dataset for fine-tuning.
+Generally, we recommend using the `AutoTokenizer` class and the `AutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, image processor, feature extractor and processor to preprocess a dataset for fine-tuning.
 </pt>
 <tf>
 Finally, the `TFAutoModelFor` classes let you load a pretrained model for a given task (see [here](model_doc/auto) for a complete list of available tasks). For example, load a model for sequence classification with [`TFAutoModelForSequenceClassification.from_pretrained`]:
@@ -122,6 +134,6 @@ Easily reuse the same checkpoint to load an architecture for a different task:
 >>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Generally, we recommend using the `AutoTokenizer` class and the `TFAutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, feature extractor and processor to preprocess a dataset for fine-tuning.
+Generally, we recommend using the `AutoTokenizer` class and the `TFAutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, image processor, feature extractor and processor to preprocess a dataset for fine-tuning.
 </tf>
 </frameworkcontent>
