@@ -190,10 +190,21 @@ if is_sagemaker_mp_enabled():
     from smdistributed.modelparallel import __version__ as SMP_VERSION
 
     IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
+    IS_SAGEMAKER_MP_POST_1_11 = version.parse(SMP_VERSION) >= version.parse("1.11")
+
+    # for SDP full model loading support
+    from .sharded_data_parallel_checkpoint import (
+        get_buffer_names,
+        get_param_shapes,
+        get_full_state_dict_from_sharded_data_parallel_checkpoint
+    )
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
+    IS_SAGEMAKER_MP_POST_1_11 = False
+
+
 
 
 skip_first_batches = None
@@ -1028,8 +1039,9 @@ class Trainer:
         Trainer's init through `optimizers`, or subclass and override this method (or `create_optimizer` and/or
         `create_scheduler`) in a subclass.
         """
+        print(f'before creation {self.args.local_rank}')
         self.create_optimizer()
-        if IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16:
+        if (IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16) or (IS_SAGEMAKER_MP_POST_1_11 and smp.state.cfg.zero2d_enabled()):
             # If smp >= 1.10 and fp16 is enabled, we unwrap the optimizer
             optimizer = self.optimizer.optimizer
         else:
@@ -1045,9 +1057,13 @@ class Trainer:
         """
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
+        print(f'come creation {self.args.local_rank}')
         if self.optimizer is None:
+            print(f'param is nonenonenone')
             decay_parameters = get_parameter_names(opt_model, ALL_LAYERNORM_LAYERS)
+            # print(f'decay param 1 is {decay_parameters}')
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
+            # print(f'decay param 2 is {decay_parameters}')
             optimizer_grouped_parameters = [
                 {
                     "params": [
@@ -1062,7 +1078,13 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
-
+            if is_sagemaker_mp_enabled():
+                opt_grouped_params = []
+                for params in optimizer_grouped_parameters:
+                    if len(params['params']) > 0:
+                        opt_grouped_params.append(params)
+                optimizer_grouped_parameters = opt_grouped_params
+                print(f"opt g params is {[len(x['params']) for x in optimizer_grouped_parameters]}")
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
 
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
@@ -1638,9 +1660,13 @@ class Trainer:
         delay_optimizer_creation = (
             self.sharded_ddp is not None
             and self.sharded_ddp != ShardedDDPOption.SIMPLE
-            or is_sagemaker_mp_enabled()
+            or (is_sagemaker_mp_enabled())
             or self.fsdp is not None
         )
+        # # test
+        # delay_optimizer_creation = False
+        # # TEST 
+        # model = self._wrap_model(self.model_wrapped)
         if args.deepspeed:
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
                 self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
@@ -1660,10 +1686,9 @@ class Trainer:
         if args.gradient_checkpointing:
             self.model.gradient_checkpointing_enable()
 
-        model = self._wrap_model(self.model_wrapped)
 
-        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
-            self._load_from_checkpoint(resume_from_checkpoint, model)
+        model = self._wrap_model(self.model_wrapped)
+            
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -1671,6 +1696,9 @@ class Trainer:
 
         if delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+
+        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
+            self._load_from_checkpoint(resume_from_checkpoint, model)
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
@@ -2016,7 +2044,7 @@ class Trainer:
             model = self.model
 
         if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
-            os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
+            os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME) and not os.path.isdir(os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial"))
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2035,15 +2063,23 @@ class Trainer:
         if self.args.deepspeed:
             # will be resumed in deepspeed_init
             pass
-        elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+        elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) or os.path.isdir(os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial")):
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
-                if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
+                if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")) or \
+                    os.path.isfile(os.path.join(os.path.dirname(resume_from_checkpoint), "user_content.pt")):
+                    if smp.state.cfg.zero2d_enabled():
+                        # print(f"weights_name: {WEIGHTS_NAME}")
+                        # print(f"optimizer_name: {OPTIMIZER_NAME}")
+                        smp.resume_from_checkpoint(
+                            path=resume_from_checkpoint, tag=WEIGHTS_NAME, partial=True, load_optimizer=True
+                        )
+                    else:
                     # If the 'user_content.pt' file exists, load with the new smp api.
                     # Checkpoint must have been saved with the new smp api.
-                    smp.resume_from_checkpoint(
-                        path=resume_from_checkpoint, tag=WEIGHTS_NAME, partial=False, load_optimizer=False
-                    )
+                        smp.resume_from_checkpoint(
+                            path=resume_from_checkpoint, tag=WEIGHTS_NAME, partial=False, load_optimizer=False
+                        )
                 else:
                     # If the 'user_content.pt' file does NOT exist, load with the old smp api.
                     # Checkpoint must have been saved with the old smp api.
@@ -2238,12 +2274,23 @@ class Trainer:
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
+
+        # need to save checkpoint before saving model if SDP is enabled.
+        if is_sagemaker_mp_enabled() and smp.state.cfg.sharded_data_parallel_degree > 1:
+            # also need to save buffer_names and param_shapes in user_content.pt file
+            # to be able to reconstruct full model
+            user_content = {}
+            user_content["buffer_names"] = get_buffer_names(self.model_wrapped)
+            user_content["param_shapes"] = get_param_shapes(self.model_wrapped, self.optimizer)
+            smp.save_checkpoint(path=output_dir, partial=True, tag=WEIGHTS_NAME, model=self.model_wrapped, optimizer=self.optimizer, user_content=user_content)
+        
         self.save_model(output_dir, _internal_call=True)
         if self.deepspeed:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
-            self.deepspeed.save_checkpoint(output_dir)
+            self.deepspeed.save_checkpoint(output_dir) # TODO: actually called twice if gather16bit is false?
 
+        
         # Save optimizer and scheduler
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
             self.optimizer.consolidate_state_dict()
@@ -2255,15 +2302,16 @@ class Trainer:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
-            smp.barrier()
-            if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
-                smp.save(
-                    opt_state_dict,
-                    os.path.join(output_dir, OPTIMIZER_NAME),
-                    partial=True,
-                    v3=smp.state.cfg.shard_optimizer_state,
-                )
+            if not smp.state.cfg.sharded_data_parallel_degree > 0:
+                opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
+                smp.barrier()
+                if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
+                    smp.save(
+                        opt_state_dict,
+                        os.path.join(output_dir, OPTIMIZER_NAME),
+                        partial=True,
+                        v3=smp.state.cfg.shard_optimizer_state,
+                    )
             if self.args.should_save:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -2677,6 +2725,32 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
             if IS_SAGEMAKER_MP_POST_1_10:
+                if smp.state.cfg.sharded_data_parallel_degree > 1:
+                    # delete bogus weights dump
+                    if self.args.should_save:
+                        file = os.path.join(output_dir, WEIGHTS_NAME)
+                        if os.path.isfile(file):
+                            os.remove(file)
+                    # TODO: create SMP flag for saving weights
+                    # if true, recover full weights and save
+                    # for now, save both
+
+                    # if checkpoint doesn't exist, save_checkpoint!
+                    if not os.path.isfile(os.path.join(output_dir, WEIGHTS_NAME + "_partial")):
+                        user_content = {}
+                        user_content["buffer_names"] = get_buffer_names(self.model_wrapped)
+                        user_content["param_shapes"] = get_param_shapes(self.model_wrapped, self.optimizer)
+                        smp.save_checkpoint(path=output_dir, partial=True, tag=WEIGHTS_NAME, model=self.model_wrapped, optimizer=self.optimizer, user_content=user_content)
+
+                    # save full model in addition to partial
+                    full_model_state_dict = get_full_state_dict_from_sharded_data_parallel_checkpoint(output_dir, tag=WEIGHTS_NAME + "_partial", dtype=torch.float32)
+                    torch.save(full_model_state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+
+                    del full_model_state_dict
+
+                    # if args.use_distributed_transformer > 0: # translate the state_dict to hf format if distributed transformer is used
+                    #     full_model = smp.nn.huggingface.gpt2.translate_state_dict_to_hf_gpt2(full_model, max_seq_len=args.max_context_width)
+                    
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
                 Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif (
