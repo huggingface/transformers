@@ -302,7 +302,6 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         )
 
     @require_torch
-    @require_accelerate
     @require_torch_gpu
     def test_small_model_fp16(self):
         import torch
