@@ -97,32 +97,41 @@ class AtlasRetrieverIndex:
         retriever_hidden_states,
         generator_input_ids,
         topk: int = 5,
+        # todo: for pre-training, we need to skip retrieval of the passage currently in the generator so it can't cheat
+        ignore_index: Optional[int] = None,
     ):
         _, passage_ids = self.index.search_batch("embeddings", retriever_hidden_states, topk)
+
         docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
 
-        queries = self.generator_tokenizer.batch_decode(generator_input_ids, skip_special_tokens=True)
+        passages = self._format_docs(docs, generator_input_ids)
 
-        # todo: this should be configurable
-        # todo: possible to re-use tokenized generator input ids here
+        generator_tokens = self._encode_passages(passages, self.generator_tokenizer, 512)
+        return generator_tokens
+
+    def _format_docs(self, docs: List[str], generator_input_ids: List[int]):
+        # todo: possible to re-use tokenized generator input ids here if non-complex formatting is used
+        queries = self.generator_tokenizer.batch_decode(generator_input_ids, skip_special_tokens=True)
+        # todo: this should be configurable with a string like "{query} context: {passage}" as input
         passages = [[f'{queries[i]} context: {passage}' for passage in doc["text"]] for i, doc in enumerate(docs)]
 
+        return passages
 
-        def encode_passages(batch, tokenizer, max_length):
-            bsz = len(batch)
-            n = max([len(example) for example in batch])
-            batch = [example + [""] *  (n - len(example)) for example in batch]
-            batch = reduce(lambda a, b: a + b, batch)
-            tokens = tokenizer(
-                batch,
-                padding=True,
-                max_length=max_length,
-                return_tensors="pt",
-                truncation=True,
-            )
-            tokens = {k: v.view(bsz, n, -1) for k, v in tokens.items()}
-            
-            return tokens
-
-        generator_tokens = encode_passages(passages, self.generator_tokenizer, 512)
-        return generator_tokens
+    def _encode_passages(self, batch, max_length):
+        # todo: possible to pre-tokenize passages and simply add padding on retrieval
+        bsz = len(batch)
+        n = max([len(example) for example in batch])
+        batch = [example + [""] *  (n - len(example)) for example in batch]
+        batch = reduce(lambda a, b: a + b, batch)
+        tokens = self.generator_tokenizer(
+            batch,
+            # Max length padding is needed to reproduce original implementation, but has a performance cost
+            # padding="max_length",
+            padding=True,
+            max_length=max_length,
+            return_tensors="pt",
+            truncation=True,
+        )
+        tokens = {k: v.view(bsz, n, -1) for k, v in tokens.items()}
+        
+        return tokens
