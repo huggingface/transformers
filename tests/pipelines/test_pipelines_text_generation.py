@@ -301,7 +301,6 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             ],
         )
 
-
     @require_torch
     @require_accelerate
     @require_torch_gpu
