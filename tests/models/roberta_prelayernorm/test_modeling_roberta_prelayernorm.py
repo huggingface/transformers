@@ -524,7 +524,7 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_no_head(self):
-        model = RobertaPreLayerNormModel.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        model = RobertaPreLayerNormModel.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
