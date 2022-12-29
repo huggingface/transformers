@@ -83,7 +83,7 @@ The examples in the dataset have the following fields:
   - `category`: The object's category, with possible values including `Coverall (0)`, `Face_Shield (1)`, `Gloves (2)`, `Goggles (3)` and `Mask (4)`.
 
 You may notice that the `bbox` field follows the COCO format, which is the format that DETR model expects.
-However, the way grouping of the fields inside `objects` differs from the annotations format DETR requires. You will
+However, the grouping of the fields inside `objects` differs from the annotation format DETR requires. You will
 need to apply some preprocessing transformations before using this data for training.
 
 To get an even better understanding of the data, visualize a random example in the dataset.
