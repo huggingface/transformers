@@ -2068,7 +2068,7 @@ class TFGenerationMixin:
         def unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=0):
             """Unflattens the first, flat batch*beam dimension of a non-scalar array."""
             shape = shape_list(tensor)
-            return tf.reshape(tensor, shape[:batch_axis] + [batch_size, num_beams] + shape[batch_axis + 1 :])
+            return tf.reshape(tensor, shape[:batch_axis] + [-1, num_beams] + shape[batch_axis + 1 :])
 
         def gather_beams(nested, beam_indices, batch_axis=0):
             """Gathers the beam slices indexed by beam_indices into new beam array."""
