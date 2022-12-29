@@ -268,7 +268,7 @@ Training involves the following steps:
 1. Load the model with `DetrForObjectDetection.from_pretrained` using the same checkpoint as in the preprocessing.
 2. Define your training hyperparameters in `TrainingArguments`.
 3. Pass the training arguments to `Trainer` along with the model, dataset, image processor, and data collator.
-4. Call `train()`` to finetune your model.
+4. Call `train()` to finetune your model.
 
 When loading the model from the same checkpoint that you used for the preprocessing, remember to pass the label to
 id and id to label maps that you created earlier from the dataset's metadata.
