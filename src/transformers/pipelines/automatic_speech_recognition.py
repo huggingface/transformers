@@ -240,7 +240,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         ignore_warning=None,
         decoder_kwargs=None,
         return_timestamps=None,
-        **generate_kwargs
+        generate_kwargs=None,
+        max_new_tokens=None,
     ):
         # No parameters on this pipeline right now
         preprocess_params = {}
@@ -361,7 +362,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, **generate_kwargs):
+    def _forward(self, model_inputs, generate_kwargs=None):
+        if generate_kwargs is None:
+            generate_kwargs = {}
         is_last = model_inputs.pop("is_last")
         if self.type == "seq2seq":
             encoder = self.model.get_encoder()
