@@ -271,7 +271,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
+                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a sampling rate of"
                     f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
                     f" {self.sampling_rate} and not {sampling_rate}."
                 )
