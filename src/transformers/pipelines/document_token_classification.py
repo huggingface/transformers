@@ -57,11 +57,9 @@ class DocumentTokenClassificationArgumentHandler(ArgumentHandler):
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
 
-        if inputs is not None and (
-            (isinstance(inputs, (list, tuple)) and len(inputs) > 0) or isinstance(inputs, types.GeneratorType)
-        ):
+        if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
-        elif isinstance(inputs, str):
+        elif isinstance(inputs, str) or isinstance(inputs, Image.Image) or isinstance(inputs, dict):
             inputs = [inputs]
         elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
             return inputs
@@ -155,7 +153,10 @@ class DocumentTokenClassificationPipeline(Pipeline):
             - **word_labels** (:obj:`List[str]`) -- The predicted labels for each word.
         """
         inputs = self._args_parser(inputs)
-        return super().__call__(inputs, **kwargs)
+        output = super().__call__(inputs, **kwargs)
+        if isinstance(output, list) and len(output) == 1:
+            return output[0]
+        return output
 
     def preprocess(self, input, lang=None, tesseract_config="", **kwargs):
         image = None
