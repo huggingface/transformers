@@ -22,7 +22,7 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import nested_simplify, require_pytesseract, require_tf, require_timm, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -245,6 +245,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         )
 
     @require_torch
+    @require_pytesseract
     @slow
     def test_layoutlm(self):
         model_id = "Narsil/layoutlmv3-finetuned-funsd"
