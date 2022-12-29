@@ -4,16 +4,16 @@ from tempfile import TemporaryDirectory
 
 from transformers import AutoConfig, TFAutoModel, is_tensorflow_text_available, is_tf_available
 from transformers.models.bert.tokenization_bert import BertTokenizer
-from transformers.testing_utils import require_tensorflow_text, slow
+from transformers.testing_utils import require_tf, require_tensorflow_text, slow
 
-
-if is_tensorflow_text_available():
-    from transformers.models.bert import TFBertTokenizer
 
 if is_tf_available():
     import tensorflow as tf
 
+    if is_tensorflow_text_available():
+        from transformers.models.bert import TFBertTokenizer
 
+        
 TOKENIZER_CHECKPOINTS = ["bert-base-uncased", "bert-base-cased"]
 TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 
@@ -32,6 +32,7 @@ if is_tf_available():
             return out["pooler_output"]
 
 
+@require_tf
 @require_tensorflow_text
 class BertTokenizationTest(unittest.TestCase):
     # The TF tokenizers are usually going to be used as pretrained tokenizers from existing model checkpoints,

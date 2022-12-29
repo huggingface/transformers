@@ -86,7 +86,7 @@ else:
         "TFBertPreTrainedModel",
     ]
 try:
-    if not is_tensorflow_text_available():
+    if not (is_tensorflow_text_available() and is_tf_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -169,7 +169,7 @@ if TYPE_CHECKING:
         )
 
     try:
-        if not is_tensorflow_text_available():
+        if not (is_tensorflow_text_available() and is_tf_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass

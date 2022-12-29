@@ -23,6 +23,7 @@ from ...utils import (
     _LazyModule,
     is_flax_available,
     is_keras_nlp_available,
+    is_tensorflow_text_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -76,7 +77,7 @@ else:
     ]
 
 try:
-    if not is_keras_nlp_available():
+    if not (is_keras_nlp_available() and is_tensorflow_text_available() and is_tf_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -137,7 +138,7 @@ if TYPE_CHECKING:
         )
 
     try:
-        if not is_keras_nlp_available():
+        if not (is_keras_nlp_available() and is_tensorflow_text_available() and is_tf_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
