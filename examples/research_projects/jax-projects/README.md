@@ -1209,7 +1209,7 @@ All the widgets are open sourced in the `huggingface_hub` [repo](https://github.
 * **Text to Speech**: Convert text to audio.
 
 **Image**
-* **Image Classification:** Given an image, predict its class. [Example](https://huggingface.co/osanseviero/llamastic).
+* **Image Classification:** Given an image, predict its class. [Example](https://huggingface.co/osanseviero/llamastic).
 * ([WIP](https://github.com/huggingface/huggingface_hub/issues/100)) **Zero Shot Image Classification**
 * ([WIP](https://github.com/huggingface/huggingface_hub/issues/112)) **Image Captioning**
 * ([WIP](https://github.com/huggingface/huggingface_hub/issues/113)) **Text to Image Generation**
