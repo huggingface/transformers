@@ -252,7 +252,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if ignore_warning is not None:
             preprocess_params["ignore_warning"] = ignore_warning
 
-        forward_params = generate_kwargs
+        forward_params = {"generate_kwargs": {}}
+        if max_new_tokens is not None:
+            forward_params["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+        if generate_kwargs is not None:
+            if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
+                raise ValueError(
+                    "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
+                    " only 1 version"
+                )
+            forward_params["generate_kwargs"].update(generate_kwargs)
 
         postprocess_params = {}
         if decoder_kwargs is not None:
@@ -365,6 +374,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def _forward(self, model_inputs, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
+
         is_last = model_inputs.pop("is_last")
         if self.type == "seq2seq":
             encoder = self.model.get_encoder()
