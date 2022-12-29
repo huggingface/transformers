@@ -40,12 +40,12 @@ Tips:
 - BEiT models are regular Vision Transformers, but pre-trained in a self-supervised way rather than supervised. They
   outperform both the [original model (ViT)](vit) as well as [Data-efficient Image Transformers (DeiT)](deit) when fine-tuned on ImageNet-1K and CIFAR-100. You can check out demo notebooks regarding inference as well as
   fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) (you can just replace
-  [`ViTFeatureExtractor`] by [`BeitFeatureExtractor`] and
+  [`ViTFeatureExtractor`] by [`BeitImageProcessor`] and
   [`ViTForImageClassification`] by [`BeitForImageClassification`]).
 - There's also a demo notebook available which showcases how to combine DALL-E's image tokenizer with BEiT for
   performing masked image modeling. You can find it [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/BEiT).
 - As the BEiT models expect each image to be of the same size (resolution), one can use
-  [`BeitFeatureExtractor`] to resize (or rescale) and normalize images for the model.
+  [`BeitImageProcessor`] to resize (or rescale) and normalize images for the model.
 - Both the patch resolution and image resolution used during pre-training or fine-tuning are reflected in the name of
   each checkpoint. For example, `microsoft/beit-base-patch16-224` refers to a base-sized architecture with patch
   resolution of 16x16 and fine-tuning resolution of 224x224. All checkpoints can be found on the [hub](https://huggingface.co/models?search=microsoft/beit).

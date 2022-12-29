@@ -91,6 +91,24 @@ class TableQuestionAnsweringPipeline(Pipeline):
     Table Question Answering pipeline using a `ModelForTableQuestionAnswering`. This pipeline is only available in
     PyTorch.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> oracle = pipeline(model="google/tapas-base-finetuned-wtq")
+    >>> table = {
+    ...     "Repository": ["Transformers", "Datasets", "Tokenizers"],
+    ...     "Stars": ["36542", "4512", "3934"],
+    ...     "Contributors": ["651", "77", "34"],
+    ...     "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+    ... }
+    >>> oracle(query="How many stars does the transformers repository have?", table=table)
+    {'answer': 'AVERAGE > 36542', 'coordinates': [(0, 1)], 'cells': ['36542'], 'aggregator': 'AVERAGE'}
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This tabular question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"table-question-answering"`.
 

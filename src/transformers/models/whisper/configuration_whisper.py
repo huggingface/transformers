@@ -35,7 +35,7 @@ WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 # fmt: off
 NON_SPEECH_TOKENS = [
-    1, 2, 6, 7, 8, 9, 10, 12, 14, 25,
+    1, 2, 7, 8, 9, 10, 14, 25,
     26, 27, 28, 29, 31, 58, 59, 60, 61, 62,
     63, 90, 91, 92, 93, 357, 366, 438, 532, 685,
     705, 796, 930, 1058, 1220, 1267, 1279, 1303, 1343, 1377,
@@ -46,7 +46,7 @@ NON_SPEECH_TOKENS = [
     34949, 40283, 40493, 40549, 47282, 49146, 50257, 50359, 50360, 50361
 ]
 NON_SPEECH_TOKENS_MULTI = [
-    1, 2, 6, 7, 8, 9, 10, 12, 14, 25,
+    1, 2, 7, 8, 9, 10, 14, 25,
     26, 27, 28, 29, 31, 58, 59, 60, 61, 62,
     63, 90, 91, 92, 93, 359, 503, 522, 542, 873,
     893, 902, 918, 922, 931, 1350, 1853, 1982, 2460, 2627,
@@ -264,6 +264,9 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
             time_duration=time_duration,
             frequency=frequency,
         )
+        encoder_sequence_length = encoder_inputs["input_features"].shape[2]
+        seq_length = encoder_sequence_length // 2 if self.use_past else seq_length
+
         decoder_inputs = super().generate_dummy_inputs(
             preprocessor.tokenizer, batch_size, seq_length, is_pair, framework
         )

@@ -1795,7 +1795,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple[torch.Tensor], FlavaForPreTrainingOutput]:
         """
         Examples:
         ```python

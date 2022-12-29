@@ -56,12 +56,12 @@ Tips:
 - One can also check out [this interactive demo on Hugging Face Spaces](https://huggingface.co/spaces/chansung/segformer-tf-transformers)
   to try out a SegFormer model on custom images.
 - SegFormer works on any input size, as it pads the input to be divisible by `config.patch_sizes`.
-- One can use [`SegformerFeatureExtractor`] to prepare images and corresponding segmentation maps
-  for the model. Note that this feature extractor is fairly basic and does not include all data augmentations used in
+- One can use [`SegformerImageProcessor`] to prepare images and corresponding segmentation maps
+  for the model. Note that this image processor is fairly basic and does not include all data augmentations used in
   the original paper. The original preprocessing pipelines (for the ADE20k dataset for instance) can be found [here](https://github.com/NVlabs/SegFormer/blob/master/local_configs/_base_/datasets/ade20k_repeat.py). The most
   important preprocessing step is that images and segmentation maps are randomly cropped and padded to the same size,
   such as 512x512 or 640x640, after which they are normalized.
-- One additional thing to keep in mind is that one can initialize [`SegformerFeatureExtractor`] with
+- One additional thing to keep in mind is that one can initialize [`SegformerImageProcessor`] with
   `reduce_labels` set to `True` or `False`. In some datasets (like ADE20k), the 0 index is used in the annotated
   segmentation maps for background. However, ADE20k doesn't include the "background" class in its 150 labels.
   Therefore, `reduce_labels` is used to reduce all labels by 1, and to make sure no loss is computed for the

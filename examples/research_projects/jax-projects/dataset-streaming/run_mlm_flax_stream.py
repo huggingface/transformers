@@ -562,7 +562,7 @@ if __name__ == "__main__":
             samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
         except StopIteration:
             # Once the end of the dataset stream is reached, the training iterator
-            # is reinitialized and reshuffled and a new eval dataset is randomely chosen.
+            # is reinitialized and reshuffled and a new eval dataset is randomly chosen.
             shuffle_seed += 1
             tokenized_datasets.set_epoch(shuffle_seed)
 

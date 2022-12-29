@@ -287,7 +287,6 @@ class SegformerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
         segmentation_map = to_numpy_array(segmentation_map)
@@ -301,7 +300,7 @@ class SegformerImageProcessor(BaseImageProcessor):
             image=segmentation_map,
             do_reduce_labels=do_reduce_labels,
             do_resize=do_resize,
-            resample=PIL.Image.NEAREST,
+            resample=PILImageResampling.NEAREST,
             size=size,
             do_rescale=False,
             do_normalize=False,
@@ -438,7 +437,6 @@ class SegformerImageProcessor(BaseImageProcessor):
                     segmentation_map=segmentation_map,
                     do_reduce_labels=do_reduce_labels,
                     do_resize=do_resize,
-                    resample=PIL.Image.NEAREST,
                     size=size,
                 )
                 for segmentation_map in segmentation_maps

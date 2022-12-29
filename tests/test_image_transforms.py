@@ -37,10 +37,12 @@ if is_vision_available():
     from transformers.image_transforms import (
         center_crop,
         center_to_corners_format,
+        convert_to_rgb,
         corners_to_center_format,
         get_resize_output_image_size,
         id_to_rgb,
         normalize,
+        pad,
         resize,
         rgb_to_id,
         to_channel_dimension_format,
@@ -60,6 +62,8 @@ class ImageTransformsTester(unittest.TestCase):
         [
             ("numpy_float_channels_first", (3, 4, 5), np.float32),
             ("numpy_float_channels_last", (4, 5, 3), np.float32),
+            ("numpy_float_channels_first", (3, 4, 5), np.float64),
+            ("numpy_float_channels_last", (4, 5, 3), np.float64),
             ("numpy_int_channels_first", (3, 4, 5), np.int32),
             ("numpy_uint_channels_first", (3, 4, 5), np.uint8),
         ]
@@ -70,6 +74,27 @@ class ImageTransformsTester(unittest.TestCase):
         pil_image = to_pil_image(image)
         self.assertIsInstance(pil_image, PIL.Image.Image)
         self.assertEqual(pil_image.size, (5, 4))
+
+        # make sure image is correctly rescaled
+        self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
+
+    @parameterized.expand(
+        [
+            ("numpy_float_channels_first", (3, 4, 5), np.float32),
+            ("numpy_float_channels_first", (3, 4, 5), np.float64),
+            ("numpy_float_channels_last", (4, 5, 3), np.float32),
+            ("numpy_float_channels_last", (4, 5, 3), np.float64),
+        ]
+    )
+    @require_vision
+    def test_to_pil_image_from_float(self, name, image_shape, dtype):
+        image = np.random.rand(*image_shape).astype(dtype)
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        # make sure image is correctly rescaled
+        self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
 
     @require_tf
     def test_to_pil_image_from_tensorflow(self):
@@ -159,6 +184,25 @@ class ImageTransformsTester(unittest.TestCase):
         # Test size is resized if longer size > max_size
         image = np.random.randint(0, 256, (3, 50, 40))
         self.assertEqual(get_resize_output_image_size(image, 20, default_to_square=False, max_size=22), (22, 17))
+
+        # Test correct channel dimension is returned if output size if height == 3
+        # Defaults to input format - channels first
+        image = np.random.randint(0, 256, (3, 18, 97))
+        resized_image = resize(image, (3, 20))
+        self.assertEqual(resized_image.shape, (3, 3, 20))
+
+        # Defaults to input format - channels last
+        image = np.random.randint(0, 256, (18, 97, 3))
+        resized_image = resize(image, (3, 20))
+        self.assertEqual(resized_image.shape, (3, 20, 3))
+
+        image = np.random.randint(0, 256, (3, 18, 97))
+        resized_image = resize(image, (3, 20), data_format="channels_last")
+        self.assertEqual(resized_image.shape, (3, 20, 3))
+
+        image = np.random.randint(0, 256, (18, 97, 3))
+        resized_image = resize(image, (3, 20), data_format="channels_first")
+        self.assertEqual(resized_image.shape, (3, 3, 20))
 
     def test_resize(self):
         image = np.random.randint(0, 256, (3, 224, 224))
@@ -289,3 +333,156 @@ class ImageTransformsTester(unittest.TestCase):
             ]
         )
         self.assertTrue(np.allclose(id_to_rgb(id_array), color))
+
+    def test_pad(self):
+        # fmt: off
+        image = np.array([[
+            [0, 1],
+            [2, 3],
+        ]])
+        # fmt: on
+
+        # Test that exception is raised if unknown padding mode is specified
+        with self.assertRaises(ValueError):
+            pad(image, 10, mode="unknown")
+
+        # Test that exception is raised if invalid padding is specified
+        with self.assertRaises(ValueError):
+            # Cannot pad on channel dimension
+            pad(image, (5, 10, 10))
+
+        # Test image is padded equally on all sides is padding is an int
+        # fmt: off
+        expected_image = np.array([
+            [[0, 0, 0, 0],
+             [0, 0, 1, 0],
+             [0, 2, 3, 0],
+             [0, 0, 0, 0]],
+        ])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, 1)))
+
+        # Test the left and right of each axis is padded (pad_left, pad_right)
+        # fmt: off
+        expected_image = np.array(
+            [[0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0],
+             [0, 0, 0, 1, 0],
+             [0, 0, 2, 3, 0],
+             [0, 0, 0, 0, 0]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, (2, 1))))
+
+        # Test only one axis is padded (pad_left, pad_right)
+        # fmt: off
+        expected_image = np.array([[
+            [9, 9],
+            [9, 9],
+            [0, 1],
+            [2, 3],
+            [9, 9]
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((2, 1), (0, 0)), constant_values=9)))
+
+        # Test padding with a constant value
+        # fmt: off
+        expected_image = np.array([[
+            [8, 8, 0, 1, 9],
+            [8, 8, 2, 3, 9],
+            [8, 8, 7, 7, 9],
+            [8, 8, 7, 7, 9]
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), constant_values=((6, 7), (8, 9)))))
+
+        # fmt: off
+        image = np.array([[
+            [0, 1, 2],
+            [3, 4, 5],
+            [6, 7, 8],
+        ]])
+        # fmt: on
+
+        # Test padding with PaddingMode.REFLECT
+        # fmt: off
+        expected_image = np.array([[
+            [2, 1, 0, 1, 2, 1],
+            [5, 4, 3, 4, 5, 4],
+            [8, 7, 6, 7, 8, 7],
+            [5, 4, 3, 4, 5, 4],
+            [2, 1, 0, 1, 2, 1],
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), mode="reflect")))
+
+        # Test padding with PaddingMode.REPLICATE
+        # fmt: off
+        expected_image = np.array([[
+            [0, 0, 0, 1, 2, 2],
+            [3, 3, 3, 4, 5, 5],
+            [6, 6, 6, 7, 8, 8],
+            [6, 6, 6, 7, 8, 8],
+            [6, 6, 6, 7, 8, 8],
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), mode="replicate")))
+
+        # Test padding with PaddingMode.SYMMETRIC
+        # fmt: off
+        expected_image = np.array([[
+            [1, 0, 0, 1, 2, 2],
+            [4, 3, 3, 4, 5, 5],
+            [7, 6, 6, 7, 8, 8],
+            [7, 6, 6, 7, 8, 8],
+            [4, 3, 3, 4, 5, 5],
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), mode="symmetric")))
+
+        # Test we can specify the output data format
+        # Test padding with PaddingMode.REFLECT
+        # fmt: off
+        image = np.array([[
+            [0, 1],
+            [2, 3],
+        ]])
+        expected_image = np.array([
+            [[0], [1], [0], [1], [0]],
+            [[2], [3], [2], [3], [2]],
+            [[0], [1], [0], [1], [0]],
+            [[2], [3], [2], [3], [2]]
+        ])
+        # fmt: on
+        self.assertTrue(
+            np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), mode="reflect", data_format="channels_last"))
+        )
+
+    @require_vision
+    def test_convert_to_rgb(self):
+        # Test that an RGBA image is converted to RGB
+        image = np.array([[[1, 2, 3, 4], [5, 6, 7, 8]]], dtype=np.uint8)
+        pil_image = PIL.Image.fromarray(image)
+        self.assertEqual(pil_image.mode, "RGBA")
+        self.assertEqual(pil_image.size, (2, 1))
+
+        # For the moment, numpy images are returned as is
+        rgb_image = convert_to_rgb(image)
+        self.assertEqual(rgb_image.shape, (1, 2, 4))
+        self.assertTrue(np.allclose(rgb_image, image))
+
+        # And PIL images are converted
+        rgb_image = convert_to_rgb(pil_image)
+        self.assertEqual(rgb_image.mode, "RGB")
+        self.assertEqual(rgb_image.size, (2, 1))
+        self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[1, 2, 3], [5, 6, 7]]], dtype=np.uint8)))
+
+        # Test that a grayscale image is converted to RGB
+        image = np.array([[0, 255]], dtype=np.uint8)
+        pil_image = PIL.Image.fromarray(image)
+        self.assertEqual(pil_image.mode, "L")
+        self.assertEqual(pil_image.size, (2, 1))
+        rgb_image = convert_to_rgb(pil_image)
+        self.assertEqual(rgb_image.mode, "RGB")
+        self.assertEqual(rgb_image.size, (2, 1))
+        self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))

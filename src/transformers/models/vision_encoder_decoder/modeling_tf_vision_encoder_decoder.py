@@ -261,7 +261,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        decoder_input_ids = tf.constant(DUMMY_INPUTS)
+        decoder_input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         batch_size, seq_len = decoder_input_ids.shape
 
         VISION_DUMMY_INPUTS = tf.random.uniform(

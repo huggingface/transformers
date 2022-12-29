@@ -44,12 +44,16 @@ class DeformableDetrFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=18,
-        max_size=1333,  # by setting max_size > max_resolution we're effectively not testing this :p
+        size=None,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
+        do_rescale=True,
+        rescale_factor=1 / 255,
+        do_pad=True,
     ):
+        # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
+        size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -57,19 +61,23 @@ class DeformableDetrFeatureExtractionTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.max_size = max_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_pad = do_pad
 
     def prepare_feat_extract_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "max_size": self.max_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
+            "do_rescale": self.do_rescale,
+            "rescale_factor": self.rescale_factor,
+            "do_pad": self.do_pad,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -84,14 +92,14 @@ class DeformableDetrFeatureExtractionTester(unittest.TestCase):
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
-                expected_height = int(self.size * h / w)
-                expected_width = self.size
+                expected_height = int(self.size["shortest_edge"] * h / w)
+                expected_width = self.size["shortest_edge"]
             elif w > h:
-                expected_height = self.size
-                expected_width = int(self.size * w / h)
+                expected_height = self.size["shortest_edge"]
+                expected_width = int(self.size["shortest_edge"] * w / h)
             else:
-                expected_height = self.size
-                expected_width = self.size
+                expected_height = self.size["shortest_edge"]
+                expected_width = self.size["shortest_edge"]
 
         else:
             expected_values = []
@@ -123,8 +131,9 @@ class DeformableDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unit
         self.assertTrue(hasattr(feature_extractor, "image_std"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
+        self.assertTrue(hasattr(feature_extractor, "do_rescale"))
+        self.assertTrue(hasattr(feature_extractor, "do_pad"))
         self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "max_size"))
 
     def test_batch_feature(self):
         pass
@@ -230,7 +239,8 @@ class DeformableDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unit
     def test_equivalence_pad_and_create_pixel_mask(self):
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
-        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
+        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False, do_rescale=False)
+
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
@@ -331,7 +341,7 @@ class DeformableDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unit
         expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
         self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
         # verify masks
-        expected_masks_sum = 822338
+        expected_masks_sum = 822873
         self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
