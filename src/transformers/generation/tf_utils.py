@@ -2210,6 +2210,7 @@ class TFGenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+            breakpoint()
             logits = unflatten_beam_dim(model_outputs.logits[:, -1], num_beams)
 
             # Store scores, attentions and hidden_states when required
