@@ -300,3 +300,11 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 }
             ],
         )
+
+    @require_torch
+    @require_torch_gpu
+    def test_small_model_fp16(self):
+        import torch
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device=0, torch_dtype=torch.float16)
+        pipe("This is a test")
