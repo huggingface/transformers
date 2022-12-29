@@ -198,14 +198,17 @@ class TFVideoMAEPatchEmbeddings(tf.keras.layers.Layer):
             tf.shape(pixel_values)[3],
             tf.shape(pixel_values)[4],
         )
-        if num_channels != self.num_channels:
+        if tf.executing_eagerly() and num_channels != self.num_channels:
             raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f"Make sure that the channel dimension of the pixel values match with the one set in the"
+                f" configuration."
             )
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
+        if tf.executing_eagerly():
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
         # TensorFlow's Conv3D layer (in the channels' last mode) has the following shape:
         # (batch_size, num_frames, height, width, num_channels). Also, in CPU mode,
         # the Conv3D layer won't support the channels' first format.
@@ -863,7 +866,7 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         self.mean = tf.convert_to_tensor(IMAGENET_DEFAULT_MEAN)[None, None, :, None, None]
         self.std = tf.convert_to_tensor(IMAGENET_DEFAULT_STD)[None, None, :, None, None]
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.mask_token = self.add_weight(
             shape=(1, 1, self.config.decoder_hidden_size), initializer="zeros", name="mask_token"
         )
@@ -922,7 +925,11 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         sequence_output = self.encoder_to_decoder(
             sequence_output
         )  # [batch_size, num_visible_patches, decoder_hidden_size]
-        batch_size, seq_len, num_channels = tf.shape(sequence_output)
+        batch_size, seq_len, num_channels = (
+            tf.shape(sequence_output)[0],
+            tf.shape(sequence_output)[1],
+            tf.shape(sequence_output)[1],
+        )
 
         # we don't unshuffle the correct visible token order, but shuffle the position embeddings accordingly.
         if bool_masked_pos is None:

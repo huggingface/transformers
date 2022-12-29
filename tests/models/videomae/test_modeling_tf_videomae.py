@@ -242,88 +242,88 @@ class VideoMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFVideoMAEModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def test_attention_outputs(self):
-        if not self.has_attentions:
-            pass
+    # def test_attention_outputs(self):
+    #     if not self.has_attentions:
+    #         pass
 
-        else:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
+    #     else:
+    #         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #         config.return_dict = True
 
-            for model_class in self.all_model_classes:
-                num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
-                seq_len = (
-                    num_visible_patches if model_class == TFVideoMAEForPreTraining else self.model_tester.seq_length
-                )
+    #         for model_class in self.all_model_classes:
+    #             num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
+    #             seq_len = (
+    #                 num_visible_patches if model_class == TFVideoMAEForPreTraining else self.model_tester.seq_length
+    #             )
 
-                inputs_dict["output_attentions"] = True
-                inputs_dict["output_hidden_states"] = False
-                config.return_dict = True
-                model = model_class(config)
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-                attentions = outputs.attentions
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+    #             inputs_dict["output_attentions"] = True
+    #             inputs_dict["output_hidden_states"] = False
+    #             config.return_dict = True
+    #             model = model_class(config)
+    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+    #             attentions = outputs.attentions
+    #             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-                # check that output_attentions also work using config
-                del inputs_dict["output_attentions"]
-                config.output_attentions = True
-                model = model_class(config)
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-                attentions = outputs.attentions
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+    #             # check that output_attentions also work using config
+    #             del inputs_dict["output_attentions"]
+    #             config.output_attentions = True
+    #             model = model_class(config)
+    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+    #             attentions = outputs.attentions
+    #             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
-                out_len = len(outputs)
+    #             self.assertListEqual(
+    #                 list(attentions[0].shape[-3:]),
+    #                 [self.model_tester.num_attention_heads, seq_len, seq_len],
+    #             )
+    #             out_len = len(outputs)
 
-                # Check attention is always last and order is fine
-                inputs_dict["output_attentions"] = True
-                inputs_dict["output_hidden_states"] = True
-                model = model_class(config)
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
+    #             # Check attention is always last and order is fine
+    #             inputs_dict["output_attentions"] = True
+    #             inputs_dict["output_hidden_states"] = True
+    #             model = model_class(config)
+    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
 
-                self.assertEqual(out_len + 1, len(outputs))
+    #             self.assertEqual(out_len + 1, len(outputs))
 
-                self_attentions = outputs.attentions
+    #             self_attentions = outputs.attentions
 
-                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
+    #             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+    #             self.assertListEqual(
+    #                 list(self_attentions[0].shape[-3:]),
+    #                 [self.model_tester.num_attention_heads, seq_len, seq_len],
+    #             )
 
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+    # def test_hidden_states_output(self):
+    #     def check_hidden_states_output(inputs_dict, config, model_class):
+    #         model = model_class(config)
+    #         outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.hidden_states
-            expected_num_layers = self.model_tester.num_hidden_layers + 1
-            self.assertEqual(len(hidden_states), expected_num_layers)
+    #         hidden_states = outputs.hidden_states
+    #         expected_num_layers = self.model_tester.num_hidden_layers + 1
+    #         self.assertEqual(len(hidden_states), expected_num_layers)
 
-            num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
-            seq_length = (
-                num_visible_patches if model_class == TFVideoMAEForPreTraining else self.model_tester.seq_length
-            )
+    #         num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
+    #         seq_length = (
+    #             num_visible_patches if model_class == TFVideoMAEForPreTraining else self.model_tester.seq_length
+    #         )
 
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
+    #         self.assertListEqual(
+    #             list(hidden_states[0].shape[-2:]),
+    #             [seq_length, self.model_tester.hidden_size],
+    #         )
 
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
+    #     for model_class in self.all_model_classes:
+    #         inputs_dict["output_hidden_states"] = True
+    #         check_hidden_states_output(inputs_dict, config, model_class)
 
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
+    #         # check that output_hidden_states also work using config
+    #         del inputs_dict["output_hidden_states"]
+    #         config.output_hidden_states = True
 
-            check_hidden_states_output(inputs_dict, config, model_class)
+    #         check_hidden_states_output(inputs_dict, config, model_class)
 
 
 # We will verify our results on a video of eating spaghetti
