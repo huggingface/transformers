@@ -542,7 +542,7 @@ def main():
     )
 
     # Scheduler and math around the number of training steps.
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = len(train_dataloader)
 
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
@@ -577,6 +577,7 @@ def main():
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
+            with accelerator.accumulate(model):
             # compute num of losses
             num_losses = batch["mask_time_indices"].sum()
             sub_attention_mask = batch.pop("sub_attention_mask", None)
@@ -590,7 +591,7 @@ def main():
 
             # divide loss by gradient accumulation steps since gradients
             # are accumulated for multiple backward passes in PyTorch
-            loss = outputs.loss / args.gradient_accumulation_steps
+            
             accelerator.backward(loss)
 
             # make sure that `num_losses` is summed for distributed training
