@@ -233,23 +233,33 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         """
         return super().__call__(inputs, **kwargs)
 
-    def _sanitize_parameters(self, **kwargs):
+    def _sanitize_parameters(
+        self,
+        chunk_length_s=None,
+        stride_length_s=None,
+        ignore_warning=None,
+        decoder_kwargs=None,
+        return_timestamps=None,
+        **generate_kwargs
+    ):
         # No parameters on this pipeline right now
         preprocess_params = {}
-        if "chunk_length_s" in kwargs:
-            preprocess_params["chunk_length_s"] = kwargs["chunk_length_s"]
-        if "stride_length_s" in kwargs:
-            preprocess_params["stride_length_s"] = kwargs["stride_length_s"]
-        if "ignore_warning" in kwargs:
-            preprocess_params["ignore_warning"] = kwargs["ignore_warning"]
+        if chunk_length_s is not None:
+            preprocess_params["chunk_length_s"] = chunk_length_s
+        if stride_length_s is not None:
+            preprocess_params["stride_length_s"] = stride_length_s
+        if ignore_warning is not None:
+            preprocess_params["ignore_warning"] = ignore_warning
+
+        forward_params = generate_kwargs
 
         postprocess_params = {}
-        if "decoder_kwargs" in kwargs:
-            postprocess_params["decoder_kwargs"] = kwargs["decoder_kwargs"]
-        if "return_timestamps" in kwargs:
-            postprocess_params["return_timestamps"] = kwargs["return_timestamps"]
+        if decoder_kwargs is not None:
+            postprocess_params["decoder_kwargs"] = decoder_kwargs
+        if return_timestamps is not None:
+            postprocess_params["return_timestamps"] = return_timestamps
 
-        return preprocess_params, {}, postprocess_params
+        return preprocess_params, forward_params, postprocess_params
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, ignore_warning=False):
         if isinstance(inputs, str):
@@ -351,7 +361,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs):
+    def _forward(self, model_inputs, **generate_kwargs):
         is_last = model_inputs.pop("is_last")
         if self.type == "seq2seq":
             encoder = self.model.get_encoder()
@@ -376,6 +386,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             tokens = self.model.generate(
                 encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
+                **generate_kwargs,
             )
 
             out = {"tokens": tokens}
