@@ -144,7 +144,7 @@ For DETR models, `DetrImageProcessor` takes care of processing image data to cre
 - `image_mean = [0.485, 0.456, 0.406 ]`
 - `image_std = [0.229, 0.224, 0.225]`
 
-These are the mean and standard deviation used to normalize images during the model training. These values are crucial
+These are the mean and standard deviation used to normalize images during the model pre-training. These values are crucial
 to replicate when doing inference or finetuning a pre-trained image model.
 
 Instantiate the `DetrImageProcessor` from the same checkpoint as the model you want to finetune.
