@@ -156,7 +156,7 @@ Instantiate the image processor from the same checkpoint as the model you want t
 >>> image_processor = DetrImageProcessor.from_pretrained(checkpoint)
 ```
 
-Before passing the images to the `DetrImageProcessor`, apply two preprocessing transformations to the dataset:
+Before passing the images to the `image_processor`, apply two preprocessing transformations to the dataset:
 - Augmenting images
 - Re-formatting annotations to meet DETR expectations
 
