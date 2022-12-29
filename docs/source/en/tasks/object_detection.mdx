@@ -97,7 +97,7 @@ To get an even better understanding of the data, visualize a random example in t
 >>> image_ids = cppe5["train"]["image_id"]
 >>> # let's pick a random image
 >>> image_id = image_ids[np.random.randint(0, len(image_ids))]
->>> print("Image n°{}".format(image_id))
+>>> print(f"Image n°{image_id}")
 
 >>> image = cppe5["train"][image_id]["image"]
 >>> annotations = cppe5["train"][image_id]["objects"]
