@@ -182,7 +182,7 @@ flip it horizontally, and brighten it:
 ```
 
 The `image_processor` expects the annotations to be in the following format: `{'image_id': int, 'annotations': List[Dict]}`,
- where each `Dict` is a COCO object annotation. Building up gradually, add a function to reformat annotations for a single example:
+ where each dictionary is a COCO object annotation. Building up gradually, let's add a function to reformat annotations for a single example:
 
 ```py
 >>> def formatted_anns(image_id, category, area, bbox):
