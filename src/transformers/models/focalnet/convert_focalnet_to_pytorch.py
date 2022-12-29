@@ -15,11 +15,16 @@
 """Convert FocalNet checkpoints from the original repository. URL: https://github.com/microsoft/FocalNet/tree/main"""
 
 import argparse
-import requests
-from PIL import Image
+import json
 
 import torch
+from PIL import Image
 
+from huggingface_hub import hf_hub_download
+
+from torchvision import transforms
+
+import requests
 from transformers import AutoImageProcessor, FocalNetConfig, FocalNetForImageClassification
 
 
@@ -41,8 +46,12 @@ def get_focalnet_config(model_name):
         embed_dim = 192
         depths = (2, 2, 18, 2)
 
-    # TODO id2label
-    config.num_labels = 1000
+    repo_id = "huggingface/label-files"
+    filename = "imagenet-1k-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     config.embed_dim = embed_dim
     config.depths = depths
@@ -77,44 +86,53 @@ def rename_key(name):
 
 def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path):
     model_name_to_url = {
-        "focalnet-tiny": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_tiny_srf.pth",
+        "focalnet-tiny": (
+            "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_tiny_srf.pth"
+        ),
     }
 
     checkpoint_url = model_name_to_url[model_name]
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")['model']
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
 
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
 
-    for k,v in state_dict.items():
-        print(k, v.shape)
-
     config = get_focalnet_config(model_name)
     model = FocalNetForImageClassification(config)
     model.eval()
-    
+
     # load state dict
     model.load_state_dict(state_dict)
 
     # verify conversion
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    processor = AutoImageProcessor.from_pretrained("microsoft/swin-base-patch4-window7-224-in22k")
+    # processor = AutoImageProcessor.from_pretrained("microsoft/swin-base-patch4-window7-224-in22k")
     image = Image.open(requests.get(url, stream=True).raw)
-    inputs = processor(images=image, return_tensors="pt")
+    #inputs = processor(images=image, return_tensors="pt")
 
-    outputs = model(**inputs)
+    image_transforms = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
 
-    print("Predicted class:", outputs.logits.argmax(-1).item())
+    pixel_values = image_transforms(image).unsqueeze(0)
+
+    outputs = model(pixel_values)
+
+    predicted_class_idx = outputs.logits.argmax(-1).item()
+    print("Predicted class:", predicted_class_idx)
 
     # assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        processor.save_pretrained(pytorch_dump_folder_path)
+        # processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

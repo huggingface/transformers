@@ -25,7 +25,6 @@ FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class FocalNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FocalNetModel`]. It is used to instantiate a FocalNet
@@ -94,18 +93,18 @@ class FocalNetConfig(PretrainedConfig):
         patch_size=4,
         num_channels=3,
         embed_dim=96,
-        depths=[2, 2, 6, 2], 
+        depths=[2, 2, 6, 2],
         mlp_ratio=4.0,
-        hidden_dropout_prob=0., 
+        hidden_dropout_prob=0.0,
         drop_path_rate=0.1,
-        patch_norm=True,            
-        focal_levels=[2, 2, 2, 2], 
-        focal_windows=[3, 3, 3, 3], 
-        use_conv_embed=False, 
-        use_layerscale=False, 
-        layerscale_value=1e-4, 
-        use_postln=False, 
-        use_postln_in_modulation=False, 
+        patch_norm=True,
+        focal_levels=[2, 2, 2, 2],
+        focal_windows=[3, 3, 3, 3],
+        use_conv_embed=False,
+        use_layerscale=False,
+        layerscale_value=1e-4,
+        use_postln=False,
+        use_postln_in_modulation=False,
         normalize_modulator=False,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -121,7 +120,7 @@ class FocalNetConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.hidden_dropout_prob = hidden_dropout_prob
         self.drop_path_rate = drop_path_rate
-        self.patch_norm = patch_norm                    
+        self.patch_norm = patch_norm
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
         self.use_conv_embed = use_conv_embed

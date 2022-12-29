@@ -1,5 +1,7 @@
-from transformers import FocalNetConfig, FocalNetModel
 import torch
+
+from transformers import FocalNetConfig, FocalNetModel
+
 
 # Initializing a FocalNet microsoft/focalnet-tiny style configuration
 configuration = FocalNetConfig()

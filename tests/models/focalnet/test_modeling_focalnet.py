@@ -30,7 +30,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import FocalNetBackbone, FocalNetForImageClassification, FocalNetForMaskedImageModeling, FocalNetModel
+    from transformers import (
+        FocalNetBackbone,
+        FocalNetForImageClassification,
+        FocalNetForMaskedImageModeling,
+        FocalNetModel,
+    )
     from transformers.models.focalnet.modeling_focalnet import FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -465,11 +470,7 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
 class FocalNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            AutoFeatureExtractor.from_pretrained("microsoft/focalnet-tiny")
-            if is_vision_available()
-            else None
-        )
+        return AutoFeatureExtractor.from_pretrained("microsoft/focalnet-tiny") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):

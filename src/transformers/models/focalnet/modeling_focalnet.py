@@ -28,7 +28,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import BackboneMixin, PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -208,13 +207,18 @@ class FocalNetImageClassifierOutput(ModelOutput):
 
 class FocalNetEmbeddings(nn.Module):
     """
-    Construct the patch and position embeddings. Optionally, also the mask token.
+    Construct the patch embeddings and layernorm.
     """
 
     def __init__(self, config):
         super().__init__()
 
-        self.patch_embeddings = FocalNetPatchEmbeddings(image_size=config.image_size, patch_size=config.patch_size, num_channels=config.num_channels, embed_dim=config.embed_dim)
+        self.patch_embeddings = FocalNetPatchEmbeddings(
+            image_size=config.image_size,
+            patch_size=config.patch_size,
+            num_channels=config.num_channels,
+            embed_dim=config.embed_dim,
+        )
         self.patch_grid = self.patch_embeddings.grid_size
 
         self.norm = nn.LayerNorm(config.embed_dim)
@@ -276,62 +280,10 @@ class FocalNetPatchEmbeddings(nn.Module):
         output_dimensions = (height, width)
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
+        if self.norm is not None:
+            embeddings = self.norm(embeddings)
+
         return embeddings, output_dimensions
-
-
-# # Copied from transformers.models.swin.modeling_swin.SwinPatchMerging with Swin->FocalNet
-# class FocalNetPatchMerging(nn.Module):
-#     """
-#     Patch Merging Layer.
-
-#     Args:
-#         input_resolution (`Tuple[int]`):
-#             Resolution of input feature.
-#         dim (`int`):
-#             Number of input channels.
-#         norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
-#             Normalization layer class.
-#     """
-
-#     def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
-#         super().__init__()
-#         self.input_resolution = input_resolution
-#         self.dim = dim
-#         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
-#         self.norm = norm_layer(4 * dim)
-
-#     def maybe_pad(self, input_feature, height, width):
-#         should_pad = (height % 2 == 1) or (width % 2 == 1)
-#         if should_pad:
-#             pad_values = (0, 0, 0, width % 2, 0, height % 2)
-#             input_feature = nn.functional.pad(input_feature, pad_values)
-
-#         return input_feature
-
-#     def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
-#         height, width = input_dimensions
-#         # `dim` is height * width
-#         batch_size, dim, num_channels = input_feature.shape
-
-#         input_feature = input_feature.view(batch_size, height, width, num_channels)
-#         # pad input to be disible by width and height, if needed
-#         input_feature = self.maybe_pad(input_feature, height, width)
-#         # [batch_size, height/2, width/2, num_channels]
-#         input_feature_0 = input_feature[:, 0::2, 0::2, :]
-#         # [batch_size, height/2, width/2, num_channels]
-#         input_feature_1 = input_feature[:, 1::2, 0::2, :]
-#         # [batch_size, height/2, width/2, num_channels]
-#         input_feature_2 = input_feature[:, 0::2, 1::2, :]
-#         # [batch_size, height/2, width/2, num_channels]
-#         input_feature_3 = input_feature[:, 1::2, 1::2, :]
-#         # batch_size height/2 width/2 4*num_channels
-#         input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-#         input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
-
-#         input_feature = self.norm(input_feature)
-#         input_feature = self.reduction(input_feature)
-
-#         return input_feature
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -371,7 +323,17 @@ class FocalNetDropPath(nn.Module):
 
 
 class FocalNetModulation(nn.Module):
-    def __init__(self, dim, focal_window, focal_level, focal_factor=2, bias=True, proj_drop=0., use_postln_in_modulation=False, normalize_modulator=False):
+    def __init__(
+        self,
+        dim,
+        focal_window,
+        focal_level,
+        focal_factor=2,
+        bias=True,
+        proj_drop=0.0,
+        use_postln_in_modulation=False,
+        normalize_modulator=False,
+    ):
         super().__init__()
 
         self.dim = dim
@@ -381,25 +343,26 @@ class FocalNetModulation(nn.Module):
         self.use_postln_in_modulation = use_postln_in_modulation
         self.normalize_modulator = normalize_modulator
 
-        self.f = nn.Linear(dim, 2*dim + (self.focal_level+1), bias=bias)
+        self.f = nn.Linear(dim, 2 * dim + (self.focal_level + 1), bias=bias)
         self.h = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=bias)
 
         self.act = nn.GELU()
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         self.focal_layers = nn.ModuleList()
-                
+
         self.kernel_sizes = []
         for k in range(self.focal_level):
-            kernel_size = self.focal_factor*k + self.focal_window
+            kernel_size = self.focal_factor * k + self.focal_window
             self.focal_layers.append(
                 nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size=kernel_size, stride=1, 
-                    groups=dim, padding=kernel_size//2, bias=False),
+                    nn.Conv2d(
+                        dim, dim, kernel_size=kernel_size, stride=1, groups=dim, padding=kernel_size // 2, bias=False
+                    ),
                     nn.GELU(),
-                    )
-                )              
-            self.kernel_sizes.append(kernel_size)          
+                )
+            )
+            self.kernel_sizes.append(kernel_size)
         if self.use_postln_in_modulation:
             self.ln = nn.LayerNorm(dim)
 
@@ -412,27 +375,27 @@ class FocalNetModulation(nn.Module):
 
         # pre linear projection
         x = self.f(x).permute(0, 3, 1, 2).contiguous()
-        q, ctx, self.gates = torch.split(x, (C, C, self.focal_level+1), 1)
-        
+        q, ctx, self.gates = torch.split(x, (C, C, self.focal_level + 1), 1)
+
         # context aggreation
-        ctx_all = 0 
-        for l in range(self.focal_level):         
+        ctx_all = 0
+        for l in range(self.focal_level):
             ctx = self.focal_layers[l](ctx)
-            ctx_all = ctx_all + ctx*self.gates[:, l:l+1]
+            ctx_all = ctx_all + ctx * self.gates[:, l : l + 1]
         ctx_global = self.act(ctx.mean(2, keepdim=True).mean(3, keepdim=True))
-        ctx_all = ctx_all + ctx_global*self.gates[:,self.focal_level:]
+        ctx_all = ctx_all + ctx_global * self.gates[:, self.focal_level :]
 
         # normalize context
         if self.normalize_modulator:
-            ctx_all = ctx_all / (self.focal_level+1)
+            ctx_all = ctx_all / (self.focal_level + 1)
 
         # focal modulation
         self.modulator = self.h(ctx_all)
-        x_out = q*self.modulator
+        x_out = q * self.modulator
         x_out = x_out.permute(0, 2, 3, 1).contiguous()
         if self.use_postln_in_modulation:
             x_out = self.ln(x_out)
-        
+
         # post linear porjection
         x_out = self.proj(x_out)
         x_out = self.proj_drop(x_out)
@@ -440,7 +403,7 @@ class FocalNetModulation(nn.Module):
 
 
 class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -450,7 +413,7 @@ class Mlp(nn.Module):
         self.drop = nn.Dropout(drop)
 
     def forward(self, x):
-        x = self.fc1(x)     
+        x = self.fc1(x)
         x = self.act(x)
         x = self.drop(x)
         x = self.fc2(x)
@@ -459,8 +422,8 @@ class Mlp(nn.Module):
 
 
 class FocalNetLayer(nn.Module):
-    r""" Focal Modulation Network Block.
-    
+    r"""Focal Modulation Network Block.
+
     Args:
         dim (int):
             Number of input channels.
@@ -477,23 +440,35 @@ class FocalNetLayer(nn.Module):
         norm_layer (nn.Module, optional):
             Normalization layer.  Default: nn.LayerNorm
         focal_level (int):
-            Number of focal levels. 
+            Number of focal levels.
         focal_window (int):
             Focal window size at first focal level
         use_layerscale (bool):
             Whether use layerscale
-        layerscale_value (float): 
+        layerscale_value (float):
             Initial layerscale value
         use_postln (bool):
             Whether use layernorm after modulation
     """
 
-    def __init__(self, config, dim, input_resolution, mlp_ratio=4., drop=0., drop_path=0., 
-                    act_layer=nn.GELU, norm_layer=nn.LayerNorm,
-                    focal_level=1, focal_window=3,
-                    use_layerscale=False, layerscale_value=1e-4, 
-                    use_postln=False, use_postln_in_modulation=False, 
-                    normalize_modulator=False):
+    def __init__(
+        self,
+        config,
+        dim,
+        input_resolution,
+        mlp_ratio=4.0,
+        drop=0.0,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        focal_level=1,
+        focal_window=3,
+        use_layerscale=False,
+        layerscale_value=1e-4,
+        use_postln=False,
+        use_postln_in_modulation=False,
+        normalize_modulator=False,
+    ):
         super().__init__()
 
         self.config = config
@@ -507,24 +482,26 @@ class FocalNetLayer(nn.Module):
 
         self.norm1 = norm_layer(dim)
         self.modulation = FocalNetModulation(
-            dim, proj_drop=drop, focal_window=focal_window, focal_level=self.focal_level, 
-            use_postln_in_modulation=use_postln_in_modulation, normalize_modulator=normalize_modulator
+            dim,
+            proj_drop=drop,
+            focal_window=focal_window,
+            focal_level=self.focal_level,
+            use_postln_in_modulation=use_postln_in_modulation,
+            normalize_modulator=normalize_modulator,
         )
 
-        self.drop_path = FocalNetDropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = FocalNetDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
         self.gamma_1 = 1.0
-        self.gamma_2 = 1.0    
+        self.gamma_2 = 1.0
         if use_layerscale:
             self.gamma_1 = nn.Parameter(layerscale_value * torch.ones((dim)), requires_grad=True)
             self.gamma_2 = nn.Parameter(layerscale_value * torch.ones((dim)), requires_grad=True)
 
     def forward(self, x, input_dimensions):
-        print("Shape of x before block:", x.shape)
-
         H, W = input_dimensions
         B, L, C = x.shape
         shortcut = x
@@ -537,9 +514,9 @@ class FocalNetLayer(nn.Module):
 
         # FFN
         x = shortcut + self.drop_path(self.gamma_1 * x)
-        x = x + self.drop_path(self.gamma_2 * (self.norm2(self.mlp(x)) if self.use_postln else self.mlp(self.norm2(x))))
-
-        print("Shape of x after block:", x.shape)
+        x = x + self.drop_path(
+            self.gamma_2 * (self.norm2(self.mlp(x)) if self.use_postln else self.mlp(self.norm2(x)))
+        )
 
         return x
 
@@ -557,13 +534,13 @@ class FocalNetStage(nn.Module):
                     input_resolution=input_resolution,
                     mlp_ratio=config.mlp_ratio,
                     drop=config.hidden_dropout_prob,
-                    drop_path=config.drop_path_rate, 
+                    drop_path=config.drop_path_rate,
                     focal_level=focal_level,
                     focal_window=focal_window,
                     use_layerscale=False,
-                    layerscale_value=1e-4, 
+                    layerscale_value=1e-4,
                     use_postln=config.use_postln,
-                    use_postln_in_modulation=config.use_postln_in_modulation, 
+                    use_postln_in_modulation=config.use_postln_in_modulation,
                     normalize_modulator=config.normalize_modulator,
                 )
                 for i in range(depth)
@@ -572,7 +549,9 @@ class FocalNetStage(nn.Module):
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(image_size=input_resolution, patch_size=2, num_channels=dim, embed_dim=out_dim, add_norm=True)
+            self.downsample = downsample(
+                image_size=input_resolution, patch_size=2, num_channels=dim, embed_dim=out_dim, add_norm=True
+            )
         else:
             self.downsample = None
 
@@ -583,6 +562,7 @@ class FocalNetStage(nn.Module):
         hidden_states: torch.Tensor,
         input_dimensions: Tuple[int, int],
         output_attentions: Optional[bool] = False,
+        print_values=False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
@@ -591,11 +571,18 @@ class FocalNetStage(nn.Module):
             hidden_states = layer_module(hidden_states, input_dimensions)
             # hidden_states = layer_outputs[0]
 
+            if print_values:
+                print(f"Hidden states after block {i}:", hidden_states[0,:3,:3])
+
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
             H, W = input_dimensions
             hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states_before_downsampling.shape[0], -1, H, W)
+            if print_values:
+                print("Hidden states before downsampling:", hidden_states[0,0,:3,:3])
             hidden_states, output_dimensions = self.downsample(hidden_states)
+            if print_values:
+                print("Hidden states after downsampling:", hidden_states[0,:3,:3])
         else:
             output_dimensions = (height, width, height, width)
 
@@ -613,14 +600,14 @@ class FocalNetEncoder(nn.Module):
         self.config = config
         # TODO add drop path
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        embed_dim = [config.embed_dim * (2 ** i) for i in range(self.num_layers)]
+        embed_dim = [config.embed_dim * (2**i) for i in range(self.num_layers)]
 
         self.layers = nn.ModuleList(
             [
                 FocalNetStage(
                     config=config,
-                    dim=embed_dim[i_layer], 
-                    out_dim=embed_dim[i_layer+1] if (i_layer < self.num_layers - 1) else None,  
+                    dim=embed_dim[i_layer],
+                    out_dim=embed_dim[i_layer + 1] if (i_layer < self.num_layers - 1) else None,
                     input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
                     depth=config.depths[i_layer],
                     focal_level=config.focal_levels[i_layer],
@@ -664,14 +651,21 @@ class FocalNetEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, input_dimensions,
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    input_dimensions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, input_dimensions, output_attentions)
+                layer_outputs = layer_module(hidden_states, input_dimensions, output_attentions, i==0)
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]
             output_dimensions = layer_outputs[2]
+
+            if i == 0:
+                print("Height and width:", output_dimensions)
+                print(f"Hidden states after layer {i}:", hidden_states.shape)
+                print(f"First values of hidden states after layer {i}:", hidden_states[0,:3,:3])
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
 
@@ -821,6 +815,9 @@ class FocalNetModel(FocalNetPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         embedding_output, input_dimensions = self.embeddings(pixel_values)
+
+        print("Shape of embeddings:", embedding_output.shape)
+        print("First values of embeddings:", embedding_output[0, :3, :3])
 
         encoder_outputs = self.encoder(
             embedding_output,
