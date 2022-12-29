@@ -127,7 +127,7 @@ You'll need them later when setting up your model.
 As a final step of getting familiar with the data, explore it for potential issues. One common problem with datasets for
 object detection is bounding boxes that "stretch" beyond the edge of the image. Such "runaway" bounding boxes can raise
 errors during training and should be addressed at this stage. There are a few examples with this issue in this dataset.
-To keep things simple, remove these images from the data.
+To keep things simple in this guide, we remove these images from the data.
 
 ```py
 >>> remove_idx = [590, 821, 822, 875, 876, 878, 879]
