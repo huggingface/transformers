@@ -225,7 +225,7 @@ Now you can combine the image and annotation transformations to use on a batch o
 ...     return image_processor(images=images, annotations=targets, return_tensors="pt")
 ```
 
-Apply this preprocessing function to the entire dataset using 🤗 Datasets `with_transform` method. This method applies
+Apply this preprocessing function to the entire dataset using 🤗 Datasets `with_transform()` method. This method applies
 transformations on the fly when you load an element of the dataset.
 
 At this point, you can check what an example from the dataset looks like after the transformations. You should see a tensor
