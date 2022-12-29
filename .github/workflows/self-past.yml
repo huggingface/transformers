@@ -17,7 +17,7 @@ on:
         type: string
       # Use this to control the commit to test against
       sha:
-        default: '88267802'
+        default: 'de919187'
         required: false
         type: string
 
