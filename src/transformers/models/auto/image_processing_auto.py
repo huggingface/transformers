@@ -87,6 +87,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("sam", "SamImageProcessor"),
         ("segformer", "SegformerImageProcessor"),
         ("swin", "ViTImageProcessor"),
+        ("focalnet", "ViTImageProcessor"),
         ("swin2sr", "Swin2SRImageProcessor"),
         ("swinv2", "ViTImageProcessor"),
         ("table-transformer", "DetrImageProcessor"),
