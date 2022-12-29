@@ -488,7 +488,7 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -714,10 +714,12 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
     state of the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for
     ImageNet.
 
-    .. warning::
+    <Tip warning={true}>
 
            This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
            supported.
+
+    </Tip>
     """,
     EFFICIENTFORMER_START_DOCSTRING,
 )
@@ -726,12 +728,12 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.efficient_former = EfficientFormerModel(config)
+        self.efficientformer = EfficientFormerModel(config)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
         # Distillation head
-        self.classifier_distillation = (
+        self.distillation_classifier = (
             nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
         )
 
@@ -765,7 +767,7 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
         sequence_output = outputs[0]
 
         cls_logits = self.classifier(sequence_output.mean(-2))
-        distillation_logits = self.classifier_distillation(sequence_output.mean(-2))
+        distillation_logits = self.distillation_classifier(sequence_output.mean(-2))
 
         # during inference, return the average of both classifier predictions
         logits = (cls_logits + distillation_logits) / 2

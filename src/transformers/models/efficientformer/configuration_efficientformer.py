@@ -39,11 +39,11 @@ class EfficientFormerConfig(PretrainedConfig):
 
 
     Args:
-        layers (`list(int)`, *optional*, defaults to [3, 2, 6, 4])
+        layers (`List(int)`, *optional*, defaults to `[3, 2, 6, 4]`)
             Depth of each stage.
-        embed_dims (`list(int)`, *optional*, defaults to [48, 96, 224, 448])
+        embed_dims (`List(int)`, *optional*, defaults to `[48, 96, 224, 448]`)
             Dimensionality of each stage.
-        downsamples (`list(bool)`, *optional*, defaults to [True, True, True, True])
+        downsamples (`List(bool)`, *optional*, defaults to `[True, True, True, True]`)
             Whether or not to downsample inputs between two stages.
         dim (`int`, *optional*, defaults to 448):
             Number of input channels
@@ -134,6 +134,7 @@ class EfficientFormerConfig(PretrainedConfig):
         hidden_act: str = "gelu",
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
+        num_labels: int = 1000,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
@@ -163,3 +164,4 @@ class EfficientFormerConfig(PretrainedConfig):
         self.distillation = distillation
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
+        self.num_labels = num_labels

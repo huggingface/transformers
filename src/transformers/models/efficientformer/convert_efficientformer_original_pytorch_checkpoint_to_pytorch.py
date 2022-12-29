@@ -21,7 +21,11 @@ from pathlib import Path
 
 import torch
 
-from transformers import EfficientFormerConfig, EfficientFormerForImageClassification, EfficientFormerImageProcessor
+from transformers import (
+    EfficientFormerConfig,
+    EfficientFormerForImageClassificationWithTeacher,
+    EfficientFormerImageProcessor,
+)
 
 
 def rename_key(old_name):
@@ -40,17 +44,48 @@ def rename_key(old_name):
             new_name = old_name.replace("4", "batchnorm_after")
 
     if "network" in old_name and re.search("\d\.\d", old_name):
-        match = re.search("\d\.\d", old_name).group()
-        new_name = old_name.replace(match, match[:2] + "blocks." + match[2:])
+        match = re.search("\d\.\d.", old_name).group()
+        if int(match[0]) < 6:
+            trimmed_name = old_name.replace(match, "")
+            trimmed_name = trimmed_name.replace("network", match[0] + ".meta4D_layers.blocks." + match[2])
+            new_name = "intermediate_stages." + trimmed_name
+        else:
+            trimmed_name = old_name.replace(match, "")
+            if int(match[2]) < 4:
+                trimmed_name = trimmed_name.replace("network", "meta4D_layers.blocks." + match[2])
+            else:
+                layer_index = str(int(match[2]) - 4)
+                trimmed_name = trimmed_name.replace("network", "meta3D_layers.blocks." + layer_index)
+                if "norm1" in old_name:
+                    trimmed_name = trimmed_name.replace("norm1", "layernorm")
+                elif "norm2" in old_name:
+                    trimmed_name = trimmed_name.replace("norm2", "layernorm")
+                elif "fc1" in old_name:
+                    trimmed_name = trimmed_name.replace("fc1", "linear_in")
+                elif "fc2" in old_name:
+                    trimmed_name = trimmed_name.replace("fc2", "linear_out")
 
-    if "proj" in old_name:
+            new_name = "last_stage." + trimmed_name
+
+    elif "network" in old_name and re.search(".\d.", old_name):
+        new_name = old_name.replace("network", "intermediate_stages")
+
+    if "fc" in new_name:
+        new_name = new_name.replace("fc", "convolution")
+    elif "norm1" in new_name:
+        new_name = new_name.replace("norm1", "batchnorm_before")
+    elif "norm2" in new_name:
+        new_name = new_name.replace("norm2", "batchnorm_after")
+    if "proj" in new_name:
         new_name = new_name.replace("proj", "projection")
-
     if "dist_head" in new_name:
-        pass
+        new_name = new_name.replace("dist_head", "distillation_classifier")
     elif "head" in new_name:
         new_name = new_name.replace("head", "classifier")
-    elif "patch_embed" in new_name or new_name == "norm.weight" or new_name == "norm.bias":
+    elif "patch_embed" in new_name:
+        new_name = "efficientformer." + new_name
+    elif new_name == "norm.weight" or new_name == "norm.bias":
+        new_name = new_name.replace("norm", "layernorm")
         new_name = "efficientformer." + new_name
     else:
         new_name = "efficientformer.encoder." + new_name
@@ -66,18 +101,19 @@ def convert_torch_checkpoint(checkpoint):
     return checkpoint
 
 
-@torch.no_grad
-def convert_efficientformer_checkpoint(checkpoint_path, efficientformer_config_file, pytorch_dump_path):
+def convert_efficientformer_checkpoint(
+    checkpoint_path: Path, efficientformer_config_file: Path, pytorch_dump_path: Path, push_to_hub: bool
+):
     orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     config = EfficientFormerConfig.from_json_file(efficientformer_config_file)
-    model = EfficientFormerForImageClassification(config)
+    model = EfficientFormerForImageClassificationWithTeacher(config)
 
     new_state_dict = convert_torch_checkpoint(orig_state_dict)
 
     model.load_state_dict(new_state_dict)
     model.eval()
 
-    feature_extractor = EfficientFormerImageProcessor(size=config.size)
+    feature_extractor = EfficientFormerImageProcessor(size=config.input_size[-1])
 
     # Save Checkpoints
     Path(pytorch_dump_path).mkdir(exist_ok=True)
@@ -86,21 +122,19 @@ def convert_efficientformer_checkpoint(checkpoint_path, efficientformer_config_f
     feature_extractor.save_pretrained(pytorch_dump_path)
     print(f"Feature extractor successfuly saved at {pytorch_dump_path}")
 
-    print("Pushing model to the hub...")
+    if push_to_hub:
+        print("Pushing model to the hub...")
 
-    model_name = "EfficientFormer"
-    repo_name = Path(pytorch_dump_path, model_name)
-
-    model.push_to_hub(
-        repo_path_or_name=repo_name,
-        commit_message="Add model",
-        use_temp_dir=True,
-    )
-    feature_extractor.push_to_hub(
-        repo_path_or_name=repo_name,
-        commit_message="Add feature extractor",
-        use_temp_dir=True,
-    )
+        model.push_to_hub(
+            repo_id=f"Bearnardd/{pytorch_dump_path}",
+            commit_message="Add model",
+            use_temp_dir=True,
+        )
+        feature_extractor.push_to_hub(
+            repo_id=f"Bearnardd/{pytorch_dump_path}",
+            commit_message="Add feature extractor",
+            use_temp_dir=True,
+        )
 
 
 if __name__ == "__main__":
@@ -123,5 +157,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
+
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
+    parser.add_argument(
+        "--no-push_to_hub",
+        dest="push_to_hub",
+        action="store_false",
+        help="Do not push model and feature extractor to the hub",
+    )
+    parser.set_defaults(push_to_hub=True)
+
     args = parser.parse_args()
-    convert_efficientformer_checkpoint(args.pytorch_model_path, args.config_file, args.pytorch_dump_path)
+    convert_efficientformer_checkpoint(
+        checkpoint_path=args.pytorch_model_path,
+        efficientformer_config_file=args.config_file,
+        pytorch_dump_path=args.pytorch_dump_path,
+        push_to_hub=args.push_to_hub,
+    )
