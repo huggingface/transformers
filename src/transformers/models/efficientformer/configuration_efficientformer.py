@@ -134,7 +134,6 @@ class EfficientFormerConfig(PretrainedConfig):
         hidden_act: str = "gelu",
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
-        num_labels: int = 1000,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
@@ -164,4 +163,3 @@ class EfficientFormerConfig(PretrainedConfig):
         self.distillation = distillation
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
-        self.num_labels = num_labels
