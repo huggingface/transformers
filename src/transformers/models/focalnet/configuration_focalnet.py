@@ -65,8 +65,6 @@ class FocalNetConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        use_absolute_embeddings (`bool`, *optional*, defaults to False):
-            Whether or not to add absolute position embeddings to the patch embeddings.
         patch_norm (`bool`, *optional*, defaults to True):
             Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -96,7 +94,6 @@ class FocalNetConfig(PretrainedConfig):
         patch_size=4,
         num_channels=3,
         embed_dim=96,
-        use_absolute_embeddings=False,
         depths=[2, 2, 6, 2], 
         mlp_ratio=4.0,
         hidden_dropout_prob=0., 
@@ -120,7 +117,6 @@ class FocalNetConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.embed_dim = embed_dim
-        self.use_absolute_embeddings = use_absolute_embeddings
         self.depths = depths
         self.mlp_ratio = mlp_ratio
         self.hidden_dropout_prob = hidden_dropout_prob

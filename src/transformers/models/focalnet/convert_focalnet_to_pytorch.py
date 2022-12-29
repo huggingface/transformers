@@ -1,29 +1,40 @@
-import argparse
-import json
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert FocalNet checkpoints from the original repository. URL: https://github.com/microsoft/FocalNet/tree/main"""
 
-import torch
+import argparse
+import requests
 from PIL import Image
 
-import requests
-import timm
-from huggingface_hub import hf_hub_download
+import torch
+
 from transformers import AutoImageProcessor, FocalNetConfig, FocalNetForImageClassification
 
 
-def get_focalnet_config(focalnet_name):
+def get_focalnet_config(model_name):
     config = FocalNetConfig()
-    name_split = focalnet_name.split("_")
 
-    model_size = name_split[1]
-    img_size = int(name_split[4])
-
-    if model_size == "tiny":
+    if "tiny" in model_name:
         embed_dim = 96
-        depths = (2, 2, 6, 2)
-    elif model_size == "small":
+        depths = [2, 2, 6, 2]
+        focal_levels = [2, 2, 2, 2]
+        focal_windows = [3, 3, 3, 3]
+    elif "small" in model_name:
         embed_dim = 96
         depths = (2, 2, 18, 2)
-    elif model_size == "base":
+    elif "base" in model_name:
         embed_dim = 128
         depths = (2, 2, 18, 2)
     else:
@@ -31,10 +42,12 @@ def get_focalnet_config(focalnet_name):
         depths = (2, 2, 18, 2)
 
     # TODO id2label
+    config.num_labels = 1000
 
-    config.image_size = img_size
     config.embed_dim = embed_dim
     config.depths = depths
+    config.focal_levels = focal_levels
+    config.focal_windows = focal_windows
 
     return config
 
@@ -46,18 +59,8 @@ def rename_key(name):
         name = name.replace("patch_embed.norm", "embeddings.norm")
     if "layers" in name:
         name = "encoder." + name
-    if "attn.proj" in name:
-        name = name.replace("attn.proj", "attention.output.dense")
-    if "attn" in name:
-        name = name.replace("attn", "attention.self")
-    if "norm1" in name:
-        name = name.replace("norm1", "layernorm_before")
-    if "norm2" in name:
-        name = name.replace("norm2", "layernorm_after")
-    if "mlp.fc1" in name:
-        name = name.replace("mlp.fc1", "intermediate.dense")
-    if "mlp.fc2" in name:
-        name = name.replace("mlp.fc2", "output.dense")
+    if "downsample.proj" in name:
+        name = name.replace("downsample.proj", "downsample.projection")
 
     if name == "norm.weight":
         name = "layernorm.weight"
@@ -72,27 +75,41 @@ def rename_key(name):
     return name
 
 
-def convert_focalnet_checkpoint(focalnet_name, pytorch_dump_folder_path):
-    timm_model = timm.create_model(focalnet_name, pretrained=True)
-    timm_model.eval()
+def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path):
+    model_name_to_url = {
+        "focalnet-tiny": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_tiny_srf.pth",
+    }
 
-    config = get_focalnet_config(focalnet_name)
+    checkpoint_url = model_name_to_url[model_name]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")['model']
+
+    # rename keys
+    for key in state_dict.copy().keys():
+        val = state_dict.pop(key)
+        state_dict[rename_key(key)] = val
+
+    for k,v in state_dict.items():
+        print(k, v.shape)
+
+    config = get_focalnet_config(model_name)
     model = FocalNetForImageClassification(config)
     model.eval()
+    
+    # load state dict
+    model.load_state_dict(state_dict)
 
-    new_state_dict = convert_state_dict(timm_model.state_dict(), model)
-    model.load_state_dict(new_state_dict)
-
+    # verify conversion
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(focalnet_name.replace("_", "-")))
+    processor = AutoImageProcessor.from_pretrained("microsoft/swin-base-patch4-window7-224-in22k")
     image = Image.open(requests.get(url, stream=True).raw)
     inputs = processor(images=image, return_tensors="pt")
 
-    timm_outs = timm_model(inputs["pixel_values"])
-    hf_outs = model(**inputs).logits
+    outputs = model(**inputs)
 
-    assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
+    print("Predicted class:", outputs.logits.argmax(-1).item())
+
+    # assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor to {pytorch_dump_folder_path}")
@@ -104,14 +121,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--focalnet_name",
-        default="focalnet_tiny_patch4_window7_224",
+        "--model_name",
+        default="focalnet-tiny",
         type=str,
-        help="Name of the FocalNet timm model you'd like to convert.",
+        help="Name of the FocalNet model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
 
     args = parser.parse_args()
-    convert_focalnet_checkpoint(args.focalnet_name, args.pytorch_dump_folder_path)
+    convert_focalnet_checkpoint(args.model_name, args.pytorch_dump_folder_path)
