@@ -757,7 +757,7 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
     ) -> Union[tuple, EfficientFormerForImageClassificationWithTeacherOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.efficient_former(
+        outputs = self.efficientformer(
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
