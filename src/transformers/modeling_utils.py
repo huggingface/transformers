@@ -382,7 +382,7 @@ def load_sharded_checkpoint(model, folder, strict=True):
         raise RuntimeError(error_message)
 
     for shard_file in shard_files:
-        state_dict = torch.load(os.path.join(folder, shard_file))
+        state_dict = torch.load(os.path.join(folder, shard_file), map_location="cpu")
         model.load_state_dict(state_dict, strict=False)
 
         # Make sure memory is fred before we load the next state dict.
