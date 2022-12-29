@@ -22,6 +22,7 @@
 from packaging import version
 
 from .. import __version__
+from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -37,11 +38,24 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     cached_property,
+    can_return_loss,
+    expand_dims,
     find_labels,
     flatten_dict,
+    is_jax_tensor,
+    is_numpy_array,
     is_tensor,
+    is_tf_tensor,
+    is_torch_device,
+    is_torch_dtype,
+    is_torch_tensor,
+    reshape,
+    squeeze,
+    tensor_size,
     to_numpy,
     to_py_obj,
+    transpose,
+    working_or_temp_dir,
 )
 from .hub import (
     CLOUDFRONT_DISTRIB_PREFIX,
@@ -58,23 +72,20 @@ from .hub import (
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
-    cached_path,
+    cached_file,
     default_cache_path,
     define_sagemaker_information,
-    filename_to_url,
+    download_url,
+    extract_commit_hash,
     get_cached_models,
     get_file_from_repo,
-    get_from_cache,
     get_full_repo_name,
-    get_list_of_files,
     has_file,
-    hf_bucket_url,
-    http_get,
     http_user_agent,
-    is_local_clone,
     is_offline_mode,
     is_remote_url,
-    url_to_filename,
+    move_cache,
+    send_example_telemetry,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
@@ -86,17 +97,27 @@ from .import_utils import (
     DummyObject,
     OptionalDependencyNotAvailable,
     _LazyModule,
+    ccl_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
+    is_bs4_available,
     is_coloredlogs_available,
     is_datasets_available,
+    is_decord_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
     is_in_notebook,
+    is_ipex_available,
+    is_jumanpp_available,
+    is_kenlm_available,
+    is_keras_nlp_available,
     is_librosa_available,
+    is_more_itertools_available,
+    is_natten_available,
+    is_ninja_available,
     is_onnx_available,
     is_pandas_available,
     is_phonemizer_available,
@@ -107,35 +128,42 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_sacremoses_available,
+    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_sklearn_available,
     is_soundfile_availble,
     is_spacy_available,
     is_speech_available,
+    is_sudachi_available,
     is_tensorflow_probability_available,
+    is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
+    is_torch_bf16_cpu_available,
+    is_torch_bf16_gpu_available,
+    is_torch_compile_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_onnx_dict_inputs_support_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_torchdistx_available,
+    is_torchdynamo_available,
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
-    tf_required,
     torch_only_method,
-    torch_required,
     torch_version,
 )
 
@@ -143,10 +171,16 @@ from .import_utils import (
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 TF2_WEIGHTS_NAME = "tf_model.h5"
+TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"
 FLAX_WEIGHTS_NAME = "flax_model.msgpack"
+FLAX_WEIGHTS_INDEX_NAME = "flax_model.msgpack.index.json"
+SAFE_WEIGHTS_NAME = "model.safetensors"
+SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
+IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
+GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
 SENTENCEPIECE_UNDERLINE = "▁"

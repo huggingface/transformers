@@ -29,9 +29,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config", "T5OnnxConfig"],
-}
+_import_structure = {"configuration_t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config", "T5OnnxConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -85,6 +83,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_flax_t5"] = [
+        "FlaxT5EncoderModel",
         "FlaxT5ForConditionalGeneration",
         "FlaxT5Model",
         "FlaxT5PreTrainedModel",
@@ -145,7 +144,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+        from .modeling_flax_t5 import (
+            FlaxT5EncoderModel,
+            FlaxT5ForConditionalGeneration,
+            FlaxT5Model,
+            FlaxT5PreTrainedModel,
+        )
 
 
 else:

@@ -22,7 +22,11 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig"],
+    "configuration_squeezebert": [
+        "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SqueezeBertConfig",
+        "SqueezeBertOnnxConfig",
+    ],
     "tokenization_squeezebert": ["SqueezeBertTokenizer"],
 }
 
@@ -54,7 +58,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
+    from .configuration_squeezebert import (
+        SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SqueezeBertConfig,
+        SqueezeBertOnnxConfig,
+    )
     from .tokenization_squeezebert import SqueezeBertTokenizer
 
     try:

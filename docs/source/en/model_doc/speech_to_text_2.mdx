@@ -38,7 +38,7 @@ Tips:
 ## Inference
 
 Speech2Text2's [`SpeechEncoderDecoderModel`] model accepts raw waveform input values from speech and
-makes use of [`~generation_utils.GenerationMixin.generate`] to translate the input speech
+makes use of [`~generation.GenerationMixin.generate`] to translate the input speech
 autoregressively to the target language.
 
 The [`Wav2Vec2FeatureExtractor`] class is responsible for preprocessing the input speech and
@@ -114,7 +114,6 @@ See [model hub](https://huggingface.co/models?filter=speech2text2) to look for S
     - save_pretrained
     - batch_decode
     - decode
-    - as_target_processor
 
 ## Speech2Text2ForCausalLM
 

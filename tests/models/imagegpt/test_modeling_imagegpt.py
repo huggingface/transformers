@@ -24,7 +24,7 @@ from transformers import ImageGPTConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -170,6 +170,12 @@ class ImageGPTModelTester:
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
+
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 513
+        config.max_position_embeddings = 1024
+        return config
 
     def prepare_config_and_inputs_for_decoder(self):
         (
@@ -532,7 +538,8 @@ class ImageGPTModelIntegrationTest(unittest.TestCase):
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 1024, 512))

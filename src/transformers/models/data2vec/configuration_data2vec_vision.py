@@ -103,12 +103,12 @@ class Data2VecVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Data2VecVisionModel, Data2VecVisionConfig
+    >>> from transformers import Data2VecVisionConfig, Data2VecVisionModel
 
     >>> # Initializing a Data2VecVision data2vec_vision-base-patch16-224-in22k style configuration
     >>> configuration = Data2VecVisionConfig()
 
-    >>> # Initializing a model from the data2vec_vision-base-patch16-224-in22k style configuration
+    >>> # Initializing a model (with random weights) from the data2vec_vision-base-patch16-224-in22k style configuration
     >>> model = Data2VecVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -128,7 +128,6 @@ class Data2VecVisionConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=224,
         patch_size=16,
         num_channels=3,
@@ -193,7 +192,7 @@ class Data2VecVisionOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
             ]
         )
 

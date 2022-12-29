@@ -129,6 +129,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
     test_onnx = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = TFConvNextModelTester(self)
@@ -145,10 +146,10 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skipIf(
         not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
-        reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
+        reason="TF does not support backprop for grouped convolutions on CPU.",
     )
     def test_keras_fit(self):
-        pass
+        super().test_keras_fit()
 
     @unittest.skip(reason="ConvNext does not support input and output embeddings")
     def test_model_common_attributes(self):
@@ -170,9 +171,12 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Model doesn't have attention layers")
-    def test_attention_outputs(self):
-        pass
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="TF does not support backprop for grouped convolutions on CPU.",
+    )
+    def test_dataset_conversion(self):
+        super().test_dataset_conversion()
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

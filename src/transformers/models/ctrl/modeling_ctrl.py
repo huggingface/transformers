@@ -431,11 +431,11 @@ class CTRLModel(CTRLPreTrainedModel):
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and -10000.0 for masked positions.
+            # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
@@ -456,7 +456,9 @@ class CTRLModel(CTRLPreTrainedModel):
 
         inputs_embeds *= np.sqrt(self.d_model_size)
 
-        pos_embeds = self.pos_encoding[position_ids, :].to(device)
+        # `self.pos_encoding` won't be sent to the correct device along the model, so we do it manually.
+        self.pos_encoding = self.pos_encoding.to(device)
+        pos_embeds = self.pos_encoding[position_ids, :]
 
         hidden_states = inputs_embeds + pos_embeds + token_type_embeds
 
@@ -507,6 +509,8 @@ class CTRLModel(CTRLPreTrainedModel):
     CTRL_START_DOCSTRING,
 )
 class CTRLLMHeadModel(CTRLPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = CTRLModel(config)

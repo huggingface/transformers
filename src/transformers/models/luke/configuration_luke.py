@@ -74,6 +74,8 @@ class LukeConfig(PretrainedConfig):
             Whether or not the model should use the entity-aware self-attention mechanism proposed in [LUKE: Deep
             Contextualized Entity Representations with Entity-aware Self-attention (Yamada et
             al.)](https://arxiv.org/abs/2010.01057).
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
 
     Examples:
 
@@ -108,6 +110,7 @@ class LukeConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_entity_aware_attention=True,
+        classifier_dropout=None,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -131,3 +134,4 @@ class LukeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_entity_aware_attention = use_entity_aware_attention
+        self.classifier_dropout = classifier_dropout

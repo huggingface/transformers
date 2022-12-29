@@ -21,9 +21,7 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 from ...utils import OptionalDependencyNotAvailable
 
 
-_import_structure = {
-    "configuration_dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
-}
+_import_structure = {"configuration_dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"]}
 
 try:
     if not is_vision_available():
@@ -32,6 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_dpt"] = ["DPTFeatureExtractor"]
+    _import_structure["image_processing_dpt"] = ["DPTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -58,6 +57,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_dpt import DPTFeatureExtractor
+        from .image_processing_dpt import DPTImageProcessor
 
     try:
         if not is_torch_available():

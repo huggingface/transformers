@@ -34,12 +34,14 @@ from .config import OnnxConfig
 
 if is_torch_available():
     from ..modeling_utils import PreTrainedModel
+    from ..pytorch_utils import is_torch_less_than_1_11
 
 if is_tf_available():
     from ..modeling_tf_utils import TFPreTrainedModel
 
 if TYPE_CHECKING:
     from ..feature_extraction_utils import FeatureExtractionMixin
+    from ..processing_utils import ProcessorMixin
     from ..tokenization_utils import PreTrainedTokenizer
 
 
@@ -80,18 +82,19 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def export_pytorch(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
     model: "PreTrainedModel",
     config: OnnxConfig,
     opset: int,
     output: Path,
     tokenizer: "PreTrainedTokenizer" = None,
+    device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
     Args:
-        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+        preprocessor: ([`PreTrainedTokenizer`], [`FeatureExtractionMixin`] or [`ProcessorMixin`]):
             The preprocessor used for encoding the data.
         model ([`PreTrainedModel`]):
             The model to export.
@@ -101,6 +104,8 @@ def export_pytorch(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
+        device (`str`, *optional*, defaults to `cpu`):
+            The device on which the ONNX model will be exported. Either `cpu` or `cuda`.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -137,6 +142,24 @@ def export_pytorch(
             # Ensure inputs match
             # TODO: Check when exporting QA we provide "is_pair=True"
             model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
+            device = torch.device(device)
+            if device.type == "cuda" and torch.cuda.is_available():
+                model.to(device)
+                model_inputs_device = dict()
+                for k, v in model_inputs.items():
+                    if isinstance(v, Tuple):
+                        model_inputs_device[k] = tuple(
+                            x.to(device) if isinstance(x, torch.Tensor) else None for x in v
+                        )
+                    elif isinstance(v, List):
+                        model_inputs_device[k] = [
+                            tuple(x.to(device) if isinstance(x, torch.Tensor) else None for x in t) for t in v
+                        ]
+                    else:
+                        model_inputs_device[k] = v.to(device)
+
+                model_inputs = model_inputs_device
+
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
             onnx_outputs = list(config.outputs.keys())
 
@@ -147,7 +170,7 @@ def export_pytorch(
 
             # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
             # so we check the torch version for backwards compatibility
-            if parse(torch.__version__) < parse("1.10"):
+            if is_torch_less_than_1_11:
                 # export can work with named args but the dict containing named args
                 # has to be the last element of the args tuple.
                 try:
@@ -253,7 +276,9 @@ def export_tensorflow(
     inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
     onnx_outputs = list(config.outputs.keys())
 
-    input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in model_inputs.items()]
+    input_signature = [
+        tf.TensorSpec([None] * tensor.ndim, dtype=tensor.dtype, name=key) for key, tensor in model_inputs.items()
+    ]
     onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature, opset=opset)
     onnx.save(onnx_model, output.as_posix())
     config.restore_ops()
@@ -262,18 +287,19 @@ def export_tensorflow(
 
 
 def export(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
     model: Union["PreTrainedModel", "TFPreTrainedModel"],
     config: OnnxConfig,
     opset: int,
     output: Path,
     tokenizer: "PreTrainedTokenizer" = None,
+    device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
-        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+        preprocessor: ([`PreTrainedTokenizer`], [`FeatureExtractionMixin`] or [`ProcessorMixin`]):
             The preprocessor used for encoding the data.
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model to export.
@@ -283,6 +309,9 @@ def export(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
+        device (`str`, *optional*, defaults to `cpu`):
+            The device on which the ONNX model will be exported. Either `cpu` or `cuda`. Only PyTorch is supported for
+            export on CUDA devices.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -293,6 +322,9 @@ def export(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
             "Please install torch or tensorflow first."
         )
+
+    if is_tf_available() and isinstance(model, TFPreTrainedModel) and device == "cuda":
+        raise RuntimeError("`tf2onnx` does not support export on CUDA device.")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
@@ -318,14 +350,14 @@ def export(
             )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
-        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer)
+        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer, device=device)
     elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
         return export_tensorflow(preprocessor, model, config, opset, output, tokenizer=tokenizer)
 
 
 def validate_model_outputs(
     config: OnnxConfig,
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
     reference_model: Union["PreTrainedModel", "TFPreTrainedModel"],
     onnx_model: Path,
     onnx_named_outputs: List[str],
@@ -337,7 +369,7 @@ def validate_model_outputs(
     logger.info("Validating ONNX model...")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validatethe model outputs.")
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validate the model outputs.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
@@ -347,18 +379,30 @@ def validate_model_outputs(
         logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
         preprocessor = tokenizer
 
-    # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
+    # generate inputs with a different batch_size and seq_len that was used for conversion to properly test
     # dynamic input shapes.
     if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
-        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
+        reference_model_inputs = config.generate_dummy_inputs(
+            preprocessor,
+            batch_size=config.default_fixed_batch + 1,
+            seq_length=config.default_fixed_sequence + 1,
+            framework=TensorType.PYTORCH,
+        )
     else:
-        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
+        reference_model_inputs = config.generate_dummy_inputs(
+            preprocessor,
+            batch_size=config.default_fixed_batch + 1,
+            seq_length=config.default_fixed_sequence + 1,
+            framework=TensorType.TENSORFLOW,
+        )
 
     # Create ONNX Runtime session
     options = SessionOptions()
     session = InferenceSession(onnx_model.as_posix(), options, providers=["CPUExecutionProvider"])
 
     # Compute outputs from the reference model
+    if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
+        reference_model.to("cpu")
     ref_outputs = reference_model(**reference_model_inputs)
     ref_outputs_dict = {}
 
@@ -374,9 +418,12 @@ def validate_model_outputs(
         else:
             ref_outputs_dict[name] = value
 
+    # Create onnxruntime inputs from the reference model inputs
+    reference_model_inputs_onnxruntime = config.generate_dummy_inputs_onnxruntime(reference_model_inputs)
+
     # We flatten potential collection of inputs (i.e. past_keys)
     onnx_inputs = {}
-    for name, value in reference_model_inputs.items():
+    for name, value in reference_model_inputs_onnxruntime.items():
         if isinstance(value, (list, tuple)):
             value = config.flatten_output_collection_property(name, value)
             onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})
@@ -420,10 +467,12 @@ def validate_model_outputs(
 
         # Values
         if not np.allclose(ref_value, ort_value, atol=atol):
+            bad_indices = np.logical_not(np.isclose(ref_value, ort_value, atol=atol))
             logger.info(f"\t\t-[x] values not close enough (atol: {atol})")
             raise ValueError(
                 "Outputs values doesn't match between reference model and ONNX exported model: "
-                f"Got max absolute difference of: {np.amax(np.abs(ref_value - ort_value))}"
+                f"Got max absolute difference of: {np.amax(np.abs(ref_value - ort_value))} for "
+                f"{ref_value[bad_indices]} vs {ort_value[bad_indices]}"
             )
         else:
             logger.info(f"\t\t-[✓] all values close (atol: {atol})")

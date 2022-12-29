@@ -27,9 +27,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTOnnxConfig"],
-}
+_import_structure = {"configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -38,6 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
+    _import_structure["image_processing_vit"] = ["ViTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -87,6 +86,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_vit import ViTFeatureExtractor
+        from .image_processing_vit import ViTImageProcessor
 
     try:
         if not is_torch_available():

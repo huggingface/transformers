@@ -32,7 +32,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_scatter, require_torch, slow, torch_device
+from transformers.testing_utils import require_tensorflow_probability, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -408,7 +408,6 @@ class TapasModelTester:
 
 
 @require_torch
-@require_scatter
 class TapasModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
@@ -499,6 +498,10 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
+    @require_tensorflow_probability
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence()
+
 
 def prepare_tapas_single_inputs_for_inference():
     # Here we prepare a single table-question pair to test TAPAS inference on:
@@ -543,7 +546,6 @@ def prepare_tapas_batch_inputs_for_training():
 
 
 @require_torch
-@require_scatter
 class TapasModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
@@ -560,7 +562,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         # test the sequence output
         expected_slice = torch.tensor(
             [
@@ -598,7 +601,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((1, 21))
@@ -647,7 +651,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((1, 21))
@@ -695,7 +700,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         inputs = tokenizer(table=table, queries=queries, padding="longest", return_tensors="pt")
         inputs_on_device = {k: v.to(torch_device) for k, v in inputs.items()}
 
-        outputs = model(**inputs_on_device)
+        with torch.no_grad():
+            outputs = model(**inputs_on_device)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((2, 28))
@@ -764,15 +770,16 @@ class TapasModelIntegrationTest(unittest.TestCase):
         float_answer = torch.FloatTensor(float_answer).to(torch_device)
 
         # forward pass to get loss + logits:
-        outputs = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            labels=labels,
-            numeric_values=numeric_values,
-            numeric_values_scale=numeric_values_scale,
-            float_answer=float_answer,
-        )
+        with torch.no_grad():
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                labels=labels,
+                numeric_values=numeric_values,
+                numeric_values_scale=numeric_values_scale,
+                float_answer=float_answer,
+            )
 
         # test the loss
         loss = outputs.loss
@@ -819,7 +826,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((1, 21))
@@ -874,7 +882,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, padding="longest", return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # test the classification logits
         logits = outputs.logits
@@ -890,7 +899,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
 # Below: tests for Tapas utilities which are defined in modeling_tapas.py.
 # These are based on segmented_tensor_test.py of the original implementation.
 # URL: https://github.com/google-research/tapas/blob/master/tapas/models/segmented_tensor_test.py
-@require_scatter
+@require_torch
 class TapasUtilitiesTest(unittest.TestCase):
     def _prepare_tables(self):
         """Prepares two tables, both with three distinct rows.
@@ -1047,11 +1056,11 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_reduce_sum_vectorized(self):
         values = torch.as_tensor([[1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]])
-        index = IndexMap(indices=torch.as_tensor([0, 0, 1]), num_segments=2, batch_dims=0)
+        index = IndexMap(indices=torch.as_tensor([[0, 0, 1]]), num_segments=2, batch_dims=0)
         sums, new_index = reduce_sum(values, index)
 
         # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
-        np.testing.assert_allclose(sums.numpy(), [[3.0, 5.0, 7.0], [3.0, 4.0, 5.0]])
+        np.testing.assert_allclose(sums.numpy(), [3.0, 3.0])
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(new_index.indices.numpy(), [0, 1])
         np.testing.assert_array_equal(new_index.num_segments.numpy(), 2)

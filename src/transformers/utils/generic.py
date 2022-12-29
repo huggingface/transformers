@@ -16,9 +16,10 @@ Generic utilities
 """
 
 import inspect
+import tempfile
 from collections import OrderedDict, UserDict
 from collections.abc import MutableMapping
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from dataclasses import fields
 from enum import Enum
 from typing import Any, ContextManager, List, Tuple
@@ -26,6 +27,13 @@ from typing import Any, ContextManager, List, Tuple
 import numpy as np
 
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
+
+
+if is_tf_available():
+    import tensorflow as tf
+
+if is_flax_available():
+    import jax.numpy as jnp
 
 
 class cached_property(property):
@@ -82,10 +90,24 @@ def _is_numpy(x):
     return isinstance(x, np.ndarray)
 
 
+def is_numpy_array(x):
+    """
+    Tests if `x` is a numpy array or not.
+    """
+    return _is_numpy(x)
+
+
 def _is_torch(x):
     import torch
 
     return isinstance(x, torch.Tensor)
+
+
+def is_torch_tensor(x):
+    """
+    Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
+    """
+    return False if not is_torch_available() else _is_torch(x)
 
 
 def _is_torch_device(x):
@@ -94,16 +116,55 @@ def _is_torch_device(x):
     return isinstance(x, torch.device)
 
 
+def is_torch_device(x):
+    """
+    Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
+    """
+    return False if not is_torch_available() else _is_torch_device(x)
+
+
+def _is_torch_dtype(x):
+    import torch
+
+    if isinstance(x, str):
+        if hasattr(torch, x):
+            x = getattr(torch, x)
+        else:
+            return False
+    return isinstance(x, torch.dtype)
+
+
+def is_torch_dtype(x):
+    """
+    Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
+    """
+    return False if not is_torch_available() else _is_torch_dtype(x)
+
+
 def _is_tensorflow(x):
     import tensorflow as tf
 
     return isinstance(x, tf.Tensor)
 
 
+def is_tf_tensor(x):
+    """
+    Tests if `x` is a tensorflow tensor or not. Safe to call even if tensorflow is not installed.
+    """
+    return False if not is_tf_available() else _is_tensorflow(x)
+
+
 def _is_jax(x):
     import jax.numpy as jnp  # noqa: F811
 
     return isinstance(x, jnp.ndarray)
+
+
+def is_jax_tensor(x):
+    """
+    Tests if `x` is a Jax tensor or not. Safe to call even if jax is not installed.
+    """
+    return False if not is_flax_available() else _is_jax(x)
 
 
 def to_py_obj(obj):
@@ -114,11 +175,11 @@ def to_py_obj(obj):
         return {k: to_py_obj(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [to_py_obj(o) for o in obj]
-    elif is_tf_available() and _is_tensorflow(obj):
+    elif is_tf_tensor(obj):
         return obj.numpy().tolist()
-    elif is_torch_available() and _is_torch(obj):
+    elif is_torch_tensor(obj):
         return obj.detach().cpu().tolist()
-    elif is_flax_available() and _is_jax(obj):
+    elif is_jax_tensor(obj):
         return np.asarray(obj).tolist()
     elif isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
         return obj.tolist()
@@ -134,11 +195,11 @@ def to_numpy(obj):
         return {k: to_numpy(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return np.array(obj)
-    elif is_tf_available() and _is_tensorflow(obj):
+    elif is_tf_tensor(obj):
         return obj.numpy()
-    elif is_torch_available() and _is_torch(obj):
+    elif is_torch_tensor(obj):
         return obj.detach().cpu().numpy()
-    elif is_flax_available() and _is_jax(obj):
+    elif is_jax_tensor(obj):
         return np.asarray(obj)
     else:
         return obj
@@ -184,12 +245,20 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
-                for element in iterator:
+                for idx, element in enumerate(iterator):
                     if (
                         not isinstance(element, (list, tuple))
                         or not len(element) == 2
                         or not isinstance(element[0], str)
                     ):
+                        if idx == 0:
+                            # If we do not have an iterator of key/values, set it as attribute
+                            self[class_fields[0].name] = first_field
+                        else:
+                            # If we have a mixed iterator, raise an error
+                            raise ValueError(
+                                f"Cannot set key/value for {element}. It needs to be a tuple (key, value)."
+                            )
                         break
                     setattr(self, element[0], element[1])
                     if element[1] is not None:
@@ -240,7 +309,7 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
-class ExplicitEnum(Enum):
+class ExplicitEnum(str, Enum):
     """
     Enum with more explicit error message for missing values.
     """
@@ -293,6 +362,28 @@ class ContextManagers:
         self.stack.__exit__(*args, **kwargs)
 
 
+def can_return_loss(model_class):
+    """
+    Check if a given model can return loss.
+
+    Args:
+        model_class (`type`): The class of the model.
+    """
+    model_name = model_class.__name__
+    if model_name.startswith("TF"):
+        signature = inspect.signature(model_class.call)
+    elif model_name.startswith("Flax"):
+        signature = inspect.signature(model_class.__call__)
+    else:
+        signature = inspect.signature(model_class.forward)
+
+    for p in signature.parameters:
+        if p == "return_loss" and signature.parameters[p].default is True:
+            return True
+
+    return False
+
+
 def find_labels(model_class):
     """
     Find the labels used by a given model.
@@ -325,3 +416,96 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
                 yield key, v
 
     return dict(_flatten_dict(d, parent_key, delimiter))
+
+
+@contextmanager
+def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
+    if use_temp_dir:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            yield tmp_dir
+    else:
+        yield working_dir
+
+
+def transpose(array, axes=None):
+    """
+    Framework-agnostic version of `numpy.transpose` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
+    """
+    if is_numpy_array(array):
+        return np.transpose(array, axes=axes)
+    elif is_torch_tensor(array):
+        return array.T if axes is None else array.permute(*axes)
+    elif is_tf_tensor(array):
+        return tf.transpose(array, perm=axes)
+    elif is_jax_tensor(array):
+        return jnp.transpose(array, axes=axes)
+    else:
+        raise ValueError(f"Type not supported for transpose: {type(array)}.")
+
+
+def reshape(array, newshape):
+    """
+    Framework-agnostic version of `numpy.reshape` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
+    """
+    if is_numpy_array(array):
+        return np.reshape(array, newshape)
+    elif is_torch_tensor(array):
+        return array.reshape(*newshape)
+    elif is_tf_tensor(array):
+        return tf.reshape(array, newshape)
+    elif is_jax_tensor(array):
+        return jnp.reshape(array, newshape)
+    else:
+        raise ValueError(f"Type not supported for reshape: {type(array)}.")
+
+
+def squeeze(array, axis=None):
+    """
+    Framework-agnostic version of `numpy.squeeze` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
+    """
+    if is_numpy_array(array):
+        return np.squeeze(array, axis=axis)
+    elif is_torch_tensor(array):
+        return array.squeeze() if axis is None else array.squeeze(dim=axis)
+    elif is_tf_tensor(array):
+        return tf.squeeze(array, axis=axis)
+    elif is_jax_tensor(array):
+        return jnp.squeeze(array, axis=axis)
+    else:
+        raise ValueError(f"Type not supported for squeeze: {type(array)}.")
+
+
+def expand_dims(array, axis):
+    """
+    Framework-agnostic version of `numpy.expand_dims` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
+    """
+    if is_numpy_array(array):
+        return np.expand_dims(array, axis)
+    elif is_torch_tensor(array):
+        return array.unsqueeze(dim=axis)
+    elif is_tf_tensor(array):
+        return tf.expand_dims(array, axis=axis)
+    elif is_jax_tensor(array):
+        return jnp.expand_dims(array, axis=axis)
+    else:
+        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+
+
+def tensor_size(array):
+    """
+    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
+    """
+    if is_numpy_array(array):
+        return np.size(array)
+    elif is_torch_tensor(array):
+        return array.numel()
+    elif is_tf_tensor(array):
+        return tf.size(array)
+    elif is_jax_tensor(array):
+        return array.size
+    else:
+        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")

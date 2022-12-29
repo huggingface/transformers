@@ -167,7 +167,7 @@ def sort_imports(file, check_only=True):
     """
     Sort `_import_structure` imports in `file`, `check_only` determines if we only check or overwrite.
     """
-    with open(file, "r") as f:
+    with open(file, encoding="utf-8") as f:
         code = f.read()
 
     if "_import_structure" not in code:
@@ -200,9 +200,9 @@ def sort_imports(file, check_only=True):
         indent = get_indent(block_lines[1])
         # Slit the internal block into blocks of indent level 1.
         internal_blocks = split_code_in_indented_blocks(internal_block_code, indent_level=indent)
-        # We have two categories of import key: list or _import_structu[key].append/extend
-        pattern = _re_direct_key if "_import_structure" in block_lines[0] else _re_indirect_key
-        # Grab the keys, but there is a trap: some lines are empty or jsut comments.
+        # We have two categories of import key: list or _import_structure[key].append/extend
+        pattern = _re_direct_key if "_import_structure = {" in block_lines[0] else _re_indirect_key
+        # Grab the keys, but there is a trap: some lines are empty or just comments.
         keys = [(pattern.search(b).groups()[0] if pattern.search(b) is not None else None) for b in internal_blocks]
         # We only sort the lines with a key.
         keys_to_sort = [(i, key) for i, key in enumerate(keys) if key is not None]
@@ -227,7 +227,7 @@ def sort_imports(file, check_only=True):
             return True
         else:
             print(f"Overwriting {file}.")
-            with open(file, "w") as f:
+            with open(file, "w", encoding="utf-8") as f:
                 f.write("\n".join(main_blocks))
 
 

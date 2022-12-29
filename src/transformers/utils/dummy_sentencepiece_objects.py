@@ -66,6 +66,13 @@ class FNetTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
+class GPTSw3Tokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class LayoutXLMTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
@@ -109,6 +116,13 @@ class MLukeTokenizer(metaclass=DummyObject):
 
 
 class MT5Tokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
+class NllbTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

@@ -104,12 +104,12 @@ class BeitConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BeitModel, BeitConfig
+    >>> from transformers import BeitConfig, BeitModel
 
     >>> # Initializing a BEiT beit-base-patch16-224-pt22k style configuration
     >>> configuration = BeitConfig()
 
-    >>> # Initializing a model from the beit-base-patch16-224-pt22k style configuration
+    >>> # Initializing a model (with random weights) from the beit-base-patch16-224-pt22k style configuration
     >>> model = BeitModel(configuration)
 
     >>> # Accessing the model configuration
@@ -129,7 +129,6 @@ class BeitConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=224,
         patch_size=16,
         num_channels=3,
@@ -194,7 +193,7 @@ class BeitOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
             ]
         )
 

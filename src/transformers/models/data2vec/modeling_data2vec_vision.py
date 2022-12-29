@@ -33,7 +33,7 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Data2VecVisionConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "BeitFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "BeitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/data2vec-vision-base"
@@ -91,18 +91,8 @@ class Data2VecVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     """
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
-# Based on https://github.com/rwightman/pytorch-image-models/blob/a2727c1bf78ba0d7b5727f5f95e37fb7f8866b1f/timm/models/layers/drop.py
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(x: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -113,32 +103,30 @@ def drop_path(x: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -
     argument.
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
+    output = input.div(keep_prob) * random_tensor
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.DropPath
-class DropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Data2VecVision
+class Data2VecVisionDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 # Copied from transformers.models.beit.modeling_beit.BeitEmbeddings with Beit->Data2VecVision
 class Data2VecVisionEmbeddings(nn.Module):
     """
@@ -154,12 +142,7 @@ class Data2VecVisionEmbeddings(nn.Module):
             self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         else:
             self.mask_token = None
-        self.patch_embeddings = PatchEmbeddings(
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            embed_dim=config.hidden_size,
-        )
+        self.patch_embeddings = Data2VecVisionPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         if config.use_absolute_position_embeddings:
             self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
@@ -187,39 +170,44 @@ class Data2VecVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-# Copied from transformers.models.beit.modeling_beit.PatchEmbeddings
-class PatchEmbeddings(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitPatchEmbeddings with Beit->Data2VecVision
+class Data2VecVisionPatchEmbeddings(nn.Module):
     """
-    Image to Patch Embedding.
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
-    def __init__(
-        self, image_size: int = 224, patch_size: int = 16, num_channels: int = 3, embed_dim: int = 768
-    ) -> None:
+    def __init__(self, config):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
         self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_patches = num_patches
         self.patch_shape = patch_shape
 
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
-        # FIXME look at relaxing size constraints
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
 
-        return x
+        return embeddings
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitSelfAttention with Beit->Data2VecVision
@@ -405,7 +393,7 @@ class Data2VecVisionLayer(nn.Module):
         self.intermediate = Data2VecVisionIntermediate(config)
         self.output = Data2VecVisionOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Data2VecVisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
@@ -469,7 +457,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(window_size[0])
         coords_w = torch.arange(window_size[1])
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))  # 2, Wh, Ww
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
@@ -618,8 +606,8 @@ DATA2VEC_VISION_START_DOCSTRING = r"""
 DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
-            [`BeitFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`BeitImageProcessor`]. See
+            [`BeitImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -878,8 +866,26 @@ class Data2VecVisionConvModule(nn.Module):
         return output
 
 
+# Copied from transformers.models.beit.modeling_beit.BeitPyramidPoolingBlock with Beit->Data2VecVision
+class Data2VecVisionPyramidPoolingBlock(nn.Module):
+    def __init__(self, pool_scale: int, in_channels: int, channels: int) -> None:
+        super().__init__()
+        self.layers = [
+            nn.AdaptiveAvgPool2d(pool_scale),
+            Data2VecVisionConvModule(in_channels, channels, kernel_size=1),
+        ]
+        for i, layer in enumerate(self.layers):
+            self.add_module(str(i), layer)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
+
+
 # Copied from transformers.models.beit.modeling_beit.BeitPyramidPoolingModule with Beit->Data2VecVision
-class Data2VecVisionPyramidPoolingModule(nn.ModuleList):
+class Data2VecVisionPyramidPoolingModule(nn.Module):
     """
     Pyramid Pooling Module (PPM) used in PSPNet.
 
@@ -899,17 +905,17 @@ class Data2VecVisionPyramidPoolingModule(nn.ModuleList):
         self.align_corners = align_corners
         self.in_channels = in_channels
         self.channels = channels
-        for pool_scale in pool_scales:
-            self.append(
-                nn.Sequential(
-                    nn.AdaptiveAvgPool2d(pool_scale),
-                    Data2VecVisionConvModule(self.in_channels, self.channels, kernel_size=1),
-                )
+        self.blocks = []
+        for i, pool_scale in enumerate(pool_scales):
+            block = Data2VecVisionPyramidPoolingBlock(
+                pool_scale=pool_scale, in_channels=in_channels, channels=channels
             )
+            self.blocks.append(block)
+            self.add_module(str(i), block)
 
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         ppm_outs = []
-        for ppm in self:
+        for ppm in self.blocks:
             ppm_out = ppm(x)
             upsampled_ppm_out = nn.functional.interpolate(
                 ppm_out, size=x.size()[2:], mode="bilinear", align_corners=self.align_corners
@@ -1140,17 +1146,17 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, Data2VecVisionForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, Data2VecVisionForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/data2vec-vision-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/data2vec-vision-base")
         >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained("facebook/data2vec-vision-base")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits

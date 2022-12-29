@@ -21,7 +21,7 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import DetrConfig, MaskFormerConfig, SwinConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -212,6 +212,13 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
+    @require_torch_multi_gpu
+    @unittest.skip(
+        reason="MaskFormer has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -314,15 +321,15 @@ def prepare_img():
 @slow
 class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def model_checkpoints(self):
-        return "facebook/maskformer-swin-small-coco"
-
-    @cached_property
     def default_feature_extractor(self):
-        return MaskFormerFeatureExtractor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+        return (
+            MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-small-coco")
+            if is_vision_available()
+            else None
+        )
 
     def test_inference_no_head(self):
-        model = MaskFormerModel.from_pretrained(self.model_checkpoints).to(torch_device)
+        model = MaskFormerModel.from_pretrained("facebook/maskformer-swin-small-coco").to(torch_device)
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
         inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
@@ -363,7 +370,11 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_instance_segmentation_head(self):
-        model = MaskFormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+        model = (
+            MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-small-coco")
+            .to(torch_device)
+            .eval()
+        )
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
         inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
@@ -378,15 +389,21 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         # masks_queries_logits
         masks_queries_logits = outputs.masks_queries_logits
         self.assertEqual(
-            masks_queries_logits.shape, (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4)
+            masks_queries_logits.shape,
+            (1, model.config.decoder_config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4),
         )
-        expected_slice = torch.tensor(
-            [[-1.3738, -1.7725, -1.9365], [-1.5978, -1.9869, -2.1524], [-1.5796, -1.9271, -2.0940]]
-        ).to(torch_device)
+        expected_slice = [
+            [-1.3737124, -1.7724937, -1.9364233],
+            [-1.5977281, -1.9867939, -2.1523695],
+            [-1.5795398, -1.9269832, -2.093942],
+        ]
+        expected_slice = torch.tensor(expected_slice).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
-        self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
+        self.assertEqual(
+            class_queries_logits.shape, (1, model.config.decoder_config.num_queries, model.config.num_labels + 1)
+        )
         expected_slice = torch.tensor(
             [
                 [1.6512e00, -5.2572e00, -3.3519e00],
@@ -396,8 +413,48 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
+    def test_inference_instance_segmentation_head_resnet_backbone(self):
+        model = (
+            MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-resnet101-coco-stuff")
+            .to(torch_device)
+            .eval()
+        )
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs_shape = inputs["pixel_values"].shape
+        # check size is divisible by 32
+        self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
+        # check size
+        self.assertEqual(inputs_shape, (1, 3, 800, 1088))
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        # masks_queries_logits
+        masks_queries_logits = outputs.masks_queries_logits
+        self.assertEqual(
+            masks_queries_logits.shape,
+            (1, model.config.decoder_config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4),
+        )
+        expected_slice = [[-0.9046, -2.6366, -4.6062], [-3.4179, -5.7890, -8.8057], [-4.9179, -7.6560, -10.7711]]
+        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
+        # class_queries_logits
+        class_queries_logits = outputs.class_queries_logits
+        self.assertEqual(
+            class_queries_logits.shape, (1, model.config.decoder_config.num_queries, model.config.num_labels + 1)
+        )
+        expected_slice = torch.tensor(
+            [[4.7188, -3.2585, -2.8857], [6.6871, -2.9181, -1.2487], [7.2449, -2.2764, -2.1874]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+
     def test_with_segmentation_maps_and_loss(self):
-        model = MaskFormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+        model = (
+            MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-small-coco")
+            .to(torch_device)
+            .eval()
+        )
         feature_extractor = self.default_feature_extractor
 
         inputs = feature_extractor(

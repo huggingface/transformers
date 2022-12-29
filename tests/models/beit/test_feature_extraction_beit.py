@@ -44,14 +44,16 @@ class BeitFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=20,
+        size=None,
         do_center_crop=True,
-        crop_size=18,
+        crop_size=None,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
-        reduce_labels=False,
+        do_reduce_labels=False,
     ):
+        size = size if size is not None else {"height": 20, "width": 20}
+        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -65,7 +67,7 @@ class BeitFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.reduce_labels = reduce_labels
+        self.do_reduce_labels = do_reduce_labels
 
     def prepare_feat_extract_dict(self):
         return {
@@ -76,7 +78,7 @@ class BeitFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "reduce_labels": self.reduce_labels,
+            "do_reduce_labels": self.do_reduce_labels,
         }
 
 
@@ -141,8 +143,8 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -153,8 +155,8 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -173,8 +175,8 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -185,8 +187,8 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -205,8 +207,8 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -217,8 +219,8 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -239,16 +241,16 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 1,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -262,16 +264,16 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -287,16 +289,16 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 1,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -312,16 +314,16 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 2,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 2,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)

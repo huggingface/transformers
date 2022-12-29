@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
+from transformers.utils.generic import ModelOutput
+
 
 class PipelineDataset(Dataset):
     def __init__(self, dataset, process, params):
@@ -76,6 +78,14 @@ class PipelineIterator(IterableDataset):
             # Batch data is assumed to be BaseModelOutput (or dict)
             loader_batched = {}
             for k, element in self._loader_batch_data.items():
+                if isinstance(element, ModelOutput):
+                    # Convert ModelOutput to tuple first
+                    element = element.to_tuple()
+                    if isinstance(element[0], torch.Tensor):
+                        loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                    elif isinstance(element[0], np.ndarray):
+                        loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
+                    continue
                 if k in {"hidden_states", "past_key_values", "attentions"} and isinstance(element, tuple):
                     # Those are stored as lists of tensors so need specific unbatching.
                     if isinstance(element[0], torch.Tensor):
@@ -83,7 +93,10 @@ class PipelineIterator(IterableDataset):
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
-                if isinstance(element[self._loader_batch_index], torch.Tensor):
+                if element is None:
+                    # This can happen for optional data that get passed around
+                    loader_batched[k] = None
+                elif isinstance(element[self._loader_batch_index], torch.Tensor):
                     # Take correct batch data, but make it looked like batch_size=1
                     # For compatibility with other methods within transformers
 
@@ -290,3 +303,16 @@ class KeyDataset(Dataset):
 
     def __getitem__(self, i):
         return self.dataset[i][self.key]
+
+
+class KeyPairDataset(Dataset):
+    def __init__(self, dataset: Dataset, key1: str, key2: str):
+        self.dataset = dataset
+        self.key1 = key1
+        self.key2 = key2
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, i):
+        return {"text": self.dataset[i][self.key1], "text_pair": self.dataset[i][self.key2]}

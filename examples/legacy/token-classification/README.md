@@ -291,4 +291,4 @@ On the test dataset the following results could be achieved:
 05/29/2020 23:34:02 - INFO - __main__ -     eval_f1 = 0.47440836543753434
 ```
 
-WNUT’17 is a very difficult task. Current state-of-the-art results on this dataset can be found [here](http://nlpprogress.com/english/named_entity_recognition.html).
+WNUT’17 is a very difficult task. Current state-of-the-art results on this dataset can be found [here](https://nlpprogress.com/english/named_entity_recognition.html).

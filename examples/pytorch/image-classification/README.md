@@ -23,8 +23,8 @@ This directory contains 2 scripts that showcase how to fine-tune any model suppo
 Try out the inference widget here: https://huggingface.co/google/vit-base-patch16-224
 
 Content:
-- [PyTorch version, Trainer](#pytorch-version-no-trainer)
-- [PyTorch version, no Trainer](#pytorch-version-trainer)
+- [PyTorch version, Trainer](#pytorch-version-trainer)
+- [PyTorch version, no Trainer](#pytorch-version-no-trainer)
 
 ## PyTorch version, Trainer
 
@@ -62,9 +62,11 @@ python run_image_classification.py \
 
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with any model or dataset from the [hub](https://huggingface.co/). For an overview of all possible arguments, we refer to the [docs](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) of the `TrainingArguments`, which can be passed as flags.
 
+> If your model classification head dimensions do not fit the number of labels in the dataset, you can specify `--ignore_mismatched_sizes` to adapt it.
+
 ### Using your own data
 
-To use your own dataset, there are 2 ways: 
+To use your own dataset, there are 2 ways:
 - you can either provide your own folders as `--train_dir` and/or `--validation_dir` arguments
 - you can upload your dataset to the hub (possibly as a private repo, if you prefer so), and simply pass the `--dataset_name` argument.
 

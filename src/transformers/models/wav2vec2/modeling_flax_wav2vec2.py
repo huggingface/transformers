@@ -120,7 +120,7 @@ def _compute_mask_indices(
     CPU as part of the preprocessing during training.
 
     Args:
-        shape: the the shape for which to compute masks.
+        shape: the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
         mask_prob:
             probability for each token to be chosen as start of the span to be masked. this will be multiplied by
@@ -150,7 +150,7 @@ def _compute_mask_indices(
         num_masked_spans = sequence_length // mask_length
 
     # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
 
     # get random indices to mask
     spec_aug_mask_idxs = np.array(

@@ -72,7 +72,7 @@ On top of the configuration of the model, we see three different weights files, 
 
 The main advantage of doing this for big models is that during step 2 of the workflow shown above, each shard of the checkpoint is loaded after the previous one, capping the memory usage in RAM to the model size plus the size of the biggest shard.
 
-Beind the scenes, the index file is used to determine which keys are in the checkpoint, and where the corresponding weights are stored. We can load that index like any json and get a dictionary:
+Behind the scenes, the index file is used to determine which keys are in the checkpoint, and where the corresponding weights are stored. We can load that index like any json and get a dictionary:
 
 ```py
 >>> import json
@@ -86,7 +86,7 @@ Beind the scenes, the index file is used to determine which keys are in the chec
 dict_keys(['metadata', 'weight_map'])
 ```
 
-The metadata just consists of the total size of the model for now. We plan to add several other informations in the future:
+The metadata just consists of the total size of the model for now. We plan to add other information in the future:
 
 ```py
 >>> index["metadata"]
@@ -114,15 +114,6 @@ If you want to directly load such a sharded checkpoint inside a model without us
 
 ## Low memory loading
 
-Sharded checkpoints reduce the memory usage during step 2 of the worflow mentioned above, but when loadin a pretrained model, why keep the random weights in memory? The option `low_cpu_mem_usage` will destroy the weights of the randomly initialized model, then progressively load the weights inside, then perform a random initialization for potential missing weights (if you are loadding a model with a newly initialized head for a fine-tuning task for instance).
+Sharded checkpoints reduce the memory usage during step 2 of the workflow mentioned above, but in order to use that model in a low memory setting, we recommend leveraging our tools based on the Accelerate library.
 
-It's very easy to use, just add `low_cpu_mem_usage=True` to your call to [`~PreTrainedModel.from_pretrained`]:
-
-```py
-from transformers import AutoModelForSequenceClas
-
-model = AutoModel.from_pretrained("bert-base-cased", low_cpu_mem_usage=True)
-```
-
-This can be used in conjunction with a sharded checkpoint.
-
+Please read the following guide for more information: [Large model loading using Accelerate](./main_classes/model#large-model-loading)

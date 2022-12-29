@@ -31,7 +31,11 @@ from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_te
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFData2VecVisionForImageClassification, TFData2VecVisionModel
+    from transformers import (
+        TFData2VecVisionForImageClassification,
+        TFData2VecVisionForSemanticSegmentation,
+        TFData2VecVisionModel,
+    )
     from transformers.models.data2vec.modeling_tf_data2vec_vision import (
         TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -142,6 +146,18 @@ class TFData2VecVisionModelTester:
         result = model(pixel_values, labels=labels, training=False)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+    def create_and_check_for_image_segmentation(self, config, pixel_values, labels, pixel_labels):
+        config.num_labels = self.num_labels
+        model = TFData2VecVisionForSemanticSegmentation(config)
+        result = model(pixel_values, training=False)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+        )
+        result = model(pixel_values, labels=pixel_labels)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels, pixel_labels = config_and_inputs
@@ -162,7 +178,11 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (TFData2VecVisionModel, TFData2VecVisionForImageClassification) if is_tf_available() else ()
+    all_model_classes = (
+        (TFData2VecVisionModel, TFData2VecVisionForImageClassification, TFData2VecVisionForSemanticSegmentation)
+        if is_tf_available()
+        else ()
+    )
 
     test_pruning = False
     test_onnx = False
@@ -207,6 +227,14 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_image_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
+
+    @unittest.skip("Test was written for TF 1.x and isn't really relevant here")
+    def test_compile_tf_model(self):
+        pass
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -353,6 +381,10 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                     )
                     val_loss2 = history2.history["val_loss"][0]
                     self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
+
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
     # Overriding this method since the base method won't be compatible with Data2VecVision.
     def test_loss_computation(self):

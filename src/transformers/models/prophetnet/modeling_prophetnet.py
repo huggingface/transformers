@@ -187,7 +187,9 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     """
     This function computes the bias for the predict stream
     """
-    left_block = torch.ones((ngram, sequence_length, sequence_length), device=device, dtype=dtype) * float("-inf")
+    left_block = (
+        torch.ones((ngram, sequence_length, sequence_length), device=device, dtype=dtype) * torch.finfo(dtype).min
+    )
     right_block = left_block.detach().clone()
     # create bias
     for stream_idx in range(ngram):
@@ -345,7 +347,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        last_hidden_state_ngram (`torch.FloatTensor` of shape `(batch_size,ngram * decoder_sequence_length, config.vocab_size)`):
+        last_hidden_state_ngram (`torch.FloatTensor` of shape `(batch_size,ngram * decoder_sequence_length, config.vocab_size)`, *optional*):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
         past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
@@ -590,7 +592,7 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
     the forward function.
     """
 
-    def __init__(self, config: ProphetNetConfig):
+    def __init__(self, config: ProphetNetConfig) -> None:
         self.max_length = config.max_position_embeddings
         super().__init__(config.max_position_embeddings, config.hidden_size, config.pad_token_id)
 
@@ -857,11 +859,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
     ):
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
 
-        assert list(hidden_states.size()) == [
-            batch_size,
-            ngram_sequence_length,
-            hidden_size,
-        ], (
+        assert list(hidden_states.size()) == [batch_size, ngram_sequence_length, hidden_size], (
             f"`hidden_states` should be of shape {batch_size, ngram_sequence_length, hidden_size}, but is of shape"
             f" {hidden_states.shape}"
         )
@@ -1336,7 +1334,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         if attention_mask is not None:
             extended_attention_mask = (
                 1.0 - attention_mask[:, None, :].repeat(self.config.num_encoder_attention_heads, 1, 1)
-            ) * -10000.0
+            ) * torch.finfo(self.dtype).min
             extended_attention_mask = extended_attention_mask.to(inputs_embeds.dtype)
         else:
             extended_attention_mask = None
@@ -1407,7 +1405,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         embeddings instead of randomly initialized word embeddings.
     """
 
-    def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
+    def __init__(self, config: ProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
         super().__init__(config)
 
         self.ngram = config.ngram
@@ -1554,7 +1552,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         if encoder_attention_mask is not None:
             extended_encoder_attention_mask = (
                 1.0 - encoder_attention_mask[:, None, :].repeat(self.config.num_decoder_attention_heads, 1, 1)
-            ) * -10000.0
+            ) * torch.finfo(self.dtype).min
             extended_encoder_attention_mask = extended_encoder_attention_mask.to(inputs_embeds.dtype)
         else:
             extended_encoder_attention_mask = None
@@ -1713,7 +1711,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # get causal mask
         causal_mask = torch.full(
-            (seq_length, seq_length), -float("inf"), dtype=hidden_states.dtype, device=hidden_states.device
+            (seq_length, seq_length),
+            torch.finfo(hidden_states.dtype).min,
+            dtype=hidden_states.dtype,
+            device=hidden_states.device,
         )
         causal_mask = torch.triu(causal_mask, 1)
         extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
@@ -1722,7 +1723,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # add usual attention mask
         if attention_mask is not None:
-            extended_attention_mask = (1.0 - attention_mask[:, None, :]) * -10000.0
+            extended_attention_mask = (1.0 - attention_mask[:, None, :]) * torch.finfo(self.dtype).min
             extended_attention_mask = extended_causal_mask + extended_attention_mask
         else:
             extended_attention_mask = extended_causal_mask
@@ -1750,7 +1751,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # add usual attention mask
         if attention_mask is not None:
-            extended_attention_mask = (1.0 - attention_mask[None, :, None, :]) * -10000.0
+            extended_attention_mask = (1.0 - attention_mask[None, :, None, :]) * torch.finfo(self.dtype).min
             extended_attention_mask = extended_attention_mask.expand((self.ngram, batch_size, seq_length, seq_length))
             # predicted stream attention_mask should always be 0
             extended_attention_mask = torch.cat(
@@ -1769,7 +1770,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetModel(ProphetNetPreTrainedModel):
-    def __init__(self, config):
+    _keys_to_ignore_on_load_missing = ["decoder.word_embeddings.weight", "encoder.word_embeddings.weight"]
+
+    def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
 
@@ -1896,6 +1899,12 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        "decoder.word_embeddings.weight",
+        "encoder.word_embeddings.weight",
+        "lm_head.weight",
+    ]
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
         self.prophetnet = ProphetNetModel(config)
@@ -2106,7 +2115,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
-    def __init__(self, config):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
+    def __init__(self, config: ProphetNetConfig):
         # set config for CLM
         config = copy.deepcopy(config)
         config.is_decoder = True
@@ -2341,7 +2352,7 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
     classes.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
         self.decoder = ProphetNetDecoder(config)
 

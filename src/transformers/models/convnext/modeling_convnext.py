@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ConvNextConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "ConvNextImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-224"
@@ -53,35 +53,40 @@ CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Stochastic depth implementation
-# Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
-    DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
-    Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
+    output = input.div(keep_prob) * random_tensor
     return output
 
 
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNext
 class ConvNextDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob=None):
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
 class ConvNextLayerNorm(nn.Module):
@@ -104,9 +109,12 @@ class ConvNextLayerNorm(nn.Module):
         if self.data_format == "channels_last":
             x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
+            input_dtype = x.dtype
+            x = x.float()
             u = x.mean(1, keepdim=True)
             s = (x - u).pow(2).mean(1, keepdim=True)
             x = (x - u) / torch.sqrt(s + self.eps)
+            x = x.to(dtype=input_dtype)
             x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
 
@@ -122,8 +130,14 @@ class ConvNextEmbeddings(nn.Module):
             config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
         )
         self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+        self.num_channels = config.num_channels
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.layernorm(embeddings)
         return embeddings
@@ -209,8 +223,9 @@ class ConvNextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.stages = nn.ModuleList()
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        cur = 0
+        drop_path_rates = [
+            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+        ]
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
@@ -220,10 +235,9 @@ class ConvNextEncoder(nn.Module):
                 out_channels=out_chs,
                 stride=2 if i > 0 else 1,
                 depth=config.depths[i],
-                drop_path_rates=drop_path_rates[cur],
+                drop_path_rates=drop_path_rates[i],
             )
             self.stages.append(stage)
-            cur += config.depths[i]
             prev_chs = out_chs
 
     def forward(
@@ -294,8 +308,8 @@ CONVNEXT_START_DOCSTRING = r"""
 CONVNEXT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for

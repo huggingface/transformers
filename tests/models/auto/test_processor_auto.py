@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from huggingface_hub import Repository, delete_repo, login
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     CONFIG_MAPPING,
@@ -36,7 +36,7 @@ from transformers import (
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
 )
-from transformers.testing_utils import PASS, USER, get_tests_dir, is_staging_test
+from transformers.testing_utils import TOKEN, USER, get_tests_dir, is_staging_test
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 from transformers.utils import FEATURE_EXTRACTOR_NAME, is_tokenizers_available
 
@@ -202,6 +202,14 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
 
+    def test_auto_processor_creates_tokenizer(self):
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
+        self.assertEqual(processor.__class__.__name__, "BertTokenizerFast")
+
+    def test_auto_processor_creates_image_processor(self):
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
+        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
+
 
 @is_staging_test
 class ProcessorPushToHubTester(unittest.TestCase):
@@ -209,22 +217,24 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._token = login(username=USER, password=PASS)
+        cls._token = TOKEN
+        set_access_token(TOKEN)
+        HfFolder.save_token(TOKEN)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            delete_repo(token=cls._token, name="test-processor")
+            delete_repo(token=cls._token, repo_id="test-processor")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-processor-org", organization="valid_org")
+            delete_repo(token=cls._token, repo_id="valid_org/test-processor-org")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-dynamic-processor")
+            delete_repo(token=cls._token, repo_id="test-dynamic-processor")
         except HTTPError:
             pass
 

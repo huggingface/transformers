@@ -18,9 +18,11 @@ Import utilities: Utilities related to imports and our lazy inits.
 import importlib.util
 import json
 import os
+import shutil
 import sys
+import warnings
 from collections import OrderedDict
-from functools import wraps
+from functools import lru_cache
 from itertools import chain
 from types import ModuleType
 from typing import Any
@@ -41,6 +43,8 @@ USE_TF = os.environ.get("USE_TF", "AUTO").upper()
 USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
+FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
+
 _torch_version = "N/A"
 if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
     _torch_available = importlib.util.find_spec("torch") is not None
@@ -56,39 +60,45 @@ else:
 
 
 _tf_version = "N/A"
-if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
-    _tf_available = importlib.util.find_spec("tensorflow") is not None
-    if _tf_available:
-        candidates = (
-            "tensorflow",
-            "tensorflow-cpu",
-            "tensorflow-gpu",
-            "tf-nightly",
-            "tf-nightly-cpu",
-            "tf-nightly-gpu",
-            "intel-tensorflow",
-            "intel-tensorflow-avx512",
-            "tensorflow-rocm",
-            "tensorflow-macos",
-        )
-        _tf_version = None
-        # For the metadata, we have to look for both tensorflow and tensorflow-cpu
-        for pkg in candidates:
-            try:
-                _tf_version = importlib_metadata.version(pkg)
-                break
-            except importlib_metadata.PackageNotFoundError:
-                pass
-        _tf_available = _tf_version is not None
-    if _tf_available:
-        if version.parse(_tf_version) < version.parse("2"):
-            logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")
-            _tf_available = False
-        else:
-            logger.info(f"TensorFlow version {_tf_version} available.")
+if FORCE_TF_AVAILABLE in ENV_VARS_TRUE_VALUES:
+    _tf_available = True
 else:
-    logger.info("Disabling Tensorflow because USE_TORCH is set")
-    _tf_available = False
+    if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
+        _tf_available = importlib.util.find_spec("tensorflow") is not None
+        if _tf_available:
+            candidates = (
+                "tensorflow",
+                "tensorflow-cpu",
+                "tensorflow-gpu",
+                "tf-nightly",
+                "tf-nightly-cpu",
+                "tf-nightly-gpu",
+                "intel-tensorflow",
+                "intel-tensorflow-avx512",
+                "tensorflow-rocm",
+                "tensorflow-macos",
+                "tensorflow-aarch64",
+            )
+            _tf_version = None
+            # For the metadata, we have to look for both tensorflow and tensorflow-cpu
+            for pkg in candidates:
+                try:
+                    _tf_version = importlib_metadata.version(pkg)
+                    break
+                except importlib_metadata.PackageNotFoundError:
+                    pass
+            _tf_available = _tf_version is not None
+        if _tf_available:
+            if version.parse(_tf_version) < version.parse("2"):
+                logger.info(
+                    f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum."
+                )
+                _tf_available = False
+            else:
+                logger.info(f"TensorFlow version {_tf_version} available.")
+    else:
+        logger.info("Disabling Tensorflow because USE_TORCH is set")
+        _tf_available = False
 
 
 if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
@@ -135,6 +145,7 @@ except importlib_metadata.PackageNotFoundError:
     except importlib_metadata.PackageNotFoundError:
         _faiss_available = False
 
+
 _ftfy_available = importlib.util.find_spec("ftfy") is not None
 try:
     _ftfy_version = importlib_metadata.version("ftfy")
@@ -166,20 +177,13 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _tf2onnx_available = False
 
+
 _onnx_available = importlib.util.find_spec("onnxruntime") is not None
 try:
     _onxx_version = importlib_metadata.version("onnx")
     logger.debug(f"Successfully imported onnx version {_onxx_version}")
 except importlib_metadata.PackageNotFoundError:
     _onnx_available = False
-
-
-_scatter_available = importlib.util.find_spec("torch_scatter") is not None
-try:
-    _scatter_version = importlib_metadata.version("torch_scatter")
-    logger.debug(f"Successfully imported torch-scatter version {_scatter_version}")
-except importlib_metadata.PackageNotFoundError:
-    _scatter_available = False
 
 
 _pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
@@ -214,6 +218,14 @@ except importlib_metadata.PackageNotFoundError:
     _timm_available = False
 
 
+_natten_available = importlib.util.find_spec("natten") is not None
+try:
+    _natten_version = importlib_metadata.version("natten")
+    logger.debug(f"Successfully imported natten version {_natten_version}")
+except importlib_metadata.PackageNotFoundError:
+    _natten_available = False
+
+
 _torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
@@ -245,10 +257,31 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _librosa_available = False
 
+ccl_version = "N/A"
+_is_ccl_available = (
+    importlib.util.find_spec("torch_ccl") is not None
+    or importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
+)
+try:
+    ccl_version = importlib_metadata.version("oneccl_bind_pt")
+    logger.debug(f"Successfully imported oneccl_bind_pt version {ccl_version}")
+except importlib_metadata.PackageNotFoundError:
+    _is_ccl_available = False
+
+_decord_availale = importlib.util.find_spec("decord") is not None
+try:
+    _decord_version = importlib_metadata.version("decord")
+    logger.debug(f"Successfully imported decord version {_decord_version}")
+except importlib_metadata.PackageNotFoundError:
+    _decord_availale = False
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
+
+
+def is_kenlm_available():
+    return importlib.util.find_spec("kenlm") is not None
 
 
 def is_torch_available():
@@ -272,7 +305,7 @@ def is_torch_cuda_available():
         return False
 
 
-def is_torch_bf16_available():
+def is_torch_bf16_gpu_available():
     if not is_torch_available():
         return False
 
@@ -282,25 +315,55 @@ def is_torch_bf16_available():
     # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
     # with additional check for torch version
     # to succeed:
-    # 1. the hardware needs to support bf16 (arch >= Ampere)
-    # 2. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
-    # 3. CUDA >= 11
+    # 1. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
+    # 2. the hardware needs to support bf16 (GPU arch >= Ampere, or CPU)
+    # 3. if using gpu, CUDA >= 11
     # 4. torch.autocast exists
     # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
     # really only correct for the 0th gpu (or currently set default device if different from 0)
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
+        return False
 
-    if not torch.cuda.is_available() or torch.version.cuda is None:
-        return False
-    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
-        return False
-    if int(torch.version.cuda.split(".")[0]) < 11:
-        return False
-    if version.parse(torch.__version__) < version.parse("1.10"):
-        return False
-    if not hasattr(torch, "autocast"):
+    if torch.cuda.is_available() and torch.version.cuda is not None:
+        if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+            return False
+        if int(torch.version.cuda.split(".")[0]) < 11:
+            return False
+        if not hasattr(torch.cuda.amp, "autocast"):
+            return False
+    else:
         return False
 
     return True
+
+
+def is_torch_bf16_cpu_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
+        return False
+
+    try:
+        # multiple levels of AttributeError depending on the pytorch version so do them all in one check
+        _ = torch.cpu.amp.autocast
+    except AttributeError:
+        return False
+
+    return True
+
+
+def is_torch_bf16_available():
+    # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
+    # has become ambiguous and therefore deprecated
+    warnings.warn(
+        "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
+        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
+        FutureWarning,
+    )
+    return is_torch_bf16_gpu_available()
 
 
 def is_torch_tf32_available():
@@ -315,7 +378,7 @@ def is_torch_tf32_available():
         return False
     if int(torch.version.cuda.split(".")[0]) < 11:
         return False
-    if version.parse(torch.__version__) < version.parse("1.7"):
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.7"):
         return False
 
     return True
@@ -325,7 +388,7 @@ torch_version = None
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
-    _torch_fx_available = (torch_version.major, torch_version.minor) == (
+    _torch_fx_available = (torch_version.major, torch_version.minor) >= (
         TORCH_FX_REQUIRED_VERSION.major,
         TORCH_FX_REQUIRED_VERSION.minor,
     )
@@ -335,6 +398,10 @@ if _torch_available:
 
 def is_torch_fx_available():
     return _torch_fx_available
+
+
+def is_bs4_available():
+    return importlib.util.find_spec("bs4") is not None
 
 
 def is_torch_onnx_dict_inputs_support_available():
@@ -365,15 +432,49 @@ def is_ftfy_available():
     return _ftfy_available
 
 
-def is_torch_tpu_available():
+@lru_cache()
+def is_torch_tpu_available(check_device=True):
+    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
         return False
-    # This test is probably enough, but just in case, we unpack a bit.
-    if importlib.util.find_spec("torch_xla") is None:
+    if importlib.util.find_spec("torch_xla") is not None:
+        if check_device:
+            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
+            try:
+                import torch_xla.core.xla_model as xm
+
+                _ = xm.xla_device()
+                return True
+            except RuntimeError:
+                return False
+        return True
+    return False
+
+
+def is_torchdynamo_available():
+    if not is_torch_available():
         return False
-    if importlib.util.find_spec("torch_xla.core") is None:
+    try:
+        import torch._dynamo as dynamo  # noqa: F401
+
+        return True
+    except Exception:
         return False
-    return importlib.util.find_spec("torch_xla.core.xla_model") is not None
+
+
+def is_torch_compile_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    return hasattr(torch, "compile")
+
+
+def is_torch_tensorrt_fx_available():
+    if importlib.util.find_spec("torch_tensorrt") is None:
+        return False
+    return importlib.util.find_spec("torch_tensorrt.fx") is not None
 
 
 def is_datasets_available():
@@ -382,6 +483,10 @@ def is_datasets_available():
 
 def is_detectron2_available():
     return _detectron2_available
+
+
+def is_more_itertools_available():
+    return importlib.util.find_spec("more_itertools") is not None
 
 
 def is_rjieba_available():
@@ -396,12 +501,46 @@ def is_py3nvml_available():
     return importlib.util.find_spec("py3nvml") is not None
 
 
+def is_sacremoses_available():
+    return importlib.util.find_spec("sacremoses") is not None
+
+
 def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
+def is_ninja_available():
+    return importlib.util.find_spec("ninja") is not None
+
+
+def is_ipex_available():
+    def get_major_and_minor_from_version(full_version):
+        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
+
+    if not is_torch_available() or importlib.util.find_spec("intel_extension_for_pytorch") is None:
+        return False
+    _ipex_version = "N/A"
+    try:
+        _ipex_version = importlib_metadata.version("intel_extension_for_pytorch")
+    except importlib_metadata.PackageNotFoundError:
+        return False
+    torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
+    ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
+    if torch_major_and_minor != ipex_major_and_minor:
+        logger.warning(
+            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
+            f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
+        )
+        return False
+    return True
+
+
 def is_bitsandbytes_available():
     return importlib.util.find_spec("bitsandbytes") is not None
+
+
+def is_torchdistx_available():
+    return importlib.util.find_spec("torchdistx") is not None
 
 
 def is_faiss_available():
@@ -432,6 +571,14 @@ def is_accelerate_available():
     return importlib.util.find_spec("accelerate") is not None
 
 
+def is_optimum_available():
+    return importlib.util.find_spec("optimum") is not None
+
+
+def is_safetensors_available():
+    return importlib.util.find_spec("safetensors") is not None
+
+
 def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
 
@@ -448,6 +595,14 @@ def is_spacy_available():
     return importlib.util.find_spec("spacy") is not None
 
 
+def is_tensorflow_text_available():
+    return importlib.util.find_spec("tensorflow_text") is not None
+
+
+def is_keras_nlp_available():
+    return importlib.util.find_spec("keras_nlp") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
@@ -456,14 +611,14 @@ def is_in_notebook():
             raise ImportError("console")
         if "VSCODE_PID" in os.environ:
             raise ImportError("vscode")
+        if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
+            # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
+            # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
+            raise ImportError("databricks")
 
         return importlib.util.find_spec("IPython") is not None
     except (AttributeError, ImportError, KeyError):
         return False
-
-
-def is_scatter_available():
-    return _scatter_available
 
 
 def is_pytorch_quantization_available():
@@ -528,6 +683,10 @@ def is_timm_available():
     return _timm_available
 
 
+def is_natten_available():
+    return _natten_available
+
+
 def is_torchaudio_available():
     return _torchaudio_available
 
@@ -554,6 +713,22 @@ def torch_only_method(fn):
     return wrapper
 
 
+def is_ccl_available():
+    return _is_ccl_available
+
+
+def is_decord_available():
+    return _decord_availale
+
+
+def is_sudachi_available():
+    return importlib.util.find_spec("sudachipy") is not None
+
+
+def is_jumanpp_available():
+    return (importlib.util.find_spec("pyknp") is not None) and (shutil.which("jumanpp") is not None)
+
+
 # docstyle-ignore
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your environment. You can install it with:
@@ -568,7 +743,7 @@ then restarting your kernel.
 
 Note that if you have a local folder named `datasets` or a local python file named `datasets.py` in your current
 working directory, python may try to import this instead of the 🤗 Datasets library. You should rename this folder or
-that python file if that's the case.
+that python file if that's the case. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -582,6 +757,7 @@ In a notebook or a colab, you can install it by executing a cell with
 ```
 !pip install tokenizers
 ```
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -589,7 +765,7 @@ In a notebook or a colab, you can install it by executing a cell with
 SENTENCEPIECE_IMPORT_ERROR = """
 {0} requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -597,7 +773,7 @@ that match your environment.
 PROTOBUF_IMPORT_ERROR = """
 {0} requires the protobuf library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/protocolbuffers/protobuf/tree/master/python#installation and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -605,7 +781,7 @@ that match your environment.
 FAISS_IMPORT_ERROR = """
 {0} requires the faiss library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -613,6 +789,37 @@ that match your environment.
 PYTORCH_IMPORT_ERROR = """
 {0} requires the PyTorch library but it was not found in your environment. Checkout the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+PYTORCH_IMPORT_ERROR_WITH_TF = """
+{0} requires the PyTorch library but it was not found in your environment.
+However, we were able to find a TensorFlow installation. TensorFlow classes begin
+with "TF", but are otherwise identically named to our PyTorch classes. This
+means that the TF equivalent of the class you tried to import would be "TF{0}".
+If you want to use TensorFlow, please use TF classes instead!
+
+If you really do want to use PyTorch please go to
+https://pytorch.org/get-started/locally/ and follow the instructions that
+match your environment.
+"""
+
+# docstyle-ignore
+TF_IMPORT_ERROR_WITH_PYTORCH = """
+{0} requires the TensorFlow library but it was not found in your environment.
+However, we were able to find a PyTorch installation. PyTorch classes do not begin
+with "TF", but are otherwise identically named to our TF classes.
+If you want to use PyTorch, please use those classes instead!
+
+If you really do want to use TensorFlow, please follow the instructions on the
+installation page https://www.tensorflow.org/install that match your environment.
+"""
+
+# docstyle-ignore
+BS4_IMPORT_ERROR = """
+{0} requires the Beautiful Soup library but it was not found in your environment. You can install it with pip:
+`pip install beautifulsoup4`. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -626,6 +833,7 @@ In a notebook or a colab, you can install it by executing a cell with
 ```
 !pip install -U scikit-learn
 ```
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -633,6 +841,7 @@ In a notebook or a colab, you can install it by executing a cell with
 TENSORFLOW_IMPORT_ERROR = """
 {0} requires the TensorFlow library but it was not found in your environment. Checkout the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -640,7 +849,7 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 DETECTRON2_IMPORT_ERROR = """
 {0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -648,32 +857,34 @@ that match your environment.
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 FTFY_IMPORT_ERROR = """
 {0} requires the ftfy library but it was not found in your environment. Checkout the instructions on the
 installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
-that match your environment.
-"""
-
-
-# docstyle-ignore
-SCATTER_IMPORT_ERROR = """
-{0} requires the torch-scatter library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/rusty1s/pytorch_scatter.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 {0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/tensorflow/probability.
+explained here: https://github.com/tensorflow/probability. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+TENSORFLOW_TEXT_IMPORT_ERROR = """
+{0} requires the tensorflow_text library but it was not found in your environment. You can install it with pip as
+explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -681,63 +892,90 @@ explained here: https://github.com/tensorflow/probability.
 PANDAS_IMPORT_ERROR = """
 {0} requires the pandas library but it was not found in your environment. You can install it with pip as
 explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
+Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 PHONEMIZER_IMPORT_ERROR = """
 {0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
-`pip install phonemizer`
+`pip install phonemizer`. Please note that you may need to restart your runtime after installation.
+"""
+
+
+# docstyle-ignore
+SACREMOSES_IMPORT_ERROR = """
+{0} requires the sacremoses library but it was not found in your environment. You can install it with pip:
+`pip install sacremoses`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
-`pip install scipy`
+`pip install scipy`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SPEECH_IMPORT_ERROR = """
 {0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
-`pip install torchaudio`
+`pip install torchaudio`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TIMM_IMPORT_ERROR = """
 {0} requires the timm library but it was not found in your environment. You can install it with pip:
-`pip install timm`
+`pip install timm`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+NATTEN_IMPORT_ERROR = """
+{0} requires the natten library but it was not found in your environment. You can install it by referring to:
+shi-labs.com/natten . You can also install it with pip (may take longer to build):
+`pip install natten`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
-`pip install pillow`
+`pip install pillow`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
 {0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
-`pip install pytesseract`
+`pip install pytesseract`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PYCTCDECODE_IMPORT_ERROR = """
 {0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
-`pip install pyctcdecode`
+`pip install pyctcdecode`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
 {0} requires the accelerate library but it was not found in your environment. You can install it with pip:
-`pip install accelerate`
+`pip install accelerate`. Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+CCL_IMPORT_ERROR = """
+{0} requires the torch ccl library but it was not found in your environment. You can install it with pip:
+`pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable`
+Please note that you may need to restart your runtime after installation.
+"""
+
+DECORD_IMPORT_ERROR = """
+{0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
+decord`. Please note that you may need to restart your runtime after installation.
+"""
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
@@ -748,19 +986,23 @@ BACKENDS_MAPPING = OrderedDict(
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
-        ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
+        ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tensorflow_probability", (is_tensorflow_probability_available, TENSORFLOW_PROBABILITY_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
+        ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
+        ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
+        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
     ]
 )
 
@@ -770,6 +1012,15 @@ def requires_backends(obj, backends):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+
+    # Raise an error for users who might not realize that classes without "TF" are torch-only
+    if "torch" in backends and "tf" not in backends and not is_torch_available() and is_tf_available():
+        raise ImportError(PYTORCH_IMPORT_ERROR_WITH_TF.format(name))
+
+    # Raise the inverse error for PyTorch users trying to load TF classes
+    if "tf" in backends and "torch" not in backends and is_torch_available() and not is_tf_available():
+        raise ImportError(TF_IMPORT_ERROR_WITH_PYTORCH.format(name))
+
     checks = (BACKENDS_MAPPING[backend] for backend in backends)
     failed = [msg.format(name) for available, msg in checks if not available()]
     if failed:
@@ -782,34 +1033,10 @@ class DummyObject(type):
     `requires_backend` each time a user tries to access any method of that class.
     """
 
-    def __getattr__(cls, key):
-        if key.startswith("_"):
-            return super().__getattr__(cls, key)
+    def __getattribute__(cls, key):
+        if key.startswith("_") and key != "_from_config":
+            return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
-
-
-def torch_required(func):
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_torch_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires PyTorch.")
-
-    return wrapper
-
-
-def tf_required(func):
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_tf_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires TF.")
-
-    return wrapper
 
 
 def is_torch_fx_proxy(x):

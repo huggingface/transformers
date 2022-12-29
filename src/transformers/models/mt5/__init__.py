@@ -43,9 +43,7 @@ else:
 
 MT5TokenizerFast = T5TokenizerFast
 
-_import_structure = {
-    "configuration_mt5": ["MT5Config"],
-}
+_import_structure = {"configuration_mt5": ["MT5Config", "MT5OnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -69,11 +67,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_mt5"] = ["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"]
+    _import_structure["modeling_flax_mt5"] = ["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"]
 
 
 if TYPE_CHECKING:
-    from .configuration_mt5 import MT5Config
+    from .configuration_mt5 import MT5Config, MT5OnnxConfig
 
     try:
         if not is_torch_available():
@@ -97,7 +95,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .modeling_flax_mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
 
 else:
     import sys

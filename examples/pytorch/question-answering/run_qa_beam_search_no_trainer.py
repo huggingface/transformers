@@ -29,10 +29,11 @@ from pathlib import Path
 import datasets
 import numpy as np
 import torch
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+import evaluate
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -49,13 +50,13 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import check_min_version, get_full_repo_name
+from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 from utils_qa import postprocess_qa_predictions_with_beam_search
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.20.0.dev0")
+check_min_version("4.26.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -103,7 +104,7 @@ def parse_args():
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
     )
     parser.add_argument(
-        "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
+        "--preprocessing_num_workers", type=int, default=1, help="A csv or a json file containing the training data."
     )
     parser.add_argument("--do_predict", action="store_true", help="Eval the question answering model")
     parser.add_argument(
@@ -231,7 +232,7 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
         "--max_predict_samples",
@@ -291,9 +292,21 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_qa_beam_search_no_trainer", args)
+
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers in the environment
-    accelerator = Accelerator(log_with="all", logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+    # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers
+    # in the environment
+    accelerator_log_kwargs = {}
+
+    if args.with_tracking:
+        accelerator_log_kwargs["log_with"] = args.report_to
+        accelerator_log_kwargs["logging_dir"] = args.output_dir
+
+    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
+
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -676,7 +689,7 @@ def main():
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
-    metric = load_metric("squad_v2" if args.version_2_with_negative else "squad")
+    metric = evaluate.load("squad_v2" if args.version_2_with_negative else "squad")
 
     def create_and_fill_np_array(start_or_end_logits, dataset, max_len):
         """
@@ -693,7 +706,7 @@ def main():
         step = 0
         # create a numpy array and fill it with -100.
         logits_concat = np.full((len(dataset), max_len), -100, dtype=np.float32)
-        # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather
+        # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather_for_metrics
         for i, output_logit in enumerate(start_or_end_logits):  # populate columns
             # We have to fill it such that we have to take the whole tensor and replace it on the newly created array
             # And after every iteration we have to change the step
@@ -725,17 +738,17 @@ def main():
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Scheduler and math around the number of training steps.
+    overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
-    else:
-        args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
+        overrode_max_train_steps = True
 
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps,
-        num_training_steps=args.max_train_steps,
+        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
+        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
     # Prepare everything with our `accelerator`.
@@ -745,15 +758,15 @@ def main():
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
-    args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+    if overrode_max_train_steps:
+        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+    # Afterwards we recalculate our number of training epochs
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Figure out how many steps we should save the Accelerator states
-    if hasattr(args.checkpointing_steps, "isdigit"):
-        checkpointing_steps = args.checkpointing_steps
-        if args.checkpointing_steps.isdigit():
-            checkpointing_steps = int(args.checkpointing_steps)
-    else:
-        checkpointing_steps = None
+    checkpointing_steps = args.checkpointing_steps
+    if checkpointing_steps is not None and checkpointing_steps.isdigit():
+        checkpointing_steps = int(checkpointing_steps)
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
@@ -810,17 +823,22 @@ def main():
                 if resume_step is not None and step < resume_step:
                     completed_steps += 1
                     continue
-            outputs = model(**batch)
-            loss = outputs.loss
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            loss = loss / args.gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+
+            with accelerator.accumulate(model):
+                outputs = model(**batch)
+                loss = outputs.loss
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+
+                accelerator.backward(loss)
+
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+
+            # Checks if the accelerator has performed an optimization step behind the scenes
+            if accelerator.sync_gradients:
                 progress_bar.update(1)
                 completed_steps += 1
 
@@ -868,11 +886,11 @@ def main():
                 end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
                 cls_logits = accelerator.pad_across_processes(cls_logits, dim=1, pad_index=-100)
 
-            all_start_top_log_probs.append(accelerator.gather(start_top_log_probs).cpu().numpy())
-            all_start_top_index.append(accelerator.gather(start_top_index).cpu().numpy())
-            all_end_top_log_probs.append(accelerator.gather(end_top_log_probs).cpu().numpy())
-            all_end_top_index.append(accelerator.gather(end_top_index).cpu().numpy())
-            all_cls_logits.append(accelerator.gather(cls_logits).cpu().numpy())
+            all_start_top_log_probs.append(accelerator.gather_for_metrics(start_top_log_probs).cpu().numpy())
+            all_start_top_index.append(accelerator.gather_for_metrics(start_top_index).cpu().numpy())
+            all_end_top_log_probs.append(accelerator.gather_for_metrics(end_top_log_probs).cpu().numpy())
+            all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
+            all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
     max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
@@ -928,11 +946,11 @@ def main():
                     end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
                     cls_logits = accelerator.pad_across_processes(cls_logits, dim=1, pad_index=-100)
 
-                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs).cpu().numpy())
-                all_start_top_index.append(accelerator.gather(start_top_index).cpu().numpy())
-                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs).cpu().numpy())
-                all_end_top_index.append(accelerator.gather(end_top_index).cpu().numpy())
-                all_cls_logits.append(accelerator.gather(cls_logits).cpu().numpy())
+                all_start_top_log_probs.append(accelerator.gather_for_metrics(start_top_log_probs).cpu().numpy())
+                all_start_top_index.append(accelerator.gather_for_metrics(start_top_index).cpu().numpy())
+                all_end_top_log_probs.append(accelerator.gather_for_metrics(end_top_log_probs).cpu().numpy())
+                all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
+                all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
         max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 

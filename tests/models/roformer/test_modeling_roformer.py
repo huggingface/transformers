@@ -457,7 +457,8 @@ class RoFormerModelIntegrationTest(unittest.TestCase):
     def test_inference_masked_lm(self):
         model = RoFormerForMaskedLM.from_pretrained("junnyu/roformer_chinese_base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
 
         # TODO Replace vocab size
         vocab_size = 50000

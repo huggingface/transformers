@@ -237,7 +237,7 @@ def write_eval_metric(summary_writer, eval_metrics, step):
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 
@@ -541,7 +541,8 @@ def main():
 
         # Generate an epoch by shuffling sampling indices from the train dataset
         num_train_samples = len(vectorized_datasets["train"])
-        train_samples_idx = jax.random.permutation(input_rng, jnp.arange(num_train_samples))
+        # Avoid using jax.numpy here in case of TPU training
+        train_samples_idx = np.random.permutation(np.arange(num_train_samples))
         train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
 
         # Gather the indexes for creating the batch and do a training step
@@ -574,7 +575,8 @@ def main():
 
         # ======================== Evaluating ==============================
         num_eval_samples = len(vectorized_datasets["validation"])
-        eval_samples_idx = jnp.arange(num_eval_samples)
+        # Avoid using jax.numpy here in case of TPU training
+        eval_samples_idx = np.arange(num_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         eval_metrics = []
@@ -589,7 +591,7 @@ def main():
 
         # get eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
         # Update progress bar
         epochs.write(
@@ -604,7 +606,7 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(training_args.output_dir, params=params, push_to_hub=training_args.push_to_hub)
 
 

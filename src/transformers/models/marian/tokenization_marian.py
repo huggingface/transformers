@@ -15,7 +15,6 @@ import json
 import os
 import re
 import warnings
-from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -112,10 +111,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> src_texts = ["I am a small frog.", "Tom asked his teacher for advice."]
     >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-    >>> inputs = tokenizer(src_texts, return_tensors="pt", padding=True)
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
-    >>> inputs["labels"] = labels["input_ids"]
+    >>> inputs = tokenizer(src_texts, text_target=tgt_texts, return_tensors="pt", padding=True)
     # keys  [input_ids, attention_mask, labels].
 
     >>> outputs = model(**inputs)  # should work
@@ -269,10 +265,18 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
-        if self._decode_use_source_tokenizer:
-            return self.spm_source.DecodePieces(tokens)
-        else:
-            return self.spm_target.DecodePieces(tokens)
+        sp_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += sp_model.decode_pieces(current_sub_tokens) + token + " "
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += sp_model.decode_pieces(current_sub_tokens)
+        return out_string.strip()
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
@@ -281,18 +285,14 @@ class MarianTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
+    def _switch_to_input_mode(self):
+        self.current_spm = self.spm_source
+        self.current_encoder = self.encoder
+
+    def _switch_to_target_mode(self):
         self.current_spm = self.spm_target
         if self.separate_vocabs:
             self.current_encoder = self.target_encoder
-        yield
-        self.current_spm = self.spm_source
-        self.current_encoder = self.encoder
 
     @property
     def vocab_size(self) -> int:

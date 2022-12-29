@@ -179,10 +179,10 @@ This creates a repository under your username with the model name `my-awesome-mo
 >>> model = AutoModel.from_pretrained("your_username/my-awesome-model")
 ```
 
-If you belong to an organization and want to push your model under the organization name instead, add the `organization` parameter:
+If you belong to an organization and want to push your model under the organization name instead, just add it to the `repo_id`:
 
 ```py
->>> pt_model.push_to_hub("my-awesome-model", organization="my-awesome-org")
+>>> pt_model.push_to_hub("my-awesome-org/my-awesome-model")
 ```
 
 The `push_to_hub` function can also be used to add other files to a model repository. For example, add a tokenizer to a model repository:
@@ -225,4 +225,4 @@ To make sure users understand your model's capabilities, limitations, potential 
 * Manually creating and uploading a `README.md` file.
 * Clicking on the **Edit model card** button in your model repository.
 
-Take a look at the DistilBert [model card](https://huggingface.co/distilbert-base-uncased) for a good example of the type of information a model card should include. For more details about other options you can control in the `README.md` file such as a model's carbon footprint or widget examples, refer to the documentation [here](https://huggingface.co/docs/hub/model-repos).
+Take a look at the DistilBert [model card](https://huggingface.co/distilbert-base-uncased) for a good example of the type of information a model card should include. For more details about other options you can control in the `README.md` file such as a model's carbon footprint or widget examples, refer to the documentation [here](https://huggingface.co/docs/hub/models-cards).

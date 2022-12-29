@@ -58,6 +58,7 @@ BERT_TINY = "hf-internal-testing/tiny-bert"
 BIGBIRD_PEGASUS_TINY = "hf-internal-testing/tiny-random-bigbird_pegasus"
 BIG_BIRD_TINY = "hf-internal-testing/tiny-random-big_bird"
 BLENDERBOT_TINY = "hf-internal-testing/tiny-random-blenderbot"
+BLOOM_TINY = "bigscience/bigscience-small-testing"
 DEBERTA_TINY = "hf-internal-testing/tiny-random-deberta"
 DEBERTA_V2_TINY = "hf-internal-testing/tiny-random-deberta-v2"
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
@@ -129,8 +130,7 @@ SPEECH_TO_TEXT_TINY = "hf-internal-testing/tiny-random-speech_to_text"
 # models with low usage, unstable API, things about to change - do nothing about the following until someone runs into a problem
 TAPAS_TINY = "hf-internal-testing/tiny-random-tapas"
 # additional notes on tapas
-# 1. requires torch_scatter - skip if it's not installed?
-# 2. "Table must be of type pd.DataFrame" failure
+# 1. "Table must be of type pd.DataFrame" failure
 
 
 # TODO: new models to add:
@@ -183,6 +183,7 @@ def make_task_cmds():
             "big_bird",
             "bigbird_pegasus",
             "blenderbot",
+            "bloom",
             "gpt2",
             "gpt_neo",
             "gptj",
@@ -304,7 +305,7 @@ stages = [ZERO2, ZERO3]
 #
 # dtypes = [FP16]
 # so just hardcoding --fp16 for now
-# if is_torch_bf16_available():
+# if is_torch_bf16_gpu_available():
 #     dtypes += [BF16]
 
 

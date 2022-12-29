@@ -871,6 +871,8 @@ class VisualBertModel(VisualBertPreTrainedModel):
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForPreTraining(VisualBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -929,7 +931,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
-        inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
+        inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
         visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
         visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
@@ -1433,7 +1435,7 @@ class VisualBertRegionToPhraseAttention(nn.Module):
     def forward(self, query, key, attention_mask):
         attention_mask = attention_mask.to(query.dtype)
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        attention_mask = (1.0 - attention_mask) * -10000.0
+        attention_mask = (1.0 - attention_mask) * torch.finfo(query.dtype).min
 
         mixed_query_layer = self.query(query)
         mixed_key_layer = self.key(key)
@@ -1459,6 +1461,8 @@ class VisualBertRegionToPhraseAttention(nn.Module):
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 

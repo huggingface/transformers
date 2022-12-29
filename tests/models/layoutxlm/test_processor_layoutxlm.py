@@ -19,10 +19,11 @@ import tempfile
 import unittest
 from typing import List
 
+import numpy as np
+
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
-    get_tests_dir,
     require_pytesseract,
     require_sentencepiece,
     require_tokenizers,
@@ -36,9 +37,6 @@ if is_pytesseract_available():
     from PIL import Image
 
     from transformers import LayoutLMv2FeatureExtractor, LayoutXLMProcessor
-
-
-SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_pytesseract
@@ -60,11 +58,14 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
+        # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
+        self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
+
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(SAMPLE_SP, **kwargs)
+        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(SAMPLE_SP, **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
@@ -74,6 +75,17 @@ class LayoutXLMProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+
+        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+
+        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+
+        return image_inputs
 
     def test_save_load_pretrained_default(self):
         feature_extractor = self.get_feature_extractor()
@@ -127,6 +139,54 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = LayoutXLMProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # add extra args
+        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
+
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+
+    @slow
+    def test_overflowing_tokens(self):
+        # In the case of overflowing tokens, test that we still have 1-to-1 mapping between the images and input_ids (sequences that are too long are broken down into multiple sequences).
+
+        from datasets import load_dataset
+
+        # set up
+        datasets = load_dataset("nielsr/funsd")
+        processor = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
+
+        def preprocess_data(examples):
+            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            words = examples["words"]
+            boxes = examples["bboxes"]
+            word_labels = examples["ner_tags"]
+            encoded_inputs = processor(
+                images,
+                words,
+                boxes=boxes,
+                word_labels=word_labels,
+                max_length=512,
+                padding="max_length",
+                truncation=True,
+                return_overflowing_tokens=True,
+                stride=50,
+                return_offsets_mapping=True,
+                return_tensors="pt",
+            )
+            return encoded_inputs
+
+        train_data = preprocess_data(datasets["train"])
+
+        self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
+
 
 # different use cases tests
 @require_sentencepiece
@@ -177,10 +237,11 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify input_ids
+            # this was obtained with Tesseract 4.1.1
             # fmt: off
             expected_decoding = "<s> 11:14 to 11:39 a.m 11:39 to 11:44 a.m. 11:44 a.m. to 12:25 p.m. 12:25 to 12:58 p.m. 12:58 to 4:00 p.m. 2:00 to 5:00 p.m. Coffee Break Coffee will be served for men and women in the lobby adjacent to exhibit area. Please move into exhibit area. (Exhibits Open) TRRF GENERAL SESSION (PART |) Presiding: Lee A. Waller TRRF Vice President “Introductory Remarks” Lee A. Waller, TRRF Vice Presi- dent Individual Interviews with TRRF Public Board Members and Sci- entific Advisory Council Mem- bers Conducted by TRRF Treasurer Philip G. Kuehn to get answers which the public refrigerated warehousing industry is looking for. Plus questions from the floor. Dr. Emil M. Mrak, University of Cal- ifornia, Chairman, TRRF Board; Sam R. Cecil, University of Georgia College of Agriculture; Dr. Stanley Charm, Tufts University School of Medicine; Dr. Robert H. Cotton, ITT Continental Baking Company; Dr. Owen Fennema, University of Wis- consin; Dr. Robert E. Hardenburg, USDA. Questions and Answers Exhibits Open Capt. Jack Stoney Room TRRF Scientific Advisory Council Meeting Ballroom Foyer</s>"  # noqa: E231
             # fmt: on
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
@@ -198,10 +259,11 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify input_ids
+            # this was obtained with Tesseract 4.1.1
             # fmt: off
             expected_decoding = "<s> 7 ITC Limited REPORT AND ACCOUNTS 2013 ITC’s Brands: An Asset for the Nation The consumer needs and aspirations they fulfil, the benefit they generate for millions across ITC’s value chains, the future-ready capabilities that support them, and the value that they create for the country, have made ITC’s brands national assets, adding to India’s competitiveness. It is ITC’s aspiration to be the No 1 FMCG player in the country, driven by its new FMCG businesses. A recent Nielsen report has highlighted that ITC's new FMCG businesses are the fastest growing among the top consumer goods companies operating in India. ITC takes justifiable pride that, along with generating economic value, these celebrated Indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. DI WILLS * ; LOVE DELIGHTFULLY SOFT SKIN? aia Ans Source: https://www.industrydocuments.ucsf.edu/docs/snbx0223</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>"  # noqa: E231
             # fmt: on
-            decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
     @slow
@@ -228,7 +290,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "<s> hello world</s>"
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
@@ -243,7 +305,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "<s> hello world</s><pad><pad>"
-            decoding = tokenizer.decode(input_processor.input_ids[0].tolist())
+            decoding = processor.decode(input_processor.input_ids[0].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
@@ -282,7 +344,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "<s> weirdly world</s>"
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify labels
@@ -304,7 +366,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "<s> my name is niels</s>"
-            decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
@@ -344,10 +406,11 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
+            # this was obtained with Tesseract 4.1.1
             # fmt: off
             expected_decoding = "<s> What's his name?</s></s> 11:14 to 11:39 a.m 11:39 to 11:44 a.m. 11:44 a.m. to 12:25 p.m. 12:25 to 12:58 p.m. 12:58 to 4:00 p.m. 2:00 to 5:00 p.m. Coffee Break Coffee will be served for men and women in the lobby adjacent to exhibit area. Please move into exhibit area. (Exhibits Open) TRRF GENERAL SESSION (PART |) Presiding: Lee A. Waller TRRF Vice President “Introductory Remarks” Lee A. Waller, TRRF Vice Presi- dent Individual Interviews with TRRF Public Board Members and Sci- entific Advisory Council Mem- bers Conducted by TRRF Treasurer Philip G. Kuehn to get answers which the public refrigerated warehousing industry is looking for. Plus questions from the floor. Dr. Emil M. Mrak, University of Cal- ifornia, Chairman, TRRF Board; Sam R. Cecil, University of Georgia College of Agriculture; Dr. Stanley Charm, Tufts University School of Medicine; Dr. Robert H. Cotton, ITT Continental Baking Company; Dr. Owen Fennema, University of Wis- consin; Dr. Robert E. Hardenburg, USDA. Questions and Answers Exhibits Open Capt. Jack Stoney Room TRRF Scientific Advisory Council Meeting Ballroom Foyer</s>"  # noqa: E231
             # fmt: on
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
@@ -362,8 +425,9 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
+            # this was obtained with Tesseract 4.1.1
             expected_decoding = "<s> what's the time</s></s> 7 ITC Limited REPORT AND ACCOUNTS 2013</s>"
-            decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
@@ -396,7 +460,7 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "<s> What's his name?</s></s> hello world</s>"
-            decoding = tokenizer.decode(input_processor.input_ids.squeeze().tolist())
+            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
@@ -412,11 +476,11 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             expected_decoding = "<s> How old is he?</s></s> hello world</s><pad><pad>"
-            decoding = tokenizer.decode(input_processor.input_ids[0].tolist())
+            decoding = processor.decode(input_processor.input_ids[0].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             expected_decoding = "<s> what's the time</s></s> my name is niels</s>"
-            decoding = tokenizer.decode(input_processor.input_ids[1].tolist())
+            decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox

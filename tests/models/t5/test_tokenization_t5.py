@@ -14,6 +14,7 @@
 # limitations under the License.
 import json
 import os
+import re
 import tempfile
 import unittest
 
@@ -210,10 +211,9 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Summary of the text.",
             "Another summary.",
         ]
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(
-                tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
-            )
+        targets = tokenizer(
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+        )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
     def test_outputs_not_longer_than_maxlen(self):
@@ -235,12 +235,10 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, 1]
         expected_tgt_tokens = [20698, 13, 8, 1499, 5, 1]
 
-        batch = tokenizer(src_text)
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(tgt_text)
+        batch = tokenizer(src_text, text_target=tgt_text)
 
         self.assertEqual(expected_src_tokens, batch["input_ids"][0])
-        self.assertEqual(expected_tgt_tokens, targets["input_ids"][0])
+        self.assertEqual(expected_tgt_tokens, batch["labels"][0])
 
     def test_token_type_ids(self):
         src_text_1 = ["A first paragraph for summarization."]
@@ -382,3 +380,25 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             model_name="t5-base",
             revision="5a7ff2d8f5117c194c7e32ec1ccbf04642cca99b",
         )
+
+    def test_get_sentinel_tokens(self):
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
+        sentinel_tokens = tokenizer.get_sentinel_tokens()
+        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
+        self.assertTrue([re.search("<extra_id_\d+>", token) is not None for token in sentinel_tokens])
+
+    def test_get_sentinel_token_ids(self):
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
+        self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted([i for i in range(1000, 1010)]))
+
+    def test_get_sentinel_tokens_for_fasttokenizer(self):
+        tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
+        sentinel_tokens = tokenizer.get_sentinel_tokens()
+        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
+        self.assertTrue([re.search("<extra_id_\d+>", token) is not None for token in sentinel_tokens])
+
+    def test_get_sentinel_token_ids_for_fasttokenizer(self):
+        tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
+        self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted([i for i in range(1000, 1010)]))

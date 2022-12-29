@@ -18,6 +18,7 @@ import os
 import re
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
+from datetime import date
 from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
@@ -32,6 +33,7 @@ from . import BaseTransformersCLICommand
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
+CURRENT_YEAR = date.today().year
 TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
@@ -60,6 +62,9 @@ class ModelPatterns:
             The tokenizer class associated with this model. Will default to `"{model_camel_cased}Config"`.
         tokenizer_class (`str`, *optional*):
             The tokenizer class associated with this model (leave to `None` for models that don't use a tokenizer).
+        image_processor_class (`str`, *optional*):
+            The image processor class associated with this model (leave to `None` for models that don't use an image
+            processor).
         feature_extractor_class (`str`, *optional*):
             The feature extractor class associated with this model (leave to `None` for models that don't use a feature
             extractor).
@@ -75,6 +80,7 @@ class ModelPatterns:
     model_upper_cased: Optional[str] = None
     config_class: Optional[str] = None
     tokenizer_class: Optional[str] = None
+    image_processor_class: Optional[str] = None
     feature_extractor_class: Optional[str] = None
     processor_class: Optional[str] = None
 
@@ -99,6 +105,7 @@ class ModelPatterns:
 ATTRIBUTE_TO_PLACEHOLDER = {
     "config_class": "[CONFIG_CLASS]",
     "tokenizer_class": "[TOKENIZER_CLASS]",
+    "image_processor_class": "[IMAGE_PROCESSOR_CLASS]",
     "feature_extractor_class": "[FEATURE_EXTRACTOR_CLASS]",
     "processor_class": "[PROCESSOR_CLASS]",
     "checkpoint": "[CHECKPOINT]",
@@ -281,7 +288,7 @@ def replace_model_patterns(
     # contains the camel-cased named, but will be treated before.
     attributes_to_check = ["config_class"]
     # Add relevant preprocessing classes
-    for attr in ["tokenizer_class", "feature_extractor_class", "processor_class"]:
+    for attr in ["tokenizer_class", "image_processor_class", "feature_extractor_class", "processor_class"]:
         if getattr(old_model_patterns, attr) is not None and getattr(new_model_patterns, attr) is not None:
             attributes_to_check.append(attr)
 
@@ -387,6 +394,7 @@ SPECIAL_PATTERNS = {
     "_CHECKPOINT_FOR_DOC =": "checkpoint",
     "_CONFIG_FOR_DOC =": "config_class",
     "_TOKENIZER_FOR_DOC =": "tokenizer_class",
+    "_IMAGE_PROCESSOR_FOR_DOC =": "image_processor_class",
     "_FEAT_EXTRACTOR_FOR_DOC =": "feature_extractor_class",
     "_PROCESSOR_FOR_DOC =": "processor_class",
 }
@@ -421,6 +429,7 @@ def duplicate_module(
     with open(module_file, "r", encoding="utf-8") as f:
         content = f.read()
 
+    content = re.sub("# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content)
     objects = parse_module_content(content)
 
     # Loop and treat all objects
@@ -549,6 +558,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
         f"test_modeling_tf_{module_name}.py",
         f"test_modeling_flax_{module_name}.py",
         f"test_tokenization_{module_name}.py",
+        f"test_image_processing_{module_name}.py",
         f"test_feature_extraction_{module_name}.py",
         f"test_processor_{module_name}.py",
     ]
@@ -683,6 +693,7 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
     else:
         tokenizer_class = None
+    image_processor_class = auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, None)
     feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
     processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
 
@@ -727,6 +738,7 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         model_upper_cased=model_upper_cased,
         config_class=config_class,
         tokenizer_class=tokenizer_class,
+        image_processor_class=image_processor_class,
         feature_extractor_class=feature_extractor_class,
         processor_class=processor_class,
     )
@@ -744,14 +756,15 @@ def clean_frameworks_in_init(
 ):
     """
     Removes all the import lines that don't belong to a given list of frameworks or concern tokenizers/feature
-    extractors/processors in an init.
+    extractors/image processors/processors in an init.
 
     Args:
         init_file (`str` or `os.PathLike`): The path to the init to treat.
         frameworks (`List[str]`, *optional*):
            If passed, this will remove all imports that are subject to a framework not in frameworks
         keep_processing (`bool`, *optional*, defaults to `True`):
-            Whether or not to keep the preprocessing (tokenizer, feature extractor, processor) imports in the init.
+            Whether or not to keep the preprocessing (tokenizer, feature extractor, image processor, processor) imports
+            in the init.
     """
     if frameworks is None:
         frameworks = get_default_frameworks()
@@ -804,8 +817,9 @@ def clean_frameworks_in_init(
             idx += 1
         # Otherwise we keep the line, except if it's a tokenizer import and we don't want to keep it.
         elif keep_processing or (
-            re.search('^\s*"(tokenization|processing|feature_extraction)', lines[idx]) is None
-            and re.search("^\s*from .(tokenization|processing|feature_extraction)", lines[idx]) is None
+            re.search('^\s*"(tokenization|processing|feature_extraction|image_processing)', lines[idx]) is None
+            and re.search("^\s*from .(tokenization|processing|feature_extraction|image_processing)", lines[idx])
+            is None
         ):
             new_lines.append(lines[idx])
             idx += 1
@@ -841,14 +855,24 @@ def add_model_to_main_init(
     new_lines = []
     framework = None
     while idx < len(lines):
+        new_framework = False
         if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
             framework = None
         elif lines[idx].lstrip().startswith("if not is_torch_available"):
             framework = "pt"
+            new_framework = True
         elif lines[idx].lstrip().startswith("if not is_tf_available"):
             framework = "tf"
+            new_framework = True
         elif lines[idx].lstrip().startswith("if not is_flax_available"):
             framework = "flax"
+            new_framework = True
+
+        if new_framework:
+            # For a new framework, we need to skip until the else: block to get where the imports are.
+            while lines[idx].strip() != "else:":
+                new_lines.append(lines[idx])
+                idx += 1
 
         # Skip if we are in a framework not wanted.
         if framework is not None and frameworks is not None and framework not in frameworks:
@@ -871,6 +895,7 @@ def add_model_to_main_init(
             if not with_processing:
                 processing_classes = [
                     old_model_patterns.tokenizer_class,
+                    old_model_patterns.image_processor_class,
                     old_model_patterns.feature_extractor_class,
                     old_model_patterns.processor_class,
                 ]
@@ -948,6 +973,7 @@ AUTO_CLASSES_PATTERNS = {
         '        ("{model_type}", "{pretrained_archive_map}"),',
     ],
     "feature_extraction_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
+    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_class}"),'],
     "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
     "modeling_tf_auto.py": ['        ("{model_type}", "{any_tf_class}"),'],
     "modeling_flax_auto.py": ['        ("{model_type}", "{any_flax_class}"),'],
@@ -981,6 +1007,14 @@ def add_model_to_auto_classes(
                     )
             elif "{config_class}" in pattern:
                 new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
+            elif "{image_processor_class}" in pattern:
+                if (
+                    old_model_patterns.image_processor_class is not None
+                    and new_model_patterns.image_processor_class is not None
+                ):
+                    new_patterns.append(
+                        pattern.replace("{image_processor_class}", old_model_patterns.image_processor_class)
+                    )
             elif "{feature_extractor_class}" in pattern:
                 if (
                     old_model_patterns.feature_extractor_class is not None
@@ -1062,6 +1096,7 @@ def duplicate_doc_file(
     with open(doc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
+    content = re.sub("<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
     if frameworks is None:
         frameworks = get_default_frameworks()
     if dest_file is None:
@@ -1105,6 +1140,10 @@ def duplicate_doc_file(
             if "Tokenizer" in block_class:
                 # We only add the tokenizer if necessary
                 if old_model_patterns.tokenizer_class != new_model_patterns.tokenizer_class:
+                    new_blocks.append(new_block)
+            elif "ImageProcessor" in block_class:
+                # We only add the image processor if necessary
+                if old_model_patterns.image_processor_class != new_model_patterns.image_processor_class:
                     new_blocks.append(new_block)
             elif "FeatureExtractor" in block_class:
                 # We only add the feature extractor if necessary
@@ -1167,7 +1206,7 @@ def create_new_model_like(
         )
 
     keep_old_processing = True
-    for processing_attr in ["feature_extractor_class", "processor_class", "tokenizer_class"]:
+    for processing_attr in ["image_processor_class", "feature_extractor_class", "processor_class", "tokenizer_class"]:
         if getattr(old_model_patterns, processing_attr) != getattr(new_model_patterns, processing_attr):
             keep_old_processing = False
 
@@ -1183,7 +1222,10 @@ def create_new_model_like(
         files_to_adapt = [
             f
             for f in files_to_adapt
-            if "tokenization" not in str(f) and "processing" not in str(f) and "feature_extraction" not in str(f)
+            if "tokenization" not in str(f)
+            and "processing" not in str(f)
+            and "feature_extraction" not in str(f)
+            and "image_processing" not in str(f)
         ]
 
     os.makedirs(module_folder, exist_ok=True)
@@ -1221,7 +1263,10 @@ def create_new_model_like(
         files_to_adapt = [
             f
             for f in files_to_adapt
-            if "tokenization" not in str(f) and "processor" not in str(f) and "feature_extraction" not in str(f)
+            if "tokenization" not in str(f)
+            and "processor" not in str(f)
+            and "feature_extraction" not in str(f)
+            and "image_processing" not in str(f)
         ]
 
     def disable_fx_test(filename: Path) -> bool:
@@ -1428,7 +1473,9 @@ def get_user_input():
     # Get old model type
     valid_model_type = False
     while not valid_model_type:
-        old_model_type = input("What is the model you would like to duplicate? ")
+        old_model_type = input(
+            "What is the model you would like to duplicate? Please provide the lowercase `model_type` (e.g. roberta): "
+        )
         if old_model_type in model_types:
             valid_model_type = True
         else:
@@ -1441,6 +1488,7 @@ def get_user_input():
 
     old_model_info = retrieve_info_for_model(old_model_type)
     old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
+    old_image_processor_class = old_model_info["model_patterns"].image_processor_class
     old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
     old_processor_class = old_model_info["model_patterns"].processor_class
     old_frameworks = old_model_info["frameworks"]
@@ -1451,61 +1499,73 @@ def get_user_input():
             "We couldn't find the name of the base checkpoint for that model, please enter it here."
         )
 
-    model_name = get_user_field("What is the name for your new model?")
+    model_name = get_user_field(
+        "What is the name (with no special casing) for your new model in the paper (e.g. RoBERTa)? "
+    )
     default_patterns = ModelPatterns(model_name, model_name)
 
     model_type = get_user_field(
-        "What identifier would you like to use for the model type of this model?",
+        "What identifier would you like to use for the `model_type` of this model? ",
         default_value=default_patterns.model_type,
     )
     model_lower_cased = get_user_field(
-        "What name would you like to use for the module of this model?",
+        "What lowercase name would you like to use for the module (folder) of this model? ",
         default_value=default_patterns.model_lower_cased,
     )
     model_camel_cased = get_user_field(
-        "What prefix (camel-cased) would you like to use for the model classes of this model?",
+        "What prefix (camel-cased) would you like to use for the model classes of this model (e.g. Roberta)? ",
         default_value=default_patterns.model_camel_cased,
     )
     model_upper_cased = get_user_field(
-        "What prefix (upper-cased) would you like to use for the constants relative to this model?",
+        "What prefix (upper-cased) would you like to use for the constants relative to this model? ",
         default_value=default_patterns.model_upper_cased,
     )
     config_class = get_user_field(
-        "What will be the name of the config class for this model?", default_value=f"{model_camel_cased}Config"
+        "What will be the name of the config class for this model? ", default_value=f"{model_camel_cased}Config"
     )
-    checkpoint = get_user_field("Please give a checkpoint identifier (on the model Hub) for this new model.")
+    checkpoint = get_user_field(
+        "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/roberta-base): "
+    )
 
     old_processing_classes = [
-        c for c in [old_feature_extractor_class, old_tokenizer_class, old_processor_class] if c is not None
+        c
+        for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
+        if c is not None
     ]
     old_processing_classes = ", ".join(old_processing_classes)
     keep_processing = get_user_field(
-        f"Will your new model use the same processing class as {old_model_type} ({old_processing_classes})?",
+        f"Will your new model use the same processing class as {old_model_type} ({old_processing_classes}) (yes/no)? ",
         convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
     )
     if keep_processing:
+        image_processor_class = old_image_processor_class
         feature_extractor_class = old_feature_extractor_class
         processor_class = old_processor_class
         tokenizer_class = old_tokenizer_class
     else:
         if old_tokenizer_class is not None:
             tokenizer_class = get_user_field(
-                "What will be the name of the tokenizer class for this model?",
+                "What will be the name of the tokenizer class for this model? ",
                 default_value=f"{model_camel_cased}Tokenizer",
             )
         else:
             tokenizer_class = None
+        if old_image_processor_class is not None:
+            image_processor_class = get_user_field(
+                "What will be the name of the image processor class for this model? ",
+                default_value=f"{model_camel_cased}ImageProcessor",
+            )
         if old_feature_extractor_class is not None:
             feature_extractor_class = get_user_field(
-                "What will be the name of the feature extractor class for this model?",
+                "What will be the name of the feature extractor class for this model? ",
                 default_value=f"{model_camel_cased}FeatureExtractor",
             )
         else:
             feature_extractor_class = None
         if old_processor_class is not None:
             processor_class = get_user_field(
-                "What will be the name of the processor class for this model?",
+                "What will be the name of the processor class for this model? ",
                 default_value=f"{model_camel_cased}Processor",
             )
         else:
@@ -1520,12 +1580,13 @@ def get_user_input():
         model_upper_cased=model_upper_cased,
         config_class=config_class,
         tokenizer_class=tokenizer_class,
+        image_processor_class=image_processor_class,
         feature_extractor_class=feature_extractor_class,
         processor_class=processor_class,
     )
 
     add_copied_from = get_user_field(
-        "Should we add # Copied from statements when creating the new modeling file?",
+        "Should we add # Copied from statements when creating the new modeling file (yes/no)? ",
         convert_to=convert_to_bool,
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
@@ -1533,7 +1594,7 @@ def get_user_input():
 
     all_frameworks = get_user_field(
         "Should we add a version of your new model in all the frameworks implemented by"
-        f" {old_model_type} ({old_frameworks})?",
+        f" {old_model_type} ({old_frameworks}) (yes/no)? ",
         convert_to=convert_to_bool,
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",

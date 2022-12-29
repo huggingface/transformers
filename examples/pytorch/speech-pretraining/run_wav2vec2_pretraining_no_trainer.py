@@ -43,7 +43,7 @@ from transformers import (
     set_seed,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
-from transformers.utils import get_full_repo_name
+from transformers.utils import get_full_repo_name, send_example_telemetry
 
 
 logger = get_logger(__name__)
@@ -363,6 +363,10 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     args = parse_args()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_wav2vec2_pretraining_no_trainer", args)
+
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
     logger.info(accelerator.state, main_process_only=False)
@@ -542,8 +546,6 @@ def main():
 
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
-    else:
-        args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
@@ -551,6 +553,9 @@ def main():
         num_warmup_steps=args.num_warmup_steps,
         num_training_steps=args.max_train_steps,
     )
+
+    # Afterwards we recalculate our number of training epochs
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # 5. Train
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -591,7 +596,7 @@ def main():
             # make sure that `num_losses` is summed for distributed training
             # and average gradients over losses of all devices
             if accelerator.state.num_processes > 1:
-                num_losses = accelerator.gather(num_losses).sum()
+                num_losses = accelerator.gather_for_metrics(num_losses).sum()
                 gradient_multiplier = accelerator.state.num_processes / num_losses
                 multiply_grads(model.module.parameters(), gradient_multiplier)
             else:
@@ -642,10 +647,10 @@ def main():
                 outputs.diversity_loss.detach()
 
                 if accelerator.state.num_processes > 1:
-                    loss = accelerator.gather(loss).sum()
-                    outputs.contrastive_loss = accelerator.gather(outputs.contrastive_loss).sum()
-                    outputs.diversity_loss = accelerator.gather(outputs.diversity_loss).sum()
-                    percent_masked = accelerator.gather(percent_masked).sum()
+                    loss = accelerator.gather_for_metrics(loss).sum()
+                    outputs.contrastive_loss = accelerator.gather_for_metrics(outputs.contrastive_loss).sum()
+                    outputs.diversity_loss = accelerator.gather_for_metrics(outputs.diversity_loss).sum()
+                    percent_masked = accelerator.gather_for_metrics(percent_masked).sum()
 
                 train_logs = {
                     "loss": (loss * args.gradient_accumulation_steps) / num_losses,
@@ -708,7 +713,7 @@ def main():
 
         # sum over devices in multi-processing
         if accelerator.num_processes > 1:
-            val_logs = {k: accelerator.gather(v).sum() for k, v in val_logs.items()}
+            val_logs = {k: accelerator.gather_for_metrics(v).sum() for k, v in val_logs.items()}
 
         val_logs = {k: v / val_logs["val_num_losses"] for k, v in val_logs.items()}
 

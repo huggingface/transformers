@@ -49,7 +49,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import CLIPModel, CLIPTextModel, CLIPVisionModel
+    from transformers import (
+        CLIPModel,
+        CLIPTextModel,
+        CLIPTextModelWithProjection,
+        CLIPVisionModel,
+        CLIPVisionModelWithProjection,
+    )
     from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -77,6 +83,7 @@ class CLIPVisionModelTester:
         num_channels=3,
         is_training=True,
         hidden_size=32,
+        projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -92,6 +99,7 @@ class CLIPVisionModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -99,6 +107,10 @@ class CLIPVisionModelTester:
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.scope = scope
+
+        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -112,6 +124,7 @@ class CLIPVisionModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -133,6 +146,19 @@ class CLIPVisionModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
+    def create_and_check_model_with_projection(self, config, pixel_values):
+        model = CLIPVisionModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
@@ -147,8 +173,8 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (CLIPVisionModel,) if is_torch_available() else ()
-
+    all_model_classes = (CLIPVisionModel, CLIPVisionModelWithProjection) if is_torch_available() else ()
+    fx_compatible = True
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -160,8 +186,8 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # CLIP does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -189,100 +215,9 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        # in CLIP, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.model_tester.image_size, self.model_tester.image_size)
-        patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        seq_len = num_patches + 1
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
-            )
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            # CLIP has a different seq_length
-            image_size = (self.model_tester.image_size, self.model_tester.image_size)
-            patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = num_patches + 1
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
     def test_training(self):
         pass
@@ -290,13 +225,11 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    # skip this test as CLIPVisionModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="CLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as CLIPVisionModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="CLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -305,6 +238,13 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CLIPVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLIPVisionModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "visual_projection"))
 
 
 class CLIPTextModelTester:
@@ -318,6 +258,7 @@ class CLIPTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
+        projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -335,6 +276,7 @@ class CLIPTextModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -366,6 +308,7 @@ class CLIPTextModelTester:
         return CLIPTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -385,6 +328,16 @@ class CLIPTextModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
+    def create_and_check_model_with_projection(self, config, input_ids, input_mask):
+        model = CLIPTextModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+            result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, input_mask = config_and_inputs
@@ -395,7 +348,8 @@ class CLIPTextModelTester:
 @require_torch
 class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (CLIPTextModel,) if is_torch_available() else ()
+    all_model_classes = (CLIPTextModel, CLIPTextModelWithProjection) if is_torch_available() else ()
+    fx_compatible = True
     test_pruning = False
     test_head_masking = False
 
@@ -410,23 +364,25 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
+
     def test_training(self):
         pass
 
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(reason="CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # CLIP does not use inputs_embeds
         pass
 
-    # skip this test as CLIPTextModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="CLIPTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip this test as CLIPTextModel has no base class and is
-    # not available in MODEL_MAPPING
+    @unittest.skip(reason="CLIPTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -436,12 +392,25 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
             model = CLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLIPTextModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "text_projection"))
+
 
 class CLIPModelTester:
-    def __init__(self, parent, is_training=True):
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
-        self.text_model_tester = CLIPTextModelTester(parent)
-        self.vision_model_tester = CLIPVisionModelTester(parent)
+        self.text_model_tester = CLIPTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = CLIPVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -483,6 +452,7 @@ class CLIPModelTester:
 @require_torch
 class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPModel,) if is_torch_available() else ()
+    fx_compatible = True
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -495,19 +465,19 @@ class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # hidden_states are tested in individual model tests
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
 
-    # input_embeds are tested in individual model tests
+    @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 
-    # tested in individual model tests
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # CLIPModel does not have input/output embeddings
+    @unittest.skip(reason="CLIPModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
 

@@ -105,7 +105,6 @@ class FlaxBeitModelTester(unittest.TestCase):
         return config, pixel_values, labels
 
     def create_and_check_model(self, config, pixel_values, labels):
-
         model = FlaxBeitModel(config=config)
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
@@ -120,6 +119,13 @@ class FlaxBeitModelTester(unittest.TestCase):
         model = FlaxBeitForImageClassification(config=config)
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = FlaxBeitForImageClassification(config)
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -227,7 +233,7 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
         pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
 
         # prepare bool_masked_pos
-        bool_masked_pos = np.ones((1, 196), dtype=np.bool)
+        bool_masked_pos = np.ones((1, 196), dtype=bool)
 
         # forward pass
         outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)

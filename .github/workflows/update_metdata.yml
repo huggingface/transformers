@@ -14,14 +14,14 @@ jobs:
         shell: bash -l {0}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Load cached virtual environment
         uses: actions/cache@v2
         id: cache
         with:
           path: ~/venv/
-          key: v2-metadata-${{ hashFiles('setup.py') }}
+          key: v3-metadata-${{ hashFiles('setup.py') }}
 
       - name: Create virtual environment on cache miss
         if: steps.cache.outputs.cache-hit != 'true'

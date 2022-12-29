@@ -25,8 +25,6 @@ from ...utils import (
     is_tokenizers_available,
     is_torch_available,
 )
-from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
-from .tokenization_layoutlm import LayoutLMTokenizer
 
 
 _import_structure = {
@@ -53,6 +51,7 @@ else:
         "LayoutLMForMaskedLM",
         "LayoutLMForSequenceClassification",
         "LayoutLMForTokenClassification",
+        "LayoutLMForQuestionAnswering",
         "LayoutLMModel",
         "LayoutLMPreTrainedModel",
     ]
@@ -68,6 +67,7 @@ else:
         "TFLayoutLMForMaskedLM",
         "TFLayoutLMForSequenceClassification",
         "TFLayoutLMForTokenClassification",
+        "TFLayoutLMForQuestionAnswering",
         "TFLayoutLMMainLayer",
         "TFLayoutLMModel",
         "TFLayoutLMPreTrainedModel",
@@ -95,6 +95,7 @@ if TYPE_CHECKING:
         from .modeling_layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
+            LayoutLMForQuestionAnswering,
             LayoutLMForSequenceClassification,
             LayoutLMForTokenClassification,
             LayoutLMModel,
@@ -109,6 +110,7 @@ if TYPE_CHECKING:
         from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
+            TFLayoutLMForQuestionAnswering,
             TFLayoutLMForSequenceClassification,
             TFLayoutLMForTokenClassification,
             TFLayoutLMMainLayer,

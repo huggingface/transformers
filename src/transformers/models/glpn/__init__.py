@@ -21,9 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {
-    "configuration_glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
-}
+_import_structure = {"configuration_glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"]}
 
 try:
     if not is_vision_available():
@@ -32,6 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_glpn"] = ["GLPNFeatureExtractor"]
+    _import_structure["image_processing_glpn"] = ["GLPNImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -58,6 +57,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_glpn import GLPNFeatureExtractor
+        from .image_processing_glpn import GLPNImageProcessor
 
     try:
         if not is_torch_available():

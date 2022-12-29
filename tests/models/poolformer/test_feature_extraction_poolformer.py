@@ -41,12 +41,15 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize_and_center_crop=True,
-        size=30,
+        size=None,
         crop_pct=0.9,
+        crop_size=None,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        size = size if size is not None else {"shortest_edge": 30}
+        crop_size = crop_size if crop_size is not None else {"height": 30, "width": 30}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -55,6 +58,7 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
         self.do_resize_and_center_crop = do_resize_and_center_crop
         self.size = size
         self.crop_pct = crop_pct
+        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -64,6 +68,7 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
             "size": self.size,
             "do_resize_and_center_crop": self.do_resize_and_center_crop,
             "crop_pct": self.crop_pct,
+            "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -111,8 +116,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -123,8 +128,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -143,8 +148,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -155,8 +160,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -175,8 +180,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -187,7 +192,7 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )

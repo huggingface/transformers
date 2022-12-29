@@ -15,6 +15,8 @@
 """ Classes to support TF Encoder-Decoder architectures"""
 
 
+import gc
+import os
 import tempfile
 import warnings
 from typing import Optional
@@ -147,7 +149,7 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
-        kwargs: (*optional*) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
+        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
 
             - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
             - With a *decoder_* prefix which will be input as `**decoder_kwargs`` for the decoder forward function.
@@ -171,13 +173,12 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
     )
 
-    if tf.executing_eagerly():
-        # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
+    # "Verify that `labels` has only positive values and -100"
+    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
 
-        # Make sure the assertion op is called by wrapping the result in an identity no-op
-        with tf.control_dependencies([assert_gte0]):
-            shifted_input_ids = tf.identity(shifted_input_ids)
+    # Make sure the assertion op is called by wrapping the result in an identity no-op
+    with tf.control_dependencies([assert_gte0]):
+        shifted_input_ids = tf.identity(shifted_input_ids)
 
     return shifted_input_ids
 
@@ -270,7 +271,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         # Add `decoder_input_ids` because `self.decoder` requires it.
-        input_ids = tf.constant(DUMMY_INPUTS)
+        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         dummy = {"input_ids": input_ids, "decoder_input_ids": input_ids}
         return dummy
 
@@ -292,24 +293,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
-        Initializing *TFEncoderDecoderModel* from a pytorch checkpoint is not supported currently.
-
-        If there are only pytorch checkpoints for a particular encoder-decoder model, a workaround is:
-
-        ```python
-        >>> # a workaround to load from pytorch checkpoint
-        >>> from transformers import EncoderDecoderModel, TFEncoderDecoderModel
-
-        >>> _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
-        >>> _model.encoder.save_pretrained("./encoder")
-        >>> _model.decoder.save_pretrained("./decoder")
-        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
-        ... )
-        >>> # This is only for copying some specific attributes of this particular model.
-        >>> model.config = _model.config
-        ```
-
         Example:
 
         ```python
@@ -320,12 +303,42 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
 
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
-            raise ValueError(
-                "Initializing `TFEncoderDecoderModel` from a pytorch checkpoint is not supported currently. Use a"
-                " tensorflow checkpoint instead. If only the pytorch checkpoints are available, create the encoder and"
-                " decoder models separately, and use them to initialize `TFEncoderDecoderModel`. Check"
-                " `TFEncoderDecoderModel.from_encoder_decoder_pretrained()` for more details."
-            )
+            import torch
+
+            from transformers import EncoderDecoderModel
+
+            # a workaround to load from pytorch checkpoint
+            _model = EncoderDecoderModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            config = _model.config
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                encoder_dir = os.path.join(tmpdirname, "encoder")
+                decoder_dir = os.path.join(tmpdirname, "decoder")
+                _model.encoder.save_pretrained(encoder_dir)
+                _model.decoder.save_pretrained(decoder_dir)
+
+                if hasattr(_model, "enc_to_dec_proj"):
+                    enc_to_dec_proj_kernel = tf.transpose(
+                        tf.constant(_model.enc_to_dec_proj.weight.detach().to("cpu").numpy()), perm=(1, 0)
+                    )
+                    enc_to_dec_proj_bias = tf.constant(_model.enc_to_dec_proj.bias.detach().to("cpu").numpy())
+
+                del _model
+                gc.collect()
+                torch.cuda.empty_cache()
+
+                model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_dir, decoder_dir, encoder_from_pt=True, decoder_from_pt=True
+                )
+                # This is only for copying some specific attributes of this particular model.
+                model.config = config
+
+                if hasattr(model, "enc_to_dec_proj"):
+                    model(model.dummy_inputs)
+                    model.enc_to_dec_proj.kernel.assign(enc_to_dec_proj_kernel)
+                    model.enc_to_dec_proj.bias.assign(enc_to_dec_proj_bias)
+
+                return model
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
@@ -630,13 +643,13 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
             loss = self.hf_compute_loss(labels, logits)
 
-        past_key_values = None
-        if decoder_inputs["use_cache"]:
-            past_key_values = decoder_outputs[1]
-        # The starting index of the remaining elements in `decoder_outputs`
-        start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
+        if not return_dict:
+            past_key_values = None
+            if use_cache:
+                past_key_values = decoder_outputs[1]
+            # The starting index of the remaining elements in `decoder_outputs`
+            start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
 
-        if not decoder_inputs["return_dict"]:
             if not isinstance(encoder_outputs, tuple):
                 encoder_outputs = encoder_outputs.to_tuple()
             output = (loss, logits, past_key_values) + decoder_outputs[start_index:] + encoder_outputs
@@ -646,7 +659,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         return TFSeq2SeqLMOutput(
             loss=loss,
             logits=decoder_outputs.logits,
-            past_key_values=past_key_values,
+            past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,

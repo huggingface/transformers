@@ -17,6 +17,7 @@
 
 import math
 import random
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -80,7 +81,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), float("-inf"))
+    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
     mask_cond = torch.arange(mask.size(-1))
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -160,6 +161,8 @@ class LEDEncoderSelfAttention(nn.Module):
 
         self.one_sided_attn_window_size = attention_window // 2
 
+        self.config = config
+
     def forward(
         self,
         hidden_states,
@@ -207,7 +210,7 @@ class LEDEncoderSelfAttention(nn.Module):
 
         # cast to fp32/fp16 then replace 1's with -inf
         float_mask = remove_from_windowed_attention_mask.type_as(query_vectors).masked_fill(
-            remove_from_windowed_attention_mask, -10000.0
+            remove_from_windowed_attention_mask, torch.finfo(query_vectors.dtype).min
         )
         # diagonal mask with zeros everywhere and -inf inplace of padding
         diagonal_mask = self._sliding_chunks_query_key_matmul(
@@ -389,24 +392,45 @@ class LEDEncoderSelfAttention(nn.Module):
         return chunked_hidden_states
 
     @staticmethod
-    def _chunk(hidden_states, window_overlap):
+    def _chunk(hidden_states, window_overlap, onnx_export: bool = False):
         """convert into overlapping chunks. Chunk size = 2w, overlap size = w"""
+        if not onnx_export:
+            # non-overlapping chunks of size = 2w
+            hidden_states = hidden_states.view(
+                hidden_states.size(0),
+                torch.div(hidden_states.size(1), (window_overlap * 2), rounding_mode="trunc"),
+                window_overlap * 2,
+                hidden_states.size(2),
+            )
+            # use `as_strided` to make the chunks overlap with an overlap size = window_overlap
+            chunk_size = list(hidden_states.size())
+            chunk_size[1] = chunk_size[1] * 2 - 1
 
-        # non-overlapping chunks of size = 2w
-        hidden_states = hidden_states.view(
+            chunk_stride = list(hidden_states.stride())
+            chunk_stride[1] = chunk_stride[1] // 2
+            return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
+
+        # When exporting to ONNX, use this separate logic
+        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
+
+        # TODO replace this with
+        # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
+        # once `unfold` is supported
+        # the case hidden_states.size(1) == window_overlap * 2 can also simply return hidden_states.unsqueeze(1), but that's control flow
+
+        chunk_size = [
             hidden_states.size(0),
-            hidden_states.size(1) // (window_overlap * 2),
+            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
             window_overlap * 2,
             hidden_states.size(2),
-        )
+        ]
 
-        # use `as_strided` to make the chunks overlap with an overlap size = window_overlap
-        chunk_size = list(hidden_states.size())
-        chunk_size[1] = chunk_size[1] * 2 - 1
-
-        chunk_stride = list(hidden_states.stride())
-        chunk_stride[1] = chunk_stride[1] // 2
-        return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
+        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
+        for chunk in range(chunk_size[1]):
+            overlapping_chunks[:, chunk, :, :] = hidden_states[
+                :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
+            ]
+        return overlapping_chunks
 
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
@@ -415,10 +439,14 @@ class LEDEncoderSelfAttention(nn.Module):
         ending_mask = beginning_mask.flip(dims=(1, 3))
         beginning_input = input_tensor[:, :affected_seq_len, :, : affected_seq_len + 1]
         beginning_mask = beginning_mask.expand(beginning_input.size())
-        beginning_input.masked_fill_(beginning_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
+        input_tensor[:, :affected_seq_len, :, : affected_seq_len + 1] = torch.full_like(
+            beginning_input, -float("inf")
+        ).where(beginning_mask.bool(), beginning_input)
         ending_input = input_tensor[:, -affected_seq_len:, :, -(affected_seq_len + 1) :]
         ending_mask = ending_mask.expand(ending_input.size())
-        ending_input.masked_fill_(ending_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
+        input_tensor[:, -affected_seq_len:, :, -(affected_seq_len + 1) :] = torch.full_like(
+            ending_input, -float("inf")
+        ).where(ending_mask.bool(), ending_input)
 
     def _sliding_chunks_query_key_matmul(self, query: torch.Tensor, key: torch.Tensor, window_overlap: int):
         """
@@ -432,14 +460,14 @@ class LEDEncoderSelfAttention(nn.Module):
         ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
         assert query.size() == key.size()
 
-        chunks_count = seq_len // window_overlap - 1
+        chunks_count = torch.div(seq_len, window_overlap, rounding_mode="trunc") - 1
 
         # group batch_size and num_heads dimensions into one, then chunk seq_len into chunks of size window_overlap * 2
         query = query.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
         key = key.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
 
-        query = self._chunk(query, window_overlap)
-        key = self._chunk(key, window_overlap)
+        query = self._chunk(query, window_overlap, self.config.__dict__.get("onnx_export", False))
+        key = self._chunk(key, window_overlap, self.config.__dict__.get("onnx_export", False))
 
         # matrix multiplication
         # bcxd: batch_size * num_heads x chunks x 2window_overlap x head_dim
@@ -457,7 +485,7 @@ class LEDEncoderSelfAttention(nn.Module):
         # window_overlap previous words). The following column is attention score from each word to itself, then
         # followed by window_overlap columns for the upper triangle.
 
-        diagonal_attention_scores = diagonal_chunked_attention_scores.new_empty(
+        diagonal_attention_scores = diagonal_chunked_attention_scores.new_zeros(
             (batch_size * num_heads, chunks_count + 1, window_overlap, window_overlap * 2 + 1)
         )
 
@@ -498,11 +526,14 @@ class LEDEncoderSelfAttention(nn.Module):
         assert seq_len % (window_overlap * 2) == 0
         assert attn_probs.size()[:3] == value.size()[:3]
         assert attn_probs.size(3) == 2 * window_overlap + 1
-        chunks_count = seq_len // window_overlap - 1
+        chunks_count = torch.div(seq_len, window_overlap, rounding_mode="trunc") - 1
         # group batch_size and num_heads dimensions into one, then chunk seq_len into chunks of size 2 window overlap
 
         chunked_attn_probs = attn_probs.transpose(1, 2).reshape(
-            batch_size * num_heads, seq_len // window_overlap, window_overlap, 2 * window_overlap + 1
+            batch_size * num_heads,
+            torch.div(seq_len, window_overlap, rounding_mode="trunc"),
+            window_overlap,
+            2 * window_overlap + 1,
         )
 
         # group batch_size and num_heads dimensions into one
@@ -577,9 +608,12 @@ class LEDEncoderSelfAttention(nn.Module):
         # (batch_size, seq_len, num_heads, max_num_global_attn_indices)
         attn_probs_from_global_key = torch.einsum("blhd,bshd->blhs", (query_vectors, key_vectors_only_global))
 
+        # need to transpose since ONNX export only supports consecutive indexing: https://pytorch.org/docs/stable/onnx.html#writes-sets
+        attn_probs_from_global_key = attn_probs_from_global_key.transpose(1, 3)
         attn_probs_from_global_key[
-            is_local_index_no_global_attn_nonzero[0], :, :, is_local_index_no_global_attn_nonzero[1]
-        ] = -10000.0
+            is_local_index_no_global_attn_nonzero[0], is_local_index_no_global_attn_nonzero[1], :, :
+        ] = torch.finfo(attn_probs_from_global_key.dtype).min
+        attn_probs_from_global_key = attn_probs_from_global_key.transpose(1, 3)
 
         return attn_probs_from_global_key
 
@@ -673,13 +707,16 @@ class LEDEncoderSelfAttention(nn.Module):
 
         global_attn_scores = global_attn_scores.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
 
+        # need to transpose since ONNX export only supports consecutive indexing: https://pytorch.org/docs/stable/onnx.html#writes-sets
+        global_attn_scores = global_attn_scores.transpose(1, 2)
         global_attn_scores[
-            is_local_index_no_global_attn_nonzero[0], :, is_local_index_no_global_attn_nonzero[1], :
-        ] = -10000.0
+            is_local_index_no_global_attn_nonzero[0], is_local_index_no_global_attn_nonzero[1], :, :
+        ] = torch.finfo(global_attn_scores.dtype).min
+        global_attn_scores = global_attn_scores.transpose(1, 2)
 
         global_attn_scores = global_attn_scores.masked_fill(
             is_index_masked[:, None, None, :],
-            -10000.0,
+            torch.finfo(global_attn_scores.dtype).min,
         )
 
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
@@ -2009,8 +2046,8 @@ class LEDDecoder(LEDPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -2172,6 +2209,8 @@ class LEDDecoder(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDModel(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: LEDConfig):
         super().__init__(config)
 
@@ -2298,9 +2337,11 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     base_model_prefix = "led"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        r"lm_head\.weight",
+        r"encoder.version",
+        r"decoder.version",
+        r"lm_head.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: LEDConfig):
@@ -2389,7 +2430,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
@@ -2441,6 +2482,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         decoder_input_ids,
         past=None,
         attention_mask=None,
+        global_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -2458,6 +2500,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "global_attention_mask": global_attention_mask,
             "head_mask": head_mask,
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
@@ -2486,7 +2529,15 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: LEDConfig, **kwargs):
+        warnings.warn(
+            "The `transformers.LEDForSequenceClassification` class is deprecated and will be removed in version 5 of"
+            " Transformers. No actual method were provided in the original paper on how to perfom"
+            " sequence classification.",
+            FutureWarning,
+        )
         super().__init__(config, **kwargs)
         self.led = LEDModel(config)
         self.classification_head = LEDClassificationHead(
@@ -2557,7 +2608,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         )
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = input_ids.eq(self.config.eos_token_id)
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
@@ -2614,6 +2665,8 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForQuestionAnswering(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 

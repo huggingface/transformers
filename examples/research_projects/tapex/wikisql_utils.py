@@ -23,8 +23,6 @@ import re
 # Original: https://github.com/google-research/tapas/master/wikisql_utils.py
 from typing import Any, List, Text
 
-import six
-
 
 EMPTY_ANSWER = "none"
 EMPTY_ANSWER_AGG = "none"
@@ -49,7 +47,7 @@ def convert_to_float(value):
         return value
     if isinstance(value, int):
         return float(value)
-    if not isinstance(value, six.string_types):
+    if not isinstance(value, str):
         raise ValueError("Argument value is not a string. Can't parse it as float")
     sanitized = value
 

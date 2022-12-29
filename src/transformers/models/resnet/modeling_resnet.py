@@ -23,12 +23,19 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BackboneOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_resnet import ResNetConfig
 
 
@@ -36,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ResNetConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
@@ -52,7 +59,7 @@ RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class ResNetConvLayer(nn.Sequential):
+class ResNetConvLayer(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
     ):
@@ -63,8 +70,14 @@ class ResNetConvLayer(nn.Sequential):
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
-class ResNetEmbeddings(nn.Sequential):
+
+class ResNetEmbeddings(nn.Module):
     """
     ResNet Embeddings (stem) composed of a single aggressive convolution.
     """
@@ -75,9 +88,20 @@ class ResNetEmbeddings(nn.Sequential):
             config.num_channels, config.embedding_size, kernel_size=7, stride=2, activation=config.hidden_act
         )
         self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.num_channels = config.num_channels
+
+    def forward(self, pixel_values: Tensor) -> Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embedding = self.embedder(pixel_values)
+        embedding = self.pooler(embedding)
+        return embedding
 
 
-class ResNetShortCut(nn.Sequential):
+class ResNetShortCut(nn.Module):
     """
     ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
     downsample the input using `stride=2`.
@@ -88,10 +112,15 @@ class ResNetShortCut(nn.Sequential):
         self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
         self.normalization = nn.BatchNorm2d(out_channels)
 
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        return hidden_state
+
 
 class ResNetBasicLayer(nn.Module):
     """
-    A classic ResNet's residual layer composed by a two `3x3` convolutions.
+    A classic ResNet's residual layer composed by two `3x3` convolutions.
     """
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
@@ -117,10 +146,10 @@ class ResNetBasicLayer(nn.Module):
 
 class ResNetBottleNeckLayer(nn.Module):
     """
-    A classic ResNet's bottleneck layer composed by a three `3x3` convolutions.
+    A classic ResNet's bottleneck layer composed by three `3x3` convolutions.
 
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
-    convolution faster. The last `1x1` convolution remap the reduced features to `out_channels`.
+    convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`.
     """
 
     def __init__(
@@ -148,7 +177,7 @@ class ResNetBottleNeckLayer(nn.Module):
         return hidden_state
 
 
-class ResNetStage(nn.Sequential):
+class ResNetStage(nn.Module):
     """
     A ResNet stage composed by stacked layers.
     """
@@ -170,6 +199,12 @@ class ResNetStage(nn.Sequential):
             layer(in_channels, out_channels, stride=stride, activation=config.hidden_act),
             *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
         )
+
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
 
 
 class ResNetEncoder(nn.Module):
@@ -232,7 +267,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ResNetModel):
+        if isinstance(module, ResNetEncoder):
             module.gradient_checkpointing = value
 
 
@@ -250,8 +285,8 @@ RESNET_START_DOCSTRING = r"""
 RESNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -342,10 +377,10 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Tensor = None,
-        labels: Tensor = None,
-        output_hidden_states: bool = None,
-        return_dict: bool = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -388,3 +423,93 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             return (loss,) + output if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+@add_start_docstrings(
+    """
+    ResNet backbone, to be used with frameworks like DETR and MaskFormer.
+    """,
+    RESNET_START_DOCSTRING,
+)
+class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.stage_names = config.stage_names
+        self.embedder = ResNetEmbeddings(config)
+        self.encoder = ResNetEncoder(config)
+
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
+
+        out_feature_channels = {}
+        out_feature_channels["stem"] = config.embedding_size
+        for idx, stage in enumerate(self.stage_names[1:]):
+            out_feature_channels[stage] = config.hidden_sizes[idx]
+
+        self.out_feature_channels = out_feature_channels
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    @property
+    def channels(self):
+        return [self.out_feature_channels[name] for name in self.out_features]
+
+    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+    ) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+        >>> model = AutoBackbone.from_pretrained(
+        ...     "microsoft/resnet-50", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ... )
+
+        >>> inputs = processor(image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 2048, 7, 7]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        embedding_output = self.embedder(pixel_values)
+
+        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
+
+        hidden_states = outputs.hidden_states
+
+        feature_maps = ()
+        for idx, stage in enumerate(self.stage_names):
+            if stage in self.out_features:
+                feature_maps += (hidden_states[idx],)
+
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
+        )

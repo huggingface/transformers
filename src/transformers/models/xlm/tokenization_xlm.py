@@ -791,7 +791,6 @@ class XLMTokenizer(PreTrainedTokenizer):
         externally, and set `bypass_tokenizer=True` to bypass the tokenizer.
 
         Args:
-
             - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported
               languages. However, we don't enforce it.
             - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
@@ -965,7 +964,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:

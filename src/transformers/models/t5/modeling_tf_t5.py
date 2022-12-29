@@ -23,7 +23,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
+from tensorflow.compiler.tf2xla.python.xla import dynamic_slice
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
@@ -36,8 +36,7 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
-    TFSharedEmbeddings,
-    TFWrappedEmbeddings,
+    get_initializer,
     keras_serializable,
     unpack_inputs,
 )
@@ -45,6 +44,7 @@ from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
+    ContextManagers,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -93,7 +93,7 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
         return self.weight * hidden_states
 
 
-class TFT5DenseReluDense(tf.keras.layers.Layer):
+class TFT5DenseActDense(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         wi_initializer = tf.keras.initializers.RandomNormal(
@@ -109,7 +109,7 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
-        self.act = tf.keras.activations.relu
+        self.act = get_tf_activation(config.dense_act_fn)
 
     def call(self, hidden_states, training=False):
         hidden_states = self.wi(hidden_states)
@@ -119,7 +119,7 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFT5GatedGeluDense(tf.keras.layers.Layer):
+class TFT5DenseGatedActDense(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         wi_initializer = tf.keras.initializers.RandomNormal(
@@ -138,7 +138,7 @@ class TFT5GatedGeluDense(tf.keras.layers.Layer):
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
-        self.act = get_tf_activation("gelu_new")
+        self.act = get_tf_activation(config.dense_act_fn)
 
     def call(self, hidden_states, training=False):
         hidden_gelu = self.act(self.wi_0(hidden_states))
@@ -152,14 +152,11 @@ class TFT5GatedGeluDense(tf.keras.layers.Layer):
 class TFT5LayerFF(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        if config.feed_forward_proj == "relu":
-            self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
-        elif config.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = TFT5GatedGeluDense(config, name="DenseReluDense")
+        if config.is_gated_act:
+            self.DenseReluDense = TFT5DenseGatedActDense(config, name="DenseReluDense")
         else:
-            raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
-            )
+            self.DenseReluDense = TFT5DenseActDense(config, name="DenseReluDense")
+
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
@@ -271,7 +268,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         max_exact = num_buckets // 2
         is_small = tf.math.less(relative_position, max_exact)
         relative_position_if_large = max_exact + tf.cast(
-            tf.math.log(relative_position / max_exact)
+            tf.math.log(tf.cast(relative_position, tf.float32) / tf.cast(max_exact, tf.float32))
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact),
             dtype=relative_position.dtype,
@@ -388,10 +385,19 @@ class TFT5Attention(tf.keras.layers.Layer):
             else:
                 position_bias = self.compute_bias(real_seq_length, key_length)
 
-            # if key and values are already calculated
-            # we want only the last query position bias
+            # if key and values are already calculated we want only the last query position bias
             if past_key_value is not None:
-                position_bias = position_bias[:, :, -seq_length:, :]
+                if not self.has_relative_attention_bias:
+                    position_bias = position_bias[:, :, -seq_length:, :]
+                else:
+                    # we might have a padded past structure, in which case we want to fetch the position bias slice
+                    # right after the most recently filled past index
+                    most_recently_filled_past_index = tf.reduce_max(tf.where(past_key_value[0][0, 0, :, 0] != 0.0))
+                    position_bias = dynamic_slice(
+                        position_bias,
+                        (0, 0, most_recently_filled_past_index + 1, 0),
+                        (1, self.n_heads, seq_length, real_seq_length),
+                    )
 
             if mask is not None:
                 position_bias = tf.cast(position_bias, dtype=mask.dtype)
@@ -675,7 +681,25 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(input_ids)
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                    ),
+                )
+                inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
 
@@ -854,8 +878,8 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        inputs = tf.constant(DUMMY_INPUTS)
-        input_mask = tf.constant(DUMMY_MASK)
+        inputs = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
+        input_mask = tf.constant(DUMMY_MASK, dtype=tf.int32)
         dummy_inputs = {
             "input_ids": inputs,
             "decoder_input_ids": inputs,
@@ -882,21 +906,10 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         return self.shared
 
     def set_input_embeddings(self, value):
-        try:
-            self.shared.weight = value
-        except AttributeError:
-            self(self.dummy_inputs)
-            self.shared.weight = value
-
-        self.shared.vocab_size = shape_list(value)[0]
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.embed_tokens = embed_tokens
+        self.shared = value
+        self.encoder.embed_tokens = self.shared
         if hasattr(self, "decoder"):
-            self.decoder.embed_tokens = embed_tokens
+            self.decoder.embed_tokens = self.shared
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -948,22 +961,27 @@ T5_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -1002,14 +1020,14 @@ T5_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
             1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        decoder_head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        decoder_head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
             1]`:
 
@@ -1078,7 +1096,7 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
@@ -1112,22 +1130,24 @@ num_heads))`.
 class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
 
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(self.config.initializer_factor),
+            name="shared",
+        )
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "shared"
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
+        self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
 
     def get_encoder(self):
         return self.encoder
@@ -1171,6 +1191,10 @@ class TFT5Model(TFT5PreTrainedModel):
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
+
+        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
+        >>> # This is not needed for torch's T5ForConditionalGeneration as it does this internally using labels arg.
+        >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
         >>> # forward pass
         >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids)
@@ -1259,23 +1283,23 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
-
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
-
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.shared = tf.keras.layers.Embedding(
+            config.vocab_size,
+            config.d_model,
+            name="shared",
+            embeddings_initializer=get_initializer(self.config.initializer_factor),
+        )
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "shared"
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
+        self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
 
         if not config.tie_word_embeddings:
             lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=config.initializer_factor)
@@ -1407,7 +1431,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         # T5v1.1 does not tie output word embeddings and thus does not require downscaling
         if self.config.tie_word_embeddings:
             sequence_output = sequence_output * (self.model_dim**-0.5)
-            logits = self.shared(sequence_output, mode="linear")
+            logits = tf.matmul(sequence_output, self.shared.weights, transpose_b=True)
         else:
             logits = self.lm_head(sequence_output)
 
@@ -1501,70 +1525,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             "use_cache": use_cache,
         }
 
-    def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
-        # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
-        # quite some duplicated code patterns it seems
-        # also the `attention_mask` is currently used in a somewhat hacky to
-        # correctly influence the `past_key_values` - not sure if this is the way to go
-        # Let's keep that for a future PR.
-        past = outputs.past_key_values
-        is_past_initialized = model_kwargs.pop("past", None) is not None
-        decoder_attention_mask = model_kwargs.pop("decoder_attention_mask", None)
-        batch_size = past[0][0].shape[0]
-
-        if not is_past_initialized:
-            # past[0].shape[3] is seq_length of prompt
-            num_padding_values = max_length - past[0][0].shape[2] - 1
-
-            padding_values = np.zeros((4, 2), dtype=np.int32)
-            padding_values[2, 1] = num_padding_values
-            padding_values = tf.constant(padding_values)
-
-            new_past = ()
-            for past_layer in past:
-                new_past_layer = list(past_layer)
-                for i in range(len(new_past_layer[:2])):
-                    new_past_layer[i] = tf.pad(past_layer[i], padding_values)
-                new_past += (tuple(new_past_layer),)
-
-            # 1 one for decoder_start_token_id, Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
-            decoder_attention_mask = tf.concat(
-                [
-                    tf.ones((batch_size, 1), dtype=tf.int32),
-                    tf.zeros((batch_size, num_padding_values), dtype=tf.int32),
-                    tf.ones((batch_size, 1), dtype=tf.int32),
-                ],
-                axis=1,
-            )
-        else:
-            slice_start_base = tf.constant([0, 0, 1, 0])
-            decoder_attention_mask_update_slice = tf.ones((batch_size, 1), dtype=decoder_attention_mask.dtype)
-            # correct 5 here
-            new_past_index = current_pos - 1
-
-            new_past = ()
-            for past_layer in past:
-                new_past_layer = list(past_layer)
-                for i in range(len(new_past_layer[:2])):
-                    update_slice = past_layer[i][:, :, -1:]
-                    # Write the last slice to the first open location in the padded past array
-                    # and then truncate the last slice off the array
-                    new_past_layer[i] = dynamic_update_slice(
-                        past_layer[i][:, :, :-1], update_slice, slice_start_base * new_past_index
-                    )
-                new_past += (tuple(new_past_layer),)
-
-            update_start = tf.constant([0, 1], dtype=tf.int32) * new_past_index
-            decoder_attention_mask = dynamic_update_slice(
-                decoder_attention_mask, decoder_attention_mask_update_slice, update_start
-            )
-
-        # set `attention_mask` and `past`
-        model_kwargs["decoder_attention_mask"] = decoder_attention_mask
-        model_kwargs["past"] = new_past
-
-        return model_kwargs
-
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return self._shift_right(labels)
 
@@ -1600,21 +1560,22 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 class TFT5EncoderModel(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
-
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.shared = tf.keras.layers.Embedding(
+            config.vocab_size,
+            config.d_model,
+            name="shared",
+            embeddings_initializer=get_initializer(self.config.initializer_factor),
+        )
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "shared"
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
 
     @property
     def dummy_inputs(self):
-        return {"input_ids": tf.constant(DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
 
     def get_encoder(self):
         return self.encoder

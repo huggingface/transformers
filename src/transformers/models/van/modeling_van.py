@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "VanConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "Visual-Attention-Network/van-base"
@@ -54,23 +54,24 @@ VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Stochastic depth implementation
-# Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+# Copied from transformers.models.convnext.modeling_convnext.drop_path
+def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
-    DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
-    Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
+    output = input.div(keep_prob) * random_tensor
     return output
 
 
@@ -78,15 +79,18 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
 class VanDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob=None):
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
-class VanOverlappingPatchEmbedder(nn.Sequential):
+class VanOverlappingPatchEmbedder(nn.Module):
     """
     Downsamples the input using a patchify operation with a `stride` of 4 by default making adjacent windows overlap by
     half of the area. From [PVTv2: Improved Baselines with Pyramid Vision
@@ -100,8 +104,13 @@ class VanOverlappingPatchEmbedder(nn.Sequential):
         )
         self.normalization = nn.BatchNorm2d(hidden_size)
 
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        return hidden_state
 
-class VanMlpLayer(nn.Sequential):
+
+class VanMlpLayer(nn.Module):
     """
     MLP with depth-wise convolution, from [PVTv2: Improved Baselines with Pyramid Vision
     Transformer](https://arxiv.org/abs/2106.13797).
@@ -123,8 +132,17 @@ class VanMlpLayer(nn.Sequential):
         self.out_dense = nn.Conv2d(hidden_size, out_channels, kernel_size=1)
         self.dropout2 = nn.Dropout(dropout_rate)
 
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.in_dense(hidden_state)
+        hidden_state = self.depth_wise(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.dropout1(hidden_state)
+        hidden_state = self.out_dense(hidden_state)
+        hidden_state = self.dropout2(hidden_state)
+        return hidden_state
 
-class VanLargeKernelAttention(nn.Sequential):
+
+class VanLargeKernelAttention(nn.Module):
     """
     Basic Large Kernel Attention (LKA).
     """
@@ -136,6 +154,12 @@ class VanLargeKernelAttention(nn.Sequential):
             hidden_size, hidden_size, kernel_size=7, dilation=3, padding=9, groups=hidden_size
         )
         self.point_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.depth_wise(hidden_state)
+        hidden_state = self.depth_wise_dilated(hidden_state)
+        hidden_state = self.point_wise(hidden_state)
+        return hidden_state
 
 
 class VanLargeKernelAttentionLayer(nn.Module):
@@ -209,7 +233,7 @@ class VanLayer(nn.Module):
         drop_path_rate: float = 0.5,
     ):
         super().__init__()
-        self.drop_path = VanDropPath(drop_path) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = VanDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.pre_normomalization = nn.BatchNorm2d(hidden_size)
         self.attention = VanSpatialAttentionLayer(hidden_size, config.hidden_act)
         self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
@@ -383,8 +407,8 @@ VAN_START_DOCSTRING = r"""
 VAN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all stages. See `hidden_states` under returned tensors for

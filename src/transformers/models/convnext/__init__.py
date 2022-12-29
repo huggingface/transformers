@@ -28,7 +28,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
+    "configuration_convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig", "ConvNextOnnxConfig"]
 }
 
 try:
@@ -38,6 +38,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_convnext"] = ["ConvNextFeatureExtractor"]
+    _import_structure["image_processing_convnext"] = ["ConvNextImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -65,7 +66,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
+    from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig, ConvNextOnnxConfig
 
     try:
         if not is_vision_available():
@@ -74,6 +75,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_convnext import ConvNextFeatureExtractor
+        from .image_processing_convnext import ConvNextImageProcessor
 
     try:
         if not is_torch_available():

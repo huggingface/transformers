@@ -1,0 +1,67 @@
+name: Self-hosted runner (check runner status)
+
+# Note that each job's dependencies go into a corresponding docker file.
+#
+# For example for `run_all_tests_torch_cuda_extensions_gpu` the docker image is
+# `huggingface/transformers-pytorch-deepspeed-latest-gpu`, which can be found at
+# `docker/transformers-pytorch-deepspeed-latest-gpu/Dockerfile`
+
+on:
+  repository_dispatch:
+  schedule:
+    # run per hour
+    - cron: "0 */1 * * *"
+
+env:
+  TRANSFORMERS_IS_CI: yes
+
+jobs:
+  check_runner_status:
+    name: Check Runner Status
+    runs-on: ubuntu-latest
+    outputs:
+      offline_runners: ${{ steps.set-offline_runners.outputs.offline_runners }}
+    steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Check Runner Status
+        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker,single-gpu-scheduled-ci-runner-docker,multi-scheduled-scheduled-ci-runner-docker,single-gpu-doctest-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+
+      - id: set-offline_runners
+        name: Set output for offline runners
+        if: ${{ always() }}
+        run: |
+          offline_runners=$(python3 -c 'fp = open("offline_runners.txt"); failed = fp.read(); fp.close(); print(failed)')
+          echo "offline_runners=$offline_runners" >> $GITHUB_OUTPUT
+
+  send_results:
+    name: Send results to webhook
+    runs-on: ubuntu-latest
+    needs: check_runner_status
+    if: ${{ failure() }}
+    steps:
+      - name: Preliminary job status
+        shell: bash
+        run: |
+          echo "Runner availability: ${{ needs.check_runner_status.result }}"
+
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: Send message to Slack
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_EVENT: runner status check
+          RUNNER_STATUS: ${{ needs.check_runner_status.result }}
+          OFFLINE_RUNNERS: ${{ needs.check_runner_status.outputs.offline_runners }}
+        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
+        run: |
+          pip install slack_sdk
+          python utils/notification_service.py

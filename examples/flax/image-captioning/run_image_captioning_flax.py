@@ -31,10 +31,11 @@ from typing import Callable, Optional
 import datasets
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
-from datasets import Dataset, load_dataset, load_metric
+from datasets import Dataset, load_dataset
 from PIL import Image
 from tqdm import tqdm
 
+import evaluate
 import jax
 import jax.numpy as jnp
 import optax
@@ -52,7 +53,7 @@ from transformers import (
     HfArgumentParser,
     is_tensorboard_available,
 )
-from transformers.utils import get_full_repo_name, is_offline_mode
+from transformers.utils import get_full_repo_name, is_offline_mode, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -185,7 +186,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -297,10 +298,12 @@ class DataTrainingArguments:
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                if extension not in ["csv", "json"]:
+                    raise ValueError(f"`train_file` should be a csv or a json file, got {extension}.")
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                if extension not in ["csv", "json"]:
+                    raise ValueError(f"`validation_file` should be a csv or a json file, got {extension}.")
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
 
@@ -334,7 +337,6 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
         batch_idx = np.arange(len(dataset))
 
     for idx in range(steps):
-
         start_idx = batch_size * idx
         end_idx = batch_size * (idx + 1)
 
@@ -346,7 +348,6 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
 
 
 def write_metric(summary_writer, metrics, train_time, step, metric_key_prefix="train"):
-
     if train_time:
         summary_writer.scalar("train_time", train_time, step)
 
@@ -387,6 +388,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_image_captioning", model_args, data_args, framework="flax")
 
     if (
         os.path.exists(training_args.output_dir)
@@ -499,7 +504,12 @@ def main():
     # Get the column names for input/target.
     dataset_columns = image_captioning_name_mapping.get(data_args.dataset_name, None)
     if data_args.image_column is None:
-        assert dataset_columns is not None
+        if dataset_columns is None:
+            raise ValueError(
+                f"`--dataset_name` {data_args.dataset_name} not found in dataset '{data_args.dataset_name}'. Make sure"
+                " to set `--dataset_name` to the correct dataset name, one of"
+                f" {', '.join(image_captioning_name_mapping.keys())}."
+            )
         image_column = dataset_columns[0]
     else:
         image_column = data_args.image_column
@@ -508,7 +518,12 @@ def main():
                 f"--image_column' value '{data_args.image_column}' needs to be one of: {', '.join(column_names)}"
             )
     if data_args.caption_column is None:
-        assert dataset_columns is not None
+        if dataset_columns is None:
+            raise ValueError(
+                f"`--dataset_name` {data_args.dataset_name} not found in dataset '{data_args.dataset_name}'. Make sure"
+                " to set `--dataset_name` to the correct dataset name, one of"
+                f" {', '.join(image_captioning_name_mapping.keys())}."
+            )
         caption_column = dataset_columns[1]
     else:
         caption_column = data_args.caption_column
@@ -547,11 +562,14 @@ def main():
         targets = captions
 
         model_inputs = {}
-        # Setup the tokenizer for targets
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(
-                targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
-            )
+
+        labels = tokenizer(
+            text_target=targets,
+            max_length=max_target_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="np",
+        )
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
             labels["input_ids"], model.config.pad_token_id, model.config.decoder_start_token_id
@@ -774,11 +792,9 @@ def main():
         num_splits = steps // steps_per_block + int(steps % steps_per_block > 0)
 
         for idx in range(num_splits):
-
             if not block_size:
                 _ds = ds
             else:
-
                 start_idx = block_size * idx
                 end_idx = block_size * (idx + 1)
 
@@ -807,7 +823,7 @@ def main():
                 yield batch
 
     # Metric
-    metric = load_metric("rouge")
+    metric = evaluate.load("rouge")
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
@@ -871,15 +887,19 @@ def main():
     # to bias and LayerNorm scale parameters. decay_mask_fn returns a
     # mask boolean with the same structure as the parameters.
     # The mask is True for parameters that should be decayed.
-    # Note that this mask is specifically adapted for FlaxBart.
-    # For FlaxT5, one should correct the layer norm parameter naming
-    # accordingly - see `run_t5_mlm_flax.py` e.g.
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
-        layer_norm_params = [
-            (name, "scale") for name in ["self_attn_layer_norm", "layernorm_embedding", "final_layer_norm"]
-        ]
-        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_params) for path in flat_params}
+        # find out all LayerNorm parameters
+        layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
+        layer_norm_named_params = set(
+            [
+                layer[-2:]
+                for layer_norm_name in layer_norm_candidates
+                for layer in flat_params.keys()
+                if layer_norm_name in "".join(layer).lower()
+            ]
+        )
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
     # create adam optimizer
@@ -914,8 +934,9 @@ def main():
 
         # ignore padded tokens from loss
         loss = loss * padding_mask
-        loss = loss.sum() / padding_mask.sum()
-        return loss
+        loss = loss.sum()
+        num_labels = padding_mask.sum()
+        return loss, num_labels
 
     # Define gradient update step fn
     def train_step(state, batch, label_smoothing_factor=0.0):
@@ -924,29 +945,38 @@ def main():
         def compute_loss(params):
             labels = batch.pop("labels")
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
-            return loss
+            loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+            return loss, num_labels
 
-        grad_fn = jax.value_and_grad(compute_loss)
-        loss, grad = grad_fn(state.params)
-        grad = jax.lax.pmean(grad, "batch")
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+        (loss, num_labels), grad = grad_fn(state.params)
+        num_labels = jax.lax.psum(num_labels, "batch")
 
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
+        # true grad = total grad / total samples
+        grad = jax.lax.psum(grad, "batch")
+        grad = jax.tree_util.tree_map(lambda x: x / num_labels, grad)
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
-
         return new_state, metrics
 
     # Define eval fn
     def eval_step(params, batch, label_smoothing_factor=0.0):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
 
-        # summarize metrics
+        loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+        num_labels = jax.lax.psum(num_labels, "batch")
+
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
         metrics = {"loss": loss}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
         return metrics
 
     # Define generation function
@@ -999,7 +1029,7 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir), params=params)
             tokenizer.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir))
             if training_args.push_to_hub:
@@ -1012,7 +1042,6 @@ def main():
         ckpt_dir: str = "",
         is_prediction=False,
     ):
-
         logger.info(f"*** {'Predict' if is_prediction else 'Evaluate'} ***")
 
         metrics = []
@@ -1052,7 +1081,7 @@ def main():
         if metrics:
             # normalize metrics
             metrics = get_metrics(metrics)
-            metrics = jax.tree_map(jnp.mean, metrics)
+            metrics = jax.tree_util.tree_map(jnp.mean, metrics)
 
         # compute ROUGE metrics
         generations = []
@@ -1091,12 +1120,10 @@ def main():
             logger.info(desc)
 
         if jax.process_index() == 0:
-
             if not os.path.isdir(os.path.join(training_args.output_dir, ckpt_dir)):
                 os.makedirs(os.path.join(training_args.output_dir, ckpt_dir), exist_ok=True)
 
             if metrics:
-
                 # Save metrics (only for the evaluation/prediction being done along with training)
                 if has_tensorboard and training_args.do_train:
                     write_metric(
@@ -1131,7 +1158,6 @@ def main():
     input_rng = None
 
     if training_args.do_train:
-
         cur_step = 0
         train_time = 0
         epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
@@ -1154,7 +1180,6 @@ def main():
 
             # train
             for batch_idx, _ in enumerate(tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False)):
-
                 cur_step += 1
                 batch = next(train_batches)
                 batch_start = time.time()
@@ -1165,7 +1190,6 @@ def main():
 
                 # log and save info
                 if training_args.logging_steps > 0 and cur_step % training_args.logging_steps == 0:
-
                     _train_metric = unreplicate(train_metric)
                     desc = (
                         f"Epoch... ({epoch + 1}/{num_epochs} | Step: {cur_step} | Loss: {_train_metric['loss']} |"
@@ -1205,7 +1229,6 @@ def main():
 
             # log and save info
             if training_args.logging_steps <= 0:
-
                 logger.info(desc)
 
                 with open(os.path.join(training_args.output_dir, "log"), "a", encoding="UTF-8") as fp:

@@ -297,7 +297,7 @@ class CustomDPRReaderTokenizerMixin:
               spans in the same passage. It corresponds to the sum of the start and end logits of the span.
             - **relevance_score**: `float` that corresponds to the score of the each passage to answer the question,
               compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
-            - **doc_id**: ``int``` the id of the passage. - ***start_index**: `int` the start index of the span
+            - **doc_id**: `int` the id of the passage. - ***start_index**: `int` the start index of the span
               (inclusive). - **end_index**: `int` the end index of the span (inclusive).
 
         Examples:

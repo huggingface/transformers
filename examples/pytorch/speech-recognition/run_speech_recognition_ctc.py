@@ -28,8 +28,9 @@ from typing import Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
-from datasets import DatasetDict, load_dataset, load_metric
+from datasets import DatasetDict, load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -44,12 +45,12 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.20.0.dev0")
+check_min_version("4.26.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -232,7 +233,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "If :obj:`True`, will use the token generated when running"
-                ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
+                ":obj:`huggingface-cli login` as HTTP bearer authorization for remote files."
             )
         },
     )
@@ -305,18 +306,19 @@ class DataCollatorCTCWithPadding:
             return_tensors="pt",
         )
 
-        with self.processor.as_target_processor():
-            labels_batch = self.processor.pad(
-                label_features,
-                padding=self.padding,
-                pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                return_tensors="pt",
-            )
+        labels_batch = self.processor.pad(
+            labels=label_features,
+            padding=self.padding,
+            pad_to_multiple_of=self.pad_to_multiple_of_labels,
+            return_tensors="pt",
+        )
 
         # replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
 
         batch["labels"] = labels
+        if "attention_mask" in batch:
+            batch["attention_mask"] = batch["attention_mask"].to(torch.long)
 
         return batch
 
@@ -375,6 +377,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_speech_recognition_ctc", model_args, data_args)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -501,7 +507,12 @@ def main():
 
         with training_args.main_process_first():
             if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
-                os.remove(vocab_file)
+                try:
+                    os.remove(vocab_file)
+                except OSError:
+                    # in shared file-systems it might be the case that
+                    # two processes try to delete the vocab file at the some time
+                    pass
 
         with training_args.main_process_first(desc="dataset map vocabulary creation"):
             if not os.path.isfile(vocab_file):
@@ -635,7 +646,7 @@ def main():
     # instantiate a data collator and the trainer
 
     # Define evaluation metrics during training, *i.e.* word error rate, character error rate
-    eval_metrics = {metric: load_metric(metric) for metric in data_args.eval_metrics}
+    eval_metrics = {metric: evaluate.load(metric) for metric in data_args.eval_metrics}
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with ``args.preprocessing_only`` since there will mostly likely
@@ -738,7 +749,7 @@ def main():
     config_name = data_args.dataset_config_name if data_args.dataset_config_name is not None else "na"
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
-        "tasks": "speech-recognition",
+        "tasks": "automatic-speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
         "dataset_args": (
             f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split:"

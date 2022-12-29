@@ -19,7 +19,7 @@ import unittest
 from transformers import TrOCRConfig
 from transformers.testing_utils import is_torch_available, require_torch, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -161,6 +161,7 @@ class TrOCRStandaloneDecoderModelTester:
 class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (TrOCRDecoder, TrOCRForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (TrOCRForCausalLM,) if is_torch_available() else ()
+    fx_compatible = True
     test_pruning = False
 
     def setUp(self):

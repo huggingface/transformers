@@ -608,7 +608,17 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
     @slow
+    def test_saved_model_creation(self):
+        pass
+
+    @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
+    @slow
     def test_saved_model_creation_extended(self):
+        pass
+
+    @unittest.skip(reason="`saved_model` doesn't work with nested outputs so no preparation happens.")
+    @slow
+    def test_prepare_serving_output(self):
         pass
 
 

@@ -108,7 +108,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
             issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original LayoutLMv2).
     """
@@ -185,7 +185,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -260,15 +260,17 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
         words = text if text_pair is None else text_pair
-        assert boxes is not None, "You must provide corresponding bounding boxes"
+        if boxes is None:
+            raise ValueError("You must provide corresponding bounding boxes")
         if is_batched:
-            assert len(words) == len(boxes), "You must provide words and boxes for an equal amount of examples"
+            if len(words) != len(boxes):
+                raise ValueError("You must provide words and boxes for an equal amount of examples")
             for words_example, boxes_example in zip(words, boxes):
-                assert len(words_example) == len(
-                    boxes_example
-                ), "You must provide as many words as there are bounding boxes"
+                if len(words_example) != len(boxes_example):
+                    raise ValueError("You must provide as many words as there are bounding boxes")
         else:
-            assert len(words) == len(boxes), "You must provide as many words as there are bounding boxes"
+            if len(words) != len(boxes):
+                raise ValueError("You must provide as many words as there are bounding boxes")
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
@@ -335,7 +337,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -399,7 +401,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         word_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,

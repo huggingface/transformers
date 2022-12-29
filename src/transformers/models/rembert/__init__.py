@@ -29,7 +29,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
+    "configuration_rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig", "RemBertOnnxConfig"]
 }
 
 try:
@@ -90,7 +90,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
+    from .configuration_rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig, RemBertOnnxConfig
 
     try:
         if not is_sentencepiece_available():

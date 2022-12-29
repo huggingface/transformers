@@ -24,6 +24,7 @@ from github import Github
 LABELS_TO_EXEMPT = [
     "good first issue",
     "good second issue",
+    "good difficult issue",
     "feature request",
     "new model",
     "wip",

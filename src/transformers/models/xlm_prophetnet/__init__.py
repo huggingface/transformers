@@ -21,10 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepie
 
 
 _import_structure = {
-    "configuration_xlm_prophetnet": [
-        "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "XLMProphetNetConfig",
-    ],
+    "configuration_xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
 }
 
 try:
@@ -48,6 +45,7 @@ else:
         "XLMProphetNetForCausalLM",
         "XLMProphetNetForConditionalGeneration",
         "XLMProphetNetModel",
+        "XLMProphetNetPreTrainedModel",
     ]
 
 
@@ -75,6 +73,7 @@ if TYPE_CHECKING:
             XLMProphetNetForCausalLM,
             XLMProphetNetForConditionalGeneration,
             XLMProphetNetModel,
+            XLMProphetNetPreTrainedModel,
         )
 
 else:

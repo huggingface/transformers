@@ -27,10 +27,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_speech_to_text_2": [
-        "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Speech2Text2Config",
-    ],
+    "configuration_speech_to_text_2": ["SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Speech2Text2Config"],
     "processing_speech_to_text_2": ["Speech2Text2Processor"],
     "tokenization_speech_to_text_2": ["Speech2Text2Tokenizer"],
 }

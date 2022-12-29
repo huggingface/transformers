@@ -104,7 +104,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -437,13 +437,12 @@ def main():
                 table=tables, query=questions, max_length=data_args.max_source_length, padding=padding, truncation=True
             )
 
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(
-                answer=[", ".join(answer) for answer in answers],
-                max_length=max_target_length,
-                padding=padding,
-                truncation=True,
-            )
+        labels = tokenizer(
+            answer=[", ".join(answer) for answer in answers],
+            max_length=max_target_length,
+            padding=padding,
+            truncation=True,
+        )
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.

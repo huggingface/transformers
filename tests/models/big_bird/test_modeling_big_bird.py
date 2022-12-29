@@ -597,13 +597,13 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_change_to_full_attn(*config_and_inputs)
 
     # overwrite from common in order to skip the check on `attentions`
-    def check_outputs(self, fx_outputs, pt_outputs, model_class, names):
+    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
         # `bigbird_block_sparse_attention` in `FlaxBigBird` returns `attention_probs = None`, while in PyTorch version,
         # an effort was done to return `attention_probs` (yet to be verified).
-        if type(names) == str and names.startswith("attentions"):
+        if name.startswith("outputs.attentions"):
             return
         else:
-            super().check_outputs(fx_outputs, pt_outputs, model_class, names)
+            super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
 
 
 @require_torch
@@ -627,7 +627,8 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         input_ids = torch.tensor([[20920, 232, 328, 1437] * 1024], dtype=torch.long, device=torch_device)
-        outputs = model(input_ids)
+        with torch.no_grad():
+            outputs = model(input_ids)
         prediction_logits = outputs.prediction_logits
         seq_relationship_logits = outputs.seq_relationship_logits
 
@@ -655,7 +656,8 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         input_ids = torch.tensor([[20920, 232, 328, 1437] * 512], dtype=torch.long, device=torch_device)
-        outputs = model(input_ids)
+        with torch.no_grad():
+            outputs = model(input_ids)
         prediction_logits = outputs.prediction_logits
         seq_relationship_logits = outputs.seq_relationship_logits
 
@@ -920,7 +922,8 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         model.eval()
 
         input_ids = torch.tensor([200 * [10] + 40 * [2] + [1]], device=torch_device, dtype=torch.long)
-        output = model(input_ids).to_tuple()[0]
+        with torch.no_grad():
+            output = model(input_ids).to_tuple()[0]
 
         # fmt: off
         target = torch.tensor(

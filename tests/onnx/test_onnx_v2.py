@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -6,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from parameterized import parameterized
-from transformers import AutoConfig, AutoFeatureExtractor, AutoTokenizer, is_tf_available, is_torch_available
+from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -15,12 +16,21 @@ from transformers.onnx import (
     export,
     validate_model_outputs,
 )
-from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
+from transformers.onnx.utils import (
+    compute_effective_axis_dimension,
+    compute_serialized_parameters_size,
+    get_preprocessor,
+)
 from transformers.testing_utils import require_onnx, require_rjieba, require_tf, require_torch, require_vision, slow
 
 
 if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
+
+if is_torch_available():
+    import torch
+
+    from transformers.models.deberta import modeling_deberta
 
 
 @require_onnx
@@ -151,7 +161,6 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
         """
         for name, config in OnnxConfigWithPastTestCaseV2.SUPPORTED_WITH_PAST_CONFIGS:
             with self.subTest(name):
-
                 # without past
                 onnx_config_default = OnnxConfigWithPast.from_model_config(config())
                 self.assertIsNotNone(onnx_config_default.values_override, "values_override should not be None")
@@ -170,48 +179,82 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 
 
 PYTORCH_EXPORT_MODELS = {
-    ("albert", "hf-internal-testing/tiny-albert"),
-    ("bert", "bert-base-cased"),
-    ("big-bird", "google/bigbird-roberta-base"),
-    ("ibert", "kssteven/ibert-roberta-base"),
-    ("camembert", "camembert-base"),
-    ("convbert", "YituTech/conv-bert-base"),
-    ("distilbert", "distilbert-base-cased"),
-    ("electra", "google/electra-base-generator"),
-    ("roberta", "roberta-base"),
-    ("roformer", "junnyu/roformer_chinese_base"),
-    ("mobilebert", "google/mobilebert-uncased"),
-    ("xlm-roberta", "xlm-roberta-base"),
-    ("layoutlm", "microsoft/layoutlm-base-uncased"),
-    ("vit", "google/vit-base-patch16-224"),
-    ("deit", "facebook/deit-small-patch16-224"),
+    ("albert", "hf-internal-testing/tiny-random-AlbertModel"),
+    ("bert", "hf-internal-testing/tiny-random-BertModel"),
     ("beit", "microsoft/beit-base-patch16-224"),
-    ("data2vec-text", "facebook/data2vec-text-base"),
+    ("big-bird", "hf-internal-testing/tiny-random-BigBirdModel"),
+    ("camembert", "camembert-base"),
+    ("clip", "hf-internal-testing/tiny-random-CLIPModel"),
+    ("convbert", "hf-internal-testing/tiny-random-ConvBertModel"),
+    ("codegen", "hf-internal-testing/tiny-random-CodeGenModel"),
+    ("data2vec-text", "hf-internal-testing/tiny-random-Data2VecTextModel"),
+    ("data2vec-vision", "facebook/data2vec-vision-base"),
+    ("deberta", "hf-internal-testing/tiny-random-DebertaModel"),
+    ("deberta-v2", "hf-internal-testing/tiny-random-DebertaV2Model"),
+    ("deit", "facebook/deit-small-patch16-224"),
+    ("convnext", "facebook/convnext-tiny-224"),
+    ("detr", "facebook/detr-resnet-50"),
+    ("distilbert", "hf-internal-testing/tiny-random-DistilBertModel"),
+    ("electra", "hf-internal-testing/tiny-random-ElectraModel"),
+    ("groupvit", "nvidia/groupvit-gcc-yfcc"),
+    ("ibert", "kssteven/ibert-roberta-base"),
+    ("imagegpt", "openai/imagegpt-small"),
+    ("levit", "facebook/levit-128S"),
+    ("layoutlm", "hf-internal-testing/tiny-random-LayoutLMModel"),
+    ("layoutlmv3", "microsoft/layoutlmv3-base"),
+    ("longformer", "allenai/longformer-base-4096"),
+    ("mobilebert", "hf-internal-testing/tiny-random-MobileBertModel"),
+    ("mobilenet_v1", "google/mobilenet_v1_0.75_192"),
+    ("mobilenet_v2", "google/mobilenet_v2_0.35_96"),
+    ("mobilevit", "apple/mobilevit-small"),
+    ("owlvit", "google/owlvit-base-patch32"),
+    ("perceiver", "hf-internal-testing/tiny-random-PerceiverModel", ("masked-lm", "sequence-classification")),
+    ("perceiver", "hf-internal-testing/tiny-random-PerceiverModel", ("image-classification",)),
+    ("poolformer", "sail/poolformer_s12"),
+    ("rembert", "google/rembert"),
+    ("resnet", "microsoft/resnet-50"),
+    ("roberta", "hf-internal-testing/tiny-random-RobertaModel"),
+    ("roformer", "hf-internal-testing/tiny-random-RoFormerModel"),
+    ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),
+    ("squeezebert", "hf-internal-testing/tiny-random-SqueezeBertModel"),
+    ("swin", "microsoft/swin-tiny-patch4-window7-224"),
+    ("vit", "google/vit-base-patch16-224"),
+    ("yolos", "hustvl/yolos-tiny"),
+    ("whisper", "openai/whisper-tiny.en"),
+    ("xlm", "hf-internal-testing/tiny-random-XLMModel"),
+    ("xlm-roberta", "hf-internal-testing/tiny-random-XLMRobertaXLModel"),
+}
+
+PYTORCH_EXPORT_ENCODER_DECODER_MODELS = {
+    ("vision-encoder-decoder", "nlpconnect/vit-gpt2-image-captioning"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
-    ("gpt2", "gpt2"),
-    ("gpt-neo", "EleutherAI/gpt-neo-125M"),
+    ("bloom", "hf-internal-testing/tiny-random-BloomModel"),
+    ("gpt2", "hf-internal-testing/tiny-random-GPT2Model"),
+    ("gpt-neo", "hf-internal-testing/tiny-random-GPTNeoModel"),
 }
 
 PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
-    ("bart", "facebook/bart-base"),
-    ("mbart", "sshleifer/tiny-mbart"),
-    ("t5", "t5-small"),
-    ("marian", "Helsinki-NLP/opus-mt-en-de"),
-    ("m2m-100", "facebook/m2m100_418M"),
+    ("bart", "hf-internal-testing/tiny-random-BartModel"),
+    ("bigbird-pegasus", "hf-internal-testing/tiny-random-BigBirdPegasusModel"),
     ("blenderbot-small", "facebook/blenderbot_small-90M"),
-    ("blenderbot", "facebook/blenderbot-400M-distill"),
-    ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
+    ("blenderbot", "hf-internal-testing/tiny-random-BlenderbotModel"),
+    ("longt5", "hf-internal-testing/tiny-random-LongT5Model"),
+    ("marian", "Helsinki-NLP/opus-mt-en-de"),
+    ("mbart", "sshleifer/tiny-mbart"),
+    ("mt5", "google/mt5-base"),
+    ("m2m-100", "hf-internal-testing/tiny-random-M2M100Model"),
+    ("t5", "hf-internal-testing/tiny-random-T5Model"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
 TENSORFLOW_EXPORT_DEFAULT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
-    ("bert", "bert-base-cased"),
+    ("bert", "hf-internal-testing/tiny-random-BertModel"),
     ("camembert", "camembert-base"),
-    ("distilbert", "distilbert-base-cased"),
-    ("roberta", "roberta-base"),
+    ("distilbert", "hf-internal-testing/tiny-random-DistilBertModel"),
+    ("roberta", "hf-internal-testing/tiny-random-RobertaModel"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_WITH_PAST_MODELS` once TensorFlow has parity with the PyTorch model implementations.
@@ -224,10 +267,20 @@ TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {}
 def _get_models_to_test(export_models_list):
     models_to_test = []
     if is_torch_available() or is_tf_available():
-        for name, model in export_models_list:
-            for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
-                name
-            ).items():
+        for name, model, *features in export_models_list:
+            if features:
+                feature_config_mapping = {
+                    feature: FeaturesManager.get_config(name, feature) for _ in features for feature in _
+                }
+            else:
+                # pre-process the model names
+                model_type = name.replace("_", "-")
+                model_name = getattr(model, "name", "")
+                feature_config_mapping = FeaturesManager.get_supported_features_for_model_type(
+                    model_type, model_name=model_name
+                )
+
+            for feature, onnx_config_class_constructor in feature_config_mapping.items():
                 models_to_test.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))
         return sorted(models_to_test)
     else:
@@ -242,12 +295,36 @@ class OnnxExportTestCaseV2(TestCase):
     Integration tests ensuring supported models are correctly exported
     """
 
-    def _onnx_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+    def _onnx_export(
+        self, test_name, name, model_name, feature, onnx_config_class_constructor, device="cpu", framework="pt"
+    ):
         from transformers.onnx import export
 
-        model_class = FeaturesManager.get_model_class_for_feature(feature)
+        model_class = FeaturesManager.get_model_class_for_feature(feature, framework=framework)
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
+
+        # Dynamic axes aren't supported for YOLO-like models. This means they cannot be exported to ONNX on CUDA devices.
+        # See: https://github.com/ultralytics/yolov5/pull/8378
+        if model.__class__.__name__.startswith("Yolos") and device != "cpu":
+            return
+
+        # ONNX inference fails with the following name, feature, framework parameterizations
+        # See: https://github.com/huggingface/transformers/issues/19357
+        if (name, feature, framework) in {
+            ("deberta-v2", "question-answering", "pt"),
+            ("deberta-v2", "multiple-choice", "pt"),
+            ("roformer", "multiple-choice", "pt"),
+            ("groupvit", "default", "pt"),
+            ("perceiver", "masked-lm", "pt"),
+            ("perceiver", "sequence-classification", "pt"),
+            ("perceiver", "image-classification", "pt"),
+            ("bert", "multiple-choice", "tf"),
+            ("camembert", "multiple-choice", "tf"),
+            ("roberta", "multiple-choice", "tf"),
+        }:
+            return
+
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():
@@ -259,21 +336,16 @@ class OnnxExportTestCaseV2(TestCase):
                     f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
                 )
 
-        # Check the modality of the inputs and instantiate the appropriate preprocessor
-        if model.main_input_name == "input_ids":
-            preprocessor = AutoTokenizer.from_pretrained(model_name)
-            # Useful for causal lm models that do not use pad tokens.
-            if not getattr(config, "pad_token_id", None):
-                config.pad_token_id = preprocessor.eos_token_id
-        elif model.main_input_name == "pixel_values":
-            preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
-        else:
-            raise ValueError(f"Unsupported model input name: {model.main_input_name}")
+        preprocessor = get_preprocessor(model_name)
+
+        # Useful for causal lm models that do not use pad tokens.
+        if isinstance(preprocessor, PreTrainedTokenizerBase) and not getattr(config, "pad_token_id", None):
+            config.pad_token_id = preprocessor.eos_token_id
 
         with NamedTemporaryFile("w") as output:
             try:
                 onnx_inputs, onnx_outputs = export(
-                    preprocessor, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
+                    preprocessor, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name), device=device
                 )
                 validate_model_outputs(
                     onnx_config,
@@ -286,6 +358,70 @@ class OnnxExportTestCaseV2(TestCase):
             except (RuntimeError, ValueError) as e:
                 self.fail(f"{name}, {feature} -> {e}")
 
+    def _onnx_export_encoder_decoder_models(
+        self, test_name, name, model_name, feature, onnx_config_class_constructor, device="cpu"
+    ):
+        from transformers import AutoFeatureExtractor, AutoTokenizer
+        from transformers.onnx import export
+
+        model_class = FeaturesManager.get_model_class_for_feature(feature)
+        config = AutoConfig.from_pretrained(model_name)
+        model = model_class.from_config(config)
+
+        onnx_config = onnx_config_class_constructor(model.config)
+
+        if is_torch_available():
+            from transformers.utils import torch_version
+
+            if torch_version < onnx_config.torch_onnx_minimum_version:
+                pytest.skip(
+                    "Skipping due to incompatible PyTorch version. Minimum required is"
+                    f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
+                )
+
+        encoder_model = model.get_encoder()
+        decoder_model = model.get_decoder()
+
+        encoder_onnx_config = onnx_config.get_encoder_config(encoder_model.config)
+        decoder_onnx_config = onnx_config.get_decoder_config(encoder_model.config, decoder_model.config, feature)
+
+        preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
+
+        onnx_opset = max(encoder_onnx_config.default_onnx_opset, decoder_onnx_config.default_onnx_opset)
+
+        with NamedTemporaryFile("w") as encoder_output:
+            onnx_inputs, onnx_outputs = export(
+                preprocessor, encoder_model, encoder_onnx_config, onnx_opset, Path(encoder_output.name), device=device
+            )
+            validate_model_outputs(
+                encoder_onnx_config,
+                preprocessor,
+                encoder_model,
+                Path(encoder_output.name),
+                onnx_outputs,
+                encoder_onnx_config.atol_for_validation,
+            )
+
+        preprocessor = AutoTokenizer.from_pretrained(model_name)
+
+        with NamedTemporaryFile("w") as decoder_output:
+            _, onnx_outputs = export(
+                preprocessor,
+                decoder_model,
+                decoder_onnx_config,
+                onnx_config.default_onnx_opset,
+                Path(decoder_output.name),
+                device=device,
+            )
+            validate_model_outputs(
+                decoder_onnx_config,
+                preprocessor,
+                decoder_model,
+                Path(decoder_output.name),
+                onnx_outputs,
+                decoder_onnx_config.atol_for_validation,
+            )
+
     @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
     @slow
     @require_torch
@@ -293,6 +429,36 @@ class OnnxExportTestCaseV2(TestCase):
     @require_rjieba
     def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
+    @slow
+    @require_torch
+    @require_vision
+    @require_rjieba
+    def test_pytorch_export_on_cuda(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, device="cuda")
+
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_ENCODER_DECODER_MODELS))
+    @slow
+    @require_torch
+    @require_vision
+    @require_rjieba
+    def test_pytorch_export_encoder_decoder_models(
+        self, test_name, name, model_name, feature, onnx_config_class_constructor
+    ):
+        self._onnx_export_encoder_decoder_models(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_ENCODER_DECODER_MODELS))
+    @slow
+    @require_torch
+    @require_vision
+    @require_rjieba
+    def test_pytorch_export_encoder_decoder_models_on_cuda(
+        self, test_name, name, model_name, feature, onnx_config_class_constructor
+    ):
+        self._onnx_export_encoder_decoder_models(
+            test_name, name, model_name, feature, onnx_config_class_constructor, device="cuda"
+        )
 
     @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS))
     @slow
@@ -313,13 +479,13 @@ class OnnxExportTestCaseV2(TestCase):
     @require_tf
     @require_vision
     def test_tensorflow_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
-        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, framework="tf")
 
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS), skip_on_empty=True)
     @slow
     @require_tf
     def test_tensorflow_export_with_past(self, test_name, name, model_name, feature, onnx_config_class_constructor):
-        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, framework="tf")
 
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS), skip_on_empty=True)
     @slow
@@ -327,4 +493,41 @@ class OnnxExportTestCaseV2(TestCase):
     def test_tensorflow_export_seq2seq_with_past(
         self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
-        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, framework="tf")
+
+
+class StableDropoutTestCase(TestCase):
+    """Tests export of StableDropout module."""
+
+    @require_torch
+    @pytest.mark.filterwarnings("ignore:.*Dropout.*:UserWarning:torch.onnx.*")  # torch.onnx is spammy.
+    def test_training(self):
+        """Tests export of StableDropout in training mode."""
+        devnull = open(os.devnull, "wb")
+        # drop_prob must be > 0 for the test to be meaningful
+        sd = modeling_deberta.StableDropout(0.1)
+        # Avoid warnings in training mode
+        do_constant_folding = False
+        # Dropout is a no-op in inference mode
+        training = torch.onnx.TrainingMode.PRESERVE
+        input = (torch.randn(2, 2),)
+
+        torch.onnx.export(
+            sd,
+            input,
+            devnull,
+            opset_version=12,  # Minimum supported
+            do_constant_folding=do_constant_folding,
+            training=training,
+        )
+
+        # Expected to fail with opset_version < 12
+        with self.assertRaises(Exception):
+            torch.onnx.export(
+                sd,
+                input,
+                devnull,
+                opset_version=11,
+                do_constant_folding=do_constant_folding,
+                training=training,
+            )

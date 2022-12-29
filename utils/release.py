@@ -123,7 +123,7 @@ def pre_release_work(patch=False):
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
     if not patch:
-        print("Cleaning main README")
+        print("Cleaning main README, don't forget to run `make fix-copies`.")
         clean_main_ref_in_model_list()
 
 
@@ -141,6 +141,8 @@ def post_release_work():
 
     print(f"Updating version to {version}.")
     global_version_update(version)
+    print("Cleaning main README, don't forget to run `make fix-copies`.")
+    clean_main_ref_in_model_list()
 
 
 if __name__ == "__main__":

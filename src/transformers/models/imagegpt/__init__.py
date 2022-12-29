@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
+    "configuration_imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig", "ImageGPTOnnxConfig"]
 }
 
 try:
@@ -32,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_imagegpt"] = ["ImageGPTFeatureExtractor"]
+    _import_structure["image_processing_imagegpt"] = ["ImageGPTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -50,7 +51,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
+    from .configuration_imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig, ImageGPTOnnxConfig
 
     try:
         if not is_vision_available():
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_imagegpt import ImageGPTFeatureExtractor
+        from .image_processing_imagegpt import ImageGPTImageProcessor
 
     try:
         if not is_torch_available():

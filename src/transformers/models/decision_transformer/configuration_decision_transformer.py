@@ -90,13 +90,13 @@ class DecisionTransformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import DecisionTransformerModel, DecisionTransformerConfig
+    >>> from transformers import DecisionTransformerConfig, DecisionTransformerModel
 
     >>> # Initializing a DecisionTransformer configuration
     >>> configuration = DecisionTransformerConfig()
 
-    >>> # Initializing a model from the configuration
-    >>> model = DecisionTransformerConfig(configuration)
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = DecisionTransformerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

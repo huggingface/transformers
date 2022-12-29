@@ -264,7 +264,7 @@ class FlaxDataCollatorForLanguageModeling:
         return inputs, labels
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 
@@ -288,8 +288,10 @@ def advance_iter_and_group_samples(train_iterator, num_samples, max_seq_length):
         tokenized_samples = next(train_iterator)
         i += len(tokenized_samples["input_ids"])
 
-        # concatenate tokenized samples to list
-        samples = {k: samples[k] + tokenized_samples[k] for k in tokenized_samples.keys()}
+        # concatenate tokenized samples to list (excluding "id" and "text")
+        samples = {
+            k: samples[k] + tokenized_samples[k] for k in ["input_ids", "attention_mask", "special_tokens_mask"]
+        }
 
     # Concatenated tokens are split to lists of length `max_seq_length`.
     # Note that remainedr of % max_seq_length are thrown away.
@@ -407,10 +409,7 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         return tokenizer(examples[data_args.text_column_name], return_special_tokens_mask=True)
 
-    tokenized_datasets = dataset.map(
-        tokenize_function,
-        batched=True,
-    )
+    tokenized_datasets = dataset.map(tokenize_function, batched=True, remove_columns=list(dataset.features.keys()))
 
     shuffle_seed = training_args.seed
     tokenized_datasets = tokenized_datasets.shuffle(buffer_size=data_args.shuffle_buffer_size, seed=shuffle_seed)
@@ -563,7 +562,7 @@ if __name__ == "__main__":
             samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
         except StopIteration:
             # Once the end of the dataset stream is reached, the training iterator
-            # is reinitialized and reshuffled and a new eval dataset is randomely chosen.
+            # is reinitialized and reshuffled and a new eval dataset is randomly chosen.
             shuffle_seed += 1
             tokenized_datasets.set_epoch(shuffle_seed)
 
@@ -593,7 +592,8 @@ if __name__ == "__main__":
 
         # ======================== Evaluating ==============================
         if step % training_args.eval_steps == 0 and step > 0:
-            eval_samples_idx = jnp.arange(data_args.num_eval_samples)
+            # Avoid using jax.numpy here in case of TPU training
+            eval_samples_idx = np.arange(data_args.num_eval_samples)
             eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
             for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=1)):
@@ -608,9 +608,9 @@ if __name__ == "__main__":
 
             # normalize eval metrics
             eval_metrics = get_metrics(eval_metrics)
-            eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
+            eval_metrics = jax.tree_util.tree_map(jnp.sum, eval_metrics)
             eval_normalizer = eval_metrics.pop("normalizer")
-            eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
+            eval_metrics = jax.tree_util.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
             # Update progress bar
             steps.desc = (
@@ -624,7 +624,7 @@ if __name__ == "__main__":
 
             # save checkpoint after each epoch and push checkpoint to the hub
             if jax.process_index() == 0:
-                params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+                params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
                 model.save_pretrained(
                     training_args.output_dir,
                     params=params,

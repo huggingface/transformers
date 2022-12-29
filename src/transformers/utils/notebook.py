@@ -120,7 +120,6 @@ class NotebookProgressBar:
         The main method to update the progress bar to `value`.
 
         Args:
-
             value (`int`):
                 The value to use. Must be between 0 and `total`.
             force_update (`bool`, *optional*, defaults to `False`):
@@ -204,7 +203,6 @@ class NotebookTrainingTracker(NotebookProgressBar):
     An object tracking the updates of an ongoing training with progress bars and a nice table reporting metrics.
 
     Args:
-
         num_steps (`int`): The number of steps during training. column_names (`List[str]`, *optional*):
             The list of column names for the metrics table (will be inferred from the first call to
             [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
@@ -307,6 +305,11 @@ class NotebookProgressCallback(TrainerCallback):
         else:
             self.prediction_bar.update(self.prediction_bar.value + 1)
 
+    def on_predict(self, args, state, control, **kwargs):
+        if self.prediction_bar is not None:
+            self.prediction_bar.close()
+        self.prediction_bar = None
+
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation
         if args.evaluation_strategy == IntervalStrategy.NO and "loss" in logs:
@@ -336,6 +339,7 @@ class NotebookProgressCallback(TrainerCallback):
             _ = metrics.pop(f"{metric_key_prefix}_runtime", None)
             _ = metrics.pop(f"{metric_key_prefix}_samples_per_second", None)
             _ = metrics.pop(f"{metric_key_prefix}_steps_per_second", None)
+            _ = metrics.pop(f"{metric_key_prefix}_jit_compilation_time", None)
             for k, v in metrics.items():
                 if k == f"{metric_key_prefix}_loss":
                     values["Validation Loss"] = v

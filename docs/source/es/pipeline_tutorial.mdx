@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Pipelines para inferencia
 
-Un [pipeline] simplifica el uso de cualquier modelo del [Model Hub](https://huggingface.co/models) para la inferencia en una variedad de tareas como la generación de texto, la segmentación de imágenes y la clasificación de audio. Incluso si no tienes experiencia con una modalidad específica o no comprendes el código que alimenta los modelos, ¡aún puedes usarlos con el [pipeline]! Este tutorial te enseñará a:
+Un [`pipeline`] simplifica el uso de cualquier modelo del [Model Hub](https://huggingface.co/models) para la inferencia en una variedad de tareas como la generación de texto, la segmentación de imágenes y la clasificación de audio. Incluso si no tienes experiencia con una modalidad específica o no comprendes el código que alimenta los modelos, ¡aún puedes usarlos con el [`pipeline`]! Este tutorial te enseñará a:
 
 * Utilizar un [`pipeline`] para inferencia.
 * Utilizar un tokenizador o modelo específico.
@@ -54,7 +54,7 @@ Si tienes más de una entrada, pásala como una lista:
 ... )
 ```
 
-Cualquier parámetro adicional para tu tarea también se puede incluir en el [`pipeline`]. La tarea `text-generation` tiene un método [`~generation_utils.GenerationMixin.generate`] con varios parámetros para controlar la salida. Por ejemplo, si deseas generar más de una salida, defínelo en el parámetro `num_return_sequences`:
+Cualquier parámetro adicional para tu tarea también se puede incluir en el [`pipeline`]. La tarea `text-generation` tiene un método [`~generation.GenerationMixin.generate`] con varios parámetros para controlar la salida. Por ejemplo, si deseas generar más de una salida, defínelo en el parámetro `num_return_sequences`:
 
 ```py
 >>> generator(
@@ -65,7 +65,7 @@ Cualquier parámetro adicional para tu tarea también se puede incluir en el [`p
 
 ### Selecciona un modelo y un tokenizador
 
-El [`pipeline`] acepta cualquier modelo del [Model Hub](https://huggingface.co/models). Hay etiquetas en el Model Hub que te permiten filtrar por el modelo que te gustaría utilizar para tu tarea. Una vez que hayas elegido un modelo apropiado, cárgalo con la clase `AutoModelFor` y [`AutoTokenizer'] correspondientes. Por ejemplo, carga la clase [`AutoModelForCausalLM`] para una tarea de modelado de lenguaje causal:
+El [`pipeline`] acepta cualquier modelo del [Model Hub](https://huggingface.co/models). Hay etiquetas en el Model Hub que te permiten filtrar por el modelo que te gustaría utilizar para tu tarea. Una vez que hayas elegido un modelo apropiado, cárgalo con la clase `AutoModelFor` y [`AutoTokenizer`] correspondientes. Por ejemplo, carga la clase [`AutoModelForCausalLM`] para una tarea de modelado de lenguaje causal:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -116,7 +116,7 @@ Pasa el archivo de audio al [`pipeline`]:
 
 ## Pipeline de visión
 
-Finalmente, utilizar un [`pipeline`] para tareas de visión es prácticamente idéntico.
+Finalmente, utilizar un [`pipeline`] para tareas de visión es prácticamente igual.
 
 Específica tu tarea de visión y pasa tu imagen al clasificador. La imagen puede ser un enlace o una ruta local a la imagen. Por ejemplo, ¿qué especie de gato se muestra a continuación?
 

@@ -325,6 +325,10 @@ class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-base-ls960")
         self.assertIsNotNone(model)
 
+    @unittest.skip("Loss shapes for CTC don't match the base test.")
+    def test_loss_computation(self):
+        pass
+
 
 @require_tf
 class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
@@ -442,6 +446,10 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
         self.assertIsNotNone(model)
+
+    @unittest.skip("Loss shapes for CTC don't match the base test.")
+    def test_loss_computation(self):
+        pass
 
 
 @require_tf

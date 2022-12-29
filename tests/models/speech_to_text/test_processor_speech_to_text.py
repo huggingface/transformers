@@ -125,8 +125,7 @@ class Speech2TextProcessorTest(unittest.TestCase):
 
         input_str = "This is a test string"
 
-        with processor.as_target_processor():
-            encoded_processor = processor(input_str)
+        encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str)
 
@@ -145,3 +144,15 @@ class Speech2TextProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = Speech2TextProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        self.assertListEqual(
+            processor.model_input_names,
+            feature_extractor.model_input_names,
+            msg="`processor` and `feature_extractor` model input names do not match",
+        )

@@ -18,12 +18,10 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
-}
+_import_structure = {"configuration_swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig", "SwinOnnxConfig"]}
 
 
 try:
@@ -38,11 +36,25 @@ else:
         "SwinForMaskedImageModeling",
         "SwinModel",
         "SwinPreTrainedModel",
+        "SwinBackbone",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_swin"] = [
+        "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFSwinForImageClassification",
+        "TFSwinForMaskedImageModeling",
+        "TFSwinModel",
+        "TFSwinPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
-    from .configuration_swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
+    from .configuration_swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig, SwinOnnxConfig
 
     try:
         if not is_torch_available():
@@ -52,12 +64,26 @@ if TYPE_CHECKING:
     else:
         from .modeling_swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SwinBackbone,
             SwinForImageClassification,
             SwinForMaskedImageModeling,
             SwinModel,
             SwinPreTrainedModel,
         )
 
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_swin import (
+            TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwinForImageClassification,
+            TFSwinForMaskedImageModeling,
+            TFSwinModel,
+            TFSwinPreTrainedModel,
+        )
 
 else:
     import sys

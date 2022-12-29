@@ -144,14 +144,14 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
 
-        "Initialisation"
+        """ Initialisation """
 
     @property
     def vocab_size(self):
-        "Returns vocab size"
+        """ Returns vocab size """
 
     def get_vocab(self):
-        "Returns vocab as a dict"
+        """ Returns vocab as a dict """
 
     def _tokenize(self, text):
         """ Returns a tokenized string. """

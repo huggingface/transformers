@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Distributed training with 🤗 Accelerate
 
-As models get bigger, parallelism has emerged as a strategy for training larger models on limited hardware and accelerating training speed by several orders of magnitude. At Hugging Face, we created the [🤗 Accelerate](https://huggingface.co/docs/accelerate/index.html) library to help users easily train a 🤗 Transformers model on any type of distributed setup, whether it is multiple GPU's on one machine or multiple GPU's across several machines. In this tutorial, learn how to customize your native PyTorch training loop to enable training in a distributed environment.
+As models get bigger, parallelism has emerged as a strategy for training larger models on limited hardware and accelerating training speed by several orders of magnitude. At Hugging Face, we created the [🤗 Accelerate](https://huggingface.co/docs/accelerate) library to help users easily train a 🤗 Transformers model on any type of distributed setup, whether it is multiple GPU's on one machine or multiple GPU's across several machines. In this tutorial, learn how to customize your native PyTorch training loop to enable training in a distributed environment.
 
 ## Setup
 
@@ -22,7 +22,7 @@ Get started by installing 🤗 Accelerate:
 pip install accelerate
 ```
 
-Then import and create an [`Accelerator`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator) object. `Accelerator` will automatically detect your type of distributed setup and initialize all the necessary components for training. You don't need to explicitly place your model on a device.
+Then import and create an [`~accelerate.Accelerator`] object. The [`~accelerate.Accelerator`] will automatically detect your type of distributed setup and initialize all the necessary components for training. You don't need to explicitly place your model on a device.
 
 ```py
 >>> from accelerate import Accelerator
@@ -32,7 +32,7 @@ Then import and create an [`Accelerator`](https://huggingface.co/docs/accelerate
 
 ## Prepare to accelerate
 
-The next step is to pass all the relevant training objects to the [`prepare`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.prepare) method. This includes your training and evaluation DataLoaders, a model and an optimizer:
+The next step is to pass all the relevant training objects to the [`~accelerate.Accelerator.prepare`] method. This includes your training and evaluation DataLoaders, a model and an optimizer:
 
 ```py
 >>> train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(
@@ -42,7 +42,7 @@ The next step is to pass all the relevant training objects to the [`prepare`](ht
 
 ## Backward
 
-The last addition is to replace the typical `loss.backward()` in your training loop with 🤗 Accelerate's [`backward`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.backward) method:
+The last addition is to replace the typical `loss.backward()` in your training loop with 🤗 Accelerate's [`~accelerate.Accelerator.backward`]method:
 
 ```py
 >>> for epoch in range(num_epochs):
@@ -121,7 +121,7 @@ accelerate launch train.py
 
 ### Train with a notebook
 
-🤗 Accelerate can also run in a notebook if you're planning on using Colaboratory's TPUs. Wrap all the code responsible for training in a function, and pass it to `notebook_launcher`:
+🤗 Accelerate can also run in a notebook if you're planning on using Colaboratory's TPUs. Wrap all the code responsible for training in a function, and pass it to [`~accelerate.notebook_launcher`]:
 
 ```py
 >>> from accelerate import notebook_launcher
@@ -129,4 +129,4 @@ accelerate launch train.py
 >>> notebook_launcher(training_function)
 ```
 
-For more information about 🤗 Accelerate and it's rich features, refer to the [documentation](https://huggingface.co/docs/accelerate/index.html).
+For more information about 🤗 Accelerate and it's rich features, refer to the [documentation](https://huggingface.co/docs/accelerate).

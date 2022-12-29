@@ -21,7 +21,8 @@ import re
 
 import numpy
 
-from .utils import ExplicitEnum, logging
+from .utils import ExplicitEnum, expand_dims, is_numpy_array, is_torch_tensor, logging, reshape, squeeze, tensor_size
+from .utils import transpose as transpose_func
 
 
 logger = logging.get_logger(__name__)
@@ -66,10 +67,12 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
     if len(tf_name) > 1:
         tf_name = tf_name[1:]  # Remove level zero
 
+    tf_weight_shape = list(tf_weight_shape)
+
     # When should we transpose the weights
-    if tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 4:
+    if tf_name[-1] == "kernel" and tf_weight_shape is not None and len(tf_weight_shape) == 4:
         transpose = TransposeType.CONV2D
-    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 3:
+    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and len(tf_weight_shape) == 3:
         transpose = TransposeType.CONV1D
     elif bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
@@ -98,12 +101,51 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
     return tf_name, transpose
 
 
+def apply_transpose(transpose: TransposeType, weight, match_shape=None, pt_to_tf=True):
+    """
+    Apply a transpose to some weight then tries to reshape the weight to the same shape as a given shape, all in a
+    framework agnostic way.
+    """
+    if transpose is TransposeType.CONV2D:
+        # Conv2D weight:
+        #    PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
+        # -> TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
+        axes = (2, 3, 1, 0) if pt_to_tf else (3, 2, 0, 1)
+        weight = transpose_func(weight, axes=axes)
+    elif transpose is TransposeType.CONV1D:
+        # Conv1D weight:
+        #    PT: (num_out_channel, num_in_channel, kernel)
+        # -> TF: (kernel, num_in_channel, num_out_channel)
+        weight = transpose_func(weight, axes=(2, 1, 0))
+    elif transpose is TransposeType.SIMPLE:
+        weight = transpose_func(weight)
+
+    if match_shape is None:
+        return weight
+
+    if len(match_shape) < len(weight.shape):
+        weight = squeeze(weight)
+    elif len(match_shape) > len(weight.shape):
+        weight = expand_dims(weight, axis=0)
+
+    if list(match_shape) != list(weight.shape):
+        try:
+            weight = reshape(weight, match_shape)
+        except AssertionError as e:
+            e.args += (match_shape, match_shape)
+            raise e
+
+    return weight
+
+
 #####################
 # PyTorch => TF 2.0 #
 #####################
 
 
-def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
+def load_pytorch_checkpoint_in_tf2_model(
+    tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+):
     """Load pytorch checkpoints in a TF 2.0 model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -115,14 +157,25 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
         )
         raise
 
-    pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info(f"Loading PyTorch weights from {pt_path}")
+    # Treats a single file as a collection of shards with 1 shard.
+    if isinstance(pytorch_checkpoint_path, str):
+        pytorch_checkpoint_path = [pytorch_checkpoint_path]
 
-    pt_state_dict = torch.load(pt_path, map_location="cpu")
+    # Loads all shards into a single state dictionary
+    pt_state_dict = {}
+    for path in pytorch_checkpoint_path:
+        pt_path = os.path.abspath(path)
+        logger.info(f"Loading PyTorch weights from {pt_path}")
+        pt_state_dict.update(torch.load(pt_path, map_location="cpu"))
+
     logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters")
 
     return load_pytorch_weights_in_tf2_model(
-        tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
+        tf_model,
+        pt_state_dict,
+        tf_inputs=tf_inputs,
+        allow_missing_keys=allow_missing_keys,
+        output_loading_info=output_loading_info,
     )
 
 
@@ -135,18 +188,41 @@ def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_mi
     )
 
 
-def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False):
+def load_pytorch_weights_in_tf2_model(
+    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+):
     """Load pytorch state_dict in a TF 2.0 model."""
     try:
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
-        from tensorflow.python.keras import backend as K
     except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
             "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
         )
         raise
+
+    pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
+    return load_pytorch_state_dict_in_tf2_model(
+        tf_model,
+        pt_state_dict,
+        tf_inputs=tf_inputs,
+        allow_missing_keys=allow_missing_keys,
+        output_loading_info=output_loading_info,
+    )
+
+
+def load_pytorch_state_dict_in_tf2_model(
+    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+):
+    """Load a pytorch state_dict in a TF 2.0 model."""
+    import tensorflow as tf
+    from packaging.version import parse
+
+    if parse(tf.__version__) >= parse("2.11.0"):
+        from keras import backend as K
+    else:
+        from tensorflow.python.keras import backend as K
 
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
@@ -163,6 +239,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
             new_key = key.replace("beta", "bias")
+        if "running_var" in key:
+            new_key = key.replace("running_var", "moving_variance")
+        if "running_mean" in key:
+            new_key = key.replace("running_mean", "moving_mean")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
@@ -197,41 +277,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
                     continue
             raise AttributeError(f"{name} not found in PyTorch model")
 
-        array = pt_state_dict[name].numpy()
+        array = apply_transpose(transpose, pt_state_dict[name], symbolic_weight.shape)
 
-        if transpose is TransposeType.CONV2D:
-            # Conv2D weight:
-            #    PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
-            # -> TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
-            array = numpy.transpose(array, axes=(2, 3, 1, 0))
-        elif transpose is TransposeType.CONV1D:
-            # Conv1D weight:
-            #    PT: (num_out_channel, num_in_channel, kernel)
-            # -> TF: (kernel, num_in_channel, num_out_channel)
-            array = numpy.transpose(array, axes=(2, 1, 0))
-        elif transpose is TransposeType.SIMPLE:
-            array = numpy.transpose(array)
-
-        if len(symbolic_weight.shape) < len(array.shape):
-            array = numpy.squeeze(array)
-        elif len(symbolic_weight.shape) > len(array.shape):
-            array = numpy.expand_dims(array, axis=0)
-
-        if list(symbolic_weight.shape) != list(array.shape):
-            try:
-                array = numpy.reshape(array, symbolic_weight.shape)
-            except AssertionError as e:
-                e.args += (symbolic_weight.shape, array.shape)
-                raise e
-
-        try:
-            assert list(symbolic_weight.shape) == list(array.shape)
-        except AssertionError as e:
-            e.args += (symbolic_weight.shape, array.shape)
-            raise e
-
-        tf_loaded_numel += array.size
-        # logger.warning(f"Initialize TF weight {symbolic_weight.name}")
+        tf_loaded_numel += tensor_size(array)
 
         weight_value_tuples.append((symbolic_weight, array))
         all_pytorch_weights.discard(name)
@@ -277,6 +325,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             f"you can already use {tf_model.__class__.__name__} for predictions without further training."
         )
 
+    if output_loading_info:
+        loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
+        return tf_model, loading_info
+
     return tf_model
 
 
@@ -285,7 +337,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 #####################
 
 
-def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
+def load_tf2_checkpoint_in_pytorch_model(
+    pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+):
     """
     Load TF 2.0 HDF5 checkpoint in a PyTorch model We use HDF5 to easily do transfer learning (see
     https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
@@ -319,17 +373,21 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     load_tf_weights(tf_model, tf_checkpoint_path)
 
-    return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
+    return load_tf2_model_in_pytorch_model(
+        pt_model, tf_model, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+    )
 
 
-def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False):
+def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False, output_loading_info=False):
     """Load TF 2.0 model in a pytorch model"""
     weights = tf_model.weights
 
-    return load_tf2_weights_in_pytorch_model(pt_model, weights, allow_missing_keys=allow_missing_keys)
+    return load_tf2_weights_in_pytorch_model(
+        pt_model, weights, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+    )
 
 
-def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False):
+def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False, output_loading_info=False):
     """Load TF2.0 symbolic weights in a PyTorch model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -340,6 +398,15 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
         )
         raise
+
+    tf_state_dict = {tf_weight.name: tf_weight.numpy() for tf_weight in tf_weights}
+    return load_tf2_state_dict_in_pytorch_model(
+        pt_model, tf_state_dict, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+    )
+
+
+def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_keys=False, output_loading_info=False):
+    import torch
 
     new_pt_params_dict = {}
     current_pt_params_dict = dict(pt_model.named_parameters())
@@ -352,11 +419,11 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     # Build a map from potential PyTorch weight names to TF 2.0 Variables
     tf_weights_map = {}
-    for tf_weight in tf_weights:
+    for name, tf_weight in tf_state_dict.items():
         pt_name, transpose = convert_tf_weight_name_to_pt_weight_name(
-            tf_weight.name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=tf_weight.shape
+            name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=tf_weight.shape
         )
-        tf_weights_map[pt_name] = (tf_weight.numpy(), transpose)
+        tf_weights_map[pt_name] = (tf_weight, transpose)
 
     all_tf_weights = set(list(tf_weights_map.keys()))
     loaded_pt_weights_data_ptr = {}
@@ -377,43 +444,18 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
         array, transpose = tf_weights_map[pt_weight_name]
 
-        if transpose is TransposeType.CONV2D:
-            # Conv2D weight:
-            #    TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
-            # -> PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
-            array = numpy.transpose(array, axes=(3, 2, 0, 1))
-        elif transpose is TransposeType.CONV1D:
-            # Conv1D weight:
-            #    TF: (kernel, num_in_channel, num_out_channel)
-            # -> PT: (num_out_channel, num_in_channel, kernel)
-            array = numpy.transpose(array, axes=(2, 1, 0))
-        elif transpose is TransposeType.SIMPLE:
-            array = numpy.transpose(array)
+        array = apply_transpose(transpose, array, pt_weight.shape, pt_to_tf=False)
 
-        if len(pt_weight.shape) < len(array.shape):
-            array = numpy.squeeze(array)
-        elif len(pt_weight.shape) > len(array.shape):
-            array = numpy.expand_dims(array, axis=0)
-
-        if list(pt_weight.shape) != list(array.shape):
-            try:
-                array = numpy.reshape(array, pt_weight.shape)
-            except AssertionError as e:
-                e.args += (pt_weight.shape, array.shape)
-                raise e
-
-        try:
-            assert list(pt_weight.shape) == list(array.shape)
-        except AssertionError as e:
-            e.args += (pt_weight.shape, array.shape)
-            raise e
-
-        # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
-        # Make sure we have a proper numpy array
         if numpy.isscalar(array):
             array = numpy.array(array)
-        new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
-        loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
+        if not is_torch_tensor(array) and not is_numpy_array(array):
+            array = array.numpy()
+        if is_numpy_array(array):
+            # Convert to torch tensor
+            array = torch.from_numpy(array)
+
+        new_pt_params_dict[pt_weight_name] = array
+        loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = array
         all_tf_weights.discard(pt_weight_name)
 
     missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
@@ -455,5 +497,9 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
         )
 
     logger.info(f"Weights or buffers not loaded from TF 2.0 model: {all_tf_weights}")
+
+    if output_loading_info:
+        loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
+        return pt_model, loading_info
 
     return pt_model
