@@ -181,7 +181,7 @@ flip it horizontally, and brighten it:
 ... )
 ```
 
-`DetrImageProcessor` expects the annotations to be in the following format: `{‘image_id’: int, ‘annotations’: List[Dict]}`,
+The `image_processor` expects the annotations to be in the following format: `{'image_id': int, 'annotations': List[Dict]}`,
  where each `Dict` is a COCO object annotation. Building up gradually, add a function to reformat annotations for a single example:
 
 ```py
