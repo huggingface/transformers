@@ -1949,6 +1949,27 @@ class TFGenerationMixin:
         else:
             return generated
 
+    @staticmethod
+    def _gather_beams(nested, beam_indices, batch_axis=0):
+        """Gathers the beam slices indexed by beam_indices into new beam array."""
+
+        def gather_fn(tensor):
+            if batch_axis > 0:
+                # pushes all dimentions before the batch to the end, so we get (batch, beam_id, ...)
+                perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
+                tensor = tf.transpose(tensor, perm=perm)
+
+            gathered_tensor = tf.gather(params=tensor, indices=beam_indices, axis=1, batch_dims=1)
+            if batch_axis > 0:
+                # transposes back to the original dimensions
+                perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
+                perm = tf.math.invert_permutation(perm)
+                gathered_tensor = tf.transpose(gathered_tensor, perm=perm)
+
+            return gathered_tensor
+
+        return tf.nest.map_structure(gather_fn, nested)
+
     def beam_search(
         self,
         input_ids: tf.Tensor,
@@ -2065,30 +2086,10 @@ class TFGenerationMixin:
                 shape[:batch_axis] + [shape[batch_axis] * shape[batch_axis + 1]] + shape[batch_axis + 2 :],
             )
 
-        def unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=0):
+        def unflatten_beam_dim(tensor, num_beams, batch_axis=0):
             """Unflattens the first, flat batch*beam dimension of a non-scalar array."""
             shape = shape_list(tensor)
             return tf.reshape(tensor, shape[:batch_axis] + [-1, num_beams] + shape[batch_axis + 1 :])
-
-        def gather_beams(nested, beam_indices, batch_axis=0):
-            """Gathers the beam slices indexed by beam_indices into new beam array."""
-
-            def gather_fn(tensor):
-                if batch_axis > 0:
-                    # pushes all dimentions before the batch to the end, so we get (batch, beam_id, ...)
-                    perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
-                    tensor = tf.transpose(tensor, perm=perm)
-
-                gathered_tensor = tf.gather(params=tensor, indices=beam_indices, axis=1, batch_dims=1)
-                if batch_axis > 0:
-                    # transposes back to the original dimensions
-                    perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
-                    perm = tf.math.invert_permutation(perm)
-                    gathered_tensor = tf.transpose(gathered_tensor, perm=perm)
-
-                return gathered_tensor
-
-            return tf.nest.map_structure(gather_fn, nested)
 
         # 1. init beam_search values
         logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
@@ -2209,7 +2210,7 @@ class TFGenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
+            logits = unflatten_beam_dim(model_outputs.logits[:, -1], num_beams)
 
             # Store scores, attentions and hidden_states when required
             if not use_xla and return_dict_in_generate:
@@ -2232,11 +2233,11 @@ class TFGenerationMixin:
             # add new logprobs to existing running logprobs scores.
             log_probs = tf.nn.log_softmax(logits)
             log_probs = logits_processor(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
-            log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
+            log_probs = unflatten_beam_dim(log_probs, num_beams)
             log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
             if do_sample:
                 log_probs = logits_warper(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
-                log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
+                log_probs = unflatten_beam_dim(log_probs, num_beams)
             vocab_size = log_probs.shape[2]
             log_probs = tf.reshape(log_probs, (batch_size, num_beams * vocab_size))
 
@@ -2257,7 +2258,7 @@ class TFGenerationMixin:
             else:
                 topk_log_probs, topk_indices = tf.math.top_k(log_probs, k=beams_to_keep)
             topk_beam_indices = topk_indices // vocab_size
-            topk_running_sequences = gather_beams(running_sequences, topk_beam_indices)
+            topk_running_sequences = self._gather_beams(running_sequences, topk_beam_indices)
             topk_ids = topk_indices % vocab_size
 
             # writes the new token
@@ -2292,7 +2293,7 @@ class TFGenerationMixin:
             # Determine the top k beam indices (from top 2*k beams) from log probs and gather top k beams
             # (from top 2*k beams).
             next_topk_indices = tf.math.top_k(running_topk_log_probs, k=num_beams)[1]
-            next_running_sequences, next_running_scores = gather_beams(
+            next_running_sequences, next_running_scores = self._gather_beams(
                 [topk_sequences, running_topk_log_probs], next_topk_indices
             )
 
@@ -2318,7 +2319,7 @@ class TFGenerationMixin:
             merged_scores = tf.concat([scores, topk_log_probs], axis=1)
             merged_is_sent_finished = tf.concat([is_sent_finished, did_topk_just_finished], axis=1)
             topk_merged_indices = tf.math.top_k(merged_scores, k=num_beams)[1]
-            next_sequences, next_scores, next_is_sent_finished = gather_beams(
+            next_sequences, next_scores, next_is_sent_finished = self._gather_beams(
                 [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices
             )
 
@@ -2328,11 +2329,11 @@ class TFGenerationMixin:
             cur_len = cur_len + 1
             if "past_key_values" in model_outputs:
                 cache = tf.nest.map_structure(
-                    lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=cache_batch_axis),
+                    lambda tensor: unflatten_beam_dim(tensor, num_beams, batch_axis=cache_batch_axis),
                     model_outputs.past_key_values,
                 )
-                next_running_indices = gather_beams(topk_beam_indices, next_topk_indices)
-                next_cache = gather_beams(cache, next_running_indices, batch_axis=cache_batch_axis)
+                next_running_indices = self._gather_beams(topk_beam_indices, next_topk_indices)
+                next_cache = self._gather_beams(cache, next_running_indices, batch_axis=cache_batch_axis)
                 model_outputs["past_key_values"] = tf.nest.map_structure(
                     lambda tensor: flatten_beam_dim(tensor, batch_axis=cache_batch_axis), next_cache
                 )

@@ -817,6 +817,28 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         return reordered_past
 
+    @staticmethod
+    def _gather_beams(nested, beam_indices, batch_axis=0):
+        """
+        RAG-specific `_gather_beams`: gathers the beam slices indexed by beam_indices into new beam array. If the
+        nested tensor has a shape mismatch with the beam indices, then it means it is the cache. In that case, isolates
+        and takes care of the extra dimension for docs.
+        """
+
+        def gather_fn(tensor):
+            is_rag_cache = tensor.shape[0] != beam_indices.shape[0]
+            if is_rag_cache:
+                n_docs = tensor.shape[0] // beam_indices.shape[0]
+                tensor = tf.reshape(tensor, (-1, n_docs, *tensor.shape[1:]))
+            gather_dim = 2 if is_rag_cache else 1
+            gathered_tensor = tf.gather(params=tensor, indices=beam_indices, axis=gather_dim, batch_dims=1)
+            if is_rag_cache:
+                gathered_tensor = tf.reshape(gathered_tensor, (-1, *gathered_tensor.shape[2:]))
+
+            return gathered_tensor
+
+        return tf.nest.map_structure(gather_fn, nested)
+
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
 
