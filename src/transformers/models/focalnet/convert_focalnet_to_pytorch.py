@@ -30,19 +30,22 @@ from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 def get_focalnet_config(model_name):
     config = FocalNetConfig()
 
+    focal_levels = [3, 3, 3, 3] if "lrf" in model_name else [2, 2, 2, 2]
+    focal_windows = [3, 3, 3, 3]
+    depths = [2, 2, 6, 2] if "tiny" in model_name else [2, 2, 18, 2]
+
     if "tiny" in model_name:
         embed_dim = 96
-        depths = [2, 2, 6, 2]
-        focal_levels = [2, 2, 2, 2]
-        focal_windows = [3, 3, 3, 3]
     elif "small" in model_name:
         embed_dim = 96
-        depths = (2, 2, 18, 2)
     elif "base" in model_name:
         embed_dim = 128
-        depths = (2, 2, 18, 2)
-    else:
+    elif "large" in model_name:
         embed_dim = 192
+        focal_windows = [5, 5, 5, 5]
+    elif "xlarge" in model_name:
+        raise NotImplementedError("To do")
+    elif "huge" in model_name:
         depths = (2, 2, 18, 2)
 
     repo_id = "huggingface/label-files"
@@ -88,13 +91,19 @@ def rename_key(name):
 
 
 def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
+    # fmt: off
     model_name_to_url = {
-        "focalnet-tiny": (
-            "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_tiny_srf.pth"
-        ),
+        "focalnet-tiny": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_tiny_srf.pth",
+        "focalnet-tiny-lrf": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_tiny_lrf.pth",
+        "focalnet-small": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_small_srf.pth",
+        "focalnet-small-lrf": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_small_lrf.pth",
+        "focalnet-base": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_base_srf.pth",
+        "focalnet-base-lrf": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_base_lrf.pth",
     }
+    # fmt: on
 
     checkpoint_url = model_name_to_url[model_name]
+    print("Checkpoint URL: ", checkpoint_url)
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
 
     # rename keys
@@ -142,11 +151,22 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     outputs = model(**inputs)
 
     predicted_class_idx = outputs.logits.argmax(-1).item()
-    print("Predicted class:", predicted_class_idx)
+    print("Predicted class:", model.config.id2label[predicted_class_idx])
 
     print("First values of logits:", outputs.logits[0, :3])
 
-    expected_slice = torch.tensor([0.2166, -0.4368, 0.2191])
+    if model_name == "focalnet-tiny":
+        expected_slice = torch.tensor([0.2166, -0.4368, 0.2191])
+    elif model_name == "focalnet-tiny-lrf":
+        expected_slice = torch.tensor([1.1669, 0.0125, -0.1695])
+    elif model_name == "focalnet-small":
+        expected_slice = torch.tensor([0.4917, -0.0430, 0.1341])
+    elif model_name == "focalnet-small-lrf":
+        expected_slice = torch.tensor([-0.2588, -0.5342, -0.2331])
+    elif model_name == "focalnet-base":
+        expected_slice = torch.tensor([-0.1655, -0.4090, -0.1730])
+    elif model_name == "focalnet-base-lrf":
+        expected_slice = torch.tensor([ 0.5306, -0.0483, -0.3928])
     assert torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 
