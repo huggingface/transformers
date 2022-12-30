@@ -909,8 +909,8 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
     """,
     FOCALNET_START_DOCSTRING,
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->FOCALNET,Swin->FocalNet,swin->focalnet
 class FocalNetForImageClassification(FocalNetPreTrainedModel):
+    # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification.__init__ with Swin->FocalNet, swin->focalnet
     def __init__(self, config):
         super().__init__(config)
 
@@ -999,8 +999,8 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
     """,
     FOCALNET_START_DOCSTRING,
 )
-# Copied from transformers.models.swin.modeling_swin.SwinBackbone with Swin->FocalNet,microsoft/swin-tiny-patch4-window7-224->microsoft/focalnet-tiny
 class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
+    # Copied from transformers.models.swin.modeling_swin.SwinBackbone.__init__ with Swin->FocalNet
     def __init__(self, config: FocalNetConfig):
         super().__init__(config)
 
