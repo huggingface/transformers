@@ -24,6 +24,8 @@ from .base import ChunkPipeline
 
 
 if TYPE_CHECKING:
+    from pyctcdecode import BeamSearchDecoderCTC
+
     from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 logger = logging.get_logger(__name__)
@@ -169,8 +171,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     """
 
-    def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        feature_extractor: Union["SequenceFeatureExtractor", str],
+        *,
+        decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
         self.feature_extractor = feature_extractor
 
         if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
@@ -178,9 +186,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         elif (
             feature_extractor._processor_class
             and feature_extractor._processor_class.endswith("WithLM")
-            and kwargs.get("decoder", None) is not None
+            and decoder is not None
         ):
-            self.decoder = kwargs["decoder"]
+            self.decoder = decoder
             self.type = "ctc_with_lm"
         else:
             self.type = "ctc"
