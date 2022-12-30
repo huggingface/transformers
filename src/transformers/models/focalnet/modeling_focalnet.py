@@ -496,7 +496,7 @@ class FocalNetStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.blocks = nn.ModuleList(
+        self.layers = nn.ModuleList(
             [
                 FocalNetLayer(
                     config=config,
@@ -504,6 +504,7 @@ class FocalNetStage(nn.Module):
                     input_resolution=input_resolution,
                     mlp_ratio=config.mlp_ratio,
                     drop=drop,
+                    # TODO fix drop path
                     # drop_path=drop_path,
                     focal_level=focal_level,
                     focal_window=focal_window,
@@ -513,7 +514,7 @@ class FocalNetStage(nn.Module):
                     use_post_layernorm_in_modulation=config.use_post_layernorm_in_modulation,
                     normalize_modulator=config.normalize_modulator,
                 )
-                for i in range(depth)
+                for _ in range(depth)
             ]
         )
 
@@ -528,7 +529,7 @@ class FocalNetStage(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, input_dimensions: Tuple[int, int]) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
-        for layer_module in self.blocks:
+        for layer_module in self.layers:
             # TODO use this
             # layer_outputs = layer_module(hidden_states, input_dimensions)
             hidden_states = layer_module(hidden_states, input_dimensions)
@@ -565,7 +566,7 @@ class FocalNetEncoder(nn.Module):
 
         embed_dim = [config.embed_dim * (2**i) for i in range(self.num_stages)]
 
-        self.layers = nn.ModuleList(
+        self.stages = nn.ModuleList(
             [
                 FocalNetStage(
                     config=config,
@@ -604,7 +605,7 @@ class FocalNetEncoder(nn.Module):
             all_hidden_states += (hidden_states,)
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
-        for i, layer_module in enumerate(self.layers):
+        for i, stage_module in enumerate(self.stages):
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -614,12 +615,12 @@ class FocalNetEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                    create_custom_forward(stage_module),
                     hidden_states,
                     input_dimensions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, input_dimensions)
+                layer_outputs = stage_module(hidden_states, input_dimensions)
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]

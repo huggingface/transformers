@@ -66,8 +66,12 @@ def rename_key(name):
         name = name.replace("patch_embed.norm", "embeddings.norm")
     if "layers" in name:
         name = "encoder." + name
+    if "encoder.layers" in name:
+        name = name.replace("encoder.layers", "encoder.stages")
     if "downsample.proj" in name:
         name = name.replace("downsample.proj", "downsample.projection")
+    if "blocks" in name:
+        name = name.replace("blocks", "layers")
 
     if name == "norm.weight":
         name = "layernorm.weight"
