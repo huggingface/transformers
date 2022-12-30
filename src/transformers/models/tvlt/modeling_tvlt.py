@@ -441,7 +441,6 @@ class TvltSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -494,7 +493,6 @@ class TvltIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -805,9 +803,9 @@ class TvltModel(TvltPreTrainedModel):
         sequence_output = encoder_outputs[0]
         if self.layernorm is not None:
             sequence_output = self.layernorm(sequence_output)
-            
+
         masked_pixel_len = pixel_embedding_output.size(1)
-        pixel_sequence_output = sequence_output[:, 1: 1 + masked_pixel_len]
+        pixel_sequence_output = sequence_output[:, 1 : 1 + masked_pixel_len]
         audio_sequence_output = sequence_output[:, 1 + masked_pixel_len :]
         if not return_dict:
             return (
@@ -919,7 +917,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         if self.task_mae:
             self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
-            
+
             self.pixel_mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
             self.audio_mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
 
@@ -1154,7 +1152,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
             total_loss += loss
 
         if not return_dict:
-            output = (matching_logits, pixel_logits, audio_logits) + outputs[5:]
+            output = (matching_logits, pixel_logits, audio_logits) + outputs[7:]
             return ((total_loss,) + output) if loss is not None else output
 
         return TvltForPreTrainingOutput(
@@ -1280,7 +1278,7 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
             loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[4:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -1369,7 +1367,7 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
             loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[4:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
