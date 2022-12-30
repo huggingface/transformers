@@ -175,10 +175,10 @@ class FocalNetImageClassifierOutput(ModelOutput):
 
 class FocalNetEmbeddings(nn.Module):
     """
-    Construct the patch embeddings and layernorm.
+    Construct the patch embeddings and layernorm. Optionally, also the mask token.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, use_mask_token=False):
         super().__init__()
 
         self.patch_embeddings = FocalNetPatchEmbeddings(
@@ -188,13 +188,23 @@ class FocalNetEmbeddings(nn.Module):
             embed_dim=config.embed_dim,
         )
         self.patch_grid = self.patch_embeddings.grid_size
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
 
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor]:
+    def forward(
+        self, pixel_values: Optional[torch.FloatTensor], bool_masked_pos: Optional[torch.BoolTensor] = None
+    ) -> Tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
+        batch_size, seq_len, _ = embeddings.size()
+
+        if bool_masked_pos is not None:
+            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            # replace the masked visual tokens by mask_tokens
+            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         embeddings = self.dropout(embeddings)
 
@@ -715,13 +725,13 @@ FOCALNET_INPUTS_DOCSTRING = r"""
     FOCALNET_START_DOCSTRING,
 )
 class FocalNetModel(FocalNetPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         super().__init__(config)
         self.config = config
         self.num_stages = len(config.depths)
         self.num_features = int(config.embed_dim * 2 ** (self.num_stages - 1))
 
-        self.embeddings = FocalNetEmbeddings(config)
+        self.embeddings = FocalNetEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = FocalNetEncoder(config, self.embeddings.patch_grid)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
@@ -745,6 +755,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FocalNetModelOutput]:
@@ -756,7 +767,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        embedding_output, input_dimensions = self.embeddings(pixel_values)
+        embedding_output, input_dimensions = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
         print("Shape of embeddings:", embedding_output.shape)
         print("First values of embeddings:", embedding_output[0, :3, :3])
@@ -790,7 +801,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """FocalNet Model with a decoder on top for masked image modeling, as proposed in
+    """FocalNet Model with a decoder on top for masked image modeling, following the implementation in
 [SimMIM](https://arxiv.org/abs/2111.09886).
 
     <Tip>
@@ -806,9 +817,10 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.focalnet = FocalNetModel(config, add_pooling_layer=False)
+        self.focalnet = FocalNetModel(config, add_pooling_layer=False, use_mask_token=True)
 
-        num_features = int(config.embed_dim * 2 ** (config.num_stages - 1))
+        self.num_stages = len(config.depths)
+        num_features = int(config.embed_dim * 2 ** (self.num_stages - 1))
         self.decoder = nn.Sequential(
             nn.Conv2d(
                 in_channels=num_features, out_channels=config.encoder_stride**2 * config.num_channels, kernel_size=1

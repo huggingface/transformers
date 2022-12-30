@@ -30,12 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        FocalNetBackbone,
-        FocalNetForImageClassification,
-        FocalNetForMaskedImageModeling,
-        FocalNetModel,
-    )
+    from transformers import FocalNetForImageClassification, FocalNetForMaskedImageModeling, FocalNetModel
     from transformers.models.focalnet.modeling_focalnet import FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -144,33 +139,6 @@ class FocalNetModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
-    def create_and_check_backbone(self, config, pixel_values, labels):
-        model = FocalNetBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
-
-        # verify backbone works with out_features=None
-        config.out_features = None
-        model = FocalNetBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify feature maps
-        self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], 4, 4])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), 1)
-
     def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
         model = FocalNetForMaskedImageModeling(config=config)
         model.to(torch_device)
@@ -225,7 +193,6 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FocalNetModel,
-            FocalNetBackbone,
             FocalNetForImageClassification,
             FocalNetForMaskedImageModeling,
         )
@@ -237,6 +204,7 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = FocalNetModelTester(self)
@@ -257,10 +225,6 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_backbone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_backbone(*config_and_inputs)
 
     def test_for_masked_image_modeling(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -299,63 +263,6 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            expected_num_attentions = len(self.model_tester.depths)
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            window_size_squared = config.window_size**2
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # also another +1 for reshaped_hidden_states
-            added_hidden_states = 1 if model_class.__name__ == "FocalNetBackbone" else 2
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), expected_num_attentions)
-
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
-            )
-
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
         model = model_class(config)
         model.to(torch_device)
@@ -385,18 +292,17 @@ class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
             [num_patches, self.model_tester.embed_dim],
         )
 
-        if not model_class.__name__ == "FocalNetBackbone":
-            reshaped_hidden_states = outputs.reshaped_hidden_states
-            self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
+        reshaped_hidden_states = outputs.reshaped_hidden_states
+        self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
-            batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-            reshaped_hidden_states = (
-                reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-            )
-            self.assertListEqual(
-                list(reshaped_hidden_states.shape[-2:]),
-                [num_patches, self.model_tester.embed_dim],
-            )
+        batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
+        reshaped_hidden_states = (
+            reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        )
+        self.assertListEqual(
+            list(reshaped_hidden_states.shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
+        )
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
