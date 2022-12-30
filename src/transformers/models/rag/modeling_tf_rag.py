@@ -829,21 +829,15 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             is_rag_cache = tensor.shape[0] != beam_indices.shape[0]
             if is_rag_cache:
                 n_docs = tensor.shape[0] // beam_indices.shape[0]
-                # isolates the ndocs dimension
-                tensor = tf.reshape(tensor, (-1, n_docs, *tensor.shape[1:]))
-                # rearranges dimensions so we get (batch, beam_id, ...)
-                perm = tf.concat((tf.constant([0, 2, 1]), tf.range(3, tf.rank(tensor))), axis=0)
-                tensor = tf.transpose(tensor, perm=perm)
+                batch_size = beam_indices.shape[0]
+                # reshapes into (batch size, num beams, n_docs, ...), the cache format expected by RAG
+                tensor = tf.reshape(tensor, (batch_size, -1, n_docs, *tensor.shape[2:]))
 
             gathered_tensor = tf.gather(params=tensor, indices=beam_indices, axis=1, batch_dims=1)
 
             if is_rag_cache:
-                # reverses the permutation
-                perm = tf.concat((tf.constant([0, 2, 1]), tf.range(3, tf.rank(tensor))), axis=0)
-                perm = tf.math.invert_permutation(perm)
-                gathered_tensor = tf.transpose(gathered_tensor, perm=perm)
-                # restores the original shape, i.e. reintegrates ndocs dimension
-                gathered_tensor = tf.reshape(gathered_tensor, (-1, *gathered_tensor.shape[2:]))
+                # reshapes back into the shape expected by beam search
+                gathered_tensor = tf.reshape(gathered_tensor, (batch_size * n_docs, -1, *gathered_tensor.shape[3:]))
 
             return gathered_tensor
 
