@@ -23,7 +23,8 @@ from torchvision import transforms
 
 import requests
 from huggingface_hub import hf_hub_download
-from transformers import AutoImageProcessor, FocalNetConfig, FocalNetForImageClassification
+from transformers import BitImageProcessor, FocalNetConfig, FocalNetForImageClassification
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 
 
 def get_focalnet_config(model_name):
@@ -86,7 +87,7 @@ def rename_key(name):
     return name
 
 
-def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     model_name_to_url = {
         "focalnet-tiny": (
             "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_tiny_srf.pth"
@@ -111,9 +112,18 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path):
     # verify conversion
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    # processor = AutoImageProcessor.from_pretrained("microsoft/swin-base-patch4-window7-224-in22k")
+    processor = BitImageProcessor(
+        do_resize=True,
+        size={"shortest_edge": 256},
+        resample=PILImageResampling.BILINEAR,
+        do_center_crop=True,
+        crop_size=224,
+        do_normalize=True,
+        image_mean=IMAGENET_DEFAULT_MEAN,
+        image_std=IMAGENET_DEFAULT_STD,
+    )
     image = Image.open(requests.get(url, stream=True).raw)
-    # inputs = processor(images=image, return_tensors="pt")
+    inputs = processor(images=image, return_tensors="pt")
 
     image_transforms = transforms.Compose(
         [
@@ -124,9 +134,12 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path):
         ]
     )
 
-    pixel_values = image_transforms(image).unsqueeze(0)
+    original_pixel_values = image_transforms(image).unsqueeze(0)
 
-    outputs = model(pixel_values)
+    # verify pixel_values
+    assert torch.allclose(inputs.pixel_values, original_pixel_values, atol=1e-4)
+
+    outputs = model(**inputs)
 
     predicted_class_idx = outputs.logits.argmax(-1).item()
     print("Predicted class:", predicted_class_idx)
@@ -140,7 +153,12 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path):
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        print(f"Pushing model and processor to the hub...")
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -155,6 +173,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether to push the model and processor to the hub.",
+    )
 
     args = parser.parse_args()
-    convert_focalnet_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_focalnet_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

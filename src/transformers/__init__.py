@@ -294,6 +294,7 @@ _import_structure = {
         "FlavaTextConfig",
     ],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
+    "models.focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
@@ -462,7 +463,6 @@ _import_structure = {
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
-    "models.focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig"],
     "models.swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
     "models.switch_transformers": ["SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
@@ -1617,6 +1617,16 @@ else:
             "FNetPreTrainedModel",
         ]
     )
+    _import_structure["models.focalnet"].extend(
+        [
+            "FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FocalNetBackbone",
+            "FocalNetForImageClassification",
+            "FocalNetForMaskedImageModeling",
+            "FocalNetModel",
+            "FocalNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.fsmt"].extend(["FSMTForConditionalGeneration", "FSMTModel", "PretrainedFSMTModel"])
     _import_structure["models.funnel"].extend(
         [
@@ -2431,16 +2441,6 @@ else:
             "SwinForMaskedImageModeling",
             "SwinModel",
             "SwinPreTrainedModel",
-        ]
-    )
-    _import_structure["models.focalnet"].extend(
-        [
-            "FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FocalNetBackbone",
-            "FocalNetForImageClassification",
-            "FocalNetForMaskedImageModeling",
-            "FocalNetModel",
-            "FocalNetPreTrainedModel",
         ]
     )
     _import_structure["models.swin2sr"].extend(

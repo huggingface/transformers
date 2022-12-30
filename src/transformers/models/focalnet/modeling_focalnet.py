@@ -400,7 +400,7 @@ class FocalNetLayer(nn.Module):
         drop_path (float, optional):
             Stochastic depth rate. Default: 0.0
         norm_layer (nn.Module, optional):
-            Normalization layer.  Default: nn.LayerNorm
+            Normalization layer. Default: nn.LayerNorm
         focal_level (int):
             Number of focal levels.
         focal_window (int):
@@ -791,7 +791,8 @@ class FocalNetModel(FocalNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """FocalNet Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+    """FocalNet Model with a decoder on top for masked image modeling, as proposed in
+[SimMIM](https://arxiv.org/abs/2111.09886).
 
     <Tip>
 
@@ -903,8 +904,8 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
 
 @add_start_docstrings(
     """
-    FocalNet Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    FocalNet Model transformer with an image classification head on top (a linear layer on top of the final hidden
+    state of the [CLS] token) e.g. for ImageNet.
     """,
     FOCALNET_START_DOCSTRING,
 )

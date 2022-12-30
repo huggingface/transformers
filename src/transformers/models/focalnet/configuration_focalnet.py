@@ -27,11 +27,10 @@ FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class FocalNetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FocalNetModel`]. It is used to instantiate a FocalNet
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the FocalNet
-    [microsoft/focalnet-tiny](https://huggingface.co/microsoft/focalnet-tiny)
-    architecture.
+    This is the configuration class to store the configuration of a [`FocalNetModel`]. It is used to instantiate a
+    FocalNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the FocalNet
+    [microsoft/focalnet-tiny](https://huggingface.co/microsoft/focalnet-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
