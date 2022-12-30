@@ -1233,7 +1233,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past_key_values=None, use_cache=None, encoder_outputs=None, attention_mask=None, **kwargs
+        self,
+        decoder_input_ids,
+        past_key_values=None,
+        use_cache=None,
+        encoder_outputs=None,
+        attention_mask=None,
+        **kwargs
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:

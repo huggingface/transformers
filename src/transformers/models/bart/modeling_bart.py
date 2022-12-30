@@ -1447,9 +1447,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
+    def _reorder_cache(past, beam_idx):
         reordered_past = ()
-        for layer_past in past_key_values:
+        for layer_past in past:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -1908,7 +1908,9 @@ class BartForCausalLM(BartPretrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
@@ -1924,8 +1926,8 @@ class BartForCausalLM(BartPretrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
+    def _reorder_cache(past, beam_idx):
         reordered_past = ()
-        for layer_past in past_key_values:
+        for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

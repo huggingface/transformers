@@ -2100,13 +2100,13 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     ):
         assert encoder_outputs is not None, "`encoder_outputs` have to be passed for generation."
 
-        if past:
+        if past_key_values:
             decoder_input_ids = decoder_input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -2122,7 +2122,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration._reorder_cache
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
-        for layer_past in past_key_values:
+        for layer_past in past:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -2346,7 +2346,7 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         use_cache=None,
@@ -2356,14 +2356,14 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
             "head_mask": head_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
@@ -2371,7 +2371,7 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
     # Copied from transformers.models.bart.modeling_bart.BartForCausalLM._reorder_cache
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
-        for layer_past in past_key_values:
+        for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 

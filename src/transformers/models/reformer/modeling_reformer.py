@@ -2286,7 +2286,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             attentions=reformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
+    ):
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]

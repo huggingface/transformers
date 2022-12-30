@@ -1499,7 +1499,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -1516,7 +1516,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         return {
             "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
             "decoder_input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,

@@ -1028,11 +1028,11 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             attentions=attns,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **model_kwargs):
         inputs = {}
 
         # if past is defined in model kwargs then use it for faster decoding
-        if past:
+        if past_key_values:
             input_ids = tf.expand_dims(input_ids[:, -1], axis=-1)
         else:
             input_ids = input_ids

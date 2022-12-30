@@ -1491,7 +1491,7 @@ class MarianMTModel(MarianPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids: torch.LongTensor,
-        past: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
@@ -1507,7 +1507,7 @@ class MarianMTModel(MarianPreTrainedModel):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -1745,8 +1745,8 @@ class MarianForCausalLM(MarianPreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
+    def _reorder_cache(past, beam_idx):
         reordered_past = ()
-        for layer_past in past_key_values:
+        for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

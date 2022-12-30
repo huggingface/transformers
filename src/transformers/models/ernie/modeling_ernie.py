@@ -1214,7 +1214,9 @@ class ErnieForCausalLM(ErniePreTrainedModel):
         )
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
+    ):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -1234,7 +1236,7 @@ class ErnieForCausalLM(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel._reorder_cache
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
-        for layer_past in past_key_values:
+        for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
