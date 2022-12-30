@@ -104,8 +104,8 @@ class FocalNetConfig(PretrainedConfig):
         use_conv_embed=False,
         use_layerscale=False,
         layerscale_value=1e-4,
-        use_postln=False,
-        use_postln_in_modulation=False,
+        use_post_layernorm=False,
+        use_post_layernorm_in_modulation=False,
         normalize_modulator=False,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -128,8 +128,8 @@ class FocalNetConfig(PretrainedConfig):
         self.use_conv_embed = use_conv_embed
         self.use_layerscale = use_layerscale
         self.layerscale_value = layerscale_value
-        self.use_postln = use_postln
-        self.use_postln_in_modulation = use_postln_in_modulation
+        self.use_post_layernorm = use_post_layernorm
+        self.use_post_layernorm_in_modulation = use_post_layernorm_in_modulation
         self.normalize_modulator = normalize_modulator
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps

@@ -300,7 +300,7 @@ class FocalNetModulation(nn.Module):
         focal_factor=2,
         bias=True,
         projection_dropout=0.0,
-        use_postln_in_modulation=False,
+        use_post_layernorm_in_modulation=False,
         normalize_modulator=False,
     ):
         super().__init__()
@@ -309,7 +309,7 @@ class FocalNetModulation(nn.Module):
         self.focal_window = focal_window
         self.focal_level = focal_level
         self.focal_factor = focal_factor
-        self.use_postln_in_modulation = use_postln_in_modulation
+        self.use_post_layernorm_in_modulation = use_post_layernorm_in_modulation
         self.normalize_modulator = normalize_modulator
 
         self.f = nn.Linear(dim, 2 * dim + (self.focal_level + 1), bias=bias)
@@ -332,7 +332,7 @@ class FocalNetModulation(nn.Module):
                 )
             )
             self.kernel_sizes.append(kernel_size)
-        if self.use_postln_in_modulation:
+        if self.use_post_layernorm_in_modulation:
             self.ln = nn.LayerNorm(dim)
 
     def forward(self, hidden_state):
@@ -363,7 +363,7 @@ class FocalNetModulation(nn.Module):
         self.modulator = self.h(ctx_all)
         x_out = q * self.modulator
         x_out = x_out.permute(0, 2, 3, 1).contiguous()
-        if self.use_postln_in_modulation:
+        if self.use_post_layernorm_in_modulation:
             x_out = self.ln(x_out)
 
         # post linear porjection
@@ -417,7 +417,7 @@ class FocalNetLayer(nn.Module):
             Whether use layerscale
         layerscale_value (float):
             Initial layerscale value
-        use_postln (bool):
+        use_post_layernorm (bool):
             Whether use layernorm after modulation
     """
 
@@ -434,8 +434,8 @@ class FocalNetLayer(nn.Module):
         focal_window=3,
         use_layerscale=False,
         layerscale_value=1e-4,
-        use_postln=False,
-        use_postln_in_modulation=False,
+        use_post_layernorm=False,
+        use_post_layernorm_in_modulation=False,
         normalize_modulator=False,
     ):
         super().__init__()
@@ -448,7 +448,7 @@ class FocalNetLayer(nn.Module):
 
         self.focal_window = focal_window
         self.focal_level = focal_level
-        self.use_postln = use_postln
+        self.use_post_layernorm = use_post_layernorm
 
         self.norm1 = nn.LayerNorm(dim)
         self.modulation = FocalNetModulation(
@@ -456,7 +456,7 @@ class FocalNetLayer(nn.Module):
             projection_dropout=drop,
             focal_window=focal_window,
             focal_level=self.focal_level,
-            use_postln_in_modulation=use_postln_in_modulation,
+            use_post_layernorm_in_modulation=use_post_layernorm_in_modulation,
             normalize_modulator=normalize_modulator,
         )
 
@@ -472,20 +472,20 @@ class FocalNetLayer(nn.Module):
             self.gamma_2 = nn.Parameter(layerscale_value * torch.ones((dim)), requires_grad=True)
 
     def forward(self, x, input_dimensions):
-        H, W = input_dimensions
-        B, L, C = x.shape
+        height, width = input_dimensions
+        batch_size, _, num_channels = x.shape
         shortcut = x
 
         # Focal Modulation
-        x = x if self.use_postln else self.norm1(x)
-        x = x.view(B, H, W, C)
-        x = self.modulation(x).view(B, H * W, C)
-        x = x if not self.use_postln else self.norm1(x)
+        x = x if self.use_post_layernorm else self.norm1(x)
+        x = x.view(batch_size, height, width, num_channels)
+        x = self.modulation(x).view(batch_size, height * width, num_channels)
+        x = x if not self.use_post_layernorm else self.norm1(x)
 
         # FFN
         x = shortcut + self.drop_path(self.gamma_1 * x)
         x = x + self.drop_path(
-            self.gamma_2 * (self.norm2(self.mlp(x)) if self.use_postln else self.mlp(self.norm2(x)))
+            self.gamma_2 * (self.norm2(self.mlp(x)) if self.use_post_layernorm else self.mlp(self.norm2(x)))
         )
 
         return x
@@ -509,8 +509,8 @@ class FocalNetStage(nn.Module):
                     focal_window=focal_window,
                     use_layerscale=False,
                     layerscale_value=1e-4,
-                    use_postln=config.use_postln,
-                    use_postln_in_modulation=config.use_postln_in_modulation,
+                    use_post_layernorm=config.use_post_layernorm,
+                    use_post_layernorm_in_modulation=config.use_post_layernorm_in_modulation,
                     normalize_modulator=config.normalize_modulator,
                 )
                 for i in range(depth)
