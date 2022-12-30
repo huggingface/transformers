@@ -176,7 +176,7 @@ _deps = [
     "beautifulsoup4",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
-    "rhoknp>=1.0.2",
+    "rhoknp>=1.1.0",
 ]
 
 

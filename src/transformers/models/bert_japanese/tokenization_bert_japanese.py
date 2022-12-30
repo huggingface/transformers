@@ -661,11 +661,13 @@ class JumanppTokenizer:
         if self.normalize_text:
             text = unicodedata.normalize("NFKC", text)
 
+        text = text.strip()
+
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
 
         for mrph in self.juman.apply_to_sentence(text).morphemes:
-            token = mrph
+            token = mrph.text
 
             if self.do_lower_case and token not in never_split:
                 token = token.lower()

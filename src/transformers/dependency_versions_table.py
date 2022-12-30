@@ -82,5 +82,5 @@ deps = {
     "beautifulsoup4": "beautifulsoup4",
     "sudachipy": "sudachipy>=0.6.6",
     "sudachidict_core": "sudachidict_core>=20220729",
-    "rhoknp": "rhoknp>=1.0.2",
+    "rhoknp": "rhoknp>=1.1.0",
 }
