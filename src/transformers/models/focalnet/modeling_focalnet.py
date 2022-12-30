@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FocalNet Transformer model."""
+""" PyTorch FocalNet model."""
 
 
 import collections.abc
@@ -721,7 +721,7 @@ FOCALNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare FocalNet Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare FocalNet Model outputting raw hidden-states without any specific head on top.",
     FOCALNET_START_DOCSTRING,
 )
 class FocalNetModel(FocalNetPreTrainedModel):
@@ -801,8 +801,9 @@ class FocalNetModel(FocalNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """FocalNet Model with a decoder on top for masked image modeling, following the implementation in
-[SimMIM](https://arxiv.org/abs/2111.09886).
+    """FocalNet Model with a decoder on top for masked image modeling.
+
+    This follows the same implementation as in [SimMIM](https://arxiv.org/abs/2111.09886).
 
     <Tip>
 
@@ -848,7 +849,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoImageProcessor, FocalNetForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, FocalNetConfig, FocalNetForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -857,7 +858,8 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/focalnet-base-simmim-window6-192")
-        >>> model = FocalNetForMaskedImageModeling.from_pretrained("microsoft/focalnet-base-simmim-window6-192")
+        >>> config = FocalNetConfig()
+        >>> model = FocalNetForMaskedImageModeling(config)
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
@@ -915,8 +917,8 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
 
 @add_start_docstrings(
     """
-    FocalNet Model transformer with an image classification head on top (a linear layer on top of the final hidden
-    state of the [CLS] token) e.g. for ImageNet.
+    FocalNet Model with an image classification head on top (a linear layer on top of the pooled output) e.g. for
+    ImageNet.
     """,
     FOCALNET_START_DOCSTRING,
 )
