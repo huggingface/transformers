@@ -2062,7 +2062,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -2095,7 +2095,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration._reorder_cache
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -2341,7 +2341,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     # Copied from transformers.models.bart.modeling_bart.BartForCausalLM._reorder_cache
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 

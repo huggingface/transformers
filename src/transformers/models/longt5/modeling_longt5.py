@@ -2104,7 +2104,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     ):
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
