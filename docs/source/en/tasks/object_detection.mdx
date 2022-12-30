@@ -572,8 +572,8 @@ Let's plot the result:
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
 ...     box = [round(i, 2) for i in box.tolist()]
-...     x,y,x2,y2 = tuple(box)
-...     draw.rectangle((x,y,x2,y2), outline="red", width=1)
+...     x, y, x2, y2 = tuple(box)
+...     draw.rectangle((x, y, x2, y2), outline="red", width=1)
 ...     draw.text((x, y), model.config.id2label[label.item()], fill="white")
 
 >>> image
