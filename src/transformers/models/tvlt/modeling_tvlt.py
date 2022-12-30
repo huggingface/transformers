@@ -59,6 +59,10 @@ class TvltModelOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
+        last_pixel_hidden_state (`torch.FloatTensor` of shape `(batch_size, pixel_sequence_length, hidden_size)`):
+            Pixel sequence of hidden-states at the output of the last layer of the model.
+        last_audio_hidden_state (`torch.FloatTensor` of shape `(batch_size, audio_sequence_length, hidden_size)`):
+            Audio sequence of hidden-states at the output of the last layer of the model.
         pixel_label_masks (`torch.FloatTensor` of shape `(batch_size, pixel_patch_length)`):
             Tensor indicating which pixel patches are masked (1) and which are not (0).
         audio_label_masks (`torch.FloatTensor` of shape `(batch_size, audio_patch_length)`):
@@ -78,6 +82,8 @@ class TvltModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
+    last_pixel_hidden_state: torch.FloatTensor = None
+    last_audio_hidden_state: torch.FloatTensor = None
     pixel_label_masks: torch.LongTensor = None
     audio_label_masks: torch.LongTensor = None
     pixel_ids_restore: torch.LongTensor = None
@@ -799,10 +805,15 @@ class TvltModel(TvltPreTrainedModel):
         sequence_output = encoder_outputs[0]
         if self.layernorm is not None:
             sequence_output = self.layernorm(sequence_output)
-
+            
+        masked_pixel_len = pixel_embedding_output.size(1)
+        pixel_sequence_output = sequence_output[:, 1: 1 + masked_pixel_len]
+        audio_sequence_output = sequence_output[:, 1 + masked_pixel_len :]
         if not return_dict:
             return (
                 sequence_output,
+                pixel_sequence_output,
+                audio_sequence_output,
                 pixel_label_masks,
                 audio_label_masks,
                 pixel_ids_restore,
@@ -811,6 +822,8 @@ class TvltModel(TvltPreTrainedModel):
 
         return TvltModelOutput(
             last_hidden_state=sequence_output,
+            last_pixel_hidden_state=pixel_sequence_output,
+            last_audio_hidden_state=audio_sequence_output,
             pixel_label_masks=pixel_label_masks,
             audio_label_masks=audio_label_masks,
             pixel_ids_restore=pixel_ids_restore,
@@ -901,12 +914,12 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         self.tvlt = TvltModel(config)
 
-        self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
-
         if self.task_matching:
             self.matching_head = TvltMatchingHead(config)
 
         if self.task_mae:
+            self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
+            
             self.pixel_mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
             self.audio_mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
 
@@ -1102,36 +1115,36 @@ class TvltForPreTraining(TvltPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            pixel_label_masks = outputs.pixel_label_masks if return_dict else outputs[1]
-            audio_label_masks = outputs.audio_label_masks if return_dict else outputs[2]
-            pixel_ids_restore = outputs.pixel_ids_restore if return_dict else outputs[3]
-            audio_ids_restore = outputs.audio_ids_restore if return_dict else outputs[4]
+            pixel_sequence_output = outputs.last_pixel_hidden_state if return_dict else outputs[1]
+            audio_sequence_output = outputs.last_audio_hidden_state if return_dict else outputs[2]
+            pixel_label_masks = outputs.pixel_label_masks if return_dict else outputs[3]
+            audio_label_masks = outputs.audio_label_masks if return_dict else outputs[4]
+            pixel_ids_restore = outputs.pixel_ids_restore if return_dict else outputs[5]
+            audio_ids_restore = outputs.audio_ids_restore if return_dict else outputs[6]
 
-            sequence_output = outputs[0]
-            sequence_output = self.encoder_to_decoder(
-                sequence_output
-            )  # [batch_size, num_visible_patches, decoder_hidden_size]
-            num_pixel_patch = pixel_label_masks.size(1)
-            pixel_sequence_output = sequence_output[:, 1 : 1 + num_pixel_patch]
-            audio_sequence_output = sequence_output[:, 1 + num_pixel_patch :]
-
+            pixel_decoder_input = self.encoder_to_decoder(
+                pixel_sequence_output
+            )  # [batch_size, num_masked_pixel_patches, decoder_hidden_size]
+            audio_decoder_input = self.encoder_to_decoder(
+                audio_sequence_output
+            )  # [batch_size, num_masked_audio_patches, decoder_hidden_size]
             num_frames = pixel_values.size(1)
-            pixel_decoder_input = self.cat_mask(self.pixel_mask_token, pixel_sequence_output, pixel_ids_restore)
-            pixel_decoder_input += self.decoder_pixel_pos_embed.repeat(1, num_frames, 1)
-            pixel_decoder_input += torch.repeat_interleave(
+            pixel_decoder_input = self.cat_mask(self.pixel_mask_token, pixel_decoder_input, pixel_ids_restore)
+            pixel_decoder_input = pixel_decoder_input + self.decoder_pixel_pos_embed.repeat(1, num_frames, 1)
+            pixel_decoder_input = pixel_decoder_input + torch.repeat_interleave(
                 self.decoder_temporal_embed[:, :num_frames], self.num_patches_per_image, dim=1
             )
-            pixel_decoder_input += self.decoder_pixel_type_embed
+            pixel_decoder_input = pixel_decoder_input + self.decoder_pixel_type_embed
             pixel_decoder_outputs = self.decoder(pixel_decoder_input)
             pixel_logits = self.pixel_mae_head(pixel_decoder_outputs.logits)
 
-            audio_decoder_input = self.cat_mask(self.audio_mask_token, audio_sequence_output, audio_ids_restore)
+            audio_decoder_input = self.cat_mask(self.audio_mask_token, audio_decoder_input, audio_ids_restore)
             num_time_patches = audio_decoder_input.size(1) // self.num_freq_patches
-            audio_decoder_input += self.decoder_freq_embed.repeat(1, num_time_patches, 1)
-            audio_decoder_input += torch.repeat_interleave(
+            audio_decoder_input = audio_decoder_input + self.decoder_freq_embed.repeat(1, num_time_patches, 1)
+            audio_decoder_input = audio_decoder_input + torch.repeat_interleave(
                 self.decoder_audio_pos_embed[:, :num_time_patches], self.num_freq_patches, dim=1
             )
-            audio_decoder_input += self.decoder_audio_type_embed
+            audio_decoder_input = audio_decoder_input + self.decoder_audio_type_embed
             audio_decoder_outputs = self.decoder(audio_decoder_input)
             audio_logits = self.audio_mae_head(audio_decoder_outputs.logits)
 
