@@ -344,10 +344,11 @@ Face to upload your model).
 ...     output_dir="detr-resnet-50_finetuned_cppe5",
 ...     per_device_train_batch_size=8,
 ...     num_train_epochs=10,
-...     fp16=False,
+...     fp16=True,
 ...     save_steps=200,
 ...     logging_steps=50,
 ...     learning_rate=1e-5,
+...     weight_decay=1e-4,
 ...     save_total_limit=2,
 ...     remove_unused_columns=False,
 ...     push_to_hub=True,
@@ -378,7 +379,7 @@ Hugging Face Hub. Upon training completion, push the final model to the Hub as w
 ```
 
 ## Evaluate
-Object detection models are commonly evaluated with a set of [COCO-style metrics](https://cocodataset.org/#detection-eval).
+Object detection models are commonly evaluated with a set of <a href="https://cocodataset.org/#detection-eval">COCO-style metrics</a>.
 You can use one of the existing metrics implementations, here you'll use the one from `torchvision` to evaluate the final
 model that you pushed to the Hub.
 
@@ -512,19 +513,20 @@ Finally, load the metrics and run the evaluation.
 Accumulating evaluation results...
 DONE (t=0.08s).
 IoU metric: bbox
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.104
- Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.188
- Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.103
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.013
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.027
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.105
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.105
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.210
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.248
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.085
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.122
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.261
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.150
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.280
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.130
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.038
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.036
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.182
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.166
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.317
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.335
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.104
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.146
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.382
 ```
+These results can be further improved by adjusting the hyperparameters in the `training_args`. Give it a go!
 
 ## Inference
 Now that you have finetuned a DETR model, evaluated it, and uploaded it to the Hugging Face Hub, you can use it for inference.
@@ -535,7 +537,7 @@ for object detection with your model, and pass an image to it:
 >>> from transformers import pipeline
 >>> import requests
 
->>> url = "https://chartwell.com/-/media/Images/blog/2020/04/keeping-staff-and-residents-protected.jpeg"
+>>> url = "https://i.imgur.com/2lnWoly.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> obj_detector = pipeline("object-detection", model="MariaK/detr-resnet-50_finetuned_cppe5")
@@ -552,7 +554,7 @@ You can also manually replicate the results of the pipeline if you'd like:
 ...     inputs = image_processor(images=image, return_tensors="pt")
 ...     outputs = model(**inputs)
 ...     target_sizes = torch.tensor([image.size[::-1]])
-...     results = image_processor.post_process_object_detection(outputs, threshold=0.4, target_sizes=target_sizes)[0]
+...     results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[0]
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
 ...     box = [round(i, 2) for i in box.tolist()]
@@ -560,5 +562,24 @@ You can also manually replicate the results of the pipeline if you'd like:
 ...         f"Detected {model.config.id2label[label.item()]} with confidence "
 ...         f"{round(score.item(), 3)} at location {box}"
 ...     )
-Detected Coverall with confidence 0.442 at location [1321.16, 172.77, 4381.91, 3197.9]
+Detected Coverall with confidence 0.566 at location [1215.32, 147.38, 4401.81, 3227.08]
+Detected Mask with confidence 0.584 at location [2449.06, 823.19, 3256.43, 1413.9]
 ```
+
+Let's plot the result:
+```py
+>>> draw = ImageDraw.Draw(image)
+
+>>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+...     box = [round(i, 2) for i in box.tolist()]
+...     x,y,x2,y2 = tuple(box)
+...     draw.rectangle((x,y,x2,y2), outline="red", width=1)
+...     draw.text((x, y), model.config.id2label[label.item()], fill="white")
+
+>>> image
+```
+
+<div class="flex justify-center">
+    <img src="https://i.imgur.com/4QZnf9A.png" alt="Object detection result on a new image"/>
+</div>
+
