@@ -64,8 +64,6 @@ class FocalNetConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        patch_norm (`bool`, *optional*, defaults to True):
-            Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -98,10 +96,8 @@ class FocalNetConfig(PretrainedConfig):
         mlp_ratio=4.0,
         hidden_dropout_prob=0.0,
         drop_path_rate=0.1,
-        patch_norm=True,
         focal_levels=[2, 2, 2, 2],
         focal_windows=[3, 3, 3, 3],
-        use_conv_embed=False,
         use_layerscale=False,
         layerscale_value=1e-4,
         use_post_layernorm=False,
@@ -122,10 +118,8 @@ class FocalNetConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.hidden_dropout_prob = hidden_dropout_prob
         self.drop_path_rate = drop_path_rate
-        self.patch_norm = patch_norm
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
-        self.use_conv_embed = use_conv_embed
         self.use_layerscale = use_layerscale
         self.layerscale_value = layerscale_value
         self.use_post_layernorm = use_post_layernorm

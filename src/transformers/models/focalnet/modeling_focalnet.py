@@ -203,12 +203,6 @@ class FocalNetEmbeddings(nn.Module):
 
 
 class FocalNetPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
     def __init__(self, image_size, patch_size, num_channels, embed_dim, add_norm=False):
         super().__init__()
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
@@ -405,8 +399,6 @@ class FocalNetLayer(nn.Module):
             Dropout rate. Default: 0.0
         drop_path (float, optional):
             Stochastic depth rate. Default: 0.0
-        act_layer (nn.Module, optional):
-            Activation layer. Default: nn.GELU
         norm_layer (nn.Module, optional):
             Normalization layer.  Default: nn.LayerNorm
         focal_level (int):
@@ -429,7 +421,6 @@ class FocalNetLayer(nn.Module):
         mlp_ratio=4.0,
         drop=0.0,
         drop_path=0.0,
-        act_layer=nn.GELU,
         focal_level=1,
         focal_window=3,
         use_layerscale=False,
@@ -441,7 +432,7 @@ class FocalNetLayer(nn.Module):
         super().__init__()
 
         self.config = config
-        
+
         self.dim = dim
         self.input_resolution = input_resolution
         self.mlp_ratio = mlp_ratio
@@ -485,14 +476,17 @@ class FocalNetLayer(nn.Module):
         # FFN
         hidden_state = shortcut + self.drop_path(self.gamma_1 * hidden_state)
         hidden_state = hidden_state + self.drop_path(
-            self.gamma_2 * (self.norm2(self.mlp(hidden_state)) if self.use_post_layernorm else self.mlp(self.norm2(hidden_state)))
+            self.gamma_2
+            * (self.norm2(self.mlp(hidden_state)) if self.use_post_layernorm else self.mlp(self.norm2(hidden_state)))
         )
 
         return hidden_state
 
 
 class FocalNetStage(nn.Module):
-    def __init__(self, config, dim, out_dim, input_resolution, depth, drop, drop_path, focal_level, focal_window, downsample):
+    def __init__(
+        self, config, dim, out_dim, input_resolution, depth, drop, drop_path, focal_level, focal_window, downsample
+    ):
         super().__init__()
         self.config = config
         self.dim = dim
@@ -560,9 +554,11 @@ class FocalNetEncoder(nn.Module):
         super().__init__()
         self.num_stages = len(config.depths)
         self.config = config
-    
+
         # stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]  # stochastic depth decay rule
+        dpr = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))
+        ]  # stochastic depth decay rule
 
         embed_dim = [config.embed_dim * (2**i) for i in range(self.num_stages)]
 
@@ -575,7 +571,7 @@ class FocalNetEncoder(nn.Module):
                     input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
                     depth=config.depths[i_layer],
                     drop=config.hidden_dropout_prob,
-                    drop_path=dpr[sum(config.depths[:i_layer]):sum(config.depths[:i_layer + 1])],
+                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                     focal_level=config.focal_levels[i_layer],
                     focal_window=config.focal_windows[i_layer],
                     downsample=FocalNetPatchEmbeddings if (i_layer < self.num_stages - 1) else None,
