@@ -21,9 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {
-    "configuration_focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig", "FocalNetOnnxConfig"]
-}
+_import_structure = {"configuration_focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig"]}
 
 
 try:
@@ -38,11 +36,10 @@ else:
         "FocalNetForMaskedImageModeling",
         "FocalNetModel",
         "FocalNetPreTrainedModel",
-        "FocalNetBackbone",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig, FocalNetOnnxConfig
+    from .configuration_focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig
 
     try:
         if not is_torch_available():
@@ -52,7 +49,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_focalnet import (
             FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FocalNetBackbone,
             FocalNetForImageClassification,
             FocalNetForMaskedImageModeling,
             FocalNetModel,

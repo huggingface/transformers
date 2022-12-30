@@ -1620,7 +1620,6 @@ else:
     _import_structure["models.focalnet"].extend(
         [
             "FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FocalNetBackbone",
             "FocalNetForImageClassification",
             "FocalNetForMaskedImageModeling",
             "FocalNetModel",
@@ -5166,7 +5165,6 @@ if TYPE_CHECKING:
         )
         from .models.focalnet import (
             FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FocalNetBackbone,
             FocalNetForImageClassification,
             FocalNetForMaskedImageModeling,
             FocalNetModel,

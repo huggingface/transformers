@@ -26,8 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BackboneOutput
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -990,116 +989,4 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
-        )
-
-
-@add_start_docstrings(
-    """
-    FocalNet backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    FOCALNET_START_DOCSTRING,
-)
-class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
-    # Copied from transformers.models.swin.modeling_swin.SwinBackbone.__init__ with Swin->FocalNet
-    def __init__(self, config: FocalNetConfig):
-        super().__init__(config)
-
-        self.stage_names = config.stage_names
-
-        self.embeddings = FocalNetEmbeddings(config)
-        self.encoder = FocalNetEncoder(config, self.embeddings.patch_grid)
-
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-
-        num_features = [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
-        self.out_feature_channels = {}
-        self.out_feature_channels["stem"] = config.embed_dim
-        for i, stage in enumerate(self.stage_names[1:]):
-            self.out_feature_channels[stage] = num_features[i]
-
-        # Add layer norms to hidden states of out_features
-        hidden_states_norms = dict()
-        for stage, num_channels in zip(self.out_features, self.channels):
-            hidden_states_norms[stage] = nn.LayerNorm(num_channels)
-        self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> BackboneOutput:
-        """
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, AutoBackbone
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> processor = AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224")
-        >>> model = AutoBackbone.from_pretrained(
-        ...     "microsoft/focalnet-tiny", out_features=["stage1", "stage2", "stage3", "stage4"]
-        ... )
-
-        >>> inputs = processor(image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> feature_maps = outputs.feature_maps
-        >>> list(feature_maps[-1].shape)
-        [1, 768, 7, 7]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        embedding_output, input_dimensions = self.embeddings(pixel_values)
-
-        outputs = self.encoder(
-            embedding_output,
-            input_dimensions,
-            output_hidden_states=True,
-            output_hidden_states_before_downsampling=True,
-            return_dict=True,
-        )
-
-        hidden_states = outputs.reshaped_hidden_states
-
-        feature_maps = ()
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage in self.out_features:
-                batch_size, num_channels, height, width = hidden_state.shape
-                hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
-                hidden_state = hidden_state.view(batch_size, height * width, num_channels)
-                hidden_state = self.hidden_states_norms[stage](hidden_state)
-                hidden_state = hidden_state.view(batch_size, height, width, num_channels)
-                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-                feature_maps += (hidden_state,)
-
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output += (outputs.hidden_states,)
-            return output
-
-        return BackboneOutput(
-            feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None,
         )
