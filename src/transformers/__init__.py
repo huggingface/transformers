@@ -1780,7 +1780,9 @@ else:
             "MPNetPreTrainedModel",
         ]
     )
-    _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.mt5"].extend(
+        ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model", "MT5PreTrainedModel"]
+    )
     _import_structure["models.mvp"].extend(
         [
             "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4873,7 +4875,7 @@ if TYPE_CHECKING:
             MPNetModel,
             MPNetPreTrainedModel,
         )
-        from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model, MT5PreTrainedModel
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             MvpForCausalLM,
