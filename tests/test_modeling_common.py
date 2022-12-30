@@ -696,7 +696,9 @@ class ModelTesterMixin:
 
         torch._C._jit_clear_class_registry()
         torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
-        torch.jit._state._clear_class_state()
+        # torch 1.8 has no `_clear_class_state` in `torch.jit._state`
+        if hasattr(torch.jit._state, "_clear_class_state"):
+            torch.jit._state._clear_class_state()
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

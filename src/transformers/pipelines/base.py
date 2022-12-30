@@ -748,6 +748,7 @@ class Pipeline(_ScikitCompat):
         task: str = "",
         args_parser: ArgumentHandler = None,
         device: Union[int, str, "torch.device"] = -1,
+        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -771,6 +772,7 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device(f"cuda:{device}")
         else:
             self.device = device
+        self.torch_dtype = torch_dtype
         self.binary_output = binary_output
 
         # Special handling
