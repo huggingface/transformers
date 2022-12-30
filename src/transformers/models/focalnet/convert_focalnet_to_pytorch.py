@@ -19,12 +19,10 @@ import json
 
 import torch
 from PIL import Image
-
-from huggingface_hub import hf_hub_download
-
 from torchvision import transforms
 
 import requests
+from huggingface_hub import hf_hub_download
 from transformers import AutoImageProcessor, FocalNetConfig, FocalNetForImageClassification
 
 
@@ -111,14 +109,16 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path):
 
     # processor = AutoImageProcessor.from_pretrained("microsoft/swin-base-patch4-window7-224-in22k")
     image = Image.open(requests.get(url, stream=True).raw)
-    #inputs = processor(images=image, return_tensors="pt")
+    # inputs = processor(images=image, return_tensors="pt")
 
-    image_transforms = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
+    image_transforms = transforms.Compose(
+        [
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
 
     pixel_values = image_transforms(image).unsqueeze(0)
 
@@ -127,7 +127,11 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path):
     predicted_class_idx = outputs.logits.argmax(-1).item()
     print("Predicted class:", predicted_class_idx)
 
-    # assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
+    print("First values of logits:", outputs.logits[0, :3])
+
+    expected_slice = torch.tensor([0.2166, -0.4368, 0.2191])
+    assert torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor to {pytorch_dump_folder_path}")

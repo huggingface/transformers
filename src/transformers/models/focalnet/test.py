@@ -1,14 +1,17 @@
 import torch
 
-from transformers import FocalNetConfig, FocalNetModel
+from transformers import SwinConfig, SwinModel
 
 
-# Initializing a FocalNet microsoft/focalnet-tiny style configuration
-configuration = FocalNetConfig()
+configuration = SwinConfig()
 
-# Initializing a model (with random weights) from the microsoft/focalnet-tiny style configuration
-model = FocalNetModel(configuration)
+model = SwinModel(configuration)
 
-outputs = model(torch.randn(1, 3, 224, 224))
+pixel_values = torch.randn((1, 3, 1024, 640))
+
+outputs = model(pixel_values, output_hidden_states=True)
 
 print(outputs.keys())
+
+for i in outputs.reshaped_hidden_states:
+    print(i.shape)

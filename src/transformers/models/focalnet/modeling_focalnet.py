@@ -61,10 +61,9 @@ FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->FocalNet
 class FocalNetEncoderOutput(ModelOutput):
     """
-    FocalNet encoder's outputs, with potential hidden states and attentions.
+    FocalNet encoder's outputs, with potential hidden states.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -74,12 +73,7 @@ class FocalNetEncoderOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, hidden_size, height, width)`.
@@ -90,12 +84,10 @@ class FocalNetEncoderOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-# Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->FocalNet
 class FocalNetModelOutput(ModelOutput):
     """
     FocalNet model's outputs that also contains a pooling of the last hidden states.
@@ -110,12 +102,6 @@ class FocalNetModelOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, hidden_size, height, width)`.
@@ -127,12 +113,10 @@ class FocalNetModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-# Copied from transformers.models.swin.modeling_swin.SwinMaskedImageModelingOutput with Swin->FocalNet
 class FocalNetMaskedImageModelingOutput(ModelOutput):
     """
     FocalNet masked image model outputs.
@@ -147,12 +131,6 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, hidden_size, height, width)`.
@@ -164,12 +142,10 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-# Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->FocalNet
 class FocalNetImageClassifierOutput(ModelOutput):
     """
     FocalNet outputs for image classification.
@@ -184,12 +160,6 @@ class FocalNetImageClassifierOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, hidden_size, height, width)`.
@@ -201,7 +171,6 @@ class FocalNetImageClassifierOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -561,35 +530,32 @@ class FocalNetStage(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: Tuple[int, int],
-        output_attentions: Optional[bool] = False,
         print_values=False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
             # TODO use this
-            # layer_outputs = layer_module(hidden_states, input_dimensions, output_attentions)
+            # layer_outputs = layer_module(hidden_states, input_dimensions)
             hidden_states = layer_module(hidden_states, input_dimensions)
             # hidden_states = layer_outputs[0]
 
             if print_values:
-                print(f"Hidden states after block {i}:", hidden_states[0,:3,:3])
+                print(f"Hidden states after block {i}:", hidden_states[0, :3, :3])
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
             H, W = input_dimensions
             hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states_before_downsampling.shape[0], -1, H, W)
             if print_values:
-                print("Hidden states before downsampling:", hidden_states[0,0,:3,:3])
+                print("Hidden states before downsampling:", hidden_states[0, 0, :3, :3])
             hidden_states, output_dimensions = self.downsample(hidden_states)
             if print_values:
-                print("Hidden states after downsampling:", hidden_states[0,:3,:3])
+                print("Hidden states after downsampling:", hidden_states[0, :3, :3])
         else:
             output_dimensions = (height, width, height, width)
 
         stage_outputs = (hidden_states, hidden_states_before_downsampling, output_dimensions)
 
-        if output_attentions:
-            stage_outputs += layer_outputs[1:]
         return stage_outputs
 
 
@@ -624,14 +590,12 @@ class FocalNetEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: Tuple[int, int],
-        output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, FocalNetEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
 
         if output_hidden_states:
             batch_size, _, hidden_size = hidden_states.shape
@@ -646,7 +610,7 @@ class FocalNetEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
+                        return module(*inputs)
 
                     return custom_forward
 
@@ -656,7 +620,7 @@ class FocalNetEncoder(nn.Module):
                     input_dimensions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, input_dimensions, output_attentions, i==0)
+                layer_outputs = layer_module(hidden_states, input_dimensions, i == 0)
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]
@@ -665,7 +629,7 @@ class FocalNetEncoder(nn.Module):
             if i == 0:
                 print("Height and width:", output_dimensions)
                 print(f"Hidden states after layer {i}:", hidden_states.shape)
-                print(f"First values of hidden states after layer {i}:", hidden_states[0,:3,:3])
+                print(f"First values of hidden states after layer {i}:", hidden_states[0, :3, :3])
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
 
@@ -687,16 +651,12 @@ class FocalNetEncoder(nn.Module):
                 all_hidden_states += (hidden_states,)
                 all_reshaped_hidden_states += (reshaped_hidden_state,)
 
-            if output_attentions:
-                all_self_attentions += layer_outputs[3:]
-
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return FocalNetEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
             reshaped_hidden_states=all_reshaped_hidden_states,
         )
 
@@ -747,9 +707,6 @@ FOCALNET_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`AutoImageProcessor.__call__`] for details.
 
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -801,11 +758,9 @@ class FocalNetModel(FocalNetPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FocalNetModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -822,7 +777,6 @@ class FocalNetModel(FocalNetPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -844,7 +798,6 @@ class FocalNetModel(FocalNetPreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
             reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
 
@@ -884,7 +837,6 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FocalNetMaskedImageModelingOutput]:
@@ -922,7 +874,6 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         outputs = self.focalnet(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -958,7 +909,6 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
             loss=masked_im_loss,
             logits=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
 
@@ -998,7 +948,6 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FocalNetImageClassifierOutput]:
@@ -1012,7 +961,6 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
 
         outputs = self.focalnet(
             pixel_values,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1052,7 +1000,6 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
 
@@ -1101,7 +1048,6 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
@@ -1133,14 +1079,12 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         embedding_output, input_dimensions = self.embeddings(pixel_values)
 
         outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            output_attentions=output_attentions,
             output_hidden_states=True,
             output_hidden_states_before_downsampling=True,
             return_dict=True,
@@ -1168,5 +1112,5 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         return BackboneOutput(
             feature_maps=feature_maps,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
+            attentions=None,
         )
