@@ -94,6 +94,7 @@ class FocalNetConfig(PretrainedConfig):
         num_channels=3,
         embed_dim=96,
         depths=[2, 2, 6, 2],
+        hidden_act="gelu",
         mlp_ratio=4.0,
         hidden_dropout_prob=0.0,
         drop_path_rate=0.1,
@@ -117,6 +118,7 @@ class FocalNetConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.embed_dim = embed_dim
         self.depths = depths
+        self.hidden_act = hidden_act
         self.mlp_ratio = mlp_ratio
         self.hidden_dropout_prob = hidden_dropout_prob
         self.drop_path_rate = drop_path_rate

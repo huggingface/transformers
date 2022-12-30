@@ -299,7 +299,7 @@ class FocalNetModulation(nn.Module):
         focal_level,
         focal_factor=2,
         bias=True,
-        proj_drop=0.0,
+        projection_dropout=0.0,
         use_postln_in_modulation=False,
         normalize_modulator=False,
     ):
@@ -317,7 +317,7 @@ class FocalNetModulation(nn.Module):
 
         self.act = nn.GELU()
         self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.projection_dropout = nn.Dropout(projection_dropout)
         self.focal_layers = nn.ModuleList()
 
         self.kernel_sizes = []
@@ -335,16 +335,17 @@ class FocalNetModulation(nn.Module):
         if self.use_postln_in_modulation:
             self.ln = nn.LayerNorm(dim)
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         """
         Args:
-            x: input features with shape of (B, H, W, C)
+            hidden_state:
+                Input features with shape of (batch_size, height, width, num_channels)
         """
-        C = x.shape[-1]
+        num_channels = hidden_state.shape[-1]
 
         # pre linear projection
-        x = self.f(x).permute(0, 3, 1, 2).contiguous()
-        q, ctx, self.gates = torch.split(x, (C, C, self.focal_level + 1), 1)
+        x = self.f(hidden_state).permute(0, 3, 1, 2).contiguous()
+        q, ctx, self.gates = torch.split(x, (num_channels, num_channels, self.focal_level + 1), 1)
 
         # context aggreation
         ctx_all = 0
@@ -367,17 +368,17 @@ class FocalNetModulation(nn.Module):
 
         # post linear porjection
         x_out = self.proj(x_out)
-        x_out = self.proj_drop(x_out)
+        x_out = self.projection_dropout(x_out)
         return x_out
 
 
 class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
+    def __init__(self, config, in_features, hidden_features=None, out_features=None, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
+        self.act = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
@@ -429,7 +430,6 @@ class FocalNetLayer(nn.Module):
         drop=0.0,
         drop_path=0.0,
         act_layer=nn.GELU,
-        norm_layer=nn.LayerNorm,
         focal_level=1,
         focal_window=3,
         use_layerscale=False,
@@ -441,6 +441,7 @@ class FocalNetLayer(nn.Module):
         super().__init__()
 
         self.config = config
+        
         self.dim = dim
         self.input_resolution = input_resolution
         self.mlp_ratio = mlp_ratio
@@ -449,10 +450,10 @@ class FocalNetLayer(nn.Module):
         self.focal_level = focal_level
         self.use_postln = use_postln
 
-        self.norm1 = norm_layer(dim)
+        self.norm1 = nn.LayerNorm(dim)
         self.modulation = FocalNetModulation(
             dim,
-            proj_drop=drop,
+            projection_dropout=drop,
             focal_window=focal_window,
             focal_level=self.focal_level,
             use_postln_in_modulation=use_postln_in_modulation,
@@ -460,9 +461,9 @@ class FocalNetLayer(nn.Module):
         )
 
         self.drop_path = FocalNetDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.norm2 = norm_layer(dim)
+        self.norm2 = nn.LayerNorm(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+        self.mlp = Mlp(config=config, in_features=dim, hidden_features=mlp_hidden_dim, drop=drop)
 
         self.gamma_1 = 1.0
         self.gamma_2 = 1.0
@@ -491,7 +492,7 @@ class FocalNetLayer(nn.Module):
 
 
 class FocalNetStage(nn.Module):
-    def __init__(self, config, dim, out_dim, input_resolution, depth, focal_level, focal_window, downsample):
+    def __init__(self, config, dim, out_dim, input_resolution, depth, drop, drop_path, focal_level, focal_window, downsample):
         super().__init__()
         self.config = config
         self.dim = dim
@@ -502,8 +503,8 @@ class FocalNetStage(nn.Module):
                     dim=dim,
                     input_resolution=input_resolution,
                     mlp_ratio=config.mlp_ratio,
-                    drop=config.hidden_dropout_prob,
-                    drop_path=config.drop_path_rate,
+                    drop=drop,
+                    # drop_path=drop_path,
                     focal_level=focal_level,
                     focal_window=focal_window,
                     use_layerscale=False,
@@ -516,7 +517,6 @@ class FocalNetStage(nn.Module):
             ]
         )
 
-        # patch merging layer
         if downsample is not None:
             self.downsample = downsample(
                 image_size=input_resolution, patch_size=2, num_channels=dim, embed_dim=out_dim, add_norm=True
@@ -526,31 +526,26 @@ class FocalNetStage(nn.Module):
 
         self.pointing = False
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_dimensions: Tuple[int, int],
-        print_values=False,
-    ) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, input_dimensions: Tuple[int, int]) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
-        for i, layer_module in enumerate(self.blocks):
+        for layer_module in self.blocks:
             # TODO use this
             # layer_outputs = layer_module(hidden_states, input_dimensions)
             hidden_states = layer_module(hidden_states, input_dimensions)
             # hidden_states = layer_outputs[0]
 
-            if print_values:
-                print(f"Hidden states after block {i}:", hidden_states[0, :3, :3])
+            # if print_values:
+            #     print(f"Hidden states after block {i}:", hidden_states[0, :3, :3])
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
             H, W = input_dimensions
             hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states_before_downsampling.shape[0], -1, H, W)
-            if print_values:
-                print("Hidden states before downsampling:", hidden_states[0, 0, :3, :3])
+            # if print_values:
+            #     print("Hidden states before downsampling:", hidden_states[0, 0, :3, :3])
             hidden_states, output_dimensions = self.downsample(hidden_states)
-            if print_values:
-                print("Hidden states after downsampling:", hidden_states[0, :3, :3])
+            # if print_values:
+            #     print("Hidden states after downsampling:", hidden_states[0, :3, :3])
         else:
             output_dimensions = (height, width, height, width)
 
@@ -564,8 +559,10 @@ class FocalNetEncoder(nn.Module):
         super().__init__()
         self.num_layers = len(config.depths)
         self.config = config
-        # TODO add drop path
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+    
+        # stochastic depth
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]  # stochastic depth decay rule
+
         embed_dim = [config.embed_dim * (2**i) for i in range(self.num_layers)]
 
         self.layers = nn.ModuleList(
@@ -576,6 +573,8 @@ class FocalNetEncoder(nn.Module):
                     out_dim=embed_dim[i_layer + 1] if (i_layer < self.num_layers - 1) else None,
                     input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
                     depth=config.depths[i_layer],
+                    drop=config.hidden_dropout_prob,
+                    drop_path=dpr[sum(config.depths[:i_layer]):sum(config.depths[:i_layer + 1])],
                     focal_level=config.focal_levels[i_layer],
                     focal_window=config.focal_windows[i_layer],
                     downsample=FocalNetPatchEmbeddings if (i_layer < self.num_layers - 1) else None,
@@ -620,7 +619,7 @@ class FocalNetEncoder(nn.Module):
                     input_dimensions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, input_dimensions, i == 0)
+                layer_outputs = layer_module(hidden_states, input_dimensions)
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]
@@ -737,14 +736,6 @@ class FocalNetModel(FocalNetPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(FOCALNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
