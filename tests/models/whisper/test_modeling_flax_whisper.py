@@ -173,14 +173,7 @@ def prepare_whisper_inputs_dict(
 
 @require_flax
 class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            FlaxWhisperForConditionalGeneration,
-            FlaxWhisperModel,
-        )
-        if is_flax_available()
-        else ()
-    )
+    all_model_classes = (FlaxWhisperForConditionalGeneration, FlaxWhisperModel) if is_flax_available() else ()
     all_generative_model_classes = (FlaxWhisperForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
     test_pruning = False
