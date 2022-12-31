@@ -318,6 +318,15 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れた", "。"],
         )
 
+    @require_jumanpp
+    def test_jumanpp_tokenizer_ext(self):
+        tokenizer = JumanppTokenizer()
+
+        self.assertListEqual(
+            tokenizer.tokenize("ありがとうございますm(_ _)ｍ見つけるのが大変です。"),
+            ["ありがとう", "ございます", "m(_ _)m", "見つける", "の", "が", "大変です", "。"],
+        )
+
     def test_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こんにちは", "こん", "にちは", "ばんは", "##こん", "##にちは", "##ばんは"]
 
