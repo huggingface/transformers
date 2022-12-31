@@ -17,8 +17,6 @@
 import inspect
 import unittest
 
-import pytest
-
 from transformers import is_torch_available, pipeline
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -2118,14 +2116,14 @@ class GenerationIntegrationTests(unittest.TestCase):
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
         output = generator(prompt)
         self.assertEqual(
-         output,
-         [
-             {
-                 "generated_text": (
-                     "Hello I believe in in in number number number number number number number number number"
-                 )
-             }
-         ],
+            output,
+            [
+                {
+                    "generated_text": (
+                        "Hello I believe in in in number number number number number number number number number"
+                    )
+                }
+            ],
         )
 
         output = generator(prompt, stop_sequence=" number")
