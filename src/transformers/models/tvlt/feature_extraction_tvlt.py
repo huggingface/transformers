@@ -21,8 +21,8 @@ import numpy as np
 import torch
 from numpy.fft import fft
 
-from ...feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
-from ...utils import TensorType, logging
+from transformers.feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
+from transformers.utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -48,11 +48,9 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             The masking type of MAE on audio with choices in ['frame-level', 'patch-level']
         sampling_rate (`int`, defaults to 41000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        hop_length (`int`, defaults to 512):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
-        chunk_length (`int`, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
-            sequences.
+        hop_length_to_sampling_rate (`int`, defaults to 86):
+            Hop length is length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients. 
+            For example, with sampling rate 44100, the hop length is 512, with 44100 / 512 = 86
         n_fft (`int`, defaults to 2048):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
@@ -69,8 +67,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         feature_size=128,
         masking_type="frame-level",
         sampling_rate=44100,
-        hop_length=512,
-        chunk_length=30,
+        hop_length_to_sampling_rate=86,
         n_fft=2048,
         padding_value=0.0,
         **kwargs
@@ -81,22 +78,18 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             padding_value=padding_value,
             **kwargs,
         )
-
+        
         self.audio_size = audio_size
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.freq_len = feature_size // self.patch_size[1]
         self.masking_type = "frame-level"
         self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.chunk_length = chunk_length
-        self.n_samples = chunk_length * sampling_rate
-        self.nb_max_frames = self.n_samples // hop_length
+        self.hop_length = sampling_rate // hop_length_to_sampling_rate
         self.sampling_rate = sampling_rate
         self.padding_value = padding_value
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
 
-    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.get_mel_filters
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
         n_mels = int(n_mels)
@@ -107,7 +100,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         # 'Center freqs' of mel bands - uniformly spaced between limits
         min_mel = 0.0
-        max_mel = 45.245640471924965
+        max_mel = 59.99247463746737
 
         mels = np.linspace(min_mel, max_mel, n_mels + 2)
 
@@ -211,7 +204,6 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
         return data.T
 
-    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor._np_extract_fbank_features
     def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
@@ -225,10 +217,12 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         filters = self.mel_filters
         mel_spec = filters @ magnitudes
-
-        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
-        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
+        
+        log_spec = 10.0 * np.log10(np.maximum(1e-10, mel_spec))
+        log_spec -= 10.0 * np.log10(np.maximum(1e-10, 1.0))
+        log_spec = np.maximum(log_spec, log_spec.max() - 80.0)
+        log_spec = log_spec - 20.0
+        log_spec = np.clip(log_spec / 40.0, -2.0, 0.0) + 1.0
 
         return log_spec
 
@@ -267,7 +261,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
-                pipeline.
+                pipeline. Current model supports sampling rate 16000 and 44100.
             resample (`bool`, *optional*):
                 If the sampling rate is not matched, resample the input audio to match.
             mask_audio (`bool`, *optional*):
@@ -288,7 +282,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate"
+                    f"This feature extractor is set to support sampling rate"
                     f" of {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled"
                     f" with {self.sampling_rate} and not {sampling_rate}."
                 )
@@ -333,7 +327,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         # convert into correct format for padding
         max_time_len = max_patch_len // self.freq_len * self.patch_size[0]  # The maximum audio size in a batch
-        padded_audio_features = np.ones([len(audio_features), 1, max_time_len, 128]).astype(np.float32)
+        padded_audio_features = np.ones([len(audio_features), 1, max_time_len, self.feature_size]).astype(np.float32)
         padded_audio_features = padded_audio_features * self.padding_value
         for i in range(len(audio_features)):
             feature = audio_features[i]
