@@ -419,7 +419,9 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
 
-        bad_words_ids = list(filter(lambda bad_token_seq: all([bad_token_seq != [i] for i in eos_token_id]), bad_words_ids))
+        bad_words_ids = list(
+            filter(lambda bad_token_seq: all([bad_token_seq != [i] for i in eos_token_id]), bad_words_ids)
+        )
         self.bad_words_id_length_1 = []
         self.bad_words_id_length_greater_than_1 = []
         for word in bad_words_ids:
@@ -686,7 +688,9 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             The length of the input sequence.
     """
 
-    def __init__(self, exponential_decay_length_penalty: Tuple, eos_token_id: Union[int, List[int]], input_ids_seq_length: int):
+    def __init__(
+        self, exponential_decay_length_penalty: Tuple, eos_token_id: Union[int, List[int]], input_ids_seq_length: int
+    ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
         if isinstance(eos_token_id, int):
@@ -697,9 +701,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         cur_len = input_ids.shape[-1]
         if cur_len > self.regulation_start:
             for i in self.eos_token_id:
-                scores[:, i] = scores[:, i] * pow(
-                    self.regulation_factor, cur_len - self.regulation_start
-                )
+                scores[:, i] = scores[:, i] * pow(self.regulation_factor, cur_len - self.regulation_start)
         return scores
 
 

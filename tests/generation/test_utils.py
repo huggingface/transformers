@@ -39,7 +39,6 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         T5ForConditionalGeneration,
         VisionEncoderDecoderModel,
-        pipeline,
         top_k_top_p_filtering,
     )
     from transformers.generation import (
