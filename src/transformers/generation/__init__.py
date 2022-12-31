@@ -67,7 +67,6 @@ else:
         "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
-        "StopTokenIdStoppingCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
@@ -187,7 +186,6 @@ if TYPE_CHECKING:
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
-            StopTokenIdStoppingCriteria,
             validate_stopping_criteria,
         )
         from .utils import (

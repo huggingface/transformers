@@ -159,37 +159,6 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         output = text_generator(prompt, stop_sequence=" fe")
         self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
 
-    def test_stop_token_ids_stopping_criteria(self):
-        prompt = """Hello I believe in"""
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
-        output = text_generator(prompt)
-        self.assertEqual(
-            output,
-            [{"generated_text": "Hello I believe in fe fe fe fe fe fe fe fe fe fe fe fe"}],
-        )
-        stop_token_ids = text_generator.tokenizer.encode(" fe")
-        output = text_generator(prompt, stop_token_ids=stop_token_ids)
-        self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
-
-    def test_stop_tokens_stopping_criteria(self):
-        prompt = """Hello I believe in"""
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", stop_tokens=[" fe"])
-        output = text_generator(prompt)
-        self.assertEqual(
-            output,
-            [{"generated_text": "Hello I believe in fe"}],
-        )
-
-        prompt = """Hello I believe in"""
-        text_generator = pipeline(
-            "text-generation", model="hf-internal-testing/tiny-random-gpt2", stopping_criteria=[], stop_tokens=[" fe"]
-        )
-        output = text_generator(prompt)
-        self.assertEqual(
-            output,
-            [{"generated_text": "Hello I believe in fe"}],
-        )
-
     def run_pipeline_test(self, text_generator, _):
         model = text_generator.model
         tokenizer = text_generator.tokenizer

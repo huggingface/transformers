@@ -107,39 +107,6 @@ class MaxTimeCriteria(StoppingCriteria):
         return time.time() - self.initial_timestamp > self.max_time
 
 
-class StopTokenIdStoppingCriteria(StoppingCriteria):
-    """
-    This class can be used to stop a generation once the model generates the specified token id.
-
-    Args:
-        stop_token_id (`int`):
-            The stop token id. This corresponds to the token id of the token you would like to stop the generation on.
-        early_stopping (`bool`):
-            If set to `True`, the generation will stop once it detects at least one stop token id.
-            Otherwise, it will wait till it sees at least one stop token id for each example in the batch.
-
-    Examples:
-    ```python
-    >>> stop_token_id = tokenizer.convert_tokens_to_ids('\n')
-    >>> stopping_criteria = StopTokenIdStoppingCriteria(stop_token_id)
-    >>> model.generate(text, stopping_criteria=[stopping_criteria])
-    ```
-    """
-
-    def __init__(self, stop_token_id: int, early_stopping: bool = False):
-        self.stop_token_id = stop_token_id
-        self.early_stopping = early_stopping
-
-    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, score: torch.FloatTensor, **kwargs) -> bool:
-        batch_size = input_ids.shape[0]
-        how_many_finished = ((input_ids[:, -1] == self.stop_token_id).sum() > 0).sum()
-        if self.early_stopping:
-            return how_many_finished > 0
-        else:
-            return how_many_finished == batch_size
-
-
 class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:

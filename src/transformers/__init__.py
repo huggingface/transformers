@@ -4147,7 +4147,6 @@ if TYPE_CHECKING:
             RepetitionPenaltyLogitsProcessor,
             StoppingCriteria,
             StoppingCriteriaList,
-            StopTokenIdStoppingCriteria,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
