@@ -3011,8 +3011,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_eos_token_id_int_and_list_greedy_search(self):
         generation_kwargs = {
-            'do_sample': False,
-            'num_beams': 1,
+            "do_sample": False,
+            "num_beams": 1,
         }
         expectation = 13
 
@@ -3034,10 +3034,10 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_eos_token_id_int_and_list_contrastive_search(self):
         generation_kwargs = {
-            'do_sample': False,
-            'num_beams': 1,
-            'penalty_alpha': 0.6,
-            'top_k': 4,
+            "do_sample": False,
+            "num_beams": 1,
+            "penalty_alpha": 0.6,
+            "top_k": 4,
         }
         expectation = 17
 
@@ -3050,8 +3050,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         eos_token_id = 225
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
-        print('generated_tokens', generated_tokens)
-        print('tokenizer.batch_decode(generated_tokens)', tokenizer.batch_decode(generated_tokens))
         self.assertTrue(expectation == len(generated_tokens[0]))
 
         torch.manual_seed(0)
@@ -3061,11 +3059,11 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):
         generation_kwargs = {
-            'do_sample': True,
-            'num_beams': 1,
-            'top_p': 0.7,
-            'top_k': 10,
-            'temperature': 0.7,
+            "do_sample": True,
+            "num_beams": 1,
+            "top_p": 0.7,
+            "top_k": 10,
+            "temperature": 0.7,
         }
         expectation = 15
 
@@ -3078,8 +3076,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         eos_token_id = 846
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
-        print('generated_tokens', generated_tokens)
-        print('tokenizer.batch_decode(generated_tokens)', tokenizer.batch_decode(generated_tokens))
         self.assertTrue(expectation == len(generated_tokens[0]))
 
         torch.manual_seed(0)
@@ -3089,8 +3085,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_eos_token_id_int_and_list_beam_search(self):
         generation_kwargs = {
-            'do_sample': False,
-            'num_beams': 3,
+            "do_sample": False,
+            "num_beams": 3,
         }
         expectation = 13
 
@@ -3103,12 +3099,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         eos_token_id = 873
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
-        print('generated_tokens', generated_tokens)
-        print('tokenizer.batch_decode(generated_tokens)', tokenizer.batch_decode(generated_tokens))
         self.assertTrue(expectation == len(generated_tokens[0]))
 
         torch.manual_seed(0)
         eos_token_id = [873]
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
-        assert False
