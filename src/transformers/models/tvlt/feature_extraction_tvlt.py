@@ -49,7 +49,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate (`int`, defaults to 41000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         hop_length_to_sampling_rate (`int`, defaults to 86):
-            Hop length is length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients. 
+            Hop length is length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
             For example, with sampling rate 44100, the hop length is 512, with 44100 / 512 = 86
         n_fft (`int`, defaults to 2048):
             Size of the Fourier transform.
@@ -78,7 +78,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             padding_value=padding_value,
             **kwargs,
         )
-        
+
         self.audio_size = audio_size
         self.num_channels = num_channels
         self.patch_size = patch_size
@@ -217,7 +217,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         filters = self.mel_filters
         mel_spec = filters @ magnitudes
-        
+
         log_spec = 10.0 * np.log10(np.maximum(1e-10, mel_spec))
         log_spec -= 10.0 * np.log10(np.maximum(1e-10, 1.0))
         log_spec = np.maximum(log_spec, log_spec.max() - 80.0)
@@ -282,7 +282,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"This feature extractor is set to support sampling rate"
+                    "This feature extractor is set to support sampling rate"
                     f" of {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled"
                     f" with {self.sampling_rate} and not {sampling_rate}."
                 )
