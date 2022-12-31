@@ -329,14 +329,14 @@ class FlaxGenerationMixin:
                 Number of beams for beam search. 1 means no beam search.
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
-            suppress_tokens (`List[int]`, *optional*, defaults to model.config.suppress_tokens):
+            suppress_tokens (`List[int]`, *optional*, defaults to `model.config.suppress_tokens`):
                 A list of tokens that will be supressed at generation. The `FlaxSupressTokensLogitsProcessor` will set
                 their log probs to `-inf` so that they are not sampled.
-            begin_suppress_tokens (`List[int]`, *optional*, defaults to model.config.begin_supress_tokens):
+            begin_suppress_tokens (`List[int]`, *optional*, defaults to `model.config.begin_supress_tokens`):
                 A list of tokens that will be supressed at the begining of the generation. The
                 `FlaxSuppressTokensAtBeginLogitsProcessor` will set their log probs to `-inf` so that they are not
                 sampled.
-            forced_decoder_ids (`List[List[int]]`, *optional*, defaults to model.config.forced_decoder_ids):
+            forced_decoder_ids (`List[List[int]]`, *optional*, defaults to `model.config.forced_decoder_ids`):
                 A list of pairs of integers which indicates a mapping from generation indices to token indices that
                 will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
                 be a token of index 123.
