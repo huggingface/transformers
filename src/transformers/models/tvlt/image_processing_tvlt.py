@@ -47,15 +47,15 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-def make_batched(videos) -> List[List[ImageInput]]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)):
-        return videos
+def make_batched(videos):
 
-    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        return [videos]
-
-    elif is_valid_image(videos):
+    videos_dim = np.array(videos).ndim
+    if videos_dim == 3:
         return [[videos]]
+    elif videos_dim == 4:
+        return [videos]
+    elif videos_dim == 5:
+        return videos
 
     raise ValueError(f"Could not make batched video from {videos}")
 
@@ -284,7 +284,6 @@ class TvltImageProcessor(BaseImageProcessor):
 
         if do_normalize:
             image = self.normalize(image=image, mean=image_mean, std=image_std)
-
         image = to_channel_dimension_format(image, data_format)
         return image
 
@@ -368,7 +367,6 @@ class TvltImageProcessor(BaseImageProcessor):
             - **pixel_mask_pos_perm** -- Pixel MAE masks position permutation to be fed to a model, of shape
               (batch_size, num_pixel_patches).
         """
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
