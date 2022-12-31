@@ -581,7 +581,7 @@ class GenerationMixin:
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id in eos_token_id)
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id not in eos_token_id)
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
