@@ -28,11 +28,21 @@ from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 def get_focalnet_config(model_name):
-    config = FocalNetConfig()
-
-    focal_levels = [3, 3, 3, 3] if "lrf" in model_name else [2, 2, 2, 2]
     focal_windows = [3, 3, 3, 3]
     depths = [2, 2, 6, 2] if "tiny" in model_name else [2, 2, 18, 2]
+    use_conv_embed = True if "large" in model_name or "huge" in model_name else False
+    use_post_layernorm = True if "large" in model_name or "huge" in model_name else False
+    use_layerscale = True if "large" in model_name or "huge" in model_name else False
+
+    if "lrf" in model_name:
+        if "large" in model_name or "huge" in model_name:
+            focal_levels = [4, 4, 4, 4]
+        else:
+            focal_levels = [3, 3, 3, 3]
+    elif "large" in model_name or "huge" in model_name:
+        focal_levels = [3, 3, 3, 3]
+    else:
+        focal_levels = [2, 2, 2, 2]
 
     if "tiny" in model_name:
         embed_dim = 96
@@ -48,17 +58,18 @@ def get_focalnet_config(model_name):
     elif "huge" in model_name:
         depths = (2, 2, 18, 2)
 
+    # set label information
     repo_id = "huggingface/label-files"
-    filename = "imagenet-1k-id2label.json"
+    if "large" in model_name or "huge" in model_name:
+        filename = "imagenet-22k-id2label.json"
+    else:
+        filename = "imagenet-1k-id2label.json"
+
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
-    config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}
+    label2id = {v: k for k, v in id2label.items()}
 
-    config.embed_dim = embed_dim
-    config.depths = depths
-    config.focal_levels = focal_levels
-    config.focal_windows = focal_windows
+    config = FocalNetConfig(embed_dim=embed_dim, depths=depths, focal_levels=focal_levels, focal_windows=focal_windows, use_conv_embed=use_conv_embed, id2label=id2label, label2id=label2id, use_post_layernorm=use_post_layernorm, use_layerscale=use_layerscale)
 
     return config
 
@@ -99,6 +110,7 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         "focalnet-small-lrf": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_small_lrf.pth",
         "focalnet-base": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_base_srf.pth",
         "focalnet-base-lrf": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_base_lrf.pth",
+        "focalnet-large": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_large_lrf_384.pth",
     }
     # fmt: on
 
@@ -166,7 +178,7 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     elif model_name == "focalnet-base":
         expected_slice = torch.tensor([-0.1655, -0.4090, -0.1730])
     elif model_name == "focalnet-base-lrf":
-        expected_slice = torch.tensor([ 0.5306, -0.0483, -0.3928])
+        expected_slice = torch.tensor([0.5306, -0.0483, -0.3928])
     assert torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 

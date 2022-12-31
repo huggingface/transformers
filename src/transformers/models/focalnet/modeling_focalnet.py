@@ -186,6 +186,8 @@ class FocalNetEmbeddings(nn.Module):
             patch_size=config.patch_size,
             num_channels=config.num_channels,
             embed_dim=config.embed_dim,
+            use_conv_embed=config.use_conv_embed,
+            is_stem=True,
         )
         self.patch_grid = self.patch_embeddings.grid_size
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
@@ -212,7 +214,9 @@ class FocalNetEmbeddings(nn.Module):
 
 
 class FocalNetPatchEmbeddings(nn.Module):
-    def __init__(self, image_size, patch_size, num_channels, embed_dim, add_norm=False):
+    def __init__(
+        self, image_size, patch_size, num_channels, embed_dim, add_norm=False, use_conv_embed=False, is_stem=False
+    ):
         super().__init__()
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
@@ -223,7 +227,21 @@ class FocalNetPatchEmbeddings(nn.Module):
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        if use_conv_embed:
+            # if we choose to use conv embedding, then we treat the stem and non-stem differently
+            if is_stem:
+                kernel_size = 7
+                padding = 2
+                stride = 4
+            else:
+                kernel_size = 3
+                padding = 1
+                stride = 2
+            self.projection = nn.Conv2d(
+                num_channels, embed_dim, kernel_size=kernel_size, stride=stride, padding=padding
+            )
+        else:
+            self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
         if add_norm:
             self.norm = nn.LayerNorm(embed_dim)
@@ -511,7 +529,7 @@ class FocalNetStage(nn.Module):
                     # drop_path=drop_path,
                     focal_level=focal_level,
                     focal_window=focal_window,
-                    use_layerscale=False,
+                    use_layerscale=config.use_layerscale,
                     layerscale_value=1e-4,
                     use_post_layernorm=config.use_post_layernorm,
                     use_post_layernorm_in_modulation=config.use_post_layernorm_in_modulation,
@@ -523,7 +541,13 @@ class FocalNetStage(nn.Module):
 
         if downsample is not None:
             self.downsample = downsample(
-                image_size=input_resolution, patch_size=2, num_channels=dim, embed_dim=out_dim, add_norm=True
+                image_size=input_resolution,
+                patch_size=2,
+                num_channels=dim,
+                embed_dim=out_dim,
+                add_norm=True,
+                use_conv_embed=config.use_conv_embed,
+                is_stem=False,
             )
         else:
             self.downsample = None

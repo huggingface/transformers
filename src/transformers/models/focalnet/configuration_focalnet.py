@@ -44,6 +44,9 @@ class FocalNetConfig(PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
+        use_conv_embed (`bool`, *optional*, defaults to `False`):
+            Whether to use convolutional embedding. The authors noted that using convolutional embedding usually improve the performance,
+            but it's not used by default.
         depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
             Depth (number of layers) of each stage in the encoder.
         focal_levels (`list(int)`, *optional*, defaults to [2, 2, 2, 2]):
@@ -98,6 +101,7 @@ class FocalNetConfig(PretrainedConfig):
         patch_size=4,
         num_channels=3,
         embed_dim=96,
+        use_conv_embed=False,
         depths=[2, 2, 6, 2],
         focal_levels=[2, 2, 2, 2],
         focal_windows=[3, 3, 3, 3],
@@ -121,6 +125,7 @@ class FocalNetConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.embed_dim = embed_dim
+        self.use_conv_embed = use_conv_embed
         self.depths = depths
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
