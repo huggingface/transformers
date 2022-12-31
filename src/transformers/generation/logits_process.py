@@ -650,7 +650,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
         cur_len = input_ids.shape[-1]
         if cur_len == self.max_length - 1:
             num_tokens = scores.shape[1]
-            scores[:, [i for i in range(num_tokens) if i in self.eos_token_id]] = -float("inf")
+            scores[:, [i for i in range(num_tokens) if i not in self.eos_token_id]] = -float("inf")
             for i in self.eos_token_id:
                 scores[:, i] = 0
         return scores

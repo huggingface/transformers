@@ -3005,17 +3005,3 @@ class GenerationIntegrationTests(unittest.TestCase):
         # However, valid model_kwargs are accepted
         valid_model_kwargs = {"attention_mask": torch.zeros_like(input_ids)}
         model.generate(input_ids, **valid_model_kwargs)
-
-    def test_stop_token_ids_stopping_criteria(self):
-        prompt = """Hello I believe in"""
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        input_ids = gpt2_tokenizer(prompt, return_tensors="pt").input_ids.to(torch_device)
-
-        stop_token_ids = gpt2_tokenizer.encode(" fe")
-        self.assertEqual(stop_token_ids, [641])
-
-        output = gpt2_model.generate(input_ids=input_ids, stop_token_ids=stop_token_ids)
-        generated_text = gpt2_tokenizer.batch_decode(output)
-
-        self.assertEqual(generated_text, ["Hello I believe in fe"])
