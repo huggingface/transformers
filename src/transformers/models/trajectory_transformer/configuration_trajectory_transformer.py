@@ -136,7 +136,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         kaiming_initializer_range=1,
         use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=1,
         bos_token_id=50256,
         eos_token_id=50256,
