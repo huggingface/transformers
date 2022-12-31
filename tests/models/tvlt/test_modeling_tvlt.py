@@ -650,7 +650,8 @@ class TvltModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_pixel_logits_shape = torch.Size([1, 1568, 768])
         expected_audio_logits_shape = torch.Size([1, 96, 256])
-        expected_matching_logits = torch.tensor([[-0.7539]], device=torch_device)
+        expected_matching_logits = torch.tensor([[-1.0838]], device=torch_device)
+        print(outputs.matching_logits)
 
         self.assertEqual(outputs.pixel_logits.shape, expected_pixel_logits_shape)
         self.assertEqual(outputs.audio_logits.shape, expected_audio_logits_shape)
