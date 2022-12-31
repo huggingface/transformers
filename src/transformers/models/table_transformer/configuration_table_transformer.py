@@ -27,8 +27,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/table-transformer-table-detection": (
-        "https://huggingface.co/microsoft/table-transformer-table-detection/resolve/main/config.json"
+    "microsoft/table-transformer-detection": (
+        "https://huggingface.co/microsoft/table-transformer-detection/resolve/main/config.json"
     ),
 }
 
@@ -38,8 +38,7 @@ class TableTransformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`TableTransformerModel`]. It is used to
     instantiate a Table Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Table Transformer
-    [microsoft/table-transformer-table-detection](https://huggingface.co/microsoft/table-transformer-table-detection)
-    architecture.
+    [microsoft/table-transformer-detection](https://huggingface.co/microsoft/table-transformer-detection) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -117,10 +116,10 @@ class TableTransformerConfig(PretrainedConfig):
     ```python
     >>> from transformers import TableTransformerModel, TableTransformerConfig
 
-    >>> # Initializing a Table Transformer microsoft/table-transformer-table-detection style configuration
+    >>> # Initializing a Table Transformer microsoft/table-transformer-detection style configuration
     >>> configuration = TableTransformerConfig()
 
-    >>> # Initializing a model from the microsoft/table-transformer-table-detection style configuration
+    >>> # Initializing a model from the microsoft/table-transformer-detection style configuration
     >>> model = TableTransformerModel(configuration)
 
     >>> # Accessing the model configuration
@@ -138,7 +137,6 @@ class TableTransformerConfig(PretrainedConfig):
         self,
         num_channels=3,
         num_queries=100,
-        max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=2048,
         encoder_attention_heads=8,
@@ -174,7 +172,6 @@ class TableTransformerConfig(PretrainedConfig):
     ):
         self.num_channels = num_channels
         self.num_queries = num_queries
-        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers

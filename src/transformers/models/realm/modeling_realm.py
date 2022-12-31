@@ -1361,7 +1361,7 @@ class RealmScorer(RealmPreTrainedModel):
         # [batch_size, num_candidates, retriever_proj_size]
         candidate_score = candidate_score.view(-1, self.config.num_candidates, self.config.retriever_proj_size)
         # [batch_size, num_candidates]
-        relevance_score = torch.einsum("BD,BND->BN", query_score, candidate_score)
+        relevance_score = torch.einsum("bd,bnd->bn", query_score, candidate_score)
 
         if not return_dict:
             return relevance_score, query_score, candidate_score

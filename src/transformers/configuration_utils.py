@@ -732,7 +732,7 @@ class PretrainedConfig(PushToHubMixin):
         return json.loads(text)
 
     def __eq__(self, other):
-        return self.__dict__ == other.__dict__
+        return isinstance(other, PretrainedConfig) and (self.__dict__ == other.__dict__)
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
@@ -942,6 +942,7 @@ def get_configuration_file(configuration_files: List[str]) -> str:
 
 
 PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)
-PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
-    object="config", object_class="AutoConfig", object_files="configuration file"
-)
+if PretrainedConfig.push_to_hub.__doc__ is not None:
+    PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
+        object="config", object_class="AutoConfig", object_files="configuration file"
+    )

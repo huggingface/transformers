@@ -836,7 +836,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 1, 57532])
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([24.2731, -6.4522, 32.4130]).to(torch_device)
+        expected_slice = torch.tensor([24.3873, -6.4491, 32.5394]).to(torch_device)
         self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
 
         # step 2: generation
@@ -872,7 +872,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(outputs.scores), 11)
         self.assertTrue(
             torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([5.3153, -3.5276, 13.4781], device=torch_device), atol=1e-4
+                outputs.scores[0][0, :3], torch.tensor([5.6019, -3.5070, 13.7123], device=torch_device), atol=1e-4
             )
         )
 

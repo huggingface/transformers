@@ -16,7 +16,7 @@ from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
 from packaging import version
-from torch import _softmax_backward_data, nn
+from torch import nn
 
 from .utils import logging
 
@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
 is_torch_less_than_1_8 = parsed_torch_version_base < version.parse("1.8.0")
+is_torch_less_than_1_9 = parsed_torch_version_base < version.parse("1.9.0")
 is_torch_greater_or_equal_than_1_10 = parsed_torch_version_base >= version.parse("1.10")
 is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
 
@@ -47,6 +48,8 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
     A function that calls the internal `_softmax_backward_data` PyTorch method and that adjusts the arguments according
     to the torch version detected.
     """
+
+    from torch import _softmax_backward_data
 
     if is_torch_less_than_1_11:
         return _softmax_backward_data(grad_output, output, parent.dim, self)

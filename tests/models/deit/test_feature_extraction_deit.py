@@ -84,6 +84,7 @@ class DeiTFeatureExtractionTester(unittest.TestCase):
 class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     feature_extraction_class = DeiTFeatureExtractor if is_vision_available() else None
+    test_cast_dtype = True
 
     def setUp(self):
         self.feature_extract_tester = DeiTFeatureExtractionTester(self)
