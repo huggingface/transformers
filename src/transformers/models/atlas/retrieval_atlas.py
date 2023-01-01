@@ -106,8 +106,8 @@ class AtlasRetrieverIndex:
 
         passages = self._format_docs(docs, generator_input_ids)
 
-        generator_tokens = self._encode_passages(passages, 512)
-        return generator_tokens
+        tokens = self._encode_passages(passages, 512)
+        return tokens
 
     def _format_docs(self, docs: List[str], generator_input_ids: List[int]):
         # todo: possible to re-use tokenized generator input ids here if non-complex formatting is used
@@ -123,7 +123,7 @@ class AtlasRetrieverIndex:
         n = max([len(example) for example in batch])
         batch = [example + [""] *  (n - len(example)) for example in batch]
         batch = reduce(lambda a, b: a + b, batch)
-        tokens = self.generator_tokenizer(
+        generator_tokens = self.generator_tokenizer(
             batch,
             # Max length padding is needed to reproduce original implementation, but has a performance cost
             # padding="max_length",
@@ -132,6 +132,17 @@ class AtlasRetrieverIndex:
             return_tensors="pt",
             truncation=True,
         )
-        tokens = {k: v.view(bsz, n, -1) for k, v in tokens.items()}
+        generator_tokens = {k: v.view(bsz, n, -1) for k, v in generator_tokens.items()}
         
-        return tokens
+        retriever_tokens = self.retriever_tokenizer(
+            batch,
+            # Max length padding is needed to reproduce original implementation, but has a performance cost
+            # padding="max_length",
+            padding=True,
+            max_length=max_length,
+            return_tensors="pt",
+            truncation=True,
+        )
+        retriever_tokens = {k: v.view(bsz, n, -1) for k, v in retriever_tokens.items()}
+
+        return generator_tokens, retriever_tokens

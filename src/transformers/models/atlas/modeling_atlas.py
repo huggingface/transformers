@@ -20,7 +20,7 @@ from typing import Callable, List, Optional, Tuple, Union
 import torch
 from torch import nn
 from functools import reduce
-
+import numpy as np
 
 from ...configuration_utils import PretrainedConfig
 from ...generation import BeamSearchScorer, LogitsProcessorList, StoppingCriteriaList
@@ -121,76 +121,46 @@ class AtlasModel(AtlasPreTrainedModel):
         labels,
         query_input_ids,
         query_attention_mask,
+        decoder_input_ids=None,
         top_k=5,
     ):
         bsz = len(input_ids)
-        #queries_tokens = self.retriever_tokenizer(queries, return_tensors="pt", padding=True, truncation=True, max_length=512)
 
         query_hidden_states = self.retriever(input_ids=query_input_ids, attention_mask=query_attention_mask)
-        query_hidden_states = query_hidden_states.cpu().detach().numpy()
-        
-        #_, passage_ids = self.index.search_batch("embeddings", query_hidden_states, topk)
-        #docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
-
-        ## todo: move this out to retriever - it's not the model's job to do this and it should be configurable
-        #passages = [[f'{queries[i]} context: {passage}' for passage in doc["text"]] for i, doc in enumerate(docs)]
+        query_hidden_states_numpy = query_hidden_states.cpu().detach().numpy()
 
 
-        # def encode_passages(batch, tokenizer, max_length):
-        #     bsz = len(batch)
-        #     n = max([len(example) for example in batch])
-        #     batch = [example + [""] *  (n - len(example)) for example in batch]
-        #     batch = reduce(lambda a, b: a + b, batch)
-        #     tokens = tokenizer(
-        #         batch,
-        #         padding=True,
-        #         max_length=max_length,
-        #         return_tensors="pt",
-        #         truncation=True,
-        #     )
-        #     tokens = {k: v.view(bsz, n, -1) for k, v in tokens.items()}
-            
-        #     return tokens
-        
-        # reader_tokens = encode_passages(passages, self.generator_tokenizer, 512)
-
-        # <EXTRACT TO CALLER>
-        # labels = self.generator_tokenizer(target, return_tensors="pt", padding=True, truncation=True, max_length=512)['input_ids'].to(self.device)
-        # labels[labels == self.generator_tokenizer.pad_token_id] = -100
-        # </EXTRACT TO CALLER>
-
-        # reader_ids = reader_tokens["input_ids"].to(self.device)  # FIXME (Not added by ae99, TODO figure out why)
-        # reader_mask = reader_tokens["attention_mask"].bool().to(self.device)
-
-        generator_tokens = self.retriever_index(query_hidden_states, input_ids, top_k)
+        generator_tokens, retriever_tokens = self.retriever_index(query_hidden_states_numpy, input_ids, top_k)
         generator_input_ids = generator_tokens["input_ids"]
         generator_attention_mask = generator_tokens["attention_mask"].bool()
-
-        retriever_loss = None
-        # if train_retriever:
-
-        #     query_emb = self.retriever(**query_enc, is_passages=False)
-
-        #     retriever_tokens = {k: v.reshape(-1, v.size(-1)) for k, v in retriever_tokens.items()}
-
-        #     passage_emb = self.retriever(**retriever_tokens, is_passages=True).to(query_emb)
-        #     passage_emb = passage_emb.view(bsz, -1, passage_emb.size(-1))
-        #     retriever_score = torch.einsum("id, ijd->ij", [query_emb, passage_emb])
-
-        #     gold_score = self.perplexity_score(generator_input_ids, generator_attention_mask, decoder_input_ids, labels, cfg, bsz)
-        #     retriever_score = retriever_score / np.sqrt(query_emb.size(-1))
-        #     gold_score = gold_score.float()
-        #     retriever_score = retriever_score.float()
-        #     retriever_loss = self.kldivloss(retriever_score, gold_score)
-
-        #     if self.training:
-        #         self.reader.train()
-
 
         n_context_training = min(top_k, generator_input_ids.size(1))
         cfg = self.generator.encoder.config
         cfg.bsz = generator_input_ids.size(0)
         cfg.n_context = n_context_training
+    
+        train_retriever = True # train_retriever = self.config.query_side_retriever_training and self.training
+
+        retriever_loss = None
+        if train_retriever:
+
+            query_emb = self.retriever(input_ids=query_input_ids, attention_mask=query_attention_mask, is_passages=False)
+            retriever_tokens = {k: v.reshape(-1, v.size(-1)) for k, v in retriever_tokens.items()}
+
+            passage_emb = self.retriever(**retriever_tokens, is_passages=True).to(query_emb)
+            passage_emb = passage_emb.view(bsz, -1, passage_emb.size(-1))
+            retriever_score = torch.einsum("id, ijd->ij", [query_emb, passage_emb])
+
+            gold_score = self.perplexity_score(generator_input_ids, generator_attention_mask, decoder_input_ids, labels, cfg, bsz)
+            retriever_score = retriever_score / np.sqrt(query_emb.size(-1))
+            gold_score = gold_score.float()
+            retriever_score = retriever_score.float()
+            retriever_loss = self.kldivloss(retriever_score, gold_score)
+
+            if self.training:
+                self.generator.train()
+
+
 
         generator_input_ids_training = generator_input_ids[:, :n_context_training].contiguous()
         generator_attention_mask_training = generator_attention_mask[:, :n_context_training].contiguous()
@@ -217,7 +187,7 @@ class AtlasModel(AtlasPreTrainedModel):
     
     @torch.no_grad()
     def generate(self, tokens, query, choices=None):
-        cfg = self.reader.encoder.config
+        cfg = self.generator.encoder.config
         cfg.bsz = tokens["input_ids"].size(0)
         cfg.n_context = min(self.opt.n_context, tokens["input_ids"].size(1))
 
@@ -246,7 +216,7 @@ class AtlasModel(AtlasPreTrainedModel):
 
     def perplexity_score(self, reader_ids, reader_mask, decoder_input_ids, labels, cfg, bsz):
         with torch.no_grad():
-            self.reader.eval()
+            self.generator.eval()
             total_context = reader_ids.size(1)
             cfg.n_context = 1
             cfg.bsz = bsz * total_context
@@ -254,7 +224,7 @@ class AtlasModel(AtlasPreTrainedModel):
             reader_mask_score = reader_mask.view(bsz * total_context, -1)
             repeated_decoder_input_ids = torch.repeat_interleave(decoder_input_ids, total_context, dim=0)
             repeated_labels = torch.repeat_interleave(labels, total_context, dim=0)
-            reader_output = self.reader(
+            reader_output = self.generator(
                 input_ids=reader_ids_score.cuda(),
                 attention_mask=reader_mask_score.cuda(),
                 decoder_input_ids=repeated_decoder_input_ids,
