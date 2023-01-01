@@ -73,23 +73,23 @@ class AtlasRetrieverIndex:
         self.index = dataset_with_index
         self.index.set_format("numpy", columns=["embeddings"], output_all_columns=True, dtype="float32")
     
-    def reindex(self, batch_size: int = 16):
+    def reindex(self, atlas, batch_size: int = 16):
         old_index = self.index.get_index("embeddings")
         device = old_index.device
         string_factory = old_index.string_factory
         metric_type = old_index.metric_type
 
         def reindex(examples):
-            tokenized = self.tokenizer(examples['text'], return_tensors="pt", padding=True, truncation=True, max_length=512)
+            tokenized = self.retriever_tokenizer(examples['text'], return_tensors="pt", padding=True, truncation=True, max_length=512)
 
-            hidden_states = self.retriever.embed_passages(
-                input_ids=tokenized["input_ids"].to(self.device),
-                attention_mask=tokenized["attention_mask"].to(self.device)
+            hidden_states = atlas.retriever.embed_passages(
+                input_ids=tokenized["input_ids"].to(atlas.device),
+                attention_mask=tokenized["attention_mask"].to(atlas.device)
             )
             examples['embeddings'] = hidden_states.cpu().detach().numpy()
             return examples
 
-        self.index = self.index.index.map(reindex, batched=True, batch_size=batch_size)
+        self.index = self.index.map(reindex, batched=True, batch_size=batch_size)
         self.index.add_faiss_index("embeddings", device=device, string_factory=string_factory, metric_type=metric_type)
 
     def __call__(
