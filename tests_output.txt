@@ -1,0 +1,8 @@
+============================= test session starts ==============================
+platform linux -- Python 3.8.13, pytest-7.1.2, pluggy-1.0.0
+rootdir: /home/jy.nam/jy.nam/transformers, configfile: setup.cfg
+plugins: cov-3.0.0, anyio-3.6.1, hydra-core-1.2.0, hypothesis-6.60.0, xdist-3.1.0, timeout-2.1.0, dash-2.7.0
+gw0 I / gw1 I / gw2 I
+gw0 [23800] / gw1 [23800] / gw2 [23800]
+
+s..

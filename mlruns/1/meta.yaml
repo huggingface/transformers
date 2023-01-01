@@ -1,0 +1,4 @@
+artifact_location: /tmp/tmpsktxjbxz
+experiment_id: '1'
+lifecycle_stage: active
+name: glue_no_trainer
