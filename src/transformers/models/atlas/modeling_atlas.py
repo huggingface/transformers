@@ -32,7 +32,7 @@ from .tokenization_atlas import AtlasTokenizer
 
 from .retriever import Contriever, UntiedDualEncoderRetriever, DualEncoderRetriever
 from .fid import FiD
-
+from .retrieval_atlas import AtlasRetrieverIndex
 
 from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends
 
@@ -74,7 +74,7 @@ class AtlasModel(AtlasPreTrainedModel):
         config: Optional[PretrainedConfig] = None,
         retriever: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
-        # index: Optional[Dataset] = None,
+        retriever_index: Optional[AtlasRetrieverIndex] = None,
         **kwargs,
     ):
         requires_backends(self, ["datasets", "faiss"])
@@ -103,49 +103,12 @@ class AtlasModel(AtlasPreTrainedModel):
             from ..auto.modeling_auto import AutoModelForSeq2SeqLM
             generator = FiD(config.generator)
 
-        # self.index = index
-        # if self.index is not None:
-        #     self.set_index(index)
+        if retriever_index is None:
+            raise ValueError("retriever_index is None, from_pretrained not implemented yet.")
 
+        self.retriever_index = retriever_index
         self.retriever = retriever
         self.generator = generator
-
-    # def set_index(self, dataset_with_index: Dataset):
-    #     assert isinstance(
-    #         dataset_with_index, Dataset
-    #     ), f"`dataset_with_index` is of type {type(dataset_with_index)}, but should be of type `Dataset`"
-    #     if len({"id", "text", "embeddings"} - set(dataset_with_index.column_names)) > 0:
-    #         raise ValueError(
-    #             "Dataset should be a dataset with the following columns: "
-    #             "id (str), text (str) and embeddings (arrays of dimension vector_size), "
-    #             f"but got columns {dataset_with_index.column_names}"
-    #         )
-    #     if "embeddings" not in dataset_with_index.list_indexes():
-    #         raise ValueError(
-    #             "Missing faiss index in the dataset. Make sure you called `dataset.add_faiss_index` to compute it "
-    #             "or `dataset.load_faiss_index` to load one from the disk."
-    #         )
-    #     self.index = dataset_with_index
-    #     self.index.set_format("numpy", columns=["embeddings"], output_all_columns=True, dtype="float32")
-    
-    # def reindex(self, batch_size: int = 16):
-    #     old_index = self.index.get_index("embeddings")
-    #     device = old_index.device
-    #     string_factory = old_index.string_factory
-    #     metric_type = old_index.metric_type
-
-    #     def reindex(examples):
-    #         tokenized = self.tokenizer(examples['text'], return_tensors="pt", padding=True, truncation=True, max_length=512)
-
-    #         hidden_states = self.retriever.embed_passages(
-    #             input_ids=tokenized["input_ids"].to(self.device),
-    #             attention_mask=tokenized["attention_mask"].to(self.device)
-    #         )
-    #         examples['embeddings'] = hidden_states.cpu().detach().numpy()
-    #         return examples
-
-    #     self.index = self.index.index.map(reindex, batched=True, batch_size=batch_size)
-    #     self.index.add_faiss_index("embeddings", device=device, string_factory=string_factory, metric_type=metric_type)
 
     # todo
     # - tokenize query with both tokenizers as input rather than in forward pass

@@ -106,7 +106,7 @@ class AtlasRetrieverIndex:
 
         passages = self._format_docs(docs, generator_input_ids)
 
-        generator_tokens = self._encode_passages(passages, self.generator_tokenizer, 512)
+        generator_tokens = self._encode_passages(passages, 512)
         return generator_tokens
 
     def _format_docs(self, docs: List[str], generator_input_ids: List[int]):
