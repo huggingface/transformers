@@ -151,6 +151,9 @@ class AtlasModel(AtlasPreTrainedModel):
             passage_emb = passage_emb.view(bsz, -1, passage_emb.size(-1))
             retriever_score = torch.einsum("id, ijd->ij", [query_emb, passage_emb])
 
+            if decoder_input_ids is None:
+                decoder_input_ids = self.generator._shift_right(labels)
+
             gold_score = self.perplexity_score(generator_input_ids, generator_attention_mask, decoder_input_ids, labels, cfg, bsz)
             retriever_score = retriever_score / np.sqrt(query_emb.size(-1))
             gold_score = gold_score.float()
@@ -181,8 +184,8 @@ class AtlasModel(AtlasPreTrainedModel):
         return retriever_loss, reader_loss
 
     def kldivloss(self, score, gold_score):
-        gold_score = torch.softmax(gold_score / self.opt.temperature_gold, dim=-1)
-        score = torch.nn.functional.log_softmax(score / self.opt.temperature_score, dim=-1)
+        gold_score = torch.softmax(gold_score / self.config.temperature_gold, dim=-1)
+        score = torch.nn.functional.log_softmax(score / self.config.temperature_score, dim=-1)
         return torch.nn.KLDivLoss()(score, gold_score)
     
     @torch.no_grad()
@@ -201,8 +204,8 @@ class AtlasModel(AtlasPreTrainedModel):
             prefix_allowed_tokens_fn = self.get_prefix_allowed_tokens_fn(prefix_str)
 
         outputs = self.generator.generate(
-            input_ids=tokens["input_ids"].cuda(),
-            attention_mask=tokens["attention_mask"].cuda(),
+            input_ids=tokens["input_ids"],
+            attention_mask=tokens["attention_mask"],
             num_return_sequences=1,
             max_length=self.opt.generation_max_length,
             min_length=self.opt.generation_min_length,
@@ -225,8 +228,8 @@ class AtlasModel(AtlasPreTrainedModel):
             repeated_decoder_input_ids = torch.repeat_interleave(decoder_input_ids, total_context, dim=0)
             repeated_labels = torch.repeat_interleave(labels, total_context, dim=0)
             reader_output = self.generator(
-                input_ids=reader_ids_score.cuda(),
-                attention_mask=reader_mask_score.cuda(),
+                input_ids=reader_ids_score,
+                attention_mask=reader_mask_score,
                 decoder_input_ids=repeated_decoder_input_ids,
                 labels=repeated_labels,
                 use_cache=False,
