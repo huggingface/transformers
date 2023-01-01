@@ -116,17 +116,19 @@ class AtlasModel(AtlasPreTrainedModel):
     # - make it possible to separate the retrieval and generation steps
     def forward(
         self,
-        queries,
-        target,
-        target_tokens,
-        topk,
+        input_ids,
+        attention_mask,
+        labels,
+        query_input_ids,
+        query_attention_mask,
+        top_k=5,
     ):
-        bsz = len(queries)
+        bsz = len(input_ids)
         #queries_tokens = self.retriever_tokenizer(queries, return_tensors="pt", padding=True, truncation=True, max_length=512)
 
-        query_hidden_states = self.retriever(input_ids=queries_tokens["input_ids"].to(self.device), attention_mask=queries_tokens["attention_mask"].to(self.device))
-
-        #query_hidden_states = query_hidden_states.cpu().detach().numpy()
+        query_hidden_states = self.retriever(input_ids=query_input_ids, attention_mask=query_attention_mask)
+        query_hidden_states = query_hidden_states.cpu().detach().numpy()
+        
         #_, passage_ids = self.index.search_batch("embeddings", query_hidden_states, topk)
         #docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
 
@@ -153,13 +155,16 @@ class AtlasModel(AtlasPreTrainedModel):
         # reader_tokens = encode_passages(passages, self.generator_tokenizer, 512)
 
         # <EXTRACT TO CALLER>
-        labels = self.generator_tokenizer(target, return_tensors="pt", padding=True, truncation=True, max_length=512)['input_ids'].to(self.device)
-        labels[labels == self.generator_tokenizer.pad_token_id] = -100
+        # labels = self.generator_tokenizer(target, return_tensors="pt", padding=True, truncation=True, max_length=512)['input_ids'].to(self.device)
+        # labels[labels == self.generator_tokenizer.pad_token_id] = -100
         # </EXTRACT TO CALLER>
 
-        reader_ids = reader_tokens["input_ids"].to(self.device)  # FIXME (Not added by ae99, TODO figure out why)
-        reader_mask = reader_tokens["attention_mask"].bool().to(self.device)
+        # reader_ids = reader_tokens["input_ids"].to(self.device)  # FIXME (Not added by ae99, TODO figure out why)
+        # reader_mask = reader_tokens["attention_mask"].bool().to(self.device)
 
+        generator_tokens = self.retriever_index(query_hidden_states, input_ids, top_k)
+        generator_input_ids = generator_tokens["input_ids"]
+        generator_attention_mask = generator_tokens["attention_mask"].bool()
 
         retriever_loss = None
         # if train_retriever:
@@ -172,7 +177,7 @@ class AtlasModel(AtlasPreTrainedModel):
         #     passage_emb = passage_emb.view(bsz, -1, passage_emb.size(-1))
         #     retriever_score = torch.einsum("id, ijd->ij", [query_emb, passage_emb])
 
-        #     gold_score = self.perplexity_score(reader_ids, reader_mask, decoder_input_ids, labels, cfg, bsz)
+        #     gold_score = self.perplexity_score(generator_input_ids, generator_attention_mask, decoder_input_ids, labels, cfg, bsz)
         #     retriever_score = retriever_score / np.sqrt(query_emb.size(-1))
         #     gold_score = gold_score.float()
         #     retriever_score = retriever_score.float()
@@ -182,26 +187,28 @@ class AtlasModel(AtlasPreTrainedModel):
         #         self.reader.train()
 
 
-        n_context_training = min(topk, reader_ids.size(1))
+        n_context_training = min(top_k, generator_input_ids.size(1))
         cfg = self.generator.encoder.config
-        cfg.bsz = reader_ids.size(0)
+        cfg.bsz = generator_input_ids.size(0)
         cfg.n_context = n_context_training
 
-        reader_ids_training = reader_ids[:, :n_context_training].contiguous()
-        reader_mask_training = reader_mask[:, :n_context_training].contiguous()
+        generator_input_ids_training = generator_input_ids[:, :n_context_training].contiguous()
+        generator_attention_mask_training = generator_attention_mask[:, :n_context_training].contiguous()
 
-        reader_ids_training = reader_ids_training.view(reader_ids.size(0), -1)
-        reader_mask_training = reader_mask_training.view(reader_mask.size(0), -1)
+        generator_input_ids_training = generator_input_ids_training.view(generator_input_ids.size(0), -1)
+        generator_attention_mask_training = generator_attention_mask_training.view(generator_attention_mask.size(0), -1)
 
         generator_output = self.generator(
-            input_ids=reader_ids_training,
-            attention_mask=reader_mask_training,
+            input_ids=generator_input_ids_training,
+            attention_mask=generator_attention_mask_training,
             decoder_input_ids=None,
             labels=labels,
             use_cache=False,
         )
 
         reader_loss = generator_output[0]
+
+        return retriever_loss, reader_loss
 
     def kldivloss(self, score, gold_score):
         gold_score = torch.softmax(gold_score / self.opt.temperature_gold, dim=-1)
