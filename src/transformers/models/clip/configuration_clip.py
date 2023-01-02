@@ -39,14 +39,13 @@ CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CLIPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate an CLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the CLIP
+    This is the configuration class to store the configuration of a [`CLIPTextModel`]. It is used to instantiate a CLIP
+    text encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the text encoder of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -149,14 +148,13 @@ class CLIPTextConfig(PretrainedConfig):
 
 class CLIPVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate an CLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the CLIP
+    This is the configuration class to store the configuration of a [`CLIPVisionModel`]. It is used to instantiate a
+    CLIP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -258,8 +256,8 @@ class CLIPVisionConfig(PretrainedConfig):
 class CLIPConfig(PretrainedConfig):
     r"""
     [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate
-    CLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLIP
+    a CLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

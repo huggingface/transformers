@@ -28,17 +28,16 @@ GIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-# Copied from transformers.models.clip.configuration_clip.CLIPVisionConfig with CLIP->Git, clip->git, openai/git-vit-base-patch32->microsoft/git-base, 32->16
+# Copied from transformers.models.clip.configuration_clip.CLIPVisionConfig with CLIPVision->GitVision, CLIP->GIT, clip->git, openai/git-vit-base-patch32->microsoft/git-base, 32->16
 class GitVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GitModel`]. It is used to instantiate an Git
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Git
+    This is the configuration class to store the configuration of a [`GitVisionModel`]. It is used to instantiate a GIT
+    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the vision encoder of the GIT
     [microsoft/git-base](https://huggingface.co/microsoft/git-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -124,7 +123,7 @@ class GitVisionConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from GitConfig
+        # get the vision config dict if we are loading from GITConfig
         if config_dict.get("model_type") == "git":
             config_dict = config_dict["vision_config"]
 
