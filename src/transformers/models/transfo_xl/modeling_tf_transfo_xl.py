@@ -1039,10 +1039,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
 
         return inputs
 
-    @staticmethod
-    def _reorder_cache(mems: List[tf.Tensor], beam_idx: tf.Tensor) -> List[tf.Tensor]:
-        return [tf.gather(layer_past, beam_idx, axis=1) for layer_past in mems]
-
 
 @add_start_docstrings(
     """
