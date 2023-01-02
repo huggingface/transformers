@@ -252,6 +252,8 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         "git-large": "/Users/nielsrogge/Documents/GIT/git_large_model.pt",
         "git-large-coco": "/Users/nielsrogge/Documents/GIT/git_large_coco_model.pt",
         "git-large-textcaps": "/Users/nielsrogge/Documents/GIT/git_large_textcaps_model.pt",
+        "git-large-vqav2": "/Users/nielsrogge/Documents/GIT/git_large_vqav2_model.pt",
+        "git-large-textvqa": "/Users/nielsrogge/Documents/GIT/git_large_textvqa_model.pt",
     }
 
     # define GIT configuration based on model name
@@ -340,18 +342,16 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     elif model_name == "git-large-textcaps":
         expected_slice_logits = torch.tensor([-1.2705, -1.2708, -1.2706])
     elif model_name == "git-large-vqav2":
-        raise NotImplementedError("To do")
+        expected_slice_logits = torch.tensor([-0.7042, -0.7043, -0.7043])
     elif model_name == "git-large-textvqa":
-        raise NotImplementedError("To do")
+        expected_slice_logits = torch.tensor([-0.8590, -0.8592, -0.8590])
     elif model_name == "git-large-vatex":
         raise NotImplementedError("To do")
     elif model_name == "git-large-msrvtt-qa":
         raise NotImplementedError("To do")
 
-    if "vatex" not in model_name:
-        # TODO add logits for VATEX models (due to sampling of frames not deterministic atm)
-        assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
-        print("Looks ok!")
+    assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
+    print("Looks ok!")
 
     prompt = ""
     if "textvqa" in model_name:
