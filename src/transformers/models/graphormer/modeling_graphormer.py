@@ -22,16 +22,15 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from .configuration_graphormer import GraphormerConfig
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    SequenceClassifierOutput,
-)
+from ...modeling_outputs import SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from .configuration_graphormer import GraphormerConfig
+
 
 try:
-    from fairseq.modules import quant_noise, LayerDropModuleList
+    from fairseq.modules import LayerDropModuleList, quant_noise
 
     FAIRSEQ_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
@@ -43,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "graphormer-base-pcqm4mv1"
 _CONFIG_FOR_DOC = "GraphormerConfig"
-_TOKENIZER_FOR_DOC = "GraphormerTokenizer"
 
 
 GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [

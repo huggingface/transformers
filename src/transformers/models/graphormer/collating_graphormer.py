@@ -1,9 +1,10 @@
 # Copyright (c) Microsoft Corporation and HuggingFace
 # Licensed under the MIT License.
 
+from typing import Any, Dict, List, Mapping
+
 import numpy as np
 import torch
-from typing import List, Dict, Any, Mapping
 
 import pyximport
 

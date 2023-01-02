@@ -14,9 +14,10 @@
 # limitations under the License.
 """ Graphormer model configuration """
 
+from typing import Callable
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from typing import Callable
 
 
 logger = logging.get_logger(__name__)

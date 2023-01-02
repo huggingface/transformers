@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    graphormer,
     albert,
     altclip,
     audio_spectrogram_transformer,
@@ -83,6 +82,7 @@ from . import (
     gpt_neox_japanese,
     gpt_sw3,
     gptj,
+    graphormer,
     groupvit,
     herbert,
     hubert,
