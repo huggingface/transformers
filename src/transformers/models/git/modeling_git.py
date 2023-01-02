@@ -1415,7 +1415,59 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
         >>> print(processor.batch_decode(generated_ids, skip_special_tokens=True))
         ['what does the front of the bus say at the top? special']
-        ```"""
+        ```
+
+        Video captioning example:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForCausalLM
+        >>> from PIL import Image
+        >>> import numpy as np
+        >>> from huggingface_hub import hf_hub_download
+        >>> from decord import VideoReader, cpu
+
+        >>> # set seed for reproducability
+        >>> np.random.seed(45)
+
+
+        >>> def sample_frames(file_path, num_frames):
+        ...     def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...         converted_len = int(clip_len * frame_sample_rate)
+        ...         end_idx = np.random.randint(converted_len, seg_len)
+        ...         start_idx = end_idx - converted_len
+        ...         indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...         indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...         return indices
+
+        ...     videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+
+        ...     # sample frames
+        ...     videoreader.seek(0)
+        ...     indices = sample_frame_indices(clip_len=num_frames, frame_sample_rate=4, seg_len=len(videoreader))
+        ...     frames = videoreader.get_batch(indices).asnumpy()
+
+        ...     return list(frames)
+
+
+        >>> # load video
+        >>> file_path = hf_hub_download(
+        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+
+        >>> # sample frames
+        >>> num_frames = model.config.num_image_with_embedding
+        >>> frames = sample_frames(file_path, num_frames)
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
+        >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
+
+        >>> pixel_values = processor(images=frames, return_tensors="pt").pixel_values
+
+        >>> generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
+
+        >>> print("Generated caption:", processor.batch_decode(generated_ids, skip_special_tokens=True))
+        ```
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
