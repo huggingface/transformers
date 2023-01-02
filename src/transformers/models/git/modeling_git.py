@@ -990,11 +990,11 @@ class GitVisionTransformer(nn.Module):
     """The vision model from CLIP, used in GIT, without any head or projection on top.""",
     GIT_START_DOCSTRING,
 )
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP_VISION_INPUTS_DOCSTRING->GIT_VISION_INPUTS_DOCSTRING, CLIP->Git, openai/clip-vit-base-patch32->microsoft/git-base, BaseModelOutputWithPooling->BaseModelOutput
 class GitVisionModel(GitPreTrainedModel):
     config_class = GitVisionConfig
     main_input_name = "pixel_values"
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP->Git
     def __init__(self, config: GitVisionConfig):
         super().__init__(config)
         self.vision_model = GitVisionTransformer(config)
@@ -1021,10 +1021,10 @@ class GitVisionModel(GitPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import GitProcessor, GitVisionModel
+        >>> from transformers import AutoProcessor, GitVisionModel
 
+        >>> processor = AutoProcessor.from_pretrained("microsoft/git-base")
         >>> model = GitVisionModel.from_pretrained("microsoft/git-base")
-        >>> processor = GitProcessor.from_pretrained("microsoft/git-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1033,7 +1033,6 @@ class GitVisionModel(GitPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1184,12 +1183,12 @@ class GitModel(GitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import GitProcessor, GitModel
+        >>> from transformers import AutoProcessor, AutoModel
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
-        >>> model = GitModel.from_pretrained("microsoft/git-base-coco")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/git-base")
+        >>> model = AutoModel.from_pretrained("microsoft/git-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1199,6 +1198,7 @@ class GitModel(GitPreTrainedModel):
         >>> inputs = processor(text, images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1370,13 +1370,15 @@ class GitForCausalLM(GitPreTrainedModel):
 
         Examples:
 
+        Image captioning example:
+
         ```python
-        >>> from transformers import GitProcessor, GitForCausalLM
+        >>> from transformers import AutoProcessor, AutoModelForCausalLM
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
-        >>> model = GitForCausalLM.from_pretrained("microsoft/git-base-coco")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
+        >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1386,7 +1388,32 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
         >>> generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> print(generated_caption)
-        two cats sleeping on a couch with remotes.
+        two cats sleeping on a pink blanket next to remotes.
+        ```
+
+        Visual question answering (VQA) example:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForCausalLM
+        >>> import requests
+        >>> from PIL import Image
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-textvqa")
+        >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-textvqa")
+
+        >>> file_path = hf_hub_download(repo_id="nielsr/textvqa-sample", filename="bus.png", repo_type="dataset")
+        >>> image = Image.open(file_path).convert("RGB")
+
+        >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
+
+        >>> question = "what does the front of the bus say at the top?"
+
+        >>> input_ids = processor(text=question, add_special_tokens=False).input_ids
+        >>> input_ids = [processor.tokenizer.cls_token_id] + input_ids
+        >>> input_ids = torch.tensor(input_ids).unsqueeze(0)
+
+        >>> generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
+        >>> print(processor.batch_decode(generated_ids, skip_special_tokens=True))
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
