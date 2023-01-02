@@ -1426,26 +1426,27 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> from huggingface_hub import hf_hub_download
         >>> from decord import VideoReader, cpu
 
+        >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
+        >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
+
         >>> # set seed for reproducability
         >>> np.random.seed(45)
 
 
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     converted_len = int(clip_len * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     start_idx = end_idx - converted_len
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
+
+
         >>> def sample_frames(file_path, num_frames):
-        ...     def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
-        ...         converted_len = int(clip_len * frame_sample_rate)
-        ...         end_idx = np.random.randint(converted_len, seg_len)
-        ...         start_idx = end_idx - converted_len
-        ...         indices = np.linspace(start_idx, end_idx, num=clip_len)
-        ...         indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
-        ...         return indices
-
         ...     videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
-
-        ...     # sample frames
         ...     videoreader.seek(0)
         ...     indices = sample_frame_indices(clip_len=num_frames, frame_sample_rate=4, seg_len=len(videoreader))
         ...     frames = videoreader.get_batch(indices).asnumpy()
-
         ...     return list(frames)
 
 
@@ -1458,14 +1459,12 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> num_frames = model.config.num_image_with_embedding
         >>> frames = sample_frames(file_path, num_frames)
 
-        >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
-        >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
-
         >>> pixel_values = processor(images=frames, return_tensors="pt").pixel_values
 
         >>> generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
 
         >>> print("Generated caption:", processor.batch_decode(generated_ids, skip_special_tokens=True))
+        Generated caption: ['a woman is sitting at a table and she is talking about the food she is holding.']
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
