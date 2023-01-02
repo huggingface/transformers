@@ -18,10 +18,8 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
+from ...utils import _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
 from ...utils import is_torch_available
-
-
 
 
 _import_structure = {
@@ -51,8 +49,6 @@ else:
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
     from .tokenization_graphormer import GraphormerTokenizer
@@ -77,7 +73,6 @@ if TYPE_CHECKING:
             GraphormerModel,
             GraphormerPreTrainedModel,
         )
-
 
 
 else:

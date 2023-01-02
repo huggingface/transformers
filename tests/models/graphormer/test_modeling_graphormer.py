@@ -40,29 +40,29 @@ if is_torch_available():
 
 class GraphormerModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -154,7 +154,7 @@ class GraphormerModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = GraphormerModel(config=config)
         model.to(torch_device)
@@ -165,16 +165,16 @@ class GraphormerModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.add_cross_attention = True
         model = GraphormerModel(config)
@@ -197,7 +197,7 @@ class GraphormerModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_graph_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = GraphormerForGraphClassification(config)
@@ -224,14 +224,7 @@ class GraphormerModelTester:
 @require_torch
 class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            GraphormerModel,
-            GraphormerForGraphClassification
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (GraphormerModel, GraphormerForGraphClassification) if is_torch_available() else ()
     all_generative_model_classes = ()
 
     def setUp(self):
@@ -334,5 +327,3 @@ class GraphormerModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-

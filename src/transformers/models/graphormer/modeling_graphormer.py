@@ -16,44 +16,26 @@
 
 
 import math
-import copy
-import random
-from typing import Optional, Tuple, List, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from .configuration_graphormer import GraphormerConfig
 from ...activations import ACT2FN
-from ...utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
-    CausalLMOutputWithCrossAttentions
+    SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 
 try:
     from fairseq.modules import quant_noise, LayerDropModuleList
-
     FAIRSEQ_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
     FAIRSEQ_AVAILABLE = False
 assert FAIRSEQ_AVAILABLE, "The Graphormer model requires `pip install fairseq`"
-
-
-from .configuration_graphormer import GraphormerConfig
 
 
 logger = logging.get_logger(__name__)
@@ -90,9 +72,7 @@ class GraphNodeFeature(nn.Module):
         self.num_heads = config.num_attention_heads
         self.num_atoms = config.num_atoms
 
-        self.atom_encoder = nn.Embedding(
-            config.num_atoms + 1, config.hidden_size, padding_idx=config.pad_token_id
-        )
+        self.atom_encoder = nn.Embedding(config.num_atoms + 1, config.hidden_size, padding_idx=config.pad_token_id)
         self.in_degree_encoder = nn.Embedding(
             config.num_in_degree, config.hidden_size, padding_idx=config.pad_token_id
         )
@@ -108,7 +88,7 @@ class GraphNodeFeature(nn.Module):
     def forward(self, batched_data):
         n_graph, n_node = batched_data["x"].size()[:2]
 
-        node_feature = (         # node feauture + graph token
+        node_feature = (  # node feauture + graph token
             self.atom_encoder(batched_data["x"]).sum(dim=-2)  # [n_graph, n_node, n_hidden]
             + self.in_degree_encoder(batched_data["in_degree"])
             + self.out_degree_encoder(batched_data["out_degree"])
@@ -125,29 +105,24 @@ class GraphAttnBias(nn.Module):
     """
     Compute attention bias for each head.
     """
+
     def __init__(self, config):
         super(GraphAttnBias, self).__init__()
         self.num_heads = config.num_attention_heads
         self.multi_hop_max_dist = config.multi_hop_max_dist
 
-        # We do not change edge feature embedding learning, as edge embeddings are represented as a combination of the original features 
-        # + shortest path  
-        self.edge_encoder = nn.Embedding(
-            config.num_edges + 1, config.num_attention_heads, padding_idx=0
-        )
+        # We do not change edge feature embedding learning, as edge embeddings are represented as a combination of the original features
+        # + shortest path
+        self.edge_encoder = nn.Embedding(config.num_edges + 1, config.num_attention_heads, padding_idx=0)
 
         self.edge_type = config.edge_type
         if self.edge_type == "multi_hop":
             self.edge_dis_encoder = nn.Embedding(
-                config.num_edge_dis
-                * config.num_attention_heads
-                * config.num_attention_heads,
+                config.num_edge_dis * config.num_attention_heads * config.num_attention_heads,
                 1,
             )
 
-        self.spatial_pos_encoder = nn.Embedding(
-            config.num_spatial, config.num_attention_heads, padding_idx=0
-        )
+        self.spatial_pos_encoder = nn.Embedding(config.num_spatial, config.num_attention_heads, padding_idx=0)
 
         self.graph_token_virtual_distance = nn.Embedding(1, config.num_attention_heads)
 
@@ -193,21 +168,15 @@ class GraphAttnBias(nn.Module):
             # [n_graph, n_node, n_node, max_dist, n_head]
             edge_input = self.edge_encoder(edge_input).mean(-2)
             max_dist = edge_input.size(-2)
-            edge_input_flat = edge_input.permute(3, 0, 1, 2, 4).reshape(
-                max_dist, -1, self.num_heads
-            )
+            edge_input_flat = edge_input.permute(3, 0, 1, 2, 4).reshape(max_dist, -1, self.num_heads)
             edge_input_flat = torch.bmm(
                 edge_input_flat,
-                self.edge_dis_encoder.weight.reshape(
-                    -1, self.num_heads, self.num_heads
-                )[:max_dist, :, :],
+                self.edge_dis_encoder.weight.reshape(-1, self.num_heads, self.num_heads)[:max_dist, :, :],
             )
-            edge_input = edge_input_flat.reshape(
-                max_dist, n_graph, n_node, n_node, self.num_heads
-            ).permute(1, 2, 3, 0, 4)
-            edge_input = (
-                edge_input.sum(-2) / (spatial_pos_.float().unsqueeze(-1))
-            ).permute(0, 3, 1, 2)
+            edge_input = edge_input_flat.reshape(max_dist, n_graph, n_node, n_node, self.num_heads).permute(
+                1, 2, 3, 0, 4
+            )
+            edge_input = (edge_input.sum(-2) / (spatial_pos_.float().unsqueeze(-1))).permute(0, 3, 1, 2)
         else:
             # [n_graph, n_node, n_node, n_head] -> [n_graph, n_head, n_node, n_node]
             edge_input = self.edge_encoder(attn_edge_type).mean(-2).permute(0, 3, 1, 2)
@@ -227,11 +196,9 @@ class MultiheadAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embedding_dim = config.embedding_dim
-        self.kdim = kdim if config.kdim is not None else config.embedding_dim
-        self.vdim = vdim if config.vdim is not None else config.embedding_dim
-        self.qkv_same_dim = (
-            self.kdim == config.embedding_dim and self.vdim == config.embedding_dim
-        )
+        self.kdim = config.kdim if config.kdim is not None else config.embedding_dim
+        self.vdim = config.vdim if config.vdim is not None else config.embedding_dim
+        self.qkv_same_dim = self.kdim == config.embedding_dim and self.vdim == config.embedding_dim
 
         self.num_heads = config.num_attention_heads
         self.dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
@@ -240,14 +207,14 @@ class MultiheadAttention(nn.Module):
         assert (
             self.head_dim * config.num_attention_heads == self.embedding_dim
         ), "embedding_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         self.self_attention = True  # config.self_attention
         assert self.self_attention, "Only support self attention"
 
-        assert not self.self_attention or self.qkv_same_dim, (
-            "Self-attention requires query, key and " "value to be of the same size"
-        )
+        assert (
+            not self.self_attention or self.qkv_same_dim
+        ), "Self-attention requires query, key and value to be of the same size"
 
         self.k_proj = quant_noise(
             nn.Linear(self.kdim, config.embedding_dim, bias=config.bias),
@@ -325,9 +292,7 @@ class MultiheadAttention(nn.Module):
 
         tgt_len, bsz, embedding_dim = query.size()
         src_len = tgt_len
-        assert (
-            embedding_dim == self.embedding_dim
-        ), f"query dim {embedding_dim} != {self.embedding_dim}"
+        assert embedding_dim == self.embedding_dim, f"query dim {embedding_dim} != {self.embedding_dim}"
         assert list(query.size()) == [tgt_len, bsz, embedding_dim]
         if key is not None:
             src_len, key_bsz, _ = key.size()
@@ -337,27 +302,15 @@ class MultiheadAttention(nn.Module):
                 assert src_len, bsz == value.shape[:2]
 
         q = self.q_proj(query)
-        k = self.k_proj(query) # shouldn't this be key
-        v = self.v_proj(query) # and here value?
+        k = self.k_proj(query)  # shouldn't this be key
+        v = self.v_proj(query)  # and here value?
         q *= self.scaling
 
-        q = (
-            q.contiguous()
-            .view(tgt_len, bsz * self.num_heads, self.head_dim)
-            .transpose(0, 1)
-        )
+        q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
-            k = (
-                k.contiguous()
-                .view(-1, bsz * self.num_heads, self.head_dim)
-                .transpose(0, 1)
-            )
+            k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if v is not None:
-            v = (
-                v.contiguous()
-                .view(-1, bsz * self.num_heads, self.head_dim)
-                .transpose(0, 1)
-            )
+            v = v.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
         assert k is not None
         assert k.size(1) == src_len
@@ -406,11 +359,7 @@ class MultiheadAttention(nn.Module):
 
         attn_weights: Optional[torch.Tensor] = None
         if need_weights:
-            attn_weights = (
-                attn_weights_float.contiguous()
-                .view(bsz, self.num_heads, tgt_len, src_len)
-                .transpose(1, 0)
-            )
+            attn_weights = attn_weights_float.contiguous().view(bsz, self.num_heads, tgt_len, src_len).transpose(1, 0)
             if not need_head_weights:
                 # average attention weights over heads
                 attn_weights = attn_weights.mean(dim=0)
@@ -419,6 +368,7 @@ class MultiheadAttention(nn.Module):
 
     def apply_sparse_mask(self, attn_weights, tgt_len: int, src_len: int, bsz: int):
         return attn_weights
+
 
 class GraphormerGraphEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
@@ -437,9 +387,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
 
         self.dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
 
-        self.activation_dropout_module = torch.nn.Dropout(
-            p=config.dropout, inplace=False
-        )
+        self.activation_dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
 
         # Initialize blocks
         self.activation_fn = ACT2FN[config.activation_fn]
@@ -517,7 +465,7 @@ def init_graphormer_params(module):
     def normal_(data):
         # with FSDP, module params will be on CUDA, so we cast them back to CPU
         # so that the RNG is consistent with and without FSDP
-        #data.copy_(data.cpu().normal_(mean=0.0, std=0.02).to(data.device))
+        # data.copy_(data.cpu().normal_(mean=0.0, std=0.02).to(data.device))
         data.normal_(mean=0.0, std=0.02)
 
     if isinstance(module, nn.Linear):
@@ -549,10 +497,10 @@ class GraphormerGraphEncoder(nn.Module):
         self.embed_scale = config.embed_scale
 
         if config.q_noise > 0:
-            self.quant_noise = apply_quant_noise_(
+            self.quant_noise = quant_noise(
                 nn.Linear(self.embedding_dim, self.embedding_dim, bias=False),
                 config.q_noise,
-                CONFIG.qn_block_size,
+                config.qn_block_size,
             )
         else:
             self.quant_noise = None
@@ -569,9 +517,7 @@ class GraphormerGraphEncoder(nn.Module):
             self.layers = LayerDropModuleList(p=self.layerdrop)
         else:
             self.layers = nn.ModuleList([])
-        self.layers.extend(
-            [GraphormerGraphEncoderLayer(config) for _ in range(config.num_layers)]
-        )
+        self.layers.extend([GraphormerGraphEncoderLayer(config) for _ in range(config.num_layers)])
 
         # Apply initialization of model params after building the model
         if self.apply_graphormer_init:
@@ -598,9 +544,7 @@ class GraphormerGraphEncoder(nn.Module):
         data_x = batched_data["x"]
         n_graph, n_node = data_x.size()[:2]
         padding_mask = (data_x[:, :, 0]).eq(0)  # B x T x 1
-        padding_mask_cls = torch.zeros(
-            n_graph, 1, device=padding_mask.device, dtype=padding_mask.dtype
-        )
+        padding_mask_cls = torch.zeros(n_graph, 1, device=padding_mask.device, dtype=padding_mask.dtype)
         padding_mask = torch.cat((padding_mask_cls, padding_mask), dim=1)
         # B x (T+1) x 1
 
@@ -670,9 +614,7 @@ class GraphormerEncoder(nn.Module):
         # Remove head is set to true during fine-tuning
         self.load_softmax = not getattr(config, "remove_head", False)
 
-        self.lm_head_transform_weight = nn.Linear(
-            config.embedding_dim, config.embedding_dim
-        )
+        self.lm_head_transform_weight = nn.Linear(config.embedding_dim, config.embedding_dim)
         self.activation_fn = ACT2FN[config.activation_fn]
         self.layer_norm = nn.LayerNorm(config.embedding_dim)
 
@@ -694,16 +636,15 @@ class GraphormerEncoder(nn.Module):
         x = self.layer_norm(self.activation_fn(self.lm_head_transform_weight(x)))
 
         # project back to size of vocabulary
-        if self.share_input_output_embed and hasattr(
-            self.graph_encoder.embed_tokens, "weight"
-        ):
-            x = F.linear(x, self.graph_encoder.embed_tokens.weight)
+        if self.share_input_output_embed and hasattr(self.graph_encoder.embed_tokens, "weight"):
+            x = torch.nn.functional.linear(x, self.graph_encoder.embed_tokens.weight)
 
         return x
 
     def max_nodes(self):
         """Maximum output length supported by the encoder."""
         return self.max_nodes
+
 
 class GraphormerDecoderHead(nn.Module):
     def __init__(self, embedding_dim, num_classes):
@@ -724,6 +665,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = GraphormerConfig
     base_model_prefix = "graphormer"
     supports_gradient_checkpointing = True
@@ -763,9 +705,6 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
 
         self.classifier = GraphormerDecoderHead(self.embedding_dim, config.num_labels)
 
-        self.decoder_heads = torch.nn.ModuleDict(heads)
-
-
     def forward(
         self,
         x,
@@ -800,21 +739,16 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         logits = head_outputs[:, 0, :].contiguous()
 
         if labels is not None:
-            mask = ~torch.isnan(cur_labels)
+            mask = ~torch.isnan(labels)
 
-            if self.classifier.num_classes == 1: # regression
+            if self.classifier.num_classes == 1:  # regression
                 loss_fct = MSELoss()
                 loss = loss_fct(logits[mask].squeeze(), labels[mask].squeeze().float())
-            elif self.classifier.num_classes > 1 and len(labels.shape) == 1: # One task classification
+            elif self.classifier.num_classes > 1 and len(labels.shape) == 1:  # One task classification
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits[mask].view(-1, self.classifier.num_classes), labels[mask].view(-1))
-            else: # Binary multi-task classification
+            else:  # Binary multi-task classification
                 loss_fct = BCEWithLogitsLoss(reduction="sum")
                 loss = loss_fct(logits[mask], labels[mask])
 
-        return SequenceClassifierOutput(
-            loss=loss, 
-            logits=logits, 
-            hidden_states=None, 
-            attentions=None
-        )
+        return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=None, attentions=None)

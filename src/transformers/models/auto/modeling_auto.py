@@ -547,7 +547,6 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-
         ("bart", "BartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("blenderbot", "BlenderbotForConditionalGeneration"),

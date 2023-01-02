@@ -91,7 +91,7 @@ class GraphormerConfig(PretrainedConfig):
         embed_scale(`float`, *optional*, defaults to None):
             TODO
         num_trans_layers_to_freeze (`int`, *optional*, defaults to 0):
-            Number of transformer layers to freeze 
+            Number of transformer layers to freeze
         encoder_normalize_before (`bool`, *optional*, defaults to False):
             Normalize features before encoding the graph.
         pre_layernorm (`bool`, *optional*, defaults to False):
@@ -114,7 +114,7 @@ class GraphormerConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         export (`bool`, *optional*, defaults to False):
             TODO
-        traceable (`bool`, *optional*, defaults to False): 
+        traceable (`bool`, *optional*, defaults to False):
             TODO
         Example:
 
@@ -129,16 +129,15 @@ class GraphormerConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "graphormer"
     keys_to_ignore_at_inference = ["past_key_values"]
-    
+
     def __init__(
         self,
         num_classes: int = 2,
         num_atoms: int = 512 * 9,
-        num_edges: int = 512 * 3,  
+        num_edges: int = 512 * 3,
         num_in_degree: int = 512,
         num_out_degree: int = 512,
         num_spatial: int = 512,
@@ -171,7 +170,7 @@ class GraphormerConfig(PretrainedConfig):
         kdim: int = None,
         vdim: int = None,
         bias: bool = True,
-        self_attention: bool = True,        
+        self_attention: bool = True,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -224,32 +223,29 @@ class GraphormerConfig(PretrainedConfig):
             **kwargs,
         )
 
+
 class GraphormerConfigSmall(GraphormerConfig):
-    def __init__(
-        self, **kwargs
-    ): 
+    def __init__(self, **kwargs):
         super().__init__(
-            share_encoder_input_output_embed = False, 
-            num_layers = 2, 
-            embedding_dim = 120, 
-            ffn_embedding_dim = 120, 
-            num_attention_heads = 3, 
-            dropout = 0.1, 
-            attention_dropout = 0.1, 
-            activation_dropout = 0.0, 
-            encoder_normalize_before = True, 
-            pre_layernorm = False, 
-            apply_graphormer_init = True, 
-            activation_fn = "gelu",
+            share_encoder_input_output_embed=False,
+            num_layers=2,
+            embedding_dim=120,
+            ffn_embedding_dim=120,
+            num_attention_heads=3,
+            dropout=0.1,
+            attention_dropout=0.1,
+            activation_dropout=0.0,
+            encoder_normalize_before=True,
+            pre_layernorm=False,
+            apply_graphormer_init=True,
+            activation_fn="gelu",
             no_token_positional_embeddings=False,
             **kwargs,
         )
 
 
 class GraphormerConfigBase(GraphormerConfig):
-    def __init__(
-        self, **kwargs
-    ): 
+    def __init__(self, **kwargs):
         super().__init__(
             share_input_output_embed=False,
             num_layers=12,
@@ -269,9 +265,7 @@ class GraphormerConfigBase(GraphormerConfig):
 
 
 class GraphormerConfigSlim(GraphormerConfig):
-    def __init__(
-        self
-    ): 
+    def __init__(self, **kwargs):
         super().__init__(
             share_input_output_embed=False,
             num_layers=12,
@@ -291,9 +285,7 @@ class GraphormerConfigSlim(GraphormerConfig):
 
 
 class GraphormerConfigLarge(GraphormerConfig):
-    def __init__(
-        self
-    ):
+    def __init__(self, **kwargs):
         super().__init__(
             share_input_output_embed=False,
             num_layers=24,
