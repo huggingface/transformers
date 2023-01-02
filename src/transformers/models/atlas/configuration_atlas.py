@@ -100,6 +100,8 @@ class AtlasConfig(PretrainedConfig):
         closed_book=False,
         forced_eos_token_id=None,
         query_side_retriever_training=False,
+        temperature_gold = 0.01,
+        temperature_score = 0.01,
         **kwargs
     ):
         super().__init__(
@@ -140,6 +142,9 @@ class AtlasConfig(PretrainedConfig):
         # pass to enable query-side finetuning of retriever (unties the parameters of the contriever encoder's
         # passage and query encoders, and freezes the passage encoder. Useful to avoid index refreshes.
         self.query_side_retriever_training = query_side_retriever_training
+
+        self.temperature_gold = temperature_gold
+        self.temperature_score = temperature_score
 
         # if self.forced_eos_token_id is None:
         #     self.forced_eos_token_id = getattr(self.generator, "forced_eos_token_id", None)

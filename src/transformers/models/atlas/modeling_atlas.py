@@ -155,7 +155,7 @@ class AtlasModel(AtlasPreTrainedModel):
 
         reader_loss = generator_output[0]
 
-        train_retriever = True # train_retriever = self.config.query_side_retriever_training and self.training
+        train_retriever = self.config.query_side_retriever_training and self.training
 
         retriever_loss = None
         if train_retriever:
