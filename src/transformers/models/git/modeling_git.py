@@ -1188,8 +1188,8 @@ class GitModel(GitPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = GitProcessor.from_pretrained("nielsr/git-base-coco")
-        >>> model = GitModel.from_pretrained("nielsr/git-base-coco")
+        >>> processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
+        >>> model = GitModel.from_pretrained("microsoft/git-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1375,8 +1375,8 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = GitProcessor.from_pretrained("nielsr/git-base-coco")
-        >>> model = GitForCausalLM.from_pretrained("nielsr/git-base-coco")
+        >>> processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
+        >>> model = GitForCausalLM.from_pretrained("microsoft/git-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

@@ -258,7 +258,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     # define GIT configuration based on model name
     config, image_size, is_video = get_git_config(model_name)
-    if "large" in model_name:
+    if "large" in model_name and not is_video:
         # large checkpoints take way too long to download
         checkpoint_path = model_name_to_path[model_name]
         state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
@@ -346,9 +346,9 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     elif model_name == "git-large-textvqa":
         expected_slice_logits = torch.tensor([-0.8590, -0.8592, -0.8590])
     elif model_name == "git-large-vatex":
-        raise NotImplementedError("To do")
+        expected_slice_logits = torch.tensor([-1.0113, -1.0114, -1.0113])
     elif model_name == "git-large-msrvtt-qa":
-        raise NotImplementedError("To do")
+        expected_slice_logits = torch.tensor([0.0130, 0.0134, 0.0131])
 
     assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")
