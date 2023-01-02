@@ -70,6 +70,7 @@ model.freeze_embeddings_and_language_adapters()
 
 ### Cross-lingual transfer
 After fine-tuning, zero-shot cross-lingual transfer can be tested by activating the language adapter of the target language:
+
 ```python
 model.set_default_language("de_DE")
 # Evaluate the model on German examples ...
