@@ -183,7 +183,8 @@ def read_in_q_k_v(state_dict, config, prefix=""):
 # We will verify our results on an image
 def prepare_img(model_name):
     if "textvqa" in model_name:
-        image = Image.open("/Users/nielsrogge/Desktop/bus.png").convert("RGB")
+        filepath = hf_hub_download(repo_id="nielsr/textvqa-sample", filename="bus.png", repo_type="dataset")
+        image = Image.open(filepath).convert("RGB")
     else:
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
@@ -251,8 +252,6 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     # define GIT configuration based on model name
     config, image_size = get_git_config(model_name)
-    # define GIT configuration based on model name
-    config, image_size = get_git_config(model_name)
     if "large" in model_name:
         # large checkpoints take way too long to download
         checkpoint_path = model_name_to_path[model_name]
@@ -281,7 +280,13 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     assert unexpected_keys == ["git.image_encoder.visual_projection.weight"]
 
     # verify results
-    image_processor = VideoMAEImageProcessor() if "vatex" in model_name else CLIPImageProcessor()
+    image_processor = (
+        VideoMAEImageProcessor()
+        if "vatex" in model_name
+        else CLIPImageProcessor(
+            size={"shortest_edge": image_size}, crop_size={"height": image_size, "width": image_size}
+        )
+    )
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", model_input_names=["input_ids", "attention_mask"])
     processor = GitProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
@@ -299,7 +304,10 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
                 Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
             ]
         )
-        pixel_values = image_transforms(image).unsqueeze(0)
+        original_pixel_values = image_transforms(image).unsqueeze(0)
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values
+
+        assert torch.allclose(pixel_values, original_pixel_values)
 
     input_ids = torch.tensor([[101]])
     outputs = model(input_ids, pixel_values=pixel_values)
@@ -316,6 +324,11 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         expected_slice_logits = torch.tensor([-0.8570, -0.8568, -0.8561])
     elif model_name == "git-base-textvqa":
         expected_slice_logits = torch.tensor([-1.4085, -1.4083, -1.4082])
+    # below: todo
+    elif model_name == "git-base-vatex":
+        raise NotImplementedError("To do")
+    elif model_name == "git-base-msrvtt-qa":
+        raise NotImplementedError("To do")
     elif model_name == "git-large":
         expected_slice_logits = torch.tensor([-1.1708, -1.1707, -1.1705])
     elif model_name == "git-large-coco":
@@ -328,33 +341,17 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
         print("Looks ok!")
 
-    print("Generating caption...")
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    # predicted_ids = []
-    # for i in range(30):
-    #     outputs = model(pixel_values=pixel_values, input_ids=input_ids)
-    #     logits = outputs.logits[:, -1, :]
-    #     # perform argmax on the last dimension (i.e. greedy decoding)
-    #     predicted_id = logits.argmax(-1)
-    #     predicted_ids.append(predicted_id.item())
-    #     print(tokenizer.decode([predicted_id.squeeze()]))
-    #     # print("Predicted id:", predicted_id)
-    #     # add predicted id to input_ids
-    #     input_ids = torch.cat([input_ids, predicted_id.unsqueeze(0)], dim=1)
-
-    # print("Generated caption:", tokenizer.batch_decode(predicted_ids, skip_special_tokens=True))
-
     prompt = ""
     if "textvqa" in model_name:
         prompt = "what does the front of the bus say at the top?"
     elif "vqa" in model_name:
         prompt = "what are the cats doing?"
     input_ids = tokenizer(prompt, add_special_tokens=False).input_ids
-    input_ids = [tokenizer.cls_token_id] + input_ids
+    input_ids = [processor.tokenizer.cls_token_id] + input_ids
     input_ids = torch.tensor(input_ids).unsqueeze(0)
-    print("Prompt:", tokenizer.decode(input_ids[0]) if input_ids is not None else None)
+    print("Generating caption...")
     generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
-    print("Generated caption:", tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
+    print("Generated caption:", processor.batch_decode(generated_ids, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
