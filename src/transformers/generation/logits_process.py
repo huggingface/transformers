@@ -124,6 +124,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing a min-length of new tokens by setting EOS (End-Of-Sequence) token probability to 0.
+
     Args:
         prompt_length_to_skip (`int`):
             The input tokens length.
@@ -135,8 +136,11 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 
     def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: int):
 
-        for arg_name, arg_value in [("prompt_length_to_skip", prompt_length_to_skip),
-                                    ("min_new_tokens", min_new_tokens), ("eos_token_id", eos_token_id)]:
+        for arg_name, arg_value in [
+            ("prompt_length_to_skip", prompt_length_to_skip),
+            ("min_new_tokens", min_new_tokens),
+            ("eos_token_id", eos_token_id),
+        ]:
             if not isinstance(arg_value, int) or arg_value < 0:
                 raise ValueError(f"`{arg_name}` has to be a positive integer, but is {arg_value}")
 
