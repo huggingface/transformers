@@ -262,7 +262,7 @@ def _compute_mask_indices(
     if mask_length < 1:
         raise ValueError("`mask_length` has to be bigger than 0.")
 
-    tf.debugging.assert_greater(
+    tf.debugging.assert_less(
         mask_length,
         sequence_length,
         message=(
