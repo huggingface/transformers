@@ -32,6 +32,7 @@ from ...utils import logging
 
 try:
     from fairseq.modules import quant_noise, LayerDropModuleList
+
     FAIRSEQ_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
     FAIRSEQ_AVAILABLE = False
