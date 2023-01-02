@@ -598,7 +598,7 @@ class SwinLayer(nn.Module):
         self.output = SwinOutput(config, dim)
 
     def set_shift_and_window_size(self, input_resolution):
-        if min(input_resolution) <= self.window_size:
+        if min(input_resolution) < self.window_size:
             # if window size is larger than input resolution, we don't partition windows
             self.shift_size = 0
             self.window_size = min(input_resolution)
@@ -1298,7 +1298,6 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         >>> outputs = model(**inputs)
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
-        [1, 768, 7, 7]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

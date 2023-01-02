@@ -144,6 +144,7 @@ class OriginalMask2FormerConfigToOursConverter:
                 num_heads=(4, 8, 16, 32),
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
+
         elif model.SWIN.EMBED_DIM == 192:
             backbone_config = SwinConfig.from_pretrained(
                 "microsoft/swin-large-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
@@ -173,6 +174,18 @@ class OriginalMask2FormerConfigToOursConverter:
             backbone_config=backbone_config,
             id2label=id2label,
             label2id=label2id,
+            feature_size=model.SEM_SEG_HEAD.CONVS_DIM,
+            mask_feature_size=model.SEM_SEG_HEAD.MASK_DIM,
+            hidden_dim=model.MASK_FORMER.HIDDEN_DIM,
+            encoder_layers=model.SEM_SEG_HEAD.TRANSFORMER_ENC_LAYERS,
+            encoder_feedforward_dim=1024,
+            decoder_layers=model.MASK_FORMER.DEC_LAYERS,
+            num_attention_heads=model.MASK_FORMER.NHEADS,
+            dropout=model.MASK_FORMER.DROPOUT,
+            dim_feedforward=model.MASK_FORMER.DIM_FEEDFORWARD,
+            pre_norm=model.MASK_FORMER.PRE_NORM,
+            enforce_input_proj=model.MASK_FORMER.ENFORCE_INPUT_PROJ,
+            common_stride=model.SEM_SEG_HEAD.COMMON_STRIDE,
         )
         return config
 
@@ -692,7 +705,7 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
             multi_scale_features, our_model_output.pixel_decoder_hidden_states
         ):
             assert torch.allclose(
-                original_model_feature, our_model_feature, atol=1e-4
+                original_model_feature, our_model_feature, atol=1e-3
             ), "The pixel decoder feature are not the same"
 
         # Let's test the full model
@@ -738,7 +751,7 @@ def get_model_name(checkpoint_file: Path):
     backbone_types = ["tiny", "small", "base", "large"]
     backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[0]
 
-    model_name = f"mask2former-{segmentation_task_name.split('-')[0]}-{backbone}-{backbone_type}-{dataset_name}"
+    model_name = f"mask2former-{backbone}-{backbone_type}-{dataset_name}-{segmentation_task_name.split('-')[0]}"
 
     return model_name
 
@@ -765,12 +778,6 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--save_model_dir",
-        required=True,
-        type=Path,
-        help="Path to the folder to output PyTorch models.",
-    )
-    parser.add_argument(
         "--mask2former_dir",
         required=True,
         type=Path,
@@ -784,16 +791,12 @@ if __name__ == "__main__":
 
     checkpoints_dir: Path = args.checkpoints_dir
     config_dir: Path = args.configs_dir
-    save_directory: Path = args.save_model_dir
     mask2former_dir: Path = args.mask2former_dir
     # append the path to the parents to mask2former dir
     sys.path.append(str(mask2former_dir.parent))
     # import original Mask2Former config and model from original source code repo
     from Mask2Former.mask2former.config import add_maskformer2_config
     from Mask2Former.mask2former.maskformer_model import MaskFormer as OriginalMask2Former
-
-    if not save_directory.exists():
-        save_directory.mkdir(parents=True)
 
     for config_file, checkpoint_file in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir

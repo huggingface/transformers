@@ -22,12 +22,11 @@ from ..auto import CONFIG_MAPPING
 
 
 MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/mask2former-instance-swin-small-coco": (
-        "https://huggingface.co/facebook/mask2former-instance-swin-small-coco/blob/main/config.json"
+    "facebook/mask2former-swin-small-coco-instance": (
+        "https://huggingface.co/facebook/mask2former-swin-small-coco-instance/blob/main/config.json"
     )
     # See all Mask2Former models at https://huggingface.co/models?filter=mask2former
 }
-
 
 logger = logging.get_logger(__name__)
 
@@ -37,7 +36,8 @@ class Mask2FormerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Mask2FormerModel`]. It is used to instantiate a
     Mask2Former model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Mask2Former
-    [facebook/mask2former-instance-swin-small-coco](facebook/mask2former-instance-swin-small-coco) architecture.
+    [facebook/mask2former-swin-small-coco-instance](https://huggingface.co/facebook/mask2former-swin-small-coco-instance)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -109,10 +109,10 @@ class Mask2FormerConfig(PretrainedConfig):
     ```python
     >>> from transformers import Mask2FormerConfig, Mask2FormerModel
 
-    >>> # Initializing a Mask2Former facebook/mask2former-instance-swin-small-coco configuration
+    >>> # Initializing a Mask2Former facebook/mask2former-swin-small-coco-instance configuration
     >>> configuration = Mask2FormerConfig()
 
-    >>> # Initializing a model (with random weights) from the facebook/mask2former-instance-swin-small-coco style configuration
+    >>> # Initializing a model (with random weights) from the facebook/mask2former-swin-small-coco-instance style configuration
     >>> model = Mask2FormerModel(configuration)
 
     >>> # Accessing the model configuration
@@ -206,6 +206,22 @@ class Mask2FormerConfig(PretrainedConfig):
         self.num_hidden_layers = decoder_layers
 
         super().__init__(**kwargs)
+
+    @classmethod
+    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
+        """Instantiate a [`Mask2FormerConfig`] (or a derived class) from a pre-trained backbone model configuration.
+
+        Args:
+            backbone_config ([`PretrainedConfig`]):
+                The backbone configuration.
+
+        Returns:
+            [`Mask2FormerConfig`]: An instance of a configuration object
+        """
+        return cls(
+            backbone_config=backbone_config,
+            **kwargs,
+        )
 
     def to_dict(self) -> Dict[str, any]:
         """

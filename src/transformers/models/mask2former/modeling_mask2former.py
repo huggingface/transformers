@@ -49,11 +49,11 @@ logger = logging.get_logger(__name__)
 
 
 _CONFIG_FOR_DOC = "Mask2FormerConfig"
-_CHECKPOINT_FOR_DOC = "facebook/mask2former-instance-swin-small-coco"
+_CHECKPOINT_FOR_DOC = "facebook/mask2former-swin-small-coco-instance"
 _IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
 
 MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/mask2former-instance-swin-small-coco",
+    "facebook/mask2former-swin-small-coco-instance",
     # See all mask2former models at https://huggingface.co/models?filter=mask2former
 ]
 
@@ -2145,19 +2145,6 @@ MASK2FORMER_INPUTS_DOCSTRING = r"""
 """
 
 
-def c2_xavier_fill(module: nn.Module) -> None:
-    """
-    Initialize `module.weight` using the "XavierFill" implemented in Caffe2. Also initializes `module.bias` to 0.
-    Caffe2 implementation of XavierFill corresponds to kaiming_uniform_ in PyTorch
-
-    Args:
-        module (torch.nn.Module): module to initialize.
-    """
-    nn.init.kaiming_uniform_(module.weight, a=1)
-    if module.bias is not None:
-        nn.init.constant_(module.bias, 0)
-
-
 class Mask2FormerPreTrainedModel(PreTrainedModel):
     config_class = Mask2FormerConfig
     base_model_prefix = "model"
@@ -2166,10 +2153,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
-
-        modules_xavier_init = [
-            Mask2FormerPixelDecoderEncoderOnly,
-        ]
 
         if isinstance(module, Mask2FormerTransformerModule):
             if module.input_projections is not None:
@@ -2199,6 +2182,11 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
 
+        elif isinstance(module, Mask2FormerMaskedAttentionDecoderLayer):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p, gain=xavier_std)
+
         elif isinstance(module, Mask2FormerPixelLevelModule):
             for submodule in module.modules():
                 if isinstance(submodule, (nn.Conv2d, nn.Linear)):
@@ -2211,6 +2199,11 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p)
             nn.init.normal_(module.level_embed, std=0)
+
+        elif isinstance(module, Mask2FormerPixelDecoderEncoderOnly):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p)
 
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -2225,21 +2218,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
         if hasattr(module, "reference_points"):
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
-
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-        elif isinstance(module, nn.MultiheadAttention):
-            module.in_proj_weight.data.normal_(mean=0.0, std=std)
-            module.in_proj_bias.data.zero_()
-
-        for target_module in modules_xavier_init:
-            if isinstance(module, target_module):
-                for p in module.parameters():
-                    if p.dim() > 1:
-                        nn.init.xavier_uniform_(p)
 
 
 @add_start_docstrings(
@@ -2282,8 +2260,8 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> # Load image preprocessor and Mask2FormerModel trained on ADE20K instance segmentation dataset
-        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("facebook/mask2former-instance-swin-small-ade")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-instance-swin-small-ade")
+        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-instance")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-instance")
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2439,8 +2417,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> import torch
 
         >>> # Load Mask2Former trained on ADE20K instance segmentation dataset
-        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("facebook/mask2former-instance-swin-small-ade")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-instance-swin-small-ade")
+        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-instance")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-instance")
 
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"

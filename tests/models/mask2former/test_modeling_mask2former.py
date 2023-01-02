@@ -49,8 +49,8 @@ class Mask2FormerModelTester:
         use_auxiliary_loss=False,
         num_queries=10,
         num_channels=3,
-        min_size=32 * 4,
-        max_size=32 * 6,
+        min_size=32 * 8,
+        max_size=32 * 8,
         num_labels=4,
         hidden_dim=64,
     ):
@@ -88,7 +88,6 @@ class Mask2FormerModelTester:
         config.num_queries = self.num_queries
         config.num_labels = self.num_labels
 
-        config.backbone_config.window_size = 4
         config.backbone_config.depths = [1, 1, 1, 1]
         config.backbone_config.num_channels = self.num_channels
 
@@ -322,7 +321,7 @@ def prepare_img():
 class Mask2FormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
-        return "facebook/mask2former-swin-small-coco"
+        return "facebook/mask2former-swin-small-coco-instance"
 
     @cached_property
     def default_feature_extractor(self):
@@ -337,13 +336,13 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
         # check size
-        self.assertEqual(inputs_shape, (1, 3, 800, 1088))
+        self.assertEqual(inputs_shape, (1, 3, 384, 384))
 
         with torch.no_grad():
             outputs = model(**inputs)
 
         expected_slice_hidden_state = torch.tensor(
-            [[-0.0482, 0.9228, 0.4951], [-0.2547, 0.8017, 0.8527], [-0.0069, 0.3385, -0.0089]]
+            [[-0.2790, -1.0717, -1.1668], [-0.5128, -0.3128, -0.4987], [-0.5832, 0.1971, -0.0197]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -352,7 +351,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[-0.8422, -0.8434, -0.9718], [-1.0144, -0.5565, -0.4195], [-1.0038, -0.4484, -0.1961]]
+            [[0.8973, 1.1847, 1.1776], [1.1934, 1.5040, 1.5128], [1.1153, 1.4486, 1.4951]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -361,7 +360,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[0.2852, -0.0159, 0.9735], [0.6254, 0.1858, 0.8529], [-0.0680, -0.4116, 1.8413]]
+            [[2.1152, 1.7000, -0.8603], [1.5808, 1.8004, -0.9353], [1.6043, 1.7495, -0.5999]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -378,7 +377,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
         # check size
-        self.assertEqual(inputs_shape, (1, 3, 800, 1088))
+        self.assertEqual(inputs_shape, (1, 3, 384, 384))
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -388,9 +387,9 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             masks_queries_logits.shape, (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4)
         )
         expected_slice = [
-            [-1.3737124, -1.7724937, -1.9364233],
-            [-1.5977281, -1.9867939, -2.1523695],
-            [-1.5795398, -1.9269832, -2.093942],
+            [-8.7839, -9.0056, -8.8121],
+            [-7.4104, -7.0313, -6.5401],
+            [-6.6105, -6.3427, -6.4675],
         ]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
@@ -399,9 +398,9 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
         expected_slice = torch.tensor(
             [
-                [1.6512e00, -5.2572e00, -3.3519e00],
-                [3.6169e-02, -5.9025e00, -2.9313e00],
-                [1.0766e-04, -7.7630e00, -5.1263e00],
+                [1.8324, -8.0835, -4.1922],
+                [0.8450, -9.0050, -3.6053],
+                [0.3045, -7.7293, -3.0275],
             ]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
