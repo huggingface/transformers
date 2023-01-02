@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 from transformers import AutoConfig, TFAutoModel, is_tensorflow_text_available, is_tf_available
 from transformers.models.bert.tokenization_bert import BertTokenizer
-from transformers.testing_utils import require_tf, require_tensorflow_text, slow
+from transformers.testing_utils import require_tensorflow_text, require_tf, slow
 
 
 if is_tf_available():
@@ -13,7 +13,7 @@ if is_tf_available():
     if is_tensorflow_text_available():
         from transformers.models.bert import TFBertTokenizer
 
-        
+
 TOKENIZER_CHECKPOINTS = ["bert-base-uncased", "bert-base-cased"]
 TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 

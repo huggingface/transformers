@@ -22,7 +22,15 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_pytesseract, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    nested_simplify,
+    require_pytesseract,
+    require_tf,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
