@@ -315,6 +315,42 @@ class AtlasModel(AtlasPreTrainedModel):
         score = torch.nn.functional.log_softmax(score / self.config.temperature_score, dim=-1)
         return torch.nn.KLDivLoss()(score, gold_score)
     
+    def generate(
+        self,
+        input_ids,
+        attention_mask,
+        query_input_ids,
+        query_attention_mask,
+        decoder_input_ids=None,
+        top_k=5,
+    ):
+        query_hidden_states = self.retriever(input_ids=query_input_ids, attention_mask=query_attention_mask, is_passages=False)
+        query_hidden_states_numpy = query_hidden_states.cpu().detach().numpy()
+
+        generator_tokens, _ = self.retriever_index(query_hidden_states_numpy, input_ids, top_k)
+        generator_input_ids = generator_tokens["input_ids"]
+        generator_attention_mask = generator_tokens["attention_mask"].bool()
+
+        n_context_training = min(top_k, generator_input_ids.size(1))
+        cfg = self.generator.encoder.config
+        cfg.bsz = generator_input_ids.size(0)
+        cfg.n_context = n_context_training
+    
+        generator_input_ids_training = generator_input_ids[:, :n_context_training].contiguous()
+        generator_attention_mask_training = generator_attention_mask[:, :n_context_training].contiguous()
+
+        generator_input_ids_training = generator_input_ids_training.view(generator_input_ids.size(0), -1)
+        generator_attention_mask_training = generator_attention_mask_training.view(generator_attention_mask.size(0), -1)
+
+        generator_output = self.generator.generate(
+            input_ids=generator_input_ids_training,
+            attention_mask=generator_attention_mask_training,
+            use_cache=False,
+        )
+
+        return generator_output
+
+
     # @torch.no_grad()
     # def generate(self, tokens, query, choices=None):
     #     cfg = self.generator.encoder.config
