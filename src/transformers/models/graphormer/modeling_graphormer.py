@@ -35,7 +35,6 @@ try:
     FAIRSEQ_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
     FAIRSEQ_AVAILABLE = False
-assert FAIRSEQ_AVAILABLE, "The Graphormer model requires `pip install fairseq`"
 
 
 logger = logging.get_logger(__name__)
@@ -484,6 +483,7 @@ def init_graphormer_params(module):
 class GraphormerGraphEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
+
         self.dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
         self.layerdrop = config.layerdrop
         self.embedding_dim = config.embedding_dim
@@ -602,6 +602,8 @@ class GraphormerGraphEncoder(nn.Module):
 class GraphormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
+        assert FAIRSEQ_AVAILABLE, "The Graphormer model requires `pip install fairseq`"
+
         self.max_nodes = config.max_nodes
 
         self.graph_encoder = GraphormerGraphEncoder(config)
