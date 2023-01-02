@@ -60,10 +60,11 @@ def get_git_config(model_name):
         vision_config.num_hidden_layers = 24
         vision_config.num_attention_heads = 16
 
-    num_image_with_embedding = 6 if "vatex" in model_name else None
+    is_video = "vatex" in model_name or "msrvtt" in model_name
+    num_image_with_embedding = 6 if is_video else None
     config = GitConfig(vision_config=vision_config.to_dict(), num_image_with_embedding=num_image_with_embedding)
 
-    return config, image_size
+    return config, image_size, is_video
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
@@ -195,6 +196,9 @@ def prepare_img(model_name):
 def prepare_video():
     from decord import VideoReader, cpu
 
+    # set seed for reproducability
+    np.random.seed(0)
+
     def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         converted_len = int(clip_len * frame_sample_rate)
         end_idx = np.random.randint(converted_len, seg_len)
@@ -251,7 +255,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     }
 
     # define GIT configuration based on model name
-    config, image_size = get_git_config(model_name)
+    config, image_size, is_video = get_git_config(model_name)
     if "large" in model_name:
         # large checkpoints take way too long to download
         checkpoint_path = model_name_to_path[model_name]
@@ -281,8 +285,10 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     # verify results
     image_processor = (
-        VideoMAEImageProcessor()
-        if "vatex" in model_name
+        VideoMAEImageProcessor(
+            size={"shortest_edge": image_size}, crop_size={"height": image_size, "width": image_size}
+        )
+        if is_video
         else CLIPImageProcessor(
             size={"shortest_edge": image_size}, crop_size={"height": image_size, "width": image_size}
         )
@@ -290,10 +296,9 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", model_input_names=["input_ids", "attention_mask"])
     processor = GitProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-    # TODO use processor to prepare data for the model
-    if "vatex" in model_name:
+    if is_video:
         video = prepare_video()
-        pixel_values = image_processor(list(video), return_tensors="pt").pixel_values
+        pixel_values = processor(images=list(video), return_tensors="pt").pixel_values
     else:
         image = prepare_img(model_name)
         image_transforms = Compose(
@@ -324,17 +329,24 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         expected_slice_logits = torch.tensor([-0.8570, -0.8568, -0.8561])
     elif model_name == "git-base-textvqa":
         expected_slice_logits = torch.tensor([-1.4085, -1.4083, -1.4082])
-    # below: todo
     elif model_name == "git-base-vatex":
-        raise NotImplementedError("To do")
+        expected_slice_logits = torch.tensor([-1.3451, -1.3447, -1.3447])
     elif model_name == "git-base-msrvtt-qa":
-        raise NotImplementedError("To do")
+        expected_slice_logits = torch.tensor([-0.8554, -0.8550, -0.8540])
     elif model_name == "git-large":
         expected_slice_logits = torch.tensor([-1.1708, -1.1707, -1.1705])
     elif model_name == "git-large-coco":
         expected_slice_logits = torch.tensor([-1.0425, -1.0423, -1.0422])
     elif model_name == "git-large-textcaps":
         expected_slice_logits = torch.tensor([-1.2705, -1.2708, -1.2706])
+    elif model_name == "git-large-vqav2":
+        raise NotImplementedError("To do")
+    elif model_name == "git-large-textvqa":
+        raise NotImplementedError("To do")
+    elif model_name == "git-large-vatex":
+        raise NotImplementedError("To do")
+    elif model_name == "git-large-msrvtt-qa":
+        raise NotImplementedError("To do")
 
     if "vatex" not in model_name:
         # TODO add logits for VATEX models (due to sampling of frames not deterministic atm)
@@ -344,6 +356,8 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     prompt = ""
     if "textvqa" in model_name:
         prompt = "what does the front of the bus say at the top?"
+    elif "msrvtt-qa" in model_name:
+        prompt = "what does the woman eat?"
     elif "vqa" in model_name:
         prompt = "what are the cats doing?"
     input_ids = tokenizer(prompt, add_special_tokens=False).input_ids
