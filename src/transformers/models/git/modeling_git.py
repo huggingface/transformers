@@ -1395,7 +1395,7 @@ class GitForCausalLM(GitPreTrainedModel):
 
         ```python
         >>> from transformers import AutoProcessor, AutoModelForCausalLM
-        >>> import requests
+        >>> from huggingface_hub import hf_hub_download
         >>> from PIL import Image
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-textvqa")
@@ -1414,6 +1414,7 @@ class GitForCausalLM(GitPreTrainedModel):
 
         >>> generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
         >>> print(processor.batch_decode(generated_ids, skip_special_tokens=True))
+        ['what does the front of the bus say at the top? special']
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
