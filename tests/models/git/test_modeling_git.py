@@ -16,6 +16,7 @@
 import inspect
 import unittest
 
+from huggingface_hub import hf_hub_download
 from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -393,8 +394,28 @@ class GitModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 @require_vision
+@slow
 class GitModelIntegrationTest(unittest.TestCase):
-    @slow
+    def test_forward_pass(self):
+        processor = GitProcessor.from_pretrained("microsoft/git-base")
+        model = GitForCausalLM.from_pretrained("microsoft/git-base")
+
+        model.to(torch_device)
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(images=image, text="hello world", return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape = torch.Size((1, 201, 30522))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[-0.9514, -0.9512, -0.9507], [-0.5454, -0.5453, -0.5453], [-0.8862, -0.8857, -0.8848]],
+            device=torch_device,
+        )
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+
     def test_inference_image_captioning(self):
         processor = GitProcessor.from_pretrained("microsoft/git-base")
         model = GitForCausalLM.from_pretrained("microsoft/git-base")
@@ -404,9 +425,38 @@ class GitModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
 
-        generated_ids = model.generate(pixel_values=pixel_values, max_length=20)
-        generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        outputs = model.generate(
+            pixel_values=pixel_values, max_length=20, output_scores=True, return_dict_in_generate=True
+        )
+        generated_caption = processor.batch_decode(outputs.sequences, skip_special_tokens=True)[0]
 
         expected_shape = torch.Size((1, 9))
-        self.assertEqual(generated_ids.shape, expected_shape)
+        self.assertEqual(outputs.sequences.shape, expected_shape)
         self.assertEquals(generated_caption, "two cats laying on a pink blanket")
+        self.assertTrue(outputs.scores[-1].shape, expected_shape)
+        expected_slice = torch.tensor([[-0.8805, -0.8803, -0.8799]], device=torch_device)
+        self.assertTrue(torch.allclose(outputs.scores[-1][0, :3], expected_slice, atol=1e-4))
+
+    def test_visual_question_answering(self):
+        processor = GitProcessor.from_pretrained("microsoft/git-base-textvqa")
+        model = GitForCausalLM.from_pretrained("microsoft/git-base-textvqa")
+        model.to(torch_device)
+
+        # prepare image
+        file_path = hf_hub_download(repo_id="nielsr/textvqa-sample", filename="bus.png", repo_type="dataset")
+        image = Image.open(file_path).convert("RGB")
+        inputs = processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # prepare question
+        question = "what does the front of the bus say at the top?"
+        input_ids = processor(text=question, add_special_tokens=False).input_ids
+        input_ids = [processor.tokenizer.cls_token_id] + input_ids
+        input_ids = torch.tensor(input_ids).unsqueeze(0).to(torch_device)
+
+        generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=20)
+        generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        expected_shape = torch.Size((1, 15))
+        self.assertEqual(generated_ids.shape, expected_shape)
+        self.assertEquals(generated_caption, "what does the front of the bus say at the top? special")
