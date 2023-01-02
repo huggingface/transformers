@@ -37,7 +37,7 @@ library: ライブラリ
 module: モジュール
 NLP/Natural Language Processing: NLPと表示される場合は翻訳されず、Natural Language Processingと表示される場合は翻訳される
 online demos: オンラインデモ
-pipeline: pipeline(翻訳しない)
+pipeline: pipeline(翻訳しない)
 pretrained/pretrain: 学習済み
 Python data structures (e.g., list, set, dict): リスト、セット、ディクショナリと訳され、括弧内は原文英語
 repository: repository(翻訳しない)
