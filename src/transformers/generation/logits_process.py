@@ -416,6 +416,8 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                 f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
             )
 
+        if eos_token_id is None:
+            eos_token_id = []
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
 
