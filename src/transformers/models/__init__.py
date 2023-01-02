@@ -17,6 +17,8 @@
 # limitations under the License.
 
 from . import (
+    graphormer2,
+    graphormer,
     albert,
     altclip,
     audio_spectrogram_transformer,

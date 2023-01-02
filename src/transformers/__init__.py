@@ -271,6 +271,7 @@ _import_structure = {
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig", "GraphormerTokenizer"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -656,6 +657,7 @@ else:
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
+    _import_structure["models.graphormer"].append("GraphormerTokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
@@ -914,6 +916,7 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1528,6 +1531,14 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.graphormer"].extend(
+        [
+            "GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GraphormerForGraphClassification",
+            "GraphormerModel",
+            "GraphormerPreTrainedModel",
         ]
     )
     _import_structure["models.groupvit"].extend(
@@ -3642,6 +3653,7 @@ if TYPE_CHECKING:
         GroupViTTextConfig,
         GroupViTVisionConfig,
     )
+    from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig, GraphormerTokenizer
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -3989,6 +4001,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
+        from .models.graphormer import GraphormerTokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
@@ -4705,6 +4718,13 @@ if TYPE_CHECKING:
             GPTJModel,
             GPTJPreTrainedModel,
         )
+        from .models.graphormer import (
+            GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GraphormerForGraphClassification,
+            GraphormerModel,
+            GraphormerPreTrainedModel,
+        )
+
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             GroupViTModel,
