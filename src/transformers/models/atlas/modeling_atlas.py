@@ -139,6 +139,22 @@ class AtlasModel(AtlasPreTrainedModel):
         cfg.bsz = generator_input_ids.size(0)
         cfg.n_context = n_context_training
     
+        generator_input_ids_training = generator_input_ids[:, :n_context_training].contiguous()
+        generator_attention_mask_training = generator_attention_mask[:, :n_context_training].contiguous()
+
+        generator_input_ids_training = generator_input_ids_training.view(generator_input_ids.size(0), -1)
+        generator_attention_mask_training = generator_attention_mask_training.view(generator_attention_mask.size(0), -1)
+
+        generator_output = self.generator(
+            input_ids=generator_input_ids_training,
+            attention_mask=generator_attention_mask_training,
+            decoder_input_ids=decoder_input_ids,
+            labels=labels,
+            use_cache=False,
+        )
+
+        reader_loss = generator_output[0]
+
         train_retriever = True # train_retriever = self.config.query_side_retriever_training and self.training
 
         retriever_loss = None
@@ -163,24 +179,6 @@ class AtlasModel(AtlasPreTrainedModel):
             if self.training:
                 self.generator.train()
 
-
-
-        generator_input_ids_training = generator_input_ids[:, :n_context_training].contiguous()
-        generator_attention_mask_training = generator_attention_mask[:, :n_context_training].contiguous()
-
-        generator_input_ids_training = generator_input_ids_training.view(generator_input_ids.size(0), -1)
-        generator_attention_mask_training = generator_attention_mask_training.view(generator_attention_mask.size(0), -1)
-
-        generator_output = self.generator(
-            input_ids=generator_input_ids_training,
-            attention_mask=generator_attention_mask_training,
-            decoder_input_ids=None,
-            labels=labels,
-            use_cache=False,
-        )
-
-        reader_loss = generator_output[0]
-
         return retriever_loss, reader_loss
 
     def kldivloss(self, score, gold_score):
@@ -188,34 +186,34 @@ class AtlasModel(AtlasPreTrainedModel):
         score = torch.nn.functional.log_softmax(score / self.config.temperature_score, dim=-1)
         return torch.nn.KLDivLoss()(score, gold_score)
     
-    @torch.no_grad()
-    def generate(self, tokens, query, choices=None):
-        cfg = self.generator.encoder.config
-        cfg.bsz = tokens["input_ids"].size(0)
-        cfg.n_context = min(self.opt.n_context, tokens["input_ids"].size(1))
+    # @torch.no_grad()
+    # def generate(self, tokens, query, choices=None):
+    #     cfg = self.generator.encoder.config
+    #     cfg.bsz = tokens["input_ids"].size(0)
+    #     cfg.n_context = min(self.opt.n_context, tokens["input_ids"].size(1))
 
-        tokens = {k: v.view(v.size(0), -1) for k, v in tokens.items()}
+    #     tokens = {k: v.view(v.size(0), -1) for k, v in tokens.items()}
 
-        bos_token_id = None
+    #     bos_token_id = None
 
-        prefix_allowed_tokens_fn = None
-        if self.opt.decoder_prompt_format is not None:
-            prefix_str = [self.opt.decoder_prompt_format.format_map({"query": q}) for q in query]
-            prefix_allowed_tokens_fn = self.get_prefix_allowed_tokens_fn(prefix_str)
+    #     prefix_allowed_tokens_fn = None
+    #     if self.opt.decoder_prompt_format is not None:
+    #         prefix_str = [self.opt.decoder_prompt_format.format_map({"query": q}) for q in query]
+    #         prefix_allowed_tokens_fn = self.get_prefix_allowed_tokens_fn(prefix_str)
 
-        outputs = self.generator.generate(
-            input_ids=tokens["input_ids"],
-            attention_mask=tokens["attention_mask"],
-            num_return_sequences=1,
-            max_length=self.opt.generation_max_length,
-            min_length=self.opt.generation_min_length,
-            num_beams=self.opt.generation_num_beams,
-            length_penalty=self.opt.generation_length_penalty,
-            forced_bos_token_id=bos_token_id,
-            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-        )
+    #     outputs = self.generator.generate(
+    #         input_ids=tokens["input_ids"],
+    #         attention_mask=tokens["attention_mask"],
+    #         num_return_sequences=1,
+    #         max_length=self.opt.generation_max_length,
+    #         min_length=self.opt.generation_min_length,
+    #         num_beams=self.opt.generation_num_beams,
+    #         length_penalty=self.opt.generation_length_penalty,
+    #         forced_bos_token_id=bos_token_id,
+    #         prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+    #     )
 
-        return outputs
+    #     return outputs
 
     def perplexity_score(self, reader_ids, reader_mask, decoder_input_ids, labels, cfg, bsz):
         with torch.no_grad():
