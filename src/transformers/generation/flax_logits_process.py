@@ -15,6 +15,8 @@
 
 import inspect
 
+import numpy as np
+
 import jax
 import jax.lax as lax
 import jax.numpy as jnp
@@ -311,36 +313,11 @@ class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
         return scores
 
 
-class FlaxForceTokenAtIdxLogitsProcessor(FlaxLogitsProcessor):
-    r"""
-    [`FlaxLogitsProcessor`] forcing a token to be sampled at an index.
-
-    Args:
-        apply_idx (`int`):
-            Index where sampling is forced.
-        token_id (`int`):
-            Token that is forced to be sampled.
-    """
-
-    def __init__(self, apply_idx: int, token_id: int):
-        self.apply_idx = apply_idx
-        self.token_id = token_id
-
-    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
-        new_scores = jnp.full(scores.shape, -float("inf"))
-
-        apply_penalty = 1 - jnp.bool_(cur_len - self.apply_idx)
-
-        scores = jnp.where(apply_penalty, new_scores.at[:, self.token_id].set(0), scores)
-
-        return scores
-
-
 class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] that takes a list of pairs of integers which indicates a mapping from generation indices to
-    token indices that will be forced before sampling. The processor will set their log probs to `inf` so that they are
-    sampled at their corresponding index.
+    token indices that will be forced before sampling. The processor will set their log probs to 0 and all other tokens
+    to `-inf` so that they are sampled at their corresponding index.
 
     Args:
         force_token_map (`list`):
@@ -348,10 +325,36 @@ class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
     """
 
     def __init__(self, force_token_map):
-        self.processors = [FlaxForceTokenAtIdxLogitsProcessor(i[0], i[1]) for i in force_token_map]
+        force_token_map = dict(force_token_map)
+        # Converts the dictionary of format {index: token} containing the tokens to be forced to an array, where the
+        # index of the array corresponds to the index of the token to be forced, for XLA compatibility.
+        # Indexes without forced tokens will have a negative value.
+        force_token_array = np.ones((max(force_token_map.keys()) + 1), dtype=np.int32) * -1
+        for index, token in force_token_map.items():
+            force_token_array[index] = token
+        self.force_token_array = jnp.array(force_token_array)
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
-        for processor in self.processors:
-            scores = processor(input_ids, scores, cur_len)
+        def _force_token(generation_idx):
+            batch_size = scores.shape[0]
+            current_token = self.force_token_array[generation_idx]
 
+            new_scores = jnp.ones_like(scores, dtype=scores.dtype) * -float("inf")
+            updates = jnp.zeros((batch_size, 1), dtype=scores.dtype)
+            new_scores = lax.dynamic_update_slice(new_scores, updates, (0, current_token))
+            return new_scores
+
+        scores = lax.cond(
+            cur_len >= self.force_token_array.shape[0],
+            # If the current length is geq than the length of force_token_array, the processor does nothing.
+            lambda: scores,
+            # Otherwise, it may force a certain token.
+            lambda: lax.cond(
+                self.force_token_array[cur_len] >= 0,
+                # Only valid (positive) tokens are forced
+                lambda: _force_token(cur_len),
+                # Otherwise, the processor does nothing.
+                lambda: scores,
+            ),
+        )
         return scores
