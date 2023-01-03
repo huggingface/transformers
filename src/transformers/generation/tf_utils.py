@@ -449,10 +449,6 @@ class TFGenerationMixin:
 
     supports_xla_generation = True
 
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)
-
     def adjust_logits_during_generation(
         self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
     ):

@@ -800,24 +800,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         return self.rag.question_encoder
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
-        """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
-
-        def _reorder_stacked(hidden_states, new_order):
-            n_docs = hidden_states.shape[0] // new_order.shape[0]
-            hidden_states = tf.reshape(hidden_states, (-1, n_docs, *hidden_states.shape[1:]))
-            hidden_states = tf.gather(hidden_states, new_order, axis=0)
-            result = tf.reshape(hidden_states, (-1, *hidden_states.shape[2:]))
-            return result
-
-        reordered_past = ()
-        for layer_past in past:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            reordered_past += (tuple(_reorder_stacked(past_state, beam_idx) for past_state in layer_past),)
-
-        return reordered_past
-
-    @staticmethod
     def _gather_beams(nested, beam_indices, batch_axis=0):
         """
         RAG-specific `_gather_beams`: gathers the beam slices indexed by beam_indices into new beam array. If the

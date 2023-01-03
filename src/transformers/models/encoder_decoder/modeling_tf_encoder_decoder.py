@@ -720,7 +720,3 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             " respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or"
             " model.decoder.resize_token_embeddings(...))"
         )
-
-    def _reorder_cache(self, past, beam_idx):
-        # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past, beam_idx)
