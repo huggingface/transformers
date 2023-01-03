@@ -77,7 +77,7 @@ else:
     ]
 
 try:
-    if not (is_keras_nlp_available() and is_tensorflow_text_available() and is_tf_available()):
+    if not is_keras_nlp_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -138,7 +138,7 @@ if TYPE_CHECKING:
         )
 
     try:
-        if not (is_keras_nlp_available() and is_tensorflow_text_available() and is_tf_available()):
+        if not is_keras_nlp_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass

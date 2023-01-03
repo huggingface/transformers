@@ -596,11 +596,11 @@ def is_spacy_available():
 
 
 def is_tensorflow_text_available():
-    return importlib.util.find_spec("tensorflow_text") is not None
+    return is_tf_available() and importlib.util.find_spec("tensorflow_text") is not None
 
 
 def is_keras_nlp_available():
-    return importlib.util.find_spec("keras_nlp") is not None
+    return is_tensorflow_text_available() and importlib.util.find_spec("keras_nlp") is not None
 
 
 def is_in_notebook():

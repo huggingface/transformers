@@ -718,7 +718,7 @@ else:
 
 # Tensorflow-text-specific objects
 try:
-    if not (is_tensorflow_text_available() and is_tf_available()):
+    if not is_tensorflow_text_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .utils import dummy_tensorflow_text_objects
@@ -731,7 +731,7 @@ else:
 
 # keras-nlp-specific objects
 try:
-    if not (is_keras_nlp_available() and is_tensorflow_text_available() and is_tf_available()):
+    if not is_keras_nlp_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .utils import dummy_keras_nlp_objects
@@ -4040,7 +4040,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
-        if not (is_tensorflow_text_available() and is_tf_available()):
+        if not is_tensorflow_text_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .utils.dummy_tensorflow_text_objects import *
@@ -4048,7 +4048,7 @@ if TYPE_CHECKING:
         from .models.bert import TFBertTokenizer
 
     try:
-        if not (is_keras_nlp_available() and is_tensorflow_text_available() and is_tf_available()):
+        if not is_keras_nlp_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .utils.dummy_keras_nlp_objects import *
