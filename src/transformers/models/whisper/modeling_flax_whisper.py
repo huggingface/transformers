@@ -225,7 +225,9 @@ class FlaxWhisperAttention(nn.Module):
             k = self.k_proj(hidden_states)
             v = self.v_proj(hidden_states)
 
-        q, k, v = jax.tree_util.tree_map(self._split_heads, (q, k, v))
+        q = self._split_heads(q)
+        k = self._split_heads(k)
+        v = self._split_heads(v)
 
         if self.causal:
             query_length, key_length = q.shape[1], k.shape[1]
