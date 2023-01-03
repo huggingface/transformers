@@ -512,6 +512,8 @@
         title: Donut
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/git
+        title: GIT
       - local: model_doc/groupvit
         title: GroupViT
       - local: model_doc/layoutlmv2
