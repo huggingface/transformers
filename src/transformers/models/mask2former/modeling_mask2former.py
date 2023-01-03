@@ -18,7 +18,6 @@ import math
 import random
 import warnings
 from dataclasses import dataclass
-from numbers import Number
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -349,7 +348,7 @@ def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_m
             (0 for the negative class and 1 for the positive class).
 
     Returns:
-        `torch.Tensor`: The computed loss.
+        loss (`torch.Tensor`): The computed loss.
     """
     criterion = nn.BCEWithLogitsLoss(reduction="none")
     cross_entropy_loss = criterion(inputs, labels)
@@ -393,7 +392,7 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
             (0 for the negative class and 1 for the positive class).
 
     Returns:
-        `torch.Tensor`: The computed loss between each pairs.
+        loss (`torch.Tensor`): The computed loss between each pairs.
     """
 
     height_and_width = inputs.shape[1]
@@ -405,8 +404,8 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     loss = torch.einsum("nc,mc->nm", cross_entropy_loss_pos, labels) + torch.einsum(
         "nc,mc->nm", cross_entropy_loss_neg, (1 - labels)
     )
-
-    return loss / height_and_width
+    loss = loss / height_and_width
+    return loss
 
 
 # Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/matcher.py
@@ -424,13 +423,13 @@ class Mask2FormerHungarianMatcher(nn.Module):
         """Creates the matcher
 
         Params:
-            cost_class (float, *optional*, defaults to 1.0):
+            cost_class (`float`, *optional*, defaults to 1.0):
                 Relative weight of the classification error in the matching cost.
-            cost_mask (float, *optional*,  defaults to 1.0):
+            cost_mask (`float`, *optional*,  defaults to 1.0):
                 This is the relative weight of the focal loss of the binary mask in the matching cost.
-            cost_dice (float, *optional*, defaults to 1.0):
+            cost_dice (`float`, *optional*, defaults to 1.0):
                 This is the relative weight of the dice loss of the binary mask in the matching cost.
-            num_points (int, *optional*, defaults to 12544):
+            num_points (`int`, *optional*, defaults to 12544):
                 No. of points to sample on which the mask loss will be calculated. The same set of K points are
                 uniformly sampled for all prediction and ground truth masks to construct the cost matrix for bipartite
                 matching.
@@ -455,20 +454,18 @@ class Mask2FormerHungarianMatcher(nn.Module):
         """
         Params:
             masks_queries_logits (`torch.Tensor`):
-                A tensor` of dim `batch_size, num_queries, num_labels` with the
-                  classification logits.
+                A tensor of dim `batch_size, num_queries, num_labels` with the classification logits.
             class_queries_logits (`torch.Tensor`):
-                A tensor` of dim `batch_size, num_queries, height, width` with the
-                  predicted masks.
+                A tensor of dim `batch_size, num_queries, height, width` with the predicted masks.
             class_labels (`torch.Tensor`):
-                A tensor` of dim `num_target_boxes` (where num_target_boxes is the number
-                  of ground-truth objects in the target) containing the class labels.
+                A tensor of dim `num_target_boxes` (where num_target_boxes is the number of ground-truth objects in the
+                target) containing the class labels.
             mask_labels (`torch.Tensor`):
-                A tensor` of dim `num_target_boxes, height, width` containing the target
-                  masks.
+                A tensor of dim `num_target_boxes, height, width` containing the target masks.
 
         Returns:
-            `List[Tuple[Tensor]]`: A list of size batch_size, containing tuples of (index_i, index_j) where:
+            matched_indices (`List[Tuple[Tensor]]`): A list of size batch_size, containing tuples of (index_i, index_j)
+            where:
                 - index_i is the indices of the selected predictions (in order)
                 - index_j is the indices of the corresponding selected labels (in order)
             For each batch element, it holds:
@@ -524,7 +521,7 @@ class Mask2FormerLoss(nn.Module):
 
         Args:
             config (`Mask2FormerConfig`):
-                The configuration for Mask2Former model also containing loss calculation specific parameters
+                The configuration for Mask2Former model also containing loss calculation specific parameters.
             weight_dict (`Dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
         """
@@ -562,14 +559,13 @@ class Mask2FormerLoss(nn.Module):
     def _pad_images_to_max_in_batch(self, tensors: List[Tensor]) -> Tuple[Tensor, Tensor]:
         # get the maximum size in the batch
         max_size = self._max_by_axis([list(tensor.shape) for tensor in tensors])
-        batch_size = len(tensors)
-        # compute finel size
-        batch_shape = [batch_size] + max_size
-        b, _, h, w = batch_shape
+        # compute final size
+        batch_shape = [len(tensors)] + max_size
+        batch_size, _, height, width = batch_shape
         dtype = tensors[0].dtype
         device = tensors[0].device
         padded_tensors = torch.zeros(batch_shape, dtype=dtype, device=device)
-        padding_masks = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        padding_masks = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
         # pad the tensors to the size of the biggest one
         for tensor, padded_tensor, padding_mask in zip(tensors, padded_tensors, padding_masks):
             padded_tensor[: tensor.shape[0], : tensor.shape[1], : tensor.shape[2]].copy_(tensor)
@@ -622,7 +618,7 @@ class Mask2FormerLoss(nn.Module):
 
         Args:
             masks_queries_logits (`torch.Tensor`):
-                A tensor of shape `batch_size, num_queries, height, width`
+                A tensor of shape `(batch_size, num_queries, height, width)`.
             mask_labels (`torch.Tensor`):
                 List of mask labels of shape `(labels, height, width)`.
             indices (`Tuple[np.array])`:
@@ -631,10 +627,10 @@ class Mask2FormerLoss(nn.Module):
                 The number of masks, used for normalization.
 
         Returns:
-            `Dict[str, Tensor]`: A dict of `torch.Tensor` containing two keys:
-            - **loss_mask** -- The loss computed using sigmoid cross entropy loss on the predicted and ground truth
+            losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing two keys:
+            - **loss_mask** -- The loss computed using sigmoid cross entropy loss on the predicted and ground truth.
               masks.
-            - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
+            - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth,
               masks.
         """
         src_idx = self._get_predictions_permutation_indices(indices)
@@ -691,13 +687,13 @@ class Mask2FormerLoss(nn.Module):
         for the foreground class in `classes`.
 
         Args:
-            logits (Tensor):
+            logits (`torch.Tensor`):
             A tensor of shape (R, 1, ...) for class-specific or class-agnostic, where R is the total number of predicted masks in all images and C is:
             the number of foreground classes. The values are logits.
 
         Returns:
-            scores (Tensor): A tensor of shape (R, 1, ...) that contains uncertainty scores with the most uncertain
-            locations having the highest uncertainty score.
+            scores (`torch.Tensor`): A tensor of shape (R, 1, ...) that contains uncertainty scores with the most
+            uncertain locations having the highest uncertainty score.
         """
         uncertainty_scores = -(torch.abs(logits))
         return uncertainty_scores
@@ -716,20 +712,20 @@ class Mask2FormerLoss(nn.Module):
         prediction as input.
 
         Args:
-            logits (float):
-                logit predictions for P points
+            logits (`float`):
+                Logit predictions for P points.
             uncertainty_function:
-                A function that takes logit predictions for P points and returns their uncertainties
-            num_points (int):
+                A function that takes logit predictions for P points and returns their uncertainties.
+            num_points (`int`):
                 The number of points P to sample.
-            oversample_ratio (int):
+            oversample_ratio (`int`):
                 Oversampling parameter.
-            importance_sample_ratio (float):
+            importance_sample_ratio (`float`):
                 Ratio of points that are sampled via importance sampling.
 
         Returns:
-            point_coordinates (torch.Tensor):
-                coordinates for P sampled points
+            point_coordinates (`torch.Tensor`):
+                Coordinates for P sampled points.
         """
 
         num_boxes = logits.shape[0]
@@ -770,9 +766,9 @@ class Mask2FormerLoss(nn.Module):
 
         Args:
             masks_queries_logits (`torch.Tensor`):
-                A tensor of shape `batch_size, num_queries, height, width`
+                A tensor of shape `(batch_size, num_queries, height, width)`.
             class_queries_logits (`torch.Tensor`):
-                A tensor of shape `batch_size, num_queries, num_labels`
+                A tensor of shape `(batch_size, num_queries, num_labels)`.
             mask_labels (`torch.Tensor`):
                 List of mask labels of shape `(labels, height, width)`.
             class_labels (`List[torch.Tensor]`):
@@ -782,7 +778,7 @@ class Mask2FormerLoss(nn.Module):
                 the inner layers of the Mask2FormerMaskedAttentionDecoder.
 
         Returns:
-            `Dict[str, Tensor]`: A dict of `torch.Tensor` containing two keys:
+            losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing three keys:
             - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
             - **loss_mask** -- The loss computed using sigmoid cross_entropy loss on the predicted and ground truth
               masks.
@@ -1736,7 +1732,7 @@ class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
             query_position_embeddings (`torch.FloatTensor`, *optional*):
                 Position embeddings that are added to the queries and keys in the self-attention layer.
             encoder_hidden_states (`torch.FloatTensor`):
-                Cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                Cross attention input to the layer of shape `(seq_len, batch, embed_dim)`.
             encoder_attention_mask (`torch.FloatTensor`):
                 Encoder attention mask of size`(1, seq_len, tgt_len, src_len)`.
             output_attentions (`bool`, *optional*):
@@ -1777,8 +1773,8 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
     of the predicted mask for each query, instead of attending to the full feature map.
 
     Args:
-        config: Mask2FormerConfig
-            configuration used to instantiate Mask2FormerMaskedAttentionDecoder
+        config: (`Mask2FormerConfig`):
+            Configuration used to instantiate Mask2FormerMaskedAttentionDecoder.
     """
 
     def __init__(self, config: Mask2FormerConfig):
