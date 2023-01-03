@@ -166,8 +166,6 @@ def prepare_whisper_inputs_dict(
     attention_mask=None,
     decoder_attention_mask=None,
 ):
-    if attention_mask is None:
-        attention_mask = np.not_equal(input_ids, config.pad_token_id).astype(np.int8)
     if decoder_attention_mask is None:
         decoder_attention_mask = np.concatenate(
             [
@@ -179,7 +177,6 @@ def prepare_whisper_inputs_dict(
     return {
         "input_features": input_ids,
         "decoder_input_ids": decoder_input_ids,
-        "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
     }
 
