@@ -1116,14 +1116,14 @@ class YolosImageProcessor(BaseImageProcessor):
         return encoded_inputs
 
     # POSTPROCESSING METHODS - TODO: add support for other frameworks
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process  with Detr->Yolos
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
-        PyTorch.
+        Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
-            outputs ([`DetrObjectDetectionOutput`]):
+            outputs ([`YolosObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
@@ -1164,8 +1164,8 @@ class YolosImageProcessor(BaseImageProcessor):
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
-        Converts the output of [`YolosForObjectDetection`] into the format expected by the COCO api. Only supports
-        PyTorch.
+        Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`YolosObjectDetectionOutput`]):
