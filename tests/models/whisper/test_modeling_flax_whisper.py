@@ -182,8 +182,11 @@ def prepare_whisper_inputs_dict(
     }
 
 
-def adjust_input_shape(cls, input_shape):
-    return functools.partial(cls, input_shape=input_shape)
+def partialclass(cls, *args, **kwargs):
+    class NewCls(cls):
+        __init__ = functools.partialmethod(cls.__init__, *args, **kwargs)
+
+    return NewCls
 
 
 @require_flax
@@ -200,7 +203,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         init_shape = (1,) + inputs_dict["input_features"].shape[1:]
         self.all_model_classes = (
-            adjust_input_shape(model_class, init_shape) for model_class in self.all_model_classes
+            partialclass(model_class, init_shape) for model_class in self.all_model_classes
         )
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
 
