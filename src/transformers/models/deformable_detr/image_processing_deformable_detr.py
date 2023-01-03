@@ -1251,8 +1251,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
     # POSTPROCESSING METHODS - TODO: add support for other frameworks
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`DeformableDetrForObjectDetection`] into the format expected by the COCO api. Only
-        supports PyTorch.
+        Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
+        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`DeformableDetrObjectDetectionOutput`]):
@@ -1299,8 +1299,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
-        Converts the output of [`DeformableDetrForObjectDetection`] into the format expected by the COCO api. Only
-        supports PyTorch.
+        Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
+        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
