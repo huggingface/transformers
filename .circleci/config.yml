@@ -9,6 +9,19 @@ parameters:
         default: false
 
 jobs:
+    # Ensure running with CircleCI/huggingface
+    check_circle_user:
+        docker:
+            - image: cimg/python:3.7.12
+        parallelism: 1
+        steps:
+            - run: echo $CIRCLE_PROJECT_USERNAME
+            - run: |
+                if [ "$CIRCLE_PROJECT_USERNAME" = "huggingface" ]; then
+                    exit 0
+                else
+                    exit -1
+                fi
     # Fetch the tests to run
     fetch_tests:
         working_directory: ~/transformers
@@ -171,13 +184,15 @@ workflows:
         when:
             not: <<pipeline.parameters.nightly>>
         jobs:
-            - check_code_quality
-            - check_repository_consistency
-            - fetch_tests
+            - check_circle_user
+#            - check_code_quality
+#            - check_repository_consistency
+#            - fetch_tests
 
     nightly:
         when: <<pipeline.parameters.nightly>>
         jobs:
+            - check_circle_user
             - check_code_quality
             - check_repository_consistency
             - fetch_all_tests
