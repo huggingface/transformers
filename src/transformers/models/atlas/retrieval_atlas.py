@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020, The ATLAS Authors and The HuggingFace Inc. team.
+# Copyright 2022, The ATLAS Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,28 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""ATLAS Retriever model implementation."""
+"""ATLAS Retriever implementation."""
 
-import os
-import pickle
-import time
-from typing import Iterable, List, Optional, Tuple
+from typing import List, Optional
 from functools import reduce
 
-import numpy as np
-
-from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import BatchEncoding
-from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends
+from ...utils import is_datasets_available, logging, requires_backends
 from .configuration_atlas import AtlasConfig
 from .tokenization_atlas import AtlasTokenizer
 
 
 if is_datasets_available():
-    from datasets import Dataset, load_dataset, load_from_disk
-
-if is_faiss_available():
-    import faiss
+    from datasets import Dataset
 
 
 logger = logging.get_logger(__name__)
@@ -98,12 +88,11 @@ class AtlasRetrieverIndex:
         generator_input_ids,
         topk: int = 5,
         # todo: for pre-training, we need to skip retrieval of the passage currently in the generator so it can't cheat
-        ignore_index: Optional[int] = None,
+        ignore_indices: Optional[int] = [],
     ):
         _, passage_ids = self.index.search_batch("embeddings", retriever_hidden_states, topk)
-
-        docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
-
+        docs = [self.index[[i for i in indices if (i >= 0 and i not in ignore_indices)]] for indices in passage_ids]
+            
         passages = self._format_docs(docs, generator_input_ids)
 
         tokens = self._encode_passages(passages, 512)
