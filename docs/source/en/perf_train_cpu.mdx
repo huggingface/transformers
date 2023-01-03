@@ -58,3 +58,40 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 <b>--use_ipex \</b>
 <b>--bf16 --no_cuda</b></pre> 
 
+### Performance Examples
+
+BERT-base, DistilBERT-base and BERT-large are selected as examples with different model sizes to demonstrate the BFloat16 training performance achieved by IPEX and speed-up ratio against Stock PyTorch FP32 on the 3rd Generation Xeon® Scalable Processors (Intel® Xeon® Platinum 8380H CPU). All the benchmarkings are using [IPEX CPU launcher](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/performance_tuning/launch_script.html) to set system configs to ensure a best-to-best comparison, like numactl (--node_id 0 , i.e., one socket full cores) and jemalloc (--enable_jemalloc).
+
+
+The examples are refering to the [Text-classification](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) (based on the script [run_glue.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py)), and SST-2, STSB and RTE are scoped from the [GLUE](https://gluebenchmark.com/) benchmark of fine-tuning the library models for sequence classification (taking samples/second as the performance metric).
+| GLUE Task  | Training configration |
+|-------|------------------------------|
+| SST-2; STS-B; RTE |per_device_train_batch_size=128 ; max_seq_len=128 ; num_train_epochs=3 ; learning_rate=2e-5|
+
+Here are the detailed software configuration and performance results:
+| Software | Version|
+|-------|------------------------------|
+| PyTorch  | v1.12.1+cpu  |
+| IPEX  | v1.12.100+cpu  |
+|Transformers| [main](https://github.com/huggingface/transformers/commit/0ea53822f8bdc2c0c41b45bcd04fa6c031e5e700) |
+
+
+[Bert-base-cased](https://huggingface.co/bert-base-cased?text=Paris+is+the+%5BMASK%5D+of+France.)
+| Task  | IPEX BFloat16  vs PT Float32 |
+|-------|------------------------------|
+| SST-2 | 1.72x                        |
+| STS-B | 1.69x                        |
+| RTE   | 1.68x                        |
+
+[Distilbert-base-uncased](https://huggingface.co/distilbert-base-uncased?text=The+goal+of+life+is+%5BMASK%5D.)
+| Task  | IPEX BFloat16  vs PT Float32 |
+|-------|------------------------------|
+| SST-2 | 1.69x                        |
+| STS-B | 1.69x                        |
+| RTE   | 1.67x                        |
+
+[Bert-large-uncased](https://huggingface.co/bert-large-uncased?text=Paris+is+the+%5BMASK%5D+of+France.)
+| Task  | IPEX BFloat16  vs PT Float32 |
+|-------|------------------------------|
+| SST-2 | 1.79x                        |
+| STS-B | 1.78x                        |
