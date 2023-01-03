@@ -374,7 +374,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @is_pt_flax_cross_test
     def test_save_load_bf16_to_base_pt(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = FLAX_MODEL_MAPPING[config.__class__]
+        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
 
         for model_class in self.all_model_classes:
             if model_class == base_class:
@@ -392,7 +392,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, input_shape=self.init_shape, from_pt=True)
+                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
 
                 base_params = flatten_dict(unfreeze(base_model.params))
 
@@ -404,13 +404,13 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @is_pt_flax_cross_test
     def test_save_load_from_base_pt(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = FLAX_MODEL_MAPPING[config.__class__]
+        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
 
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
 
-            model = base_class(config, input_shape=self.init_shape)
+            model = base_class(config)
             base_params = flatten_dict(unfreeze(model.params))
 
             # convert Flax model to PyTorch model
@@ -434,7 +434,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @is_pt_flax_cross_test
     def test_save_load_to_base_pt(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = FLAX_MODEL_MAPPING[config.__class__]
+        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
 
         for model_class in self.all_model_classes:
             if model_class == base_class:
@@ -451,7 +451,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, input_shape=self.init_shape, from_pt=True)
+                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
 
                 base_params = flatten_dict(unfreeze(base_model.params))
 
