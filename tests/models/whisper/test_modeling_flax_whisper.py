@@ -197,7 +197,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxWhisperModelTester(self)
-        _, inputs_dict = self.model_test.prepare_config_and_inputs_for_common()
+        _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         init_shape = (1,) + inputs_dict["input_features"].shape[1:]
         self.all_model_classes = (
             adjust_input_shape(model_class, init_shape) for model_class in self.all_model_classes
