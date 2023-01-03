@@ -284,13 +284,13 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         padding = [(int(n_fft // 2), int(n_fft // 2))]
         return np.pad(one_waveform, padding, mode=pad_mode)
 
-    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._num_frames_calc
     @staticmethod
+    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._num_frames_calc
     def _num_frames_calc(in_size, frame_size, frame_stride):
         return int(1 + np.floor((in_size - frame_size) * 1 / frame_stride))
 
-    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._frame_signal
     @staticmethod
+    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._frame_signal
     def _frame_signal(one_waveform, n_frames, frame_signal_scale, window_length, sample_stride):
         scale = frame_signal_scale
         frames = np.zeros(n_frames * window_length)
@@ -303,8 +303,8 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
 
         return frames
 
-    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._windowing
     @staticmethod
+    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._windowing
     def _windowing(frames, window_length, window):
         if frames.size % window_length != 0:
             raise ValueError(
@@ -316,8 +316,8 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         shaped = window * shaped
         return shaped
 
-    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._dft
     @staticmethod
+    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._dft
     def _dft(frames, K, n_frames, n_samples, n_fft):
         dft = np.zeros([n_frames, K])
 
@@ -337,8 +337,8 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         one_waveform: np.ndarray,
     ) -> np.ndarray:
         """
-        Extracts log-mel filterbank features for one waveform vector (unbatched). Adapted from
-        Flashlight's C++ MFSC code and librosa.
+        Extracts log-mel filterbank features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC
+        code and librosa.
         """
         one_waveform = self._center_pad(one_waveform, self.n_fft, "reflect")
 
