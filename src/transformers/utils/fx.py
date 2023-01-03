@@ -156,6 +156,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "CLIPTextModelWithProjection",
     "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
+    "GitVisionModel",
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
