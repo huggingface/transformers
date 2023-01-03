@@ -221,7 +221,6 @@ class GroupViTVisionConfig(PretrainedConfig):
         initializer_factor=1.0,
         assign_eps=1.0,
         assign_mlp_ratio=[0.5, 4],
-        qkv_bias=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -249,7 +248,6 @@ class GroupViTVisionConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.assign_eps = assign_eps
         self.assign_mlp_ratio = assign_mlp_ratio
-        self.qkv_bias = qkv_bias
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
