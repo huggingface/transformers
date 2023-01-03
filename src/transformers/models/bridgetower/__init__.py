@@ -37,7 +37,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_bridgetower"] = ["BridgeTowerImageProcessor"]
-    _import_structure["processing_bridgetower"] = ["BridgeTowerProcessor"]
+_import_structure["processing_bridgetower"] = ["BridgeTowerProcessor"]
 
 try:
     if not is_torch_available():
@@ -69,7 +69,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_bridgetower import BridgeTowerImageProcessor
-        from .processing_bridgetower import BridgeTowerProcessor
+    from .processing_bridgetower import BridgeTowerProcessor
 
     try:
         if not is_torch_available():

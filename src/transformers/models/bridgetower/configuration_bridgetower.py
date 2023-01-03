@@ -36,34 +36,28 @@ class BridgeTowerVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the vision configuration of a [`BridgeTowerModel`]. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the bridgetower-base
-    [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
+    [BridgeTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        output_resolution (`int`, *optional*, defaults to 288):
-            The final size (resolution) of each image.
-        input_resolution_before (`int`, *optional*, defaults to 224):
-            The size (resolution) of each input image.
+        image_size (`int`, *optional*, defaults to 288):
+            The size (resolution) of each image.
         stop_gradient (`bool`, *optional*, defaults to `False`):
             Whether to stop gradient for training.
-        embed_dim (`int`, *optional*, defaults to 512):
-            Dimension of embeddings in vit model.
-        width (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in vit model.
-        vit_layernorm_init_from_vit (`bool`, *optional*, defaults to `False`):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in vit's encoder model.
+        init_layernorm_from_vit (`bool`, *optional*, defaults to `False`):
             Whether to init vit LayerNorm from vit.
-        vit_layernorm_shared (`bool`, *optional*, defaults to `True`):
+        share_layernorm (`bool`, *optional*, defaults to `True`):
             Whether vit's LayerNorm layers are shared.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch in vit.
         vit_remove_last (`bool`, *optional*, defaults to `False`):
             Whether to remove vit's last layer.
-        transformer_width (`int`, *optional*, defaults to 512):
-            Width of vit's transformer.
 
     Example:
 
@@ -80,32 +74,25 @@ class BridgeTowerVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        embed_dim=512,
-        input_resolution=224,
-        width=768,
-        layers=12,
+        hidden_size=768,
+        num_hidden_layers=12,
         patch_size=16,
-        transformer_width=512,
-        output_resolution=288,
+        image_size=288,
         stop_gradient=False,
-        vit_layernorm_shared=True,
+        share_layernorm=True,
         vit_remove_last=False,
-        vit_layernorm_init_from_vit=False,
+        init_layernorm_from_vit=False,
         **kwargs
     ):
         super().__init__(**kwargs)
-
-        self.embed_dim = embed_dim
-        self.input_resolution = input_resolution
-        self.width = width
-        self.layers = layers
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
         self.patch_size = patch_size
-        self.transformer_width = transformer_width
-        self.output_resolution = output_resolution
+        self.image_size = image_size
         self.stop_gradient = stop_gradient
-        self.vit_layernorm_shared = vit_layernorm_shared
+        self.share_layernorm = share_layernorm
         self.vit_remove_last = vit_remove_last
-        self.vit_layernorm_init_from_vit = vit_layernorm_init_from_vit
+        self.init_layernorm_from_vit = init_layernorm_from_vit
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -139,7 +126,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
             represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 6):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -252,13 +239,13 @@ class BridgeTowerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`BridgeTowerModel`]. It is used to instantiate a
     BridgeTower model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the bridgetower-base
-    [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
+    [BridgeTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        cross_modal_transform_shared (`bool`, *optional*, defaults to `True`):
+        share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
             Whether cross modal transformer layers are shared.
         drop_rate (`float`, *optional*, defaults to 0.1):
             Drop out probability.
@@ -268,8 +255,6 @@ class BridgeTowerConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        image_size (`int`, *optional*, defaults to 288):
-            The size (resolution) of each image.
         input_image_embed_size (`int`, *optional*, defaults to 768):
             Embedding size of the input image.
         input_text_embed_size (`int`, *optional*, defaults to 768):
@@ -278,27 +263,22 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether this is an encoder/decoder model
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        link_tower_shared (`bool`, *optional*, defaults to `False`):
+        share_link_tower_layers (`bool`, *optional*, defaults to `False`):
             Whether the bride/link tower layers are shared.
         link_tower_type (`str`, *optional*, defaults to `"add"`):
             Type of the bridge/link layer.
         max_text_len (`int`, *optional*, defaults to 50):
             Maximum text length.
         mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of MLP hidden dim to embedding dim.
+            Ratio of MLP hidden dimension to embedding dimension.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`BridgeTowerTextConfig`].
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether embedding weights are tied with the decoder
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`BridgeTowerVisionConfig`].
-        vocab_size (`int`, *optional*, defaults to 50265):
-            Vocabulary size of the text part of the model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`BridgeTowerModel`].
 
     Example:
 
@@ -318,47 +298,41 @@ class BridgeTowerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        cross_modal_transform_shared=True,
+        share_cross_modal_transformer_layers=True,
         drop_rate=0.1,
         head_hidden_scale=2,
         hidden_act="gelu",
         hidden_size=768,
-        image_size=288,
         input_image_embed_size=768,
         input_text_embed_size=768,
         is_encoder_decoder=False,
         layer_norm_eps=1e-05,
-        link_tower_shared=False,
+        share_link_tower_layers=False,
         link_tower_type="add",
         max_text_len=50,
         mlp_ratio=4,
         num_attention_heads=12,
         num_hidden_layers=6,
         text_config=None,
-        tie_word_embeddings=False,
         vision_config=None,
-        vocab_size=50265,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.cross_modal_transform_shared = cross_modal_transform_shared
+        self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
         self.drop_rate = drop_rate
         self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
-        self.image_size = image_size
         self.input_image_embed_size = input_image_embed_size
         self.input_text_embed_size = input_text_embed_size
         self.is_encoder_decoder = is_encoder_decoder
         self.layer_norm_eps = layer_norm_eps
-        self.link_tower_shared = link_tower_shared
+        self.share_link_tower_layers = share_link_tower_layers
         self.link_tower_type = link_tower_type
         self.max_text_len = max_text_len
         self.mlp_ratio = mlp_ratio
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
 
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
