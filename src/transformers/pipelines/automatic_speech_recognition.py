@@ -129,7 +129,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     properly compute the final `offset`.
     """
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
-    begin = np.where(sequences[0][0] == timestamp_begin)[1]
+    begin = np.where(sequences[0][0] >= timestamp_begin)[1]
     import ipdb
 
     ipdb.set_trace()
@@ -609,7 +609,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             final_items.append(items)
         if stride and self.type == "seq2seq" and not return_timestamps:
             items = _fast_find_longest_common_sequence(final_items, self.tokenizer)
-        elif stride and self.type == "seq2seq" and return_timestamps:
+        elif stride and self.type == "seq2seq_whisper" and return_timestamps:
             items = _find_timestamp_sequence(
                 final_items, self.tokenizer, self.feature_extractor, self.model.config.max_source_positions
             )

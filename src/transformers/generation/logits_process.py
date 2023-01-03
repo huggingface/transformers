@@ -785,8 +785,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
     def __call__(self, input_ids, scores):
         # suppress <|notimestamps|> which is handled by without_timestamps
-        if self.no_timestamps_token_id is not None:
-            scores[:, self.no_timestamps_token_id] = -float("inf")
+        scores[:, self.no_timestamps_token_id] = -float("inf")
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):
@@ -806,11 +805,14 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 scores[:, last_allowed + 1 :] = -float("inf")
 
             # if sum of probability over timestamps is above any other token, sample timestamp
-            logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
-            for k in range(input_ids.shape[0]):
-                timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
-                max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
-                if timestamp_logprob > max_text_token_logprob:
-                    scores[k, : self.timestamp_begin] = -float("inf")
+        logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
+        for k in range(input_ids.shape[0]):
+            timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
+            max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
+            if timestamp_logprob > max_text_token_logprob:
+                print("Forcing timestamp output")
+                scores[k, : self.timestamp_begin] = -float("inf")
+            else:
+                print("Not forcing timestamp output")
 
         return scores

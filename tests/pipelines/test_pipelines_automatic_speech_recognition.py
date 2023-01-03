@@ -305,20 +305,22 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
-    @require_torch
     @slow
+    @require_torch
     def test_whisper_timestamp_prediction(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         array = np.concatenate(
             [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
         )
         pipe = pipeline(
-            model="openai/whisper-tiny",
+            model="openai/whisper-large",
             generate_kwargs={"forced_bos_token_id": None},
             max_new_tokens=448,
+            return_timestamps=True,
+            chunk_length_s=30,
         )
-        output = pipe(array, return_timestamps=True, chunk_length_s=30, stride_length_s=[15, 0])
 
+        output = pipe(array)
         self.assertDictEqual(
             output,
             {
