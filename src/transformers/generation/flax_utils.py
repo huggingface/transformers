@@ -129,7 +129,7 @@ class FlaxGenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in
     [`FlaxPreTrainedModel`].
-    
+
     The class exposes [`~generation.FlaxGenerationMixin.generate`], which can be used for:
             - *greedy decoding* by calling [`~generation.FlaxGenerationMixin._greedy_search`] if `num_beams=1` and
               `do_sample=False`.
