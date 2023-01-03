@@ -36,11 +36,11 @@ class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        feature_size (`int`, defaults to 1):
+        feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
+        sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        padding_value (`float`, defaults to 0.0):
+        padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
@@ -53,11 +53,11 @@ class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
 
     def __init__(
         self,
-        feature_size=1,
-        sampling_rate=16000,
-        padding_value=0.0,
-        return_attention_mask=False,
-        do_normalize=True,
+        feature_size: int = 1,
+        sampling_rate: int = 16000,
+        padding_value: float = 0.0,
+        return_attention_mask: bool = False,
+        do_normalize: bool = True,
         **kwargs
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -221,42 +221,45 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
     This class extracts log mel-filter bank features from raw speech.
 
     Args:
-        feature_size (`int`, defaults to 80):
+        feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features. This is the number of mel-frequency bins.
-        sampling_rate (`int`, defaults to 16000):
+        sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz (Hz).
-        padding_value (`float`, defaults to 0.0):
+        padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding vectors.
-        hop_length (`int`, defaults to 16):
+        hop_length (`int`, *optional*, defaults to 16):
             Number of ms between windows. Otherwise referred to as "shift" in many papers.
-        win_length (`int`, defaults to 64):
+        win_length (`int`, *optional*, defaults to 64):
             Number of ms per window
-        win_function (`str`, defaults to `"hann_window"`):
+        win_function (`str`, *optional*, defaults to `"hann_window"`):
             Name for the window function used for windowing, must be accessible via `torch.{win_function}`
-        frame_signal_scale (`float`, defaults to 1.0):
+        frame_signal_scale (`float`, *optional*, defaults to 1.0):
             Constant multiplied in creating the frames before applying DFT.
-        fmin (`int`, defaults to 80):
+        fmin (`float`, *optional*, defaults to 80):
             Minimum mel frequency in Hz.
-        fmax (`int`, defaults to 7600):
+        fmax (`float`, *optional*, defaults to 7600):
             Maximum mel frequency in Hz.
-        mel_floor (`float` defaults to 1e-10):
+        mel_floor (`float`, *optional*, defaults to 1e-10):
             Minimum value of mel frequency banks.
+        reduction_factor (`int`, *optional*, defaults to 2):
+            Spectrogram length reduction factor.
     """
 
     model_input_names = ["input_values", "attention_mask"]
 
     def __init__(
         self,
-        feature_size=80,
-        sampling_rate=16000,
-        padding_value=0.0,
-        hop_length=16,
-        win_length=64,
-        win_function="hann_window",
-        frame_signal_scale=1.0,
-        fmin=80,
-        fmax=7600,
-        mel_floor=1e-10,
+        feature_size: int = 80,
+        sampling_rate: int = 16000,
+        padding_value: float = 0.0,
+        hop_length: int = 16,
+        win_length: int = 64,
+        win_function: str = "hann_window",
+        frame_signal_scale: float = 1.0,
+        fmin: float = 80,
+        fmax: float = 7600,
+        mel_floor: float = 1e-10,
+        reduction_factor: int = 2,
         **kwargs
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -267,6 +270,7 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         self.fmin = fmin
         self.fmax = fmax
         self.mel_floor = mel_floor
+        self.reduction_factor = reduction_factor
         self.return_attention_mask = True
 
         self.sample_size = win_length * sampling_rate // 1000
@@ -363,6 +367,9 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         fbanks = fbanks.numpy()
 
         return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, fbanks)))
+
+    def _reduce(self, inputs):
+        return inputs[:, self.reduction_factor - 1 :: self.reduction_factor]
 
     def __call__(
         self,
@@ -484,5 +491,11 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+
+        # thin out frames for reduction factor
+        if self.reduction_factor > 1:
+            padded_inputs["input_values"] = self._reduce(padded_inputs["input_values"])
+            if attention_mask is not None:
+                padded_inputs["attention_mask"] = self._reduce(padded_inputs["attention_mask"])
 
         return padded_inputs
