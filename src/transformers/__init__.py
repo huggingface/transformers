@@ -777,7 +777,7 @@ else:
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.fan"].extend(["FanFeatureExtractor", "FanImageProcessor"])
-    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor", "FlavaImageProcessor"])
+    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
