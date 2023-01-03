@@ -15,10 +15,12 @@
 
 
 import inspect
+import tempfile
 import unittest
 
-from transformers import WhisperConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+import transformers
+from transformers import WhisperConfig, is_flax_available, is_torch_available
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
@@ -34,12 +36,23 @@ if is_flax_available():
     import numpy as np
 
     import jax
+    import jax.numpy as jnp
+    from flax.core.frozen_dict import unfreeze
+    from flax.traverse_util import flatten_dict
     from transformers import (
+        FLAX_MODEL_MAPPING,
         FlaxWhisperForConditionalGeneration,
         FlaxWhisperModel,
         WhisperFeatureExtractor,
         WhisperProcessor,
     )
+    from transformers.modeling_flax_pytorch_utils import (
+        convert_pytorch_state_dict_to_flax,
+        load_flax_weights_in_pytorch_model,
+    )
+
+if is_torch_available():
+    import torch
 
 
 @require_flax
@@ -203,11 +216,12 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     # overwrite because of `input_features`
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                model = model_class(config)
+                model = model_class(config, input_shape=init_shape)
 
                 @jax.jit
                 def model_jitted(input_features, decoder_input_ids, **kwargs):
@@ -224,6 +238,215 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
+    # overwrite because of `input_features`
+    @is_pt_flax_cross_test
+    def test_equivalence_flax_to_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # Output all for aggressive testing
+                config.output_hidden_states = True
+                config.output_attentions = self.has_attentions
+
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+                fx_model = model_class(config, input_shape=init_shape, dtype=jnp.float32)
+
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
+
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**prepared_inputs_dict)
+
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fx_model.save_pretrained(tmpdirname)
+                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+
+                # send pytorch model to the correct device
+                pt_model_loaded.to(torch_device)
+                pt_model_loaded.eval()
+
+                with torch.no_grad():
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
+
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
+
+    # overwrite because of `input_features`
+    @is_pt_flax_cross_test
+    def test_equivalence_pt_to_flax(self):
+        # It might be better to put this inside the for loop below (because we modify the config there).
+        # But logically, it is fine.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # Output all for aggressive testing
+                config.output_hidden_states = True
+                config.output_attentions = self.has_attentions
+
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+                fx_model = model_class(config, input_shape=init_shape, dtype=jnp.float32)
+
+                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_model.params = fx_state
+
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**prepared_inputs_dict)
+
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pt_model.save_pretrained(tmpdirname)
+                    fx_model_loaded = model_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+
+                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict)
+
+                fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs_loaded, pt_outputs, model_class)
+
+    # overwrite because of `input_features`
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config, input_shape=init_shape)
+            model.params = model.to_bf16(model.params)
+            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+
+            # convert Flax model to PyTorch model
+            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
+            pt_model = pt_model_class(config).eval()
+            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_model.save_pretrained(tmpdirname)
+                base_model = base_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+
+                base_params = flatten_dict(unfreeze(base_model.params))
+
+                for key in base_params_from_head.keys():
+                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    # overwrite because of `input_features`
+    @is_pt_flax_cross_test
+    def test_save_load_from_base_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = base_class(config, input_shape=init_shape)
+            base_params = flatten_dict(unfreeze(model.params))
+
+            # convert Flax model to PyTorch model
+            pt_model_class = getattr(transformers, base_class.__name__[4:])  # Skip the "Flax" at the beginning
+            pt_model = pt_model_class(config).eval()
+            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                # save pt model
+                pt_model.save_pretrained(tmpdirname)
+                head_model = model_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+
+                base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
+
+                for key in base_param_from_head.keys():
+                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    # overwrite because of `input_features`
+    @is_pt_flax_cross_test
+    def test_save_load_to_base_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config, input_shape=init_shape)
+            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+
+            # convert Flax model to PyTorch model
+            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
+            pt_model = pt_model_class(config).eval()
+            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_model.save_pretrained(tmpdirname)
+                base_model = base_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+
+                base_params = flatten_dict(unfreeze(base_model.params))
+
+                for key in base_params_from_head.keys():
+                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
@@ -237,10 +460,6 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
         if len(prefix) > 0:
             prefix = f"{prefix}: "
         raise AssertionError(f"{prefix}{a} != {b}")
-
-
-def _long_tensor(tok_lst):
-    return np.array(tok_lst, dtype=np.int32)
 
 
 @slow
