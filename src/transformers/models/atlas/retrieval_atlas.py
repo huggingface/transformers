@@ -82,17 +82,28 @@ class AtlasRetrieverIndex:
         self.index = self.index.map(reindex, batched=True, batch_size=batch_size)
         self.index.add_faiss_index("embeddings", device=device, string_factory=string_factory, metric_type=metric_type)
 
+
+
     def __call__(
         self, 
         retriever_hidden_states,
         generator_input_ids,
         topk: int = 5,
-        # todo: for pre-training, we need to skip retrieval of the passage currently in the generator so it can't cheat
-        ignore_indices: Optional[int] = [],
+        # todo - ignore_ids should be a list of documents to skip for each example in the batch
+        ignore_ids: Optional[List[List[str]]] = [],
     ):
-        _, passage_ids = self.index.search_batch("embeddings", retriever_hidden_states, topk)
-        docs = [self.index[[i for i in indices if (i >= 0 and i not in ignore_indices)]] for indices in passage_ids]
-            
+        scores, passage_ids = self.index.search_batch("embeddings", retriever_hidden_states, topk)
+
+        print(scores)
+
+        docs = [self.index[[i for i in indices if i >= 0]] for indices in passage_ids]
+
+        for i in range(len(docs)):
+            docs[i]['score'] = scores[i]
+            self.remove_ignore_ids(docs[i], ignore_ids)
+                    
+        print(docs)
+
         passages = self._format_docs(docs, generator_input_ids)
 
         tokens = self._encode_passages(passages, 512)
