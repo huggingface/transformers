@@ -727,7 +727,7 @@ class XMODPreTrainedModel(PreTrainedModel):
         logger.info("Freezing adapters")
         for layer in self.roberta.encoder.layer:
             if layer.output.adapter_layer_norm is not None:
-                for parameter in layer.output.adapter_layer_norm:
+                for parameter in layer.output.adapter_layer_norm.parameters():
                     parameter.requires_grad = False
             for parameter in layer.output.adapter_modules.parameters():
                 parameter.requires_grad = False
@@ -888,7 +888,7 @@ class XMODModel(XMODPreTrainedModel):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors:
         of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
