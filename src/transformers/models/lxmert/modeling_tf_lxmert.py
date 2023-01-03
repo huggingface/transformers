@@ -1160,7 +1160,7 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
             visual_losses["obj"] = {"shape": (-1,), "num": config.num_object_labels}
         if config.visual_attr_loss:
             visual_losses["attr"] = {"shape": (-1,), "num": config.num_attr_labels}
-        if config.visual_obj_loss:
+        if config.visual_feat_loss:
             visual_losses["feat"] = {"shape": (-1, 2048), "num": config.visual_feat_dim}
         self.visual_losses = visual_losses
 
@@ -1228,7 +1228,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
                 "num": config.num_attr_labels,
                 "loss": "visn_ce",
             }
-        if config.visual_obj_loss:
+        if config.visual_feat_loss:
             visual_losses["feat"] = {
                 "shape": (-1, config.visual_feat_dim),
                 "num": config.visual_feat_dim,
