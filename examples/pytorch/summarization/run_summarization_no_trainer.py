@@ -293,6 +293,11 @@ def parse_args():
         help="Whether to enable experiment trackers for logging.",
     )
     parser.add_argument(
+        "--fp16",
+        action="store_true",
+        help="Whether to enable Floating Point 16 for the accelerator.",
+    )
+    parser.add_argument(
         "--report_to",
         type=str,
         default="all",
@@ -336,7 +341,8 @@ def main():
         accelerator_log_kwargs["log_with"] = args.report_to
         accelerator_log_kwargs["logging_dir"] = args.output_dir
 
-    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
+    mixed_precision_type = 'fp16' if args.fp16 else None
+    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, mixed_precision=mixed_precision_type, **accelerator_log_kwargs)
     if args.source_prefix is None and args.model_name_or_path in [
         "t5-small",
         "t5-base",
