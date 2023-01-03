@@ -753,9 +753,8 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
-    Whisper specific Processor.
-    This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
-    are sampled at their corresponding index.
+    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
+    probs to `inf` so that they are sampled at their corresponding index.
 
     Args:
         begin_index (`int`, *optional*, defaults to `5` ):

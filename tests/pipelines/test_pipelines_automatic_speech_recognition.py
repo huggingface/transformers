@@ -323,22 +323,27 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             output,
             {
                 "text": (
-                    " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing"
-                    " cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his"
-                    " overstrain dyes. Even the soaring arena around him with thousands of spectators, retrievalidies not"
-                    " worth thinking about."
+                    " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the"
+                    " tight-wing cloth that was the only garment you wore. The cut on his chest still dripping blood."
+                    " The ache of his overstrain dyes. Even the soaring arena around him with thousands of spectators,"
+                    " retrievalidies not worth thinking about."
                 ),
                 "chunks": [
                     {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
                     {
-                        "text": " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment",
+                        "text": (
+                            " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only"
+                            " garment"
+                        ),
                         "timestamp": (5.5, 10.24),
                     },
                     {"text": " you wore.", "timestamp": (10.24, 11.74)},
                     {"text": " The cut on his chest still dripping blood.", "timestamp": (11.74, 14.88)},
                     {"text": " The ache of his overstrain dyes.", "timestamp": (14.88, 17.6)},
                     {
-                        "text": " Even the soaring arena around him with thousands of spectators, retrievalidies not worth",
+                        "text": (
+                            " Even the soaring arena around him with thousands of spectators, retrievalidies not worth"
+                        ),
                         "timestamp": (17.6, 23.28),
                     },
                 ],
