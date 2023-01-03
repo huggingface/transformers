@@ -666,6 +666,9 @@ class GenerationMixin:
                 expand_size, dim=0
             )
             model_kwargs["encoder_outputs"] = encoder_outputs
+            decoder_attention_mask = model_kwargs.get("decoder_attention_mask")
+            if decoder_attention_mask is not None:
+                model_kwargs["decoder_attention_mask"] = decoder_attention_mask.repeat_interleave(expand_size, dim=0)
 
         return input_ids, model_kwargs
 
@@ -701,12 +704,20 @@ class GenerationMixin:
             token_type_ids = model_kwargs["token_type_ids"]
             model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
 
-        # update attention mask
         if not is_encoder_decoder:
+            # update attention mask
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
                 model_kwargs["attention_mask"] = torch.cat(
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                )
+        else:
+            # update decoder attention mask
+            if "decoder_attention_mask" in model_kwargs:
+                decoder_attention_mask = model_kwargs["decoder_attention_mask"]
+                model_kwargs["decoder_attention_mask"] = torch.cat(
+                    [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
+                    dim=-1,
                 )
 
         return model_kwargs
