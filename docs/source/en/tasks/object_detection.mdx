@@ -16,7 +16,7 @@ specific language governing permissions and limitations under the License.
 
 Object detection is the computer vision task of detecting instances (such as humans, buildings, or cars) in an image. Object detection models receive an image as input and output
 coordinates of the bounding boxes and associated labels of the detected objects. An image can contain multiple objects,
-each with its own bounding box and a label (e.g. it can have a car and a building).
+each with its own bounding box and a label (e.g. it can have a car and a building), and each object can
 be present in different parts of an image (e.g. the image can have several cars).
 This task is commonly used in autonomous driving for detecting things like pedestrians, road signs, and traffic lights.
 Other applications include counting objects in images, image search, and more.
@@ -39,10 +39,10 @@ Before you begin, make sure you have all the necessary libraries installed:
 pip install -q datasets transformers evaluate timm albumentations
 ```
 
-In this guide you'll use `datasets` to load a dataset from the Hugging Face Hub, `transformers` to train your model,
+You'll use 🤗 Datasets to load a dataset from the Hugging Face Hub, 🤗 Transformers to train your model,
 and `albumentations` to augment the data. `timm` is currently required to load a convolutional backbone for the DETR model.
 
-We encourage you to share your model with the community. Log in to your Hugging Face account to upload it to Hub.
+We encourage you to share your model with the community. Log in to your Hugging Face account to upload it to the Hub.
 When prompted, enter your token to log in:
 
 ```py
@@ -53,7 +53,7 @@ When prompted, enter your token to log in:
 
 ## Load the CPPE-5 dataset
 
-In this guide, you'll use the [CPPE-5 dataset](https://huggingface.co/datasets/cppe-5) that contains images with
+The [CPPE-5 dataset](https://huggingface.co/datasets/cppe-5) contains images with
 annotations identifying medical personal protective equipment (PPE) in the context of the COVID-19 pandemic.
 
 Start by loading the dataset:
@@ -105,7 +105,7 @@ The examples in the dataset have the following fields:
   - `bbox`: The object's bounding box (in the [COCO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#coco) ).
   - `category`: The object's category, with possible values including `Coverall (0)`, `Face_Shield (1)`, `Gloves (2)`, `Goggles (3)` and `Mask (4)`.
 
-You may notice that the `bbox` field follows the COCO format, which is the format that DETR model expects.
+You may notice that the `bbox` field follows the COCO format, which is the format that the DETR model expects.
 However, the grouping of the fields inside `objects` differs from the annotation format DETR requires. You will
 need to apply some preprocessing transformations before using this data for training.
 
@@ -179,12 +179,12 @@ Instantiate the image processor from the same checkpoint as the model you want t
 
 Before passing the images to the `image_processor`, apply two preprocessing transformations to the dataset:
 - Augmenting images
-- Re-formatting annotations to meet DETR expectations
+- Reformatting annotations to meet DETR expectations
 
-First, to make sure the model does not overfit on the training data, you can apply image augmentation with [Albumentations](https://albumentations.ai/docs/).
+First, to make sure the model does not overfit on the training data, you can apply image augmentation with any data augmentation library. Here we use [Albumentations](https://albumentations.ai/docs/) ...
 This library ensures that transformations affect the image and update the bounding boxes accordingly.
 The 🤗 Datasets library documentation has a detailed [guide on how to augment images for object detection](https://huggingface.co/docs/datasets/object_detection),
-and it uses the exact same dataset as an example. Apply the same approach here, i.e., resize each image to (480, 480),
+and it uses the exact same dataset as an example. Apply the same approach here, resize each image to (480, 480),
 flip it horizontally, and brighten it:
 
 ```py
@@ -203,7 +203,7 @@ flip it horizontally, and brighten it:
 ```
 
 The `image_processor` expects the annotations to be in the following format: `{'image_id': int, 'annotations': List[Dict]}`,
- where each dictionary is a COCO object annotation. Building up gradually, let's add a function to reformat annotations for a single example:
+ where each dictionary is a COCO object annotation. Let's add a function to reformat annotations for a single example:
 
 ```py
 >>> def formatted_anns(image_id, category, area, bbox):
@@ -246,7 +246,7 @@ Now you can combine the image and annotation transformations to use on a batch o
 ...     return image_processor(images=images, annotations=targets, return_tensors="pt")
 ```
 
-Apply this preprocessing function to the entire dataset using 🤗 Datasets `with_transform()` method. This method applies
+Apply this preprocessing function to the entire dataset using 🤗 Datasets [`~datasets.Dataset.with_transform`] method. This method applies
 transformations on the fly when you load an element of the dataset.
 
 At this point, you can check what an example from the dataset looks like after the transformations. You should see a tensor
@@ -331,7 +331,7 @@ and `id2label` maps that you created earlier from the dataset's metadata. Additi
 ```
 
 In the [`TrainingArguments`] use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit.
-An important note: do not remove unused columns because this will drop the image column. Without the image column, you
+It is important you do not remove unused columns because this will drop the image column. Without the image column, you
 can't create `pixel_values`. For this reason, set `remove_unused_columns` to `False`.
 If you wish to share your model by pushing to the Hub, set `push_to_hub` to `True` (you must be signed in to Hugging
 Face to upload your model).
@@ -354,7 +354,7 @@ Face to upload your model).
 ... )
 ```
 
-Finally, bring everything together, and call `train`:
+Finally, bring everything together, and call [`~transformers.Trainer.train`]:
 
 ```py
 >>> from transformers import Trainer
@@ -371,7 +371,7 @@ Finally, bring everything together, and call `train`:
 ```
 
 If you have set `push_to_hub` to `True` in the `training_args`, the training checkpoints are pushed to the
-Hugging Face Hub. Upon training completion, push the final model to the Hub as well by calling the `push_to_hub()` method.
+Hugging Face Hub. Upon training completion, push the final model to the Hub as well by calling the [`~transformers.Trainer.push_to_hub`] method.
 
 ```py
 >>> trainer.push_to_hub()
@@ -379,7 +379,7 @@ Hugging Face Hub. Upon training completion, push the final model to the Hub as w
 
 ## Evaluate
 Object detection models are commonly evaluated with a set of <a href="https://cocodataset.org/#detection-eval">COCO-style metrics</a>.
-You can use one of the existing metrics implementations, here you'll use the one from `torchvision` to evaluate the final
+You can use one of the existing metrics implementations, but here you'll use the one from `torchvision` to evaluate the final
 model that you pushed to the Hub.
 
 To use the `torchvision` evaluator, you'll need to prepare a ground truth COCO dataset. The API to build a COCO dataset
@@ -445,7 +445,7 @@ First, prepare the `cppe5["test"]` set: format the annotations and save the data
 ...     return path_output_cppe5, path_anno
 ```
 
-Next, prepare an instance of a CocoDetection class that can be used with `cocoevaluator`.
+Next, prepare an instance of a `CocoDetection` class that can be used with `cocoevaluator`.
 
 ```py
 >>> import torchvision
@@ -525,11 +525,11 @@ IoU metric: bbox
  Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.146
  Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.382
 ```
-These results can be further improved by adjusting the hyperparameters in the `training_args`. Give it a go!
+These results can be further improved by adjusting the hyperparameters in [`~transformers.TrainingArguments`]. Give it a go!
 
 ## Inference
 Now that you have finetuned a DETR model, evaluated it, and uploaded it to the Hugging Face Hub, you can use it for inference.
-The simplest way to try out your finetuned model for inference is to use it in a `pipeline()`. Instantiate a pipeline
+The simplest way to try out your finetuned model for inference is to use it in a [`Pipeline`]. Instantiate a pipeline
 for object detection with your model, and pass an image to it:
 
 ```py
