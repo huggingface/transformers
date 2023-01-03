@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-import torchaudio.compliance.kaldi as ta_kaldi
+import torchaudio
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -218,53 +218,151 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using TorchAudio.
+    This class extracts log mel-filter bank features from raw speech.
 
     Args:
         feature_size (`int`, defaults to 80):
-            The feature dimension of the extracted features.
+            The feature dimension of the extracted features. This is the number of mel-frequency bins.
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        num_mel_bins (`int`, defaults to 80):
-            Number of Mel-frequency bins.
+            The sampling rate at which the audio files should be digitalized expressed in Hertz (Hz).
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding vectors.
+        hop_length (`int`, defaults to 16):
+            Number of ms between windows. Otherwise referred to as "shift" in many papers.
+        win_length (`int`, defaults to 64):
+            Number of ms per window
+        win_function (`str`, defaults to `"hann_window"`):
+            Name for the window function used for windowing, must be accessible via `torch.{win_function}`
+        frame_signal_scale (`float`, defaults to 1.0):
+            Constant multiplied in creating the frames before applying DFT.
+        fmin (`int`, defaults to 80):
+            Minimum mel frequency in Hz.
+        fmax (`int`, defaults to 7600):
+            Maximum mel frequency in Hz.
+        mel_floor (`float` defaults to 1e-10):
+            Minimum value of mel frequency banks.
     """
 
     model_input_names = ["input_values", "attention_mask"]
 
-    def __init__(self, feature_size=80, sampling_rate=16000, num_mel_bins=80, padding_value=0.0, **kwargs):
+    def __init__(
+        self,
+        feature_size=80,
+        sampling_rate=16000,
+        padding_value=0.0,
+        hop_length=16,
+        win_length=64,
+        win_function="hann_window",
+        frame_signal_scale=1.0,
+        fmin=80,
+        fmax=7600,
+        mel_floor=1e-10,
+        **kwargs
+    ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.num_mel_bins = num_mel_bins
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.win_function = win_function
+        self.frame_signal_scale = frame_signal_scale
+        self.fmin = fmin
+        self.fmax = fmax
+        self.mel_floor = mel_floor
         self.return_attention_mask = True
+
+        self.sample_size = win_length * sampling_rate // 1000
+        self.sample_stride = hop_length * sampling_rate // 1000
+
+        self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
+        self.n_freqs = (self.n_fft // 2) + 1
+
+    @staticmethod
+    def _center_pad(one_waveform, n_fft, pad_mode):
+        padding = [(int(n_fft // 2), int(n_fft // 2))]
+        return np.pad(one_waveform, padding, mode=pad_mode)
+
+    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._num_frames_calc
+    @staticmethod
+    def _num_frames_calc(in_size, frame_size, frame_stride):
+        return int(1 + np.floor((in_size - frame_size) * 1 / frame_stride))
+
+    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._frame_signal
+    @staticmethod
+    def _frame_signal(one_waveform, n_frames, frame_signal_scale, window_length, sample_stride):
+        scale = frame_signal_scale
+        frames = np.zeros(n_frames * window_length)
+        for frame_idx in range(n_frames):
+            start = frame_idx * window_length
+            end = (frame_idx + 1) * window_length
+            wave_start = frame_idx * sample_stride
+            wave_end = frame_idx * sample_stride + window_length
+            frames[start:end] = scale * one_waveform[wave_start:wave_end]
+
+        return frames
+
+    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._windowing
+    @staticmethod
+    def _windowing(frames, window_length, window):
+        if frames.size % window_length != 0:
+            raise ValueError(
+                f"`frames` is supposed to have length divisble by `window_length`, but is {frames.size} with"
+                f" window_length={window_length}."
+            )
+
+        shaped = frames.reshape(-1, window_length)
+        shaped = window * shaped
+        return shaped
+
+    # Copied from transformers.models.mctct.feature_extraction_mctct.MCTCTFeatureExtractor._dft
+    @staticmethod
+    def _dft(frames, K, n_frames, n_samples, n_fft):
+        dft = np.zeros([n_frames, K])
+
+        for frame in range(n_frames):
+            begin = frame * n_samples
+
+            inwards_buffer = frames[begin : begin + n_samples]
+            inwards_buffer = np.pad(inwards_buffer, (0, n_fft - n_samples), "constant")
+            out = np.fft.rfft(inwards_buffer)
+
+            dft[frame] = np.abs(out[:K])
+
+        return dft
 
     def _extract_fbank_features(
         self,
-        waveform: np.ndarray,
+        one_waveform: np.ndarray,
     ) -> np.ndarray:
         """
-        Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
-        and hence the waveform should not be normalized before feature extraction.
+        Extracts log-mel filterbank features for one waveform vector (unbatched). Adapted from
+        Flashlight's C++ MFSC code and librosa.
         """
-        waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
-        waveform = torch.from_numpy(waveform).unsqueeze(0)
-        features = ta_kaldi.fbank(
-            waveform,
-            frame_length=64,  # 1024 samples @ 16 kHz
-            frame_shift=16,  # 256 samples @ 16 kHz
-            high_freq=7600,
-            low_freq=80,
-            num_mel_bins=self.num_mel_bins,
-            raw_energy=False,
-            remove_dc_offset=False,
-            sample_frequency=self.sampling_rate,
-            snip_edges=False,
-            use_log_fbank=True,
-            use_power=False,
-            window_type="hanning",
+        one_waveform = self._center_pad(one_waveform, self.n_fft, "reflect")
+
+        n_frames = self._num_frames_calc(one_waveform.size, self.sample_size, self.sample_stride)
+
+        frames = self._frame_signal(
+            one_waveform, n_frames, self.frame_signal_scale, self.sample_size, self.sample_stride
         )
-        # TODO: this is not equal to the log-mel spectrograms from the original yet!
-        return features.numpy()
+
+        window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
+        window = window.numpy()
+
+        frames = self._windowing(frames, self.sample_size, window)
+
+        dft_out = self._dft(frames.flatten(), self.n_freqs, n_frames, self.sample_size, self.n_fft)
+
+        fbanks = torchaudio.functional.melscale_fbanks(
+            n_freqs=self.n_freqs,
+            f_min=self.fmin,
+            f_max=self.fmax,
+            n_mels=self.feature_size,
+            sample_rate=self.sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+        )
+        fbanks = fbanks.numpy()
+
+        return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, fbanks)))
 
     def __call__(
         self,
