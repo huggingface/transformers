@@ -131,7 +131,8 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         object_detector = pipeline("zero-shot-object-detection")
 
         outputs = object_detector(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", candidate_labels=["cat", "remote", "couch"]
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            candidate_labels=["cat", "remote", "couch"],
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
