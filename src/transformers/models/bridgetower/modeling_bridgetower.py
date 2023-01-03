@@ -143,7 +143,7 @@ class BridgeTowerResidualAttention(nn.Module):
 
         self.attn = nn.MultiheadAttention(d_model, n_head)
         self.ln_1 = BridgeTowerLayerNorm(d_model)
-        self.mlp = nn.Sequential(
+        self.mlp = nn.ModuleDict(
             OrderedDict(
                 [
                     ("c_fc", nn.Linear(d_model, d_model * 4)),
@@ -162,8 +162,11 @@ class BridgeTowerResidualAttention(nn.Module):
         return self.attn(hidden_state, hidden_state, hidden_state, need_weights=False, attn_mask=self.attn_mask, key_padding_mask=attention_mask)[0]
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor = None):
-        hidden_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
-        hidden_state = hidden_state + self.mlp(self.ln_2(hidden_state))
+        residual_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
+        hidden_state = self.ln_2(residual_state)
+        for _, layer in self.mlp.items():
+            hidden_state = layer(hidden_state)
+        hidden_state = residual_state + hidden_state
         return hidden_state
 
 
@@ -182,12 +185,12 @@ class BridgeTowerTransformer(nn.Module):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         if vit_remove_last:
-            self.resblocks = nn.Sequential(
-                *[BridgeTowerResidualAttention(hidden_size, heads, attn_mask) for _ in range(num_hidden_layers - 1)]
+            self.resblocks = nn.ModuleList(
+                [BridgeTowerResidualAttention(hidden_size, heads, attn_mask) for _ in range(num_hidden_layers - 1)]
             )
         else:
-            self.resblocks = nn.Sequential(
-                *[BridgeTowerResidualAttention(hidden_size, heads, attn_mask) for _ in range(num_hidden_layers)]
+            self.resblocks = nn.ModuleList(
+                [BridgeTowerResidualAttention(hidden_size, heads, attn_mask) for _ in range(num_hidden_layers)]
             )
         self.model_type = model_type
         self.stop_gradient = stop_gradient
@@ -239,7 +242,7 @@ class BridgeTowerVisualTransformer(nn.Module):
         self.model_type = model_type
         self.share_layernorm = share_layernorm
         if not share_layernorm:
-            self.ln_separate = nn.ModuleList([BridgeTowerLayerNorm(hidden_size) for _ in range(layers)])
+            self.ln_separate = nn.ModuleList([BridgeTowerLayerNorm(hidden_size) for _ in range(num_hidden_layers)])
 
     def forward(self, hidden_state: torch.Tensor, attention_mask):
         # shape = [*, hidden_size, grid, grid]
@@ -332,18 +335,6 @@ class BridgeTowerCLIP(nn.Module):
             share_layernorm=share_layernorm,
             vit_remove_last=vit_remove_last,
         )
-
-        self.initialize_parameters()
-
-    def initialize_parameters(self):
-        proj_std = (self.visual.transformer.hidden_size**-0.5) * ((2 * self.visual.transformer.num_hidden_layers) ** -0.5)
-        attn_std = self.visual.transformer.hidden_size**-0.5
-        fc_std = (2 * self.visual.transformer.hidden_size) ** -0.5
-        for block in self.visual.transformer.resblocks:
-            nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
-            nn.init.normal_(block.attn.out_proj.weight, std=proj_std)
-            nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
-            nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
     @property
     def dtype(self):
@@ -1021,7 +1012,16 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BridgeTowerSelfAttention"]
 
     def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, BridgeTowerCLIP):
+            proj_std = (module.visual.transformer.hidden_size**-0.5) * ((2 * module.visual.transformer.num_hidden_layers) ** -0.5)
+            attn_std = module.visual.transformer.hidden_size**-0.5
+            fc_std = (2 * module.visual.transformer.hidden_size) ** -0.5
+            for block in module.visual.transformer.resblocks:
+                nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
+                nn.init.normal_(block.attn.out_proj.weight, std=proj_std)
+                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
+                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
+        elif isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=0.02)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -1444,6 +1444,9 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
 
         self.bridgetower = BridgeTowerModel(config)
         self.mlm_score = BridgeTowerMLMHead(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.mlm_score.decoder
