@@ -10,7 +10,7 @@ parameters:
 
 jobs:
     # Ensure running with CircleCI/huggingface
-    check_circle_user:
+    check_circleci_user:
         docker:
             - image: cimg/python:3.7.12
         parallelism: 1
@@ -184,7 +184,7 @@ workflows:
         when:
             not: <<pipeline.parameters.nightly>>
         jobs:
-            - check_circle_user
+            - check_circleci_user
             - check_code_quality
             - check_repository_consistency
             - fetch_tests
@@ -192,7 +192,7 @@ workflows:
     nightly:
         when: <<pipeline.parameters.nightly>>
         jobs:
-            - check_circle_user
+            - check_circleci_user
             - check_code_quality
             - check_repository_consistency
             - fetch_all_tests
