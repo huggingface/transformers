@@ -42,7 +42,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
             Beam indices indicating to which beam hypothesis the `next_tokens` correspond.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
-        eos_token_id (`int`, *optional*):
+        eos_token_id (`Union[int, List[int]]`, *optional*):
             The id of the *end-of-sequence* token.
 
     Return:
@@ -74,7 +74,7 @@ FINALIZE_INPUTS_DOCSTRING = r"""
             The beam indices indicating to which beam the `final_beam_tokens` shall be added.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
-        eos_token_id (`int`, *optional*):
+        eos_token_id (`Union[int, List[int]]`, *optional*):
             The id of the *end-of-sequence* token.
 
     Return:
@@ -519,7 +519,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 The scores of all tokens in the vocabulary for each of the beam hypotheses.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
+            eos_token_id (`Union[int, List[int]]`, *optional*):
                 The id of the *end-of-sequence* token.
 
         Return:
