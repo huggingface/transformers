@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import functools
 import inspect
 import tempfile
 import unittest
@@ -181,6 +182,10 @@ def prepare_whisper_inputs_dict(
     }
 
 
+def adjust_input_shape(cls, input_shape):
+    return functools.partial(cls, input_shape=input_shape)
+
+
 @require_flax
 class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxWhisperForConditionalGeneration, FlaxWhisperModel) if is_flax_available() else ()
@@ -192,6 +197,11 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxWhisperModelTester(self)
+        _, inputs_dict = self.model_test.prepare_config_and_inputs_for_common()
+        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+        self.all_model_classes = (
+            adjust_input_shape(model_class, init_shape) for model_class in self.all_model_classes
+        )
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
 
     def test_config(self):
