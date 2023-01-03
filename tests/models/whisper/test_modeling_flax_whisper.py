@@ -208,10 +208,10 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FlaxWhisperModelTester(self)
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+        self.init_shape = (1,) + inputs_dict["input_features"].shape[1:]
 
         self.all_model_classes = (
-            make_partial_class(model_class, input_shape=init_shape) for model_class in self.all_model_classes
+            make_partial_class(model_class, input_shape=self.init_shape) for model_class in self.all_model_classes
         )
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
 
@@ -392,7 +392,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
+                base_model = base_class.from_pretrained(tmpdirname, input_shape=self.init_shape, from_pt=True)
 
                 base_params = flatten_dict(unfreeze(base_model.params))
 
@@ -410,7 +410,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             if model_class == base_class:
                 continue
 
-            model = base_class(config)
+            model = base_class(config, input_shape=self.init_shape)
             base_params = flatten_dict(unfreeze(model.params))
 
             # convert Flax model to PyTorch model
@@ -451,7 +451,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
+                base_model = base_class.from_pretrained(tmpdirname, input_shape=self.init_shape, from_pt=True)
 
                 base_params = flatten_dict(unfreeze(base_model.params))
 
