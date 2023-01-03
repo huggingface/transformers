@@ -24,13 +24,7 @@ import numpy as np
 
 import transformers
 from transformers import WhisperConfig
-from transformers.testing_utils import (
-    is_pt_flax_cross_test,
-    require_torch,
-    require_torchaudio,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_flax_available, is_torch_available
 from transformers.utils.import_utils import is_datasets_available
 
