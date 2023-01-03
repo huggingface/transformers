@@ -591,7 +591,7 @@ class XMODModelIntegrationTest(unittest.TestCase):
             [0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2],
         ])
         # fmt: on
-        lang_codes = ["en_XX", "de_DE", "de_DE", "en_XX"]
+        lang_ids = torch.LongTensor([0, 8, 8, 0])
         expected_output_shape = torch.Size((4, 12, 768))  # batch_size, sequence_length, embedding_vector_dim
         # fmt: off
         expected_output_values_last_dim = torch.tensor([
@@ -601,7 +601,7 @@ class XMODModelIntegrationTest(unittest.TestCase):
             [-0.2394, -0.0036, 0.1252, -0.0087, 0.1325, 0.0580, -0.2049, -0.1978, -0.1223, 0.0648, -0.2599, -0.3724],
         ])
         # fmt: on
-        output = model(input_ids, lang_codes=lang_codes)["last_hidden_state"].detach()
+        output = model(input_ids, lang_ids=lang_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
         self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))

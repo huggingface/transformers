@@ -410,23 +410,16 @@ class XMODOutput(nn.Module):
         for language in config.languages:
             self.adapter_modules[str(language)] = XMODAdapter(config)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor, lang_codes: List[str]) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor, lang_ids: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + input_tensor
-        hidden_states = self.lang_adapter(lang_codes, hidden_states)
+        hidden_states = self.lang_adapter(lang_ids, hidden_states)
         return hidden_states
 
-    def lang_adapter(self, lang_codes: List[str], hidden_states: torch.Tensor):
+    def lang_adapter(self, lang_ids: torch.Tensor, hidden_states: torch.Tensor):
         # Process subsequent samples with the same lang_id in parallel
-        langs = [lang_codes[0]]
-        lang_lengths = [1]
-        for lang in lang_codes[1:]:
-            if lang == langs[-1]:
-                lang_lengths[-1] += 1
-            else:
-                langs.append(lang)
-                lang_lengths.append(1)
+        lang_ids, lang_lengths = torch.unique_consecutive(lang_ids, return_counts=True)
 
         if not self.ln_before_adapter:
             residual = hidden_states
@@ -437,10 +430,11 @@ class XMODOutput(nn.Module):
         if self.ln_before_adapter:
             residual = hidden_states
 
-        split_hidden_states = torch.split(hidden_states, lang_lengths, 0)
+        split_hidden_states = torch.split(hidden_states, lang_lengths.tolist(), 0)
         lang_wise_outputs = []
-        for i, (lang, s_x) in enumerate(zip(langs, split_hidden_states)):
-            lang_wise_outputs.append(self.adapter_modules[str(lang)](s_x))
+        for i, (lang_id, s_x) in enumerate(zip(lang_ids, split_hidden_states)):
+            lang = list(self.adapter_modules.keys())[int(lang_id.item())]
+            lang_wise_outputs.append(self.adapter_modules[lang](s_x))
         hidden_states = torch.cat(lang_wise_outputs, 0)
 
         hidden_states = self.dropout(hidden_states)
@@ -467,7 +461,7 @@ class XMODLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        lang_codes: List[str],
+        lang_ids: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -528,7 +522,7 @@ class XMODLayer(nn.Module):
             self.seq_len_dim,
             attention_output,
         )
-        layer_output = self.output(intermediate_output, residual, lang_codes)
+        layer_output = self.output(intermediate_output, residual, lang_ids)
         if not self.pre_norm:
             layer_output = self.output.LayerNorm(layer_output)
         outputs = (layer_output,) + outputs
@@ -557,7 +551,7 @@ class XMODEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        lang_codes: List[str],
+        lang_ids: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -597,7 +591,7 @@ class XMODEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
-                    lang_codes,
+                    lang_ids,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
@@ -606,7 +600,7 @@ class XMODEncoder(nn.Module):
             else:
                 layer_outputs = layer_module(
                     hidden_states,
-                    lang_codes,
+                    lang_ids,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
@@ -764,6 +758,9 @@ XMOD_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
+        lang_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of the language adapters that should be activated for each sample, respectively. Default: the index
+            that corresponds to `self.config.default_language`.
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -867,7 +864,7 @@ class XMODModel(XMODPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        lang_codes: Optional[List[str]] = None,
+        lang_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -882,10 +879,7 @@ class XMODModel(XMODPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        lang_codes (`List[str]` of length `batch_size`, *optional*):
-            Language of each sample. Default: `self.config.default_language`.
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length,
-        hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -894,7 +888,8 @@ class XMODModel(XMODPreTrainedModel):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors
+        of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
@@ -930,13 +925,12 @@ class XMODModel(XMODPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        if lang_codes is None:
+        if lang_ids is None:
             if self.config.default_language is None:
                 raise ValueError("Input language unknown. Please call `XMODPreTrainedModel.set_default_language()`")
-            lang_codes = batch_size * [self.config.default_language]
-        else:
-            if len(lang_codes) != batch_size:
-                raise ValueError("Number of lang_codes does not match batch size")
+            adapter_languages = list(self.encoder.layer[0].output.adapter_modules.keys())
+            default_lang_id = adapter_languages.index(self.config.default_language)
+            lang_ids = default_lang_id * torch.ones(batch_size, device=device)
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -980,7 +974,7 @@ class XMODModel(XMODPreTrainedModel):
         )
         encoder_outputs = self.encoder(
             embedding_output,
-            lang_codes=lang_codes,
+            lang_ids=lang_ids,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -1011,12 +1005,12 @@ class XMODModel(XMODPreTrainedModel):
     "X-MOD Model with a `language modeling` head on top for CLM fine-tuning.",
     XMOD_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->XMOD, ROBERTA->XMOD
 class XMODForCausalLM(XMODPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.__init__ with Roberta->XMOD
     def __init__(self, config):
         super().__init__(config)
 
@@ -1032,9 +1026,11 @@ class XMODForCausalLM(XMODPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.get_output_embeddings
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
@@ -1043,6 +1039,7 @@ class XMODForCausalLM(XMODPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        lang_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1106,6 +1103,7 @@ class XMODForCausalLM(XMODPreTrainedModel):
 
         outputs = self.roberta(
             input_ids,
+            lang_ids=lang_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1144,6 +1142,7 @@ class XMODForCausalLM(XMODPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1156,6 +1155,7 @@ class XMODForCausalLM(XMODPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM._reorder_cache
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
@@ -1167,12 +1167,12 @@ class XMODForCausalLM(XMODPreTrainedModel):
     """X-MOD Model with a `language modeling` head on top.""",
     XMOD_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with Roberta->XMOD, ROBERTA->XMOD
 class XMODForMaskedLM(XMODPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with Roberta->XMOD
     def __init__(self, config):
         super().__init__(config)
 
@@ -1191,9 +1191,11 @@ class XMODForMaskedLM(XMODPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.get_output_embeddings
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
@@ -1210,6 +1212,7 @@ class XMODForMaskedLM(XMODPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        lang_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1234,6 +1237,7 @@ class XMODForMaskedLM(XMODPreTrainedModel):
 
         outputs = self.roberta(
             input_ids,
+            lang_ids=lang_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1304,10 +1308,10 @@ class XMODLMHead(nn.Module):
     """,
     XMOD_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with Roberta->XMOD, ROBERTA->XMOD
 class XMODForSequenceClassification(XMODPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->XMOD
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1331,6 +1335,7 @@ class XMODForSequenceClassification(XMODPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        lang_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1351,6 +1356,7 @@ class XMODForSequenceClassification(XMODPreTrainedModel):
 
         outputs = self.roberta(
             input_ids,
+            lang_ids=lang_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1405,10 +1411,10 @@ class XMODForSequenceClassification(XMODPreTrainedModel):
     """,
     XMOD_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with Roberta->XMOD, ROBERTA->XMOD
 class XMODForMultipleChoice(XMODPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice.__init__ with Roberta->XMOD
     def __init__(self, config):
         super().__init__(config)
 
@@ -1429,6 +1435,7 @@ class XMODForMultipleChoice(XMODPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        lang_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1449,6 +1456,7 @@ class XMODForMultipleChoice(XMODPreTrainedModel):
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        flat_lang_ids = lang_ids.repeat(input_ids.size(0) * input_ids.size(1)) if lang_ids is not None else None
         flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
         flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
@@ -1460,6 +1468,7 @@ class XMODForMultipleChoice(XMODPreTrainedModel):
 
         outputs = self.roberta(
             flat_input_ids,
+            lang_ids=flat_lang_ids,
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
@@ -1499,11 +1508,11 @@ class XMODForMultipleChoice(XMODPreTrainedModel):
     """,
     XMOD_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with Roberta->XMOD, ROBERTA->XMOD
 class XMODForTokenClassification(XMODPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->XMOD
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1530,6 +1539,7 @@ class XMODForTokenClassification(XMODPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        lang_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1548,6 +1558,7 @@ class XMODForTokenClassification(XMODPreTrainedModel):
 
         outputs = self.roberta(
             input_ids,
+            lang_ids=lang_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1610,11 +1621,11 @@ class XMODClassificationHead(nn.Module):
     """,
     XMOD_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with Roberta->XMOD, ROBERTA->XMOD
 class XMODForQuestionAnswering(XMODPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->XMOD
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1637,6 +1648,7 @@ class XMODForQuestionAnswering(XMODPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        lang_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1662,6 +1674,7 @@ class XMODForQuestionAnswering(XMODPreTrainedModel):
 
         outputs = self.roberta(
             input_ids,
+            lang_ids=lang_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,

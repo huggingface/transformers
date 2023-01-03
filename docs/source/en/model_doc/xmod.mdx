@@ -42,7 +42,7 @@ model = XMODModel.from_pretrained("jvamvas/xmod-base")
 model.set_default_language("en_XX")
 ```
 
-2. By explicitly passing the language code for each sample:
+2. By explicitly passing the index of the language adapter for each sample:
 
 ```python
 import torch
@@ -53,11 +53,13 @@ input_ids = torch.tensor(
         [0, 1310, 49083, 443, 269, 71, 5486, 165, 60429, 660, 23, 2],
     ]
 )
-lang_codes = [
-    "en_XX",
-    "de_DE",
-]
-output = model(input_ids, lang_codes=lang_codes)
+lang_ids = torch.LongTensor(
+    [
+        0,  # en_XX
+        8,  # de_DE
+    ]
+)
+output = model(input_ids, lang_ids=lang_ids)
 ```
 
 ### Fine-tuning
