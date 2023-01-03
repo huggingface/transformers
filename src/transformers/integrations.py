@@ -1314,6 +1314,8 @@ class ClearMLCallback(TrainerCallback):
                 ClearML project name.
             CLEARML_TASK (`str`, *optional* defaults to `"Trainer"`):
                 ClearML task name.
+            CLEARML_LOG_MODEL (`bool`, *optional*, defaults to `False`):
+                Whether to log models as artifacts during training.
     """
 
     def __init__(self):
