@@ -91,26 +91,26 @@ Now you can convert the label id to a label name:
 
 ## Preprocess
 
-The next step is to load a ViT feature extractor to process the image into a tensor:
+The next step is to load a ViT image processor to process the image into a tensor:
 
 ```py
->>> from transformers import AutoFeatureExtractor
+>>> from transformers import AutoImageProcessor
 
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+>>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 ```
 
-Apply some image transformations to the images to make the model more robust against overfitting. Here you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module, but you can also use any image library you like. 
+Apply some image transformations to the images to make the model more robust against overfitting. Here you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module, but you can also use any image library you like.
 
 Crop a random part of the image, resize it, and normalize it with the image mean and standard deviation:
 
 ```py
 >>> from torchvision.transforms import RandomResizedCrop, Compose, Normalize, ToTensor
 
->>> normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+>>> normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
 >>> size = (
-...     feature_extractor.size["shortest_edge"]
-...     if "shortest_edge" in feature_extractor.size
-...     else (feature_extractor.size["height"], feature_extractor.size["width"])
+...     image_processor.size["shortest_edge"]
+...     if "shortest_edge" in image_processor.size
+...     else (image_processor.size["height"], image_processor.size["width"])
 ... )
 >>> _transforms = Compose([RandomResizedCrop(size), ToTensor(), normalize])
 ```
@@ -213,7 +213,7 @@ At this point, only three steps remain:
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     tokenizer=feature_extractor,
+...     tokenizer=image_processor,
 ...     compute_metrics=compute_metrics,
 ... )
 
@@ -266,14 +266,14 @@ You can also manually replicate the results of the `pipeline` if you'd like:
 
 <frameworkcontent>
 <pt>
-Load a feature extractor to preprocess the image and return the `input` as PyTorch tensors:
+Load an image processor to preprocess the image and return the `input` as PyTorch tensors:
 
 ```py
->>> from transformers import AutoFeatureExtractor
+>>> from transformers import AutoImageProcessor
 >>> import torch
 
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("my_awesome_food_model")
->>> inputs = feature_extractor(image, return_tensors="pt")
+>>> image_processor = AutoImageProcessor.from_pretrained("my_awesome_food_model")
+>>> inputs = image_processor(image, return_tensors="pt")
 ```
 
 Pass your inputs to the model and return the logits:

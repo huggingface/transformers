@@ -37,7 +37,7 @@ library: ライブラリ
 module: モジュール
 NLP/Natural Language Processing: NLPと表示される場合は翻訳されず、Natural Language Processingと表示される場合は翻訳される
 online demos: オンラインデモ
-pipeline: pipeline(翻訳しない)
+pipeline: pipeline(翻訳しない)
 pretrained/pretrain: 学習済み
 Python data structures (e.g., list, set, dict): リスト、セット、ディクショナリと訳され、括弧内は原文英語
 repository: repository(翻訳しない)
@@ -80,7 +80,8 @@ user: ユーザ
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hant.md">繁體中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> |
-        <b>日本語</b>
+        <b>日本語</b> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a>
     <p>
 </h4>
 
@@ -455,6 +456,7 @@ Flax、PyTorch、TensorFlowをcondaでインストールする方法は、それ
 1. **[XLSR-Wav2Vec2](https://huggingface.co/docs/transformers/model_doc/xlsr_wav2vec2)** (from Facebook AI) released with the paper [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://arxiv.org/abs/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 1. **[YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos)** (from Huazhong University of Science & Technology) released with the paper [You Only Look at One Sequence: Rethinking Transformer in Vision through Object Detection](https://arxiv.org/abs/2106.00666) by Yuxin Fang, Bencheng Liao, Xinggang Wang, Jiemin Fang, Jiyang Qi, Rui Wu, Jianwei Niu, Wenyu Liu.
 1. **[YOSO](https://huggingface.co/docs/transformers/model_doc/yoso)** (from the University of Wisconsin - Madison) released with the paper [You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling](https://arxiv.org/abs/2111.09714) by Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh.
+
 1. 新しいモデルを投稿したいですか？新しいモデルを追加するためのガイドとして、**詳細なガイドとテンプレート**が追加されました。これらはリポジトリの[`templates`](./templates)フォルダにあります。PRを始める前に、必ず[コントリビューションガイド](./CONTRIBUTING.md)を確認し、メンテナに連絡するか、フィードバックを収集するためにissueを開いてください。
 
 各モデルがFlax、PyTorch、TensorFlowで実装されているか、🤗Tokenizersライブラリに支えられた関連トークナイザを持っているかは、[この表](https://huggingface.co/docs/transformers/index#supported-frameworks)を参照してください。

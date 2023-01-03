@@ -109,7 +109,6 @@ class GLPNConfig(PretrainedConfig):
         initializer_range=0.02,
         drop_path_rate=0.1,
         layer_norm_eps=1e-6,
-        is_encoder_decoder=False,
         decoder_hidden_size=64,
         max_depth=10,
         head_in_index=-1,

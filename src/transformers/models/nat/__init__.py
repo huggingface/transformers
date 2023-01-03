@@ -35,6 +35,7 @@ else:
         "NatForImageClassification",
         "NatModel",
         "NatPreTrainedModel",
+        "NatBackbone",
     ]
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_nat import (
             NAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NatBackbone,
             NatForImageClassification,
             NatModel,
             NatPreTrainedModel,

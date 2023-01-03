@@ -210,6 +210,8 @@ PYTORCH_EXPORT_MODELS = {
     ("owlvit", "google/owlvit-base-patch32"),
     ("perceiver", "hf-internal-testing/tiny-random-PerceiverModel", ("masked-lm", "sequence-classification")),
     ("perceiver", "hf-internal-testing/tiny-random-PerceiverModel", ("image-classification",)),
+    ("poolformer", "sail/poolformer_s12"),
+    ("rembert", "google/rembert"),
     ("resnet", "microsoft/resnet-50"),
     ("roberta", "hf-internal-testing/tiny-random-RobertaModel"),
     ("roformer", "hf-internal-testing/tiny-random-RoFormerModel"),
@@ -271,7 +273,12 @@ def _get_models_to_test(export_models_list):
                     feature: FeaturesManager.get_config(name, feature) for _ in features for feature in _
                 }
             else:
-                feature_config_mapping = FeaturesManager.get_supported_features_for_model_type(name)
+                # pre-process the model names
+                model_type = name.replace("_", "-")
+                model_name = getattr(model, "name", "")
+                feature_config_mapping = FeaturesManager.get_supported_features_for_model_type(
+                    model_type, model_name=model_name
+                )
 
             for feature, onnx_config_class_constructor in feature_config_mapping.items():
                 models_to_test.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))

@@ -34,7 +34,12 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
+from ...pytorch_utils import (
+    find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_1_10,
+    meshgrid,
+    prune_linear_layer,
+)
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_vilt import ViltConfig
 
@@ -138,7 +143,7 @@ class ViltEmbeddings(nn.Module):
         x = x.flatten(2).transpose(1, 2)
         # Set `device` here, otherwise `patch_index` will always be on `CPU` and will fail near the end for torch>=1.13
         patch_index = torch.stack(
-            torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
+            meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
         ).to(device=x_mask.device)
         patch_index = patch_index[None, None, :, :, :]
         patch_index = patch_index.expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)

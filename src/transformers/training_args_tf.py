@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
 from .training_args import TrainingArguments
-from .utils import cached_property, is_tf_available, logging, tf_required
+from .utils import cached_property, is_tf_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -185,8 +185,8 @@ class TFTrainingArguments(TrainingArguments):
     xla: bool = field(default=False, metadata={"help": "Whether to activate the XLA compilation or not"})
 
     @cached_property
-    @tf_required
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
+        requires_backends(self, ["tf"])
         logger.info("Tensorflow: setting up strategy")
 
         gpus = tf.config.list_physical_devices("GPU")
@@ -234,19 +234,19 @@ class TFTrainingArguments(TrainingArguments):
         return strategy
 
     @property
-    @tf_required
     def strategy(self) -> "tf.distribute.Strategy":
         """
         The strategy used for distributed training.
         """
+        requires_backends(self, ["tf"])
         return self._setup_strategy
 
     @property
-    @tf_required
     def n_replicas(self) -> int:
         """
         The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
+        requires_backends(self, ["tf"])
         return self._setup_strategy.num_replicas_in_sync
 
     @property
@@ -276,11 +276,11 @@ class TFTrainingArguments(TrainingArguments):
         return per_device_batch_size * self.n_replicas
 
     @property
-    @tf_required
     def n_gpu(self) -> int:
         """
         The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
+        requires_backends(self, ["tf"])
         warnings.warn(
             "The n_gpu argument is deprecated and will be removed in a future version, use n_replicas instead.",
             FutureWarning,

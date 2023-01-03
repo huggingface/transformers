@@ -796,7 +796,7 @@ class LongformerSelfAttention(nn.Module):
             hidden_states.size(2),
         ]
 
-        overlapping_chunks = torch.empty(chunk_size)
+        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
         for chunk in range(chunk_size[1]):
             overlapping_chunks[:, chunk, :, :] = hidden_states[
                 :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :

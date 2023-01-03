@@ -253,7 +253,14 @@ class Speech2TextAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -347,6 +354,7 @@ class Speech2TextAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Speech2Text
 class Speech2TextEncoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
@@ -370,14 +378,14 @@ class Speech2TextEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         layer_head_mask: torch.Tensor,
         output_attentions: bool = False,
-    ):
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
+                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -415,6 +423,7 @@ class Speech2TextEncoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Speech2Text
 class Speech2TextDecoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
@@ -453,7 +462,7 @@ class Speech2TextDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ):
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -466,7 +475,7 @@ class Speech2TextDecoderLayer(nn.Module):
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
                 `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
+                size `(decoder_attention_heads,)`.
             past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -663,15 +672,12 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-            `decoder_input_ids` you can choose to directly pass an embedded representation. If `past_key_values` is
-            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
-            useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).

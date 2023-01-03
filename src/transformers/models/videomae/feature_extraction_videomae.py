@@ -14,6 +14,8 @@
 # limitations under the License.
 """Feature extractor class for VideoMAE."""
 
+import warnings
+
 from ...utils import logging
 from .image_processing_videomae import VideoMAEImageProcessor
 
@@ -21,4 +23,11 @@ from .image_processing_videomae import VideoMAEImageProcessor
 logger = logging.get_logger(__name__)
 
 
-VideoMAEFeatureExtractor = VideoMAEImageProcessor
+class VideoMAEFeatureExtractor(VideoMAEImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class VideoMAEFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
+            " Please use VideoMAEImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)

@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "MobileViTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileViTFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "MobileViTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "apple/mobilevit-small"
@@ -692,8 +692,8 @@ MOBILEVIT_START_DOCSTRING = r"""
 MOBILEVIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileViTFeatureExtractor`]. See
-            [`MobileViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`MobileViTImageProcessor`]. See
+            [`MobileViTImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -1027,17 +1027,17 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileViTFeatureExtractor, MobileViTForSemanticSegmentation
+        >>> from transformers import MobileViTImageProcessor, MobileViTForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-small")
+        >>> image_processor = MobileViTImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-small")
         >>> model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-small")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

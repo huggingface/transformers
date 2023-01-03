@@ -144,9 +144,8 @@ from .utils import (
     is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_torch_tensorrt_fx_available,
+    is_torch_compile_available,
     is_torch_tpu_available,
-    is_torchdynamo_available,
     logging,
 )
 from .utils.generic import ContextManagers
@@ -299,13 +298,13 @@ class Trainer:
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
-        eval_dataset: Optional[Dataset] = None,
+        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
-        model_init: Callable[[], PreTrainedModel] = None,
+        model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-        preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
+        preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         if args is None:
             output_dir = "tmp_trainer"
@@ -357,6 +356,13 @@ class Trainer:
             self.is_model_parallel = True
         else:
             self.is_model_parallel = False
+
+        # At this stage the model is already loaded
+        if getattr(model, "is_loaded_in_8bit", False):
+            raise ValueError(
+                "The model you want to train is loaded in 8-bit precision. "
+                "Training an 8-bit model is not supported yet. "
+            )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
@@ -559,7 +565,7 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled()):
+        if (args.fp16 or args.bf16) and not (args.deepspeed or is_sagemaker_mp_enabled() or is_torch_tpu_available()):
             # deepspeed and SageMaker Model Parallel manage their own half precision
             if args.half_precision_backend == "cuda_amp":
                 self.use_cuda_amp = True
@@ -636,33 +642,9 @@ class Trainer:
         # very last
         self._memory_tracker.stop_and_update_metrics()
 
-        # torchdynamo
-        if args.torchdynamo:
-            if not is_torchdynamo_available():
-                raise RuntimeError("Torchdynamo is not installed.")
-            import torchdynamo
-            from torchdynamo.optimizations import backends
-
-            def get_ctx():
-                # Normal
-                if args.torchdynamo == "eager":
-                    return torchdynamo.optimize("eager")
-                elif args.torchdynamo == "nvfuser":
-                    return torchdynamo.optimize("aot_nvfuser")
-                # TensorRT
-                if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
-                    if not is_torch_tensorrt_fx_available():
-                        raise RuntimeError("Torch-TensorRT FX path is not installed.")
-                    if args.torchdynamo == "fx2trt-fp16":
-                        return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
-                    elif args.torchdynamo == "fx2trt":
-                        return torchdynamo.optimize(backends.fx2trt_compiler)
-                else:
-                    raise RuntimeError(f"Torchdynamo backend {args.torchdynamo} is not supported.")
-
-            self.ctx_manager_torchdynamo = get_ctx()
-        else:
-            self.ctx_manager_torchdynamo = contextlib.nullcontext()
+        # torch.compile
+        if args.torch_compile and not is_torch_compile_available():
+            raise RuntimeError("Using torch.compile requires a nighly install of PyTorch.")
 
     def add_callback(self, callback):
         """
@@ -1305,8 +1287,9 @@ class Trainer:
                         jit_inputs = tuple(jit_inputs)
                         jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
                 jit_model = torch.jit.freeze(jit_model)
-                jit_model(**example_batch)
-                jit_model(**example_batch)
+                with torch.no_grad():
+                    jit_model(**example_batch)
+                    jit_model(**example_batch)
                 model = jit_model
                 self.use_cpu_amp = False
                 self.use_cuda_amp = False
@@ -1338,6 +1321,9 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True, dataloader=None):
+        if self.args.torch_compile:
+            model = torch.compile(model, backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode)
+
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
@@ -1365,7 +1351,9 @@ class Trainer:
             model = nn.DataParallel(model)
 
         if self.args.jit_mode_eval:
+            start_time = time.time()
             model = self.torch_jit_model_eval(model, dataloader, training)
+            self.jit_compilation_time = round(time.time() - start_time, 4)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -1436,9 +1424,8 @@ class Trainer:
                     cpu_offload=cpu_offload,
                     auto_wrap_policy=auto_wrap_policy,
                     mixed_precision=mixed_precision_policy,
+                    device_id=self.args.device,
                 )
-                if FSDPOption.OFFLOAD not in self.args.fsdp:
-                    model.to(self.args.device)
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
@@ -2493,18 +2480,7 @@ class Trainer:
         """
         A helper wrapper to group together context managers.
         """
-        return ContextManagers(
-            [
-                self.torchdynamo_smart_context_manager(),
-                self.autocast_smart_context_manager(),
-            ]
-        )
-
-    def torchdynamo_smart_context_manager(self):
-        """
-        A helper wrapper that creates an appropriate context manager for `torchdynamo`.
-        """
-        return self.ctx_manager_torchdynamo
+        return self.autocast_smart_context_manager()
 
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
@@ -2850,6 +2826,8 @@ class Trainer:
         )
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
+        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
@@ -2917,6 +2895,8 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         total_batch_size = self.args.eval_batch_size * self.args.world_size
+        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
@@ -3133,6 +3113,8 @@ class Trainer:
 
         if all_losses is not None:
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
+        if hasattr(self, "jit_compilation_time"):
+            metrics[f"{metric_key_prefix}_jit_compilation_time"] = self.jit_compilation_time
 
         # Prefix all keys with metric_key_prefix + '_'
         for key in list(metrics.keys()):
@@ -3180,7 +3162,9 @@ class Trainer:
         sizes = self._nested_gather(size).cpu()
 
         max_size = max(s[1] for s in sizes)
-        if tensor.shape[1] == max_size:
+        # When extracting XLA graphs for compilation, max_size is 0,
+        # so use inequality to avoid errors.
+        if tensor.shape[1] >= max_size:
             return tensor
 
         # Then pad to the maximum size
@@ -3530,7 +3514,7 @@ class Trainer:
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-    ) -> PredictionOutput:
+    ) -> EvalLoopOutput:
         """
         Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
 
@@ -3667,7 +3651,7 @@ class Trainer:
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
-        return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
+        return EvalLoopOutput(predictions=preds, label_ids=label_ids, metrics=metrics, num_samples=num_examples)
 
     def _gather_and_numpify(self, tensors, name):
         """
