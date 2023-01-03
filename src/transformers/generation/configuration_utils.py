@@ -144,6 +144,7 @@ class GenerationConfig(PushToHubMixin):
             language token.
         forced_eos_token_id (`Union[int, List[int]]`, *optional*, defaults to `model.config.forced_eos_token_id`):
             The id of the token to force as the last generated token when `max_length` is reached.
+            Optionally, use a list to set multiple *end-of-sequence* tokens.
         remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
             Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
@@ -184,7 +185,7 @@ class GenerationConfig(PushToHubMixin):
         bos_token_id (`int`, *optional*):
             The id of the *beginning-of-sequence* token.
         eos_token_id (`Union[int, List[int]]`, *optional*):
-            The id of the *end-of-sequence* token.
+            The id of the *end-of-sequence* token.  Optionally, use a list to set multiple *end-of-sequence* tokens.
 
         > Generation parameters exclusive to encoder-decoder models
 

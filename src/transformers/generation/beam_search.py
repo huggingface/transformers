@@ -43,7 +43,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
         eos_token_id (`Union[int, List[int]]`, *optional*):
-            The id of the *end-of-sequence* token.
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
     Return:
         `UserDict`: A dictionary composed of the fields as defined above:
@@ -75,7 +75,7 @@ FINALIZE_INPUTS_DOCSTRING = r"""
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
         eos_token_id (`Union[int, List[int]]`, *optional*):
-            The id of the *end-of-sequence* token.
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
     Return:
         `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated sequences.
@@ -520,7 +520,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token.
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
         Return:
             `UserDict`: A dictionary composed of the fields as defined above:

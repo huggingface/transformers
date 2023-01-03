@@ -101,7 +101,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
         min_length (`int`):
             The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
         eos_token_id (`Union[int, List[int]]`):
-            The id of the *end-of-sequence* token.
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
     def __init__(self, min_length: int, eos_token_id: Union[int, List[int]]):
@@ -399,7 +399,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
             that should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
             add_special_tokens=False).input_ids`.
         eos_token_id (`Union[int, List[int]]`):
-            The id of the *end-of-sequence* token.
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
@@ -640,6 +640,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
             The maximum length of the sequence to be generated.
         eos_token_id (`Union[int, List[int]]`):
             The id of the token to force as the last generated token when `max_length` is reached.
+            Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
     def __init__(self, max_length: int, eos_token_id: Union[int, List[int]]):
@@ -685,7 +686,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
             starts and `decay_factor` represents the factor of exponential decay
         eos_token_id (`Union[int, List[int]]`):
-            The id of the *end-of-sequence* token.
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         input_ids_seq_length (`int`):
             The length of the input sequence.
     """
