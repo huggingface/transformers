@@ -142,8 +142,9 @@ class GenerationConfig(PushToHubMixin):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
             language token.
-        forced_eos_token_id (`int`, *optional*, defaults to `model.config.forced_eos_token_id`):
-            The id of the token to force as the last generated token when `max_length` is reached.
+        forced_eos_token_id (`Union[int, List[int]]`, *optional*, defaults to `model.config.forced_eos_token_id`):
+            The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
+            list to set multiple *end-of-sequence* tokens.
         remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
             Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
@@ -152,10 +153,10 @@ class GenerationConfig(PushToHubMixin):
             generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
             penalty starts and `decay_factor` represents the factor of exponential decay
         suppress_tokens  (`List[int]`, *optional*):
-            A list of tokens that will be supressed at generation. The `SupressTokens` logit processor will set their
+            A list of tokens that will be suppressed at generation. The `SupressTokens` logit processor will set their
             log probs to `-inf` so that they are not sampled.
         begin_suppress_tokens  (`List[int]`, *optional*):
-            A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens` logit
+            A list of tokens that will be suppressed at the beginning of the generation. The `SupressBeginTokens` logit
             processor will set their log probs to `-inf` so that they are not sampled.
         forced_decoder_ids (`List[List[int]]`, *optional*):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
@@ -183,8 +184,8 @@ class GenerationConfig(PushToHubMixin):
             The id of the *padding* token.
         bos_token_id (`int`, *optional*):
             The id of the *beginning-of-sequence* token.
-        eos_token_id (`int`, *optional*):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`, *optional*):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
         > Generation parameters exclusive to encoder-decoder models
 
