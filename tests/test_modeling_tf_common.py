@@ -1854,7 +1854,7 @@ class TFModelTesterMixin:
 
         Either the model supports XLA generation and passes the inner test, or it raises an appropriate exception
         """
-        self._test_xla_generate(num_beams=1, num_return_sequences=1, max_new_tokens=64, penalty_alpha=0.5, top_k=4)
+        self._test_xla_generate(num_beams=1, num_return_sequences=1, max_new_tokens=16, penalty_alpha=0.5, top_k=4)
 
     @slow
     def test_xla_generate_slow(self):

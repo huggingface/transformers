@@ -155,6 +155,12 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_
     if hasattr(tiny_config, "image_size") and feature_extractor:
         feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
 
+    # Audio Spectogram Transformer specific.
+    if feature_extractor.__class__.__name__ == "ASTFeatureExtractor":
+        feature_extractor = feature_extractor.__class__(
+            max_length=tiny_config.max_length, num_mel_bins=tiny_config.num_mel_bins
+        )
+
     # Speech2TextModel specific.
     if hasattr(tiny_config, "input_feat_per_channel") and feature_extractor:
         feature_extractor = feature_extractor.__class__(

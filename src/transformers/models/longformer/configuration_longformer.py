@@ -221,7 +221,10 @@ class LongformerOnnxConfig(OnnxConfig):
         )
         import torch
 
+        # for some reason, replacing this code by inputs["global_attention_mask"] = torch.randint(2, inputs["input_ids"].shape, dtype=torch.int64)
+        # makes the export fail randomly
         inputs["global_attention_mask"] = torch.zeros_like(inputs["input_ids"])
         # make every second token global
         inputs["global_attention_mask"][:, ::2] = 1
+
         return inputs

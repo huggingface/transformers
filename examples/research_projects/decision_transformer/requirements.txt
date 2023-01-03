@@ -133,7 +133,7 @@ pbr==5.8.1
 pexpect==4.8.0
 phonemizer==3.0.1
 pickleshare==0.7.5
-Pillow==9.0.1
+Pillow==9.3.0
 Pint==0.16.1
 plac==1.3.4
 platformdirs==2.5.1

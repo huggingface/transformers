@@ -1087,7 +1087,7 @@ def add_code_sample_docstrings(
             expected_loss=expected_loss,
         )
 
-        if "SequenceClassification" in model_class and modality == "audio":
+        if ["SequenceClassification" in model_class or "AudioClassification" in model_class] and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]
         elif "SequenceClassification" in model_class:
             code_sample = sample_docstrings["SequenceClassification"]
