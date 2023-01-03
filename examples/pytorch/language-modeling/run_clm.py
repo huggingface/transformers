@@ -30,6 +30,7 @@ from itertools import chain
 from typing import Optional
 
 import datasets
+import torch
 from datasets import load_dataset
 
 import evaluate
@@ -126,7 +127,7 @@ class ModelArguments:
                 "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
                 "dtype will be automatically derived from the model's weights."
             ),
-            "choices": ["auto"],
+            "choices": ["auto", "bfloat16", "float16", "float32"],
         },
     )
 
@@ -391,7 +392,9 @@ def main():
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             use_auth_token=True if model_args.use_auth_token else None,
-            torch_dtype=model_args.torch_dtype,
+            torch_dtype=model_args.torch_dtype
+            if model_args.torch_dtype in ["auto", None]
+            else getattr(torch, model_args.torch_dtype),
         )
     else:
         model = AutoModelForCausalLM.from_config(config)
