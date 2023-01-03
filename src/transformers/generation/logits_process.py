@@ -15,7 +15,7 @@
 
 import inspect
 import math
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -100,16 +100,18 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     Args:
         min_length (`int`):
             The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
-    def __init__(self, min_length: int, eos_token_id: int):
+    def __init__(self, min_length: int, eos_token_id: Union[int, List[int]]):
         if not isinstance(min_length, int) or min_length < 0:
             raise ValueError(f"`min_length` has to be a positive integer, but is {min_length}")
 
-        if not isinstance(eos_token_id, int) or eos_token_id < 0:
-            raise ValueError(f"`eos_token_id` has to be a positive integer, but is {eos_token_id}")
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        if not all([isinstance(i, int) for i in eos_token_id]) or any([i < 0 for i in eos_token_id]):
+            raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         self.min_length = min_length
         self.eos_token_id = eos_token_id
@@ -117,7 +119,8 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len < self.min_length:
-            scores[:, self.eos_token_id] = -float("inf")
+            for i in self.eos_token_id:
+                scores[:, i] = -float("inf")
         return scores
 
 
@@ -431,11 +434,11 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
             List of list of token ids that are not allowed to be generated. In order to get the token ids of the words
             that should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
             add_special_tokens=False).input_ids`.
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
-    def __init__(self, bad_words_ids: List[List[int]], eos_token_id: int):
+    def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
 
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
             raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
@@ -449,7 +452,14 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                 f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
             )
 
-        bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
+        if eos_token_id is None:
+            eos_token_id = []
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+
+        bad_words_ids = list(
+            filter(lambda bad_token_seq: all([bad_token_seq != [i] for i in eos_token_id]), bad_words_ids)
+        )
         self.bad_words_id_length_1 = []
         self.bad_words_id_length_greater_than_1 = []
         for word in bad_words_ids:
@@ -664,20 +674,24 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     Args:
         max_length (`int`):
             The maximum length of the sequence to be generated.
-        eos_token_id (`int`):
-            The id of the token to force as the last generated token when `max_length` is reached.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
+            list to set multiple *end-of-sequence* tokens.
     """
 
-    def __init__(self, max_length: int, eos_token_id: int):
+    def __init__(self, max_length: int, eos_token_id: Union[int, List[int]]):
         self.max_length = max_length
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len == self.max_length - 1:
             num_tokens = scores.shape[1]
-            scores[:, [i for i in range(num_tokens) if i != self.eos_token_id]] = -float("inf")
-            scores[:, self.eos_token_id] = 0
+            scores[:, [i for i in range(num_tokens) if i not in self.eos_token_id]] = -float("inf")
+            for i in self.eos_token_id:
+                scores[:, i] = 0
         return scores
 
 
@@ -707,23 +721,26 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
             This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
             starts and `decay_factor` represents the factor of exponential decay
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         input_ids_seq_length (`int`):
             The length of the input sequence.
     """
 
-    def __init__(self, exponential_decay_length_penalty: Tuple, eos_token_id: int, input_ids_seq_length: int):
+    def __init__(
+        self, exponential_decay_length_penalty: Tuple, eos_token_id: Union[int, List[int]], input_ids_seq_length: int
+    ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len > self.regulation_start:
-            scores[:, self.eos_token_id] = scores[:, self.eos_token_id] * pow(
-                self.regulation_factor, cur_len - self.regulation_start
-            )
+            for i in self.eos_token_id:
+                scores[:, i] = scores[:, i] * pow(self.regulation_factor, cur_len - self.regulation_start)
         return scores
 
 
