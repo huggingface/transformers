@@ -810,9 +810,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
             max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
             if timestamp_logprob > max_text_token_logprob:
-                print("Forcing timestamp output")
                 scores[k, : self.timestamp_begin] = -float("inf")
-            else:
-                print("Not forcing timestamp output")
 
         return scores

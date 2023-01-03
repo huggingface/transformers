@@ -313,14 +313,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
         )
         pipe = pipeline(
-            model="openai/whisper-large",
-            generate_kwargs={"forced_bos_token_id": None},
-            max_new_tokens=448,
+            model="openai/whisper-tiny",
+            generate_kwargs={"forced_decoder_ids": None},
+            # max_new_tokens=448,
             return_timestamps=True,
-            chunk_length_s=30,
+            # chunk_length_s=30,
         )
 
-        output = pipe(array)
+        output = pipe(ds[40]["audio"])
+        self.assertDictEqual(
+            output,
+            # TODO This is not great, we're missing the last segment.
+            {
+                "text": " A man said to the universe, Sir, I exist.",
+                "chunks": [{"text": " A man said to the universe,", "timestamp": (0.0, 2.48)}],
+            },
+        )
+
+        output = pipe(array, chunk_length_s=30)
         self.assertDictEqual(
             output,
             {
@@ -347,6 +357,52 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             " Even the soaring arena around him with thousands of spectators, retrievalidies not worth"
                         ),
                         "timestamp": (17.6, 23.28),
+                    },
+                    # TODO Seems like a bug, no ?
+                    {"text": " thinking about.", "timestamp": (23.28, 1026.98)},
+                ],
+            },
+        )
+
+        output = pipe(array, chunk_length_s=10)
+        self.assertDictEqual(
+            nested_simplify(output),
+            {
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Brian's body, trickling into the titling"
+                    " cloth that was the only girl. body, trickling into the titling cloth that was the only garment"
+                    " you wore. The cut on his chest still dripping blood. The ache of his overstrained eyes. in"
+                    " blood. The ache of his overstrain dyes. Even the soaring arena around him with thousands of"
+                    " spectators, or trivialities not worth thinking about. His instant panic was followed by a small"
+                    " sharp blow high on his chest."
+                ),
+                "chunks": [
+                    {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
+                    {
+                        "text": (
+                            " Sweat covered Brian's body, trickling into the titling cloth that was the only girl."
+                        ),
+                        "timestamp": (5.5, 10.0),
+                    },
+                    {
+                        "text": (
+                            " body, trickling into the titling cloth that was the only garment you wore. The cut on"
+                            " his chest"
+                        ),
+                        "timestamp": (25.0, 31.18),
+                    },
+                    {"text": " still dripping blood. The ache of his overstrained eyes.", "timestamp": (31.18, 34.82)},
+                    {
+                        "text": (
+                            " in blood. The ache of his overstrain dyes. Even the soaring arena around him with"
+                            " thousands"
+                        ),
+                        "timestamp": (50.0, 57.0),
+                    },
+                    {"text": " of spectators, or trivialities not worth thinking about.", "timestamp": (74.96, 79.76)},
+                    {
+                        "text": " His instant panic was followed by a small sharp blow high on his chest.",
+                        "timestamp": (79.76, 84.96),
                     },
                 ],
             },

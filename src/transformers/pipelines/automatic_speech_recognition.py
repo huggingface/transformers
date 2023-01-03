@@ -129,11 +129,8 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     properly compute the final `offset`.
     """
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
-    begin = np.where(sequences[0][0] >= timestamp_begin)[1]
-    import ipdb
-
-    ipdb.set_trace()
-    if len(begin.shape):
+    begin = np.where(sequences[0][0] == timestamp_begin)[1]
+    if len(begin.shape) == 0:
         raise ValueError("No timestamp detected")
     begin_idx = begin.item()
     items = []
@@ -396,8 +393,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if ignore_warning is not None:
             preprocess_params["ignore_warning"] = ignore_warning
 
-        forward_params = {"generate_kwargs": {}}
+        forward_params = {}
         if max_new_tokens is not None:
+            if "generate_kwargs" not in forward_params:
+                forward_params["generate_kwargs"] = {}
             forward_params["generate_kwargs"]["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
             if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
@@ -405,6 +404,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
                     " only 1 version"
                 )
+            if "generate_kwargs" not in forward_params:
+                forward_params["generate_kwargs"] = {}
             forward_params["generate_kwargs"].update(generate_kwargs)
 
         postprocess_params = {}
@@ -443,6 +444,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             _inputs = inputs.pop("raw", None)
             if _inputs is None:
+                # Remove path which will not be used from `datasets`.
+                inputs.pop("path", None)
                 _inputs = inputs.pop("array", None)
             in_sampling_rate = inputs.pop("sampling_rate")
             extra = inputs
@@ -546,13 +549,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             )
             out = {"tokens": tokens}
         elif self.type == "seq2seq_whisper":
-            stride = model_inputs.pop("stride")
+            stride = model_inputs.pop("stride", None)
             tokens = self.model.generate(
-                **model_inputs,
+                input_features=model_inputs.pop("input_features"),
                 logits_processor=[WhisperTimeStampLogitsProcessor()],
                 **generate_kwargs,
             )
-            out = {"tokens": tokens, "stride": stride}
+            out = {"tokens": tokens}
+            if stride is not None:
+                out["stride"] = stride
 
         else:
             stride = model_inputs.pop("stride", None)
@@ -603,7 +608,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # This won't work with left padding (which doesn't exist right now)
                 right_n = total_n - right
                 items = items[:, left:right_n]
-            if self.type == "seq2seq_whisper" and return_timestamps:
+            if self.type == "seq2seq_whisper" and return_timestamps and stride is not None:
                 # Whisper needs the stride data
                 items = [items, stride]
             final_items.append(items)
@@ -616,6 +621,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         else:
             items = np.concatenate(final_items, axis=1)
             items = items.squeeze(0)
+
         if self.type == "ctc_with_lm":
             if decoder_kwargs is None:
                 decoder_kwargs = {}
@@ -628,7 +634,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 word_offsets = []
                 for word, (start_offset, end_offset) in chunk_offset:
                     word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
-
         else:
             skip_special_tokens = self.type != "ctc"
             text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens)
@@ -637,19 +642,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     "offsets"
                 ]
             elif return_timestamps:
-                char_offsets = self.tokenizer.decode(
+                offsets = self.tokenizer.decode(
                     items, skip_special_tokens=skip_special_tokens, output_char_offsets=True
                 )["char_offsets"]
                 if return_timestamps == "word":
-                    word_offsets = self.tokenizer._get_word_offsets(
-                        char_offsets, self.tokenizer.replace_word_delimiter_char
-                    )
+                    offsets = self.tokenizer._get_word_offsets(offsets, self.tokenizer.replace_word_delimiter_char)
 
-        if return_timestamps and self.type != "seq2seq":
-            if return_timestamps == "word":
-                offsets = word_offsets
-            else:
-                offsets = char_offsets
+        if return_timestamps and self.type not in {"seq2seq", "seq2seq_whisper"}:
             chunks = []
             for item in offsets:
                 start = item["start_offset"] * self.model.config.inputs_to_logits_ratio
@@ -660,7 +659,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
                 chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})
             optional["chunks"] = chunks
-
         elif return_timestamps and self.type == "seq2seq_whisper":
             optional["chunks"] = offsets
 
