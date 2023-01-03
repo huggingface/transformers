@@ -795,7 +795,7 @@ class Mask2FormerLoss(nn.Module):
         # retrieve the matching between the outputs of the last layer and the labels
         indices = self.matcher(masks_queries_logits, class_queries_logits, mask_labels, class_labels)
         # compute the average number of target masks for normalization purposes
-        num_masks: Number = self.get_num_masks(class_labels, device=class_labels[0].device)
+        num_masks = self.get_num_masks(class_labels, device=class_labels[0].device)
         # get all the losses
         losses: Dict[str, Tensor] = {
             **self.loss_masks(masks_queries_logits, mask_labels, indices, num_masks),
@@ -895,7 +895,7 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
         return pos
 
 
-# Modified from transformers.models.detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->Mask2FormerPixelDecoderEncoder
+# Modified from transformers.models.detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention
 class Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
