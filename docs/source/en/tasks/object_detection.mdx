@@ -317,7 +317,7 @@ Training involves the following steps:
 4. Call [`~Trainer.train`] to finetune your model.
 
 When loading the model from the same checkpoint that you used for the preprocessing, remember to pass the `label2id`
-and `id2label` maps that you created earlier from the dataset's metadata.
+and `id2label` maps that you created earlier from the dataset's metadata. Additionally, we specify `ignore_mismatched_sizes=True` to replace the existing classification head with a new one.
 
 ```py
 >>> from transformers import AutoModelForObjectDetection
