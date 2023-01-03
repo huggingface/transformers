@@ -189,6 +189,13 @@ def partialclass(cls, *args, **kwargs):
     return NewCls
 
 
+def make_partial_class(full_class, *args, **kwargs):
+    partial_class = partialclass(full_class, *args, **kwargs)
+    partial_class.__name__ = full_class.__name__
+
+    return partial_class
+
+
 @require_flax
 class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxWhisperForConditionalGeneration, FlaxWhisperModel) if is_flax_available() else ()
@@ -202,8 +209,9 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
         self.model_tester = FlaxWhisperModelTester(self)
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+
         self.all_model_classes = (
-            partialclass(model_class, init_shape) for model_class in self.all_model_classes
+            make_partial_class(model_class, input_shape=init_shape) for model_class in self.all_model_classes
         )
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
 
@@ -226,12 +234,11 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     # overwrite because of `input_features`
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                model = model_class(config, input_shape=init_shape)
+                model = model_class(config)
 
                 @jax.jit
                 def model_jitted(input_features, decoder_input_ids, **kwargs):
@@ -252,7 +259,6 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
@@ -272,7 +278,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
                 # So we disable `use_cache` here for PyTorch model.
                 pt_model.config.use_cache = False
-                fx_model = model_class(config, input_shape=init_shape, dtype=jnp.float32)
+                fx_model = model_class(config, dtype=jnp.float32)
 
                 pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
 
@@ -315,7 +321,6 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
         # It might be better to put this inside the for loop below (because we modify the config there).
         # But logically, it is fine.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
@@ -335,7 +340,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
                 # So we disable `use_cache` here for PyTorch model.
                 pt_model.config.use_cache = False
-                fx_model = model_class(config, input_shape=init_shape, dtype=jnp.float32)
+                fx_model = model_class(config, dtype=jnp.float32)
 
                 fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
                 fx_model.params = fx_state
@@ -355,7 +360,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = model_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
 
                 fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict)
 
@@ -368,15 +373,14 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     # overwrite because of `input_features`
     @is_pt_flax_cross_test
     def test_save_load_bf16_to_base_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = FLAX_MODEL_MAPPING[config.__class__]
 
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
 
-            model = model_class(config, input_shape=init_shape)
+            model = model_class(config)
             model.params = model.to_bf16(model.params)
             base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
 
@@ -388,7 +392,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
 
                 base_params = flatten_dict(unfreeze(base_model.params))
 
@@ -399,15 +403,14 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     # overwrite because of `input_features`
     @is_pt_flax_cross_test
     def test_save_load_from_base_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = FLAX_MODEL_MAPPING[config.__class__]
 
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
 
-            model = base_class(config, input_shape=init_shape)
+            model = base_class(config)
             base_params = flatten_dict(unfreeze(model.params))
 
             # convert Flax model to PyTorch model
@@ -419,7 +422,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 # save pt model
                 pt_model.save_pretrained(tmpdirname)
-                head_model = model_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+                head_model = model_class.from_pretrained(tmpdirname, from_pt=True)
 
                 base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
 
@@ -430,15 +433,14 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     # overwrite because of `input_features`
     @is_pt_flax_cross_test
     def test_save_load_to_base_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = FLAX_MODEL_MAPPING[config.__class__]
 
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
 
-            model = model_class(config, input_shape=init_shape)
+            model = model_class(config)
             base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
 
             # convert Flax model to PyTorch model
@@ -449,7 +451,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, input_shape=init_shape, from_pt=True)
+                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
 
                 base_params = flatten_dict(unfreeze(base_model.params))
 
