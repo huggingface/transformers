@@ -639,8 +639,8 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
         max_length (`int`):
             The maximum length of the sequence to be generated.
         eos_token_id (`Union[int, List[int]]`):
-            The id of the token to force as the last generated token when `max_length` is reached.
-            Optionally, use a list to set multiple *end-of-sequence* tokens.
+            The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
+            list to set multiple *end-of-sequence* tokens.
     """
 
     def __init__(self, max_length: int, eos_token_id: Union[int, List[int]]):
