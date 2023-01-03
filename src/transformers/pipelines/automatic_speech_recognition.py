@@ -393,10 +393,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if ignore_warning is not None:
             preprocess_params["ignore_warning"] = ignore_warning
 
-        forward_params = {}
+        forward_params = defaultdict(dict)
         if max_new_tokens is not None:
-            if "generate_kwargs" not in forward_params:
-                forward_params["generate_kwargs"] = {}
             forward_params["generate_kwargs"]["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
             if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
@@ -404,8 +402,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
                     " only 1 version"
                 )
-            if "generate_kwargs" not in forward_params:
-                forward_params["generate_kwargs"] = {}
             forward_params["generate_kwargs"].update(generate_kwargs)
 
         postprocess_params = {}
@@ -413,6 +409,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             postprocess_params["decoder_kwargs"] = decoder_kwargs
         if return_timestamps is not None:
             postprocess_params["return_timestamps"] = return_timestamps
+            if self.model.config.__class__.__name__ == "WhisperConfig":
+                # Whisper is highly specific, if we want timestamps, we need to
+                # force whisper to output timestamp tokens, which means we need
+                # to set this variable to prevent `no_timestamp_token` to be
+                # used in the decoder.
+                if "forced_decoder_ids" not in forward_params.get("generate_kwargs", {}):
+                    forward_params["generate_kwargs"]["forced_decoder_ids"] = None
 
         return preprocess_params, forward_params, postprocess_params
 

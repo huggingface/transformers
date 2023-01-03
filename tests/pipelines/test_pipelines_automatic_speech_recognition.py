@@ -314,10 +314,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         )
         pipe = pipeline(
             model="openai/whisper-tiny",
-            generate_kwargs={"forced_decoder_ids": None},
-            # max_new_tokens=448,
             return_timestamps=True,
-            # chunk_length_s=30,
         )
 
         output = pipe(ds[40]["audio"])
