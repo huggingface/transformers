@@ -308,40 +308,42 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @slow
     def test_whisper_timestamp_prediction(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         array = np.concatenate(
             [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
         )
         pipe = pipeline(
-            "automatic-speech-recognition",
-            model=model,
-            tokenizer=processor.tokenizer,
-            feature_extractor=processor.feature_extractor,
-            forced_bos_token_id=None,
+            model="openai/whisper-tiny",
+            generate_kwargs={"forced_bos_token_id": None},
             max_new_tokens=448,
         )
         output = pipe(array, return_timestamps=True, chunk_length_s=30, stride_length_s=[15, 0])
-        # fmt: off
-        EXPECTED_OUTPUT = {
-            "text": (
-                " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing"
-                " cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his"
-                " overstrain dyes. Even the soaring arena around him with thousands of spectators, retrievalidies not"
-                " worth thinking about."
-            ),
-            "chunks": [
-                {'text': ' A man said to the universe, Sir, I exist.', 'timestamp': (0.0, 5.5)},
-                {'text': " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment", 'timestamp': (5.5, 10.24)},
-                {'text': ' you wore.', 'timestamp': (10.24, 11.74)}, {'text': ' The cut on his chest still dripping blood.', 'timestamp': (11.74, 14.88)},
-                {'text': ' The ache of his overstrain dyes.', 'timestamp': (14.88, 17.6)},
-                {'text': ' Even the soaring arena around him with thousands of spectators, retrievalidies not worth', 'timestamp': (17.6, 23.28)}
-            ],
-        }
-        # fmt: on
 
-        self.assertDictEqual(output, EXPECTED_OUTPUT)
+        self.assertDictEqual(
+            output,
+            {
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing"
+                    " cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his"
+                    " overstrain dyes. Even the soaring arena around him with thousands of spectators, retrievalidies not"
+                    " worth thinking about."
+                ),
+                "chunks": [
+                    {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
+                    {
+                        "text": " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment",
+                        "timestamp": (5.5, 10.24),
+                    },
+                    {"text": " you wore.", "timestamp": (10.24, 11.74)},
+                    {"text": " The cut on his chest still dripping blood.", "timestamp": (11.74, 14.88)},
+                    {"text": " The ache of his overstrain dyes.", "timestamp": (14.88, 17.6)},
+                    {
+                        "text": " Even the soaring arena around him with thousands of spectators, retrievalidies not worth",
+                        "timestamp": (17.6, 23.28),
+                    },
+                ],
+            },
+        )
 
     @require_torch
     @slow
