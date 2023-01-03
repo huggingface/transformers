@@ -670,7 +670,7 @@ def compute_segments(
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
-    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+    segmentation = torch.zeros((int(height), int(width)), dtype=torch.int32, device=mask_probs.device)
     segments: List[Dict] = []
 
     if target_size is not None:
