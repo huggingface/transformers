@@ -1222,10 +1222,8 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
 
 
 @add_start_docstrings(
-    (
-        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-        " top."
-    ),
+    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+    " top.",
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -1430,7 +1428,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
             link_layer_index += 1
 
-        # Concatenate the cls token of the text and image feats to get the final represtation
+        #  Concatenate the cls token of the text and image feats to get the final represtation
         text_feats, image_feats = cross_text_feats, cross_image_feats
         cls_feats = self.get_cls_feats(text_feats, image_feats)
 
