@@ -735,20 +735,9 @@ class YolosImageProcessor(BaseImageProcessor):
         """
         image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.27. "
-                "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
-            )
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` parameter is deprecated and will be removed in v4.27. "
-                "Please specify `do_pad` instead`.",
-                FutureWarning,
-            )
-            image_processor_dict["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation

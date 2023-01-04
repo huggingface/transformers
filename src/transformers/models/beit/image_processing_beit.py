@@ -139,13 +139,7 @@ class BeitImageProcessor(BaseImageProcessor):
         """
         image_processor_dict = image_processor_dict.copy()
         if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in v4.27. "
-                "Please specify `do_reduce_labels` instead`.",
-                FutureWarning,
-            )
-            image_processor_dict["do_reduce_labels"] = kwargs.pop("reduce_labels")
-
+            image_processor_dict["reduce_labels"] = kwargs.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
