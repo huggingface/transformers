@@ -103,6 +103,81 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
+class MeanScaler(nn.Module):
+    """
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
+        super().__init__()
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
+
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # these will have shape (N, C)
+        total_weight = weights.sum(dim=self.dim)
+        weighted_sum = (data.abs() * weights).sum(dim=self.dim)
+
+        # first compute a global scale per-dimension
+        total_observed = total_weight.sum(dim=0)
+        denominator = torch.max(total_observed, torch.ones_like(total_observed))
+        default_scale = weighted_sum.sum(dim=0) / denominator
+
+        # then compute a per-item, per-dimension scale
+        denominator = torch.max(total_weight, torch.ones_like(total_weight))
+        scale = weighted_sum / denominator
+
+        # use per-batch scale when no element is observed
+        # or when the sequence contains only zeros
+        scale = (
+            torch.max(
+                self.minimum_scale,
+                torch.where(
+                    weighted_sum > torch.zeros_like(weighted_sum),
+                    scale,
+                    default_scale * torch.ones_like(total_weight),
+                ),
+            )
+            .detach()
+            .unsqueeze(dim=self.dim)
+        )
+
+        return data / scale, scale if self.keepdim else scale.squeeze(dim=self.dim)
+
+
+class NOPScaler(nn.Module):
+    """
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+
+    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        scale = torch.ones_like(data).mean(dim=self.dim, keepdim=self.keepdim)
+        return data, scale
+
+
 class FeatureEmbedder(nn.Module):
     def __init__(
         self,
@@ -213,6 +288,7 @@ class VariableSelectionNetwork(nn.Module):
         return var_encodings, weight
 
 
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->TemporalFusionTransformerAttention
 class TemporalFusionTransformerAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -357,6 +433,7 @@ class TemporalFusionTransformerEncoderLayer(nn.Module):
         self.encoder_lstm = nn.LSTM(
             input_size=config.variable_dimension,
             hidden_size=config.embedding_dimension,
+            num_layers=config.encoder_layers,
             dropout=config.dropout,
             batch_first=True,
         )
@@ -364,6 +441,7 @@ class TemporalFusionTransformerEncoderLayer(nn.Module):
         self.decoder_lstm = nn.LSTM(
             input_size=config.variable_dimension,
             hidden_size=config.embedding_dimension,
+            num_layers=config.encoder_layers,
             dropout=config.dropout,
             batch_first=True,
         )
@@ -383,7 +461,7 @@ class TemporalFusionTransformerEncoderLayer(nn.Module):
     def forward(
         self,
         context_input: torch.Tensor,
-        target_input: torch.Tensor,
+        target_input: Optional[torch.Tensor] = None,
         states: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         """
@@ -417,7 +495,13 @@ class TemporalFusionTransformerEncoderLayer(nn.Module):
 class TemporalFusionTransformerDecoderLayer(nn.Module):
     def __init__(self, config: TemporalFusionTransformerConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.embedding_dimension
+
+        self.enrich = GatedResidualNetwork(
+            d_hidden=config.embedding_dimension,
+            d_static=config.variable_dimension,
+            dropout=config.dropout,
+        )
 
         self.self_attn = TemporalFusionTransformerAttention(
             embed_dim=self.embed_dim,
@@ -425,6 +509,7 @@ class TemporalFusionTransformerDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
         )
+
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
@@ -741,22 +826,7 @@ class TemporalFusionTransformerEncoder(TemporalFusionTransformerPreTrainedModel)
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
-
-        self.embed_positions = TemporalFusionTransformerLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            embed_dim,
-        )
-        self.layers = nn.ModuleList(
-            [TemporalFusionTransformerEncoderLayer(config) for _ in range(config.encoder_layers)]
-        )
+        self.layer = TemporalFusionTransformerEncoderLayer(config)
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
@@ -765,90 +835,32 @@ class TemporalFusionTransformerEncoder(TemporalFusionTransformerPreTrainedModel)
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
+        inputs_embeds,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`~TemporalFusionTransformerTokenizer`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
-                for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
                 representation. This is useful if you want more control over how to convert `input_ids` indices
                 into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        embed_pos = self.embed_positions(input_shape)
-
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs_embeds
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
-
         encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1173,22 +1185,207 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
     def __init__(self, config: TemporalFusionTransformerConfig):
         super().__init__(config)
 
-        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        if config.scaling:
+            self.scaler = MeanScaler(dim=1, keepdim=True)
+        else:
+            self.scaler = NOPScaler(dim=1, keepdim=True)
 
+        self.embedder = FeatureEmbedder(
+            cardinalities=config.cardinality,
+            embedding_dims=[config.variable_dimension] * config.num_static_categorical_features,
+        )
+
+        # projection networks
+        self.target_proj = nn.Linear(
+            in_features=config.input_size * len(config.lags_sequence), out_features=config.variable_dimension
+        )
+
+        self.dynamic_proj = nn.Linear(
+            in_features=config.num_dynamic_real_features, out_features=config.variable_dimension
+        )
+
+        self.static_feat_proj = nn.Linear(
+            in_features=config.num_static_real_features + config.input_size, out_features=config.variable_dimension
+        )
+
+        # variable selection networks
+        self.past_selection = VariableSelectionNetwork(
+            d_hidden=config.variable_dimension,
+            n_vars=2,  # target and time features
+            dropout=config.dropout,
+            add_static=True,
+        )
+
+        self.future_selection = VariableSelectionNetwork(
+            d_hidden=config.variable_dimension,
+            n_vars=2,  # target and time features
+            dropout=config.dropout,
+            add_static=True,
+        )
+
+        self.static_selection = VariableSelectionNetwork(
+            d_hidden=config.variable_dimension,
+            n_vars=2,  # cat, static_feat
+            dropout=config.dropout,
+        )
+
+        # Static Gated Residual Networks
+        self.selection = GatedResidualNetwork(
+            d_hidden=config.variable_dimension,
+            dropout=config.dropout,
+        )
+
+        self.enrichment = GatedResidualNetwork(
+            d_hidden=config.variable_dimension,
+            dropout=config.dropout,
+        )
+
+        self.state_h = GatedResidualNetwork(
+            d_hidden=config.variable_dimension,
+            d_output=config.embedding_dimension,
+            dropout=config.dropout,
+        )
+
+        self.state_c = GatedResidualNetwork(
+            d_hidden=config.variable_dimension,
+            d_output=config.embedding_dimension,
+            dropout=config.dropout,
+        )
+
+        # encoder and decoder
         self.encoder = TemporalFusionTransformerEncoder(config, self.shared)
         self.decoder = TemporalFusionTransformerDecoder(config, self.shared)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.shared
+    @property
+    def _past_length(self) -> int:
+        return self.config.context_length + max(self.config.lags_sequence)
 
-    def set_input_embeddings(self, value):
-        self.shared = value
-        self.encoder.embed_tokens = self.shared
-        self.decoder.embed_tokens = self.shared
+    def get_lagged_subsequences(
+        self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
+    ) -> torch.Tensor:
+        """
+        Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
+            where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
+            j, :, k] = sequence[i, -indices[k]-S+j, :].
+
+        Args:
+            sequence: Tensor
+                The sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
+            subsequences_length : int
+                Length of the subsequences to be extracted.
+            shift: int
+                Shift the lags by this amount back.
+        """
+        sequence_length = sequence.shape[1]
+        indices = [lag - shift for lag in self.config.lags_sequence]
+
+        try:
+            assert max(indices) + subsequences_length <= sequence_length, (
+                f"lags cannot go further than history length, found lag {max(indices)} "
+                f"while history length is only {sequence_length}"
+            )
+        except AssertionError as e:
+            e.args += (max(indices), sequence_length)
+            raise
+
+        lagged_values = []
+        for lag_index in indices:
+            begin_index = -lag_index - subsequences_length
+            end_index = -lag_index if lag_index > 0 else None
+            lagged_values.append(sequence[:, begin_index:end_index, ...])
+        return torch.stack(lagged_values, dim=-1)
+
+    def create_network_inputs(
+        self,
+        feat_static_cat: torch.Tensor,
+        feat_static_real: torch.Tensor,
+        past_time_feat: torch.Tensor,
+        past_target: torch.Tensor,
+        past_observed_values: torch.Tensor,
+        future_time_feat: Optional[torch.Tensor] = None,
+        future_target: Optional[torch.Tensor] = None,
+    ):
+        # time feature
+        time_feat = (
+            torch.cat(
+                (
+                    past_time_feat[:, self._past_length - self.context_length :, ...],
+                    future_time_feat,
+                ),
+                dim=1,
+            )
+            if future_target is not None
+            else past_time_feat[:, self._past_length - self.context_length :, ...]
+        )
+
+        # calculate scale
+        context = past_target[:, -self.context_length :]
+        observed_context = past_observed_values[:, -self.context_length :]
+        _, scale = self.scaler(context, observed_context)
+
+        # scale the target and create lag features of targets
+        target = (
+            torch.cat((past_target, future_target), dim=1) / scale
+            if future_target is not None
+            else past_target / scale
+        )
+        subsequences_length = (
+            self.context_length + self.prediction_length if future_target is not None else self.context_length
+        )
+
+        lagged_target = self.get_lagged_subsequences(
+            sequence=target,
+            subsequences_length=subsequences_length,
+        )
+        lags_shape = lagged_target.shape
+        reshaped_lagged_target = lagged_target.reshape(lags_shape[0], lags_shape[1], -1)
+
+        # embeddings
+        embedded_cat = self.embedder(feat_static_cat)
+        log_scale = scale.log() if self.input_size == 1 else scale.squeeze(1).log()
+        static_feat = torch.cat((feat_static_real, log_scale), dim=1)
+
+        # return the network inputs
+        return (
+            reshaped_lagged_target,  # target
+            time_feat,  # dynamic real covariates
+            scale,  # scale
+            embedded_cat,  # static covariates
+            static_feat,
+        )
+
+    def enc_dec_outputs(self, transformer_inputs, time_feat, embedded_cat, static_feat):
+        target_proj = self.target_proj(transformer_inputs)
+
+        past_target_proj = target_proj[:, : self.config.context_length, ...]
+        future_target_proj = target_proj[:, self.config.context_length :, ...]
+
+        time_feat_proj = self.dynamic_proj(time_feat)
+        past_time_feat_proj = time_feat_proj[:, : self.context_length, ...]
+        future_time_feat_proj = time_feat_proj[:, self.context_length :, ...]
+
+        static_feat_proj = self.static_feat_proj(static_feat)
+
+        static_var, _ = self.static_selection(embedded_cat + [static_feat_proj])
+        static_selection = self.selection(static_var).unsqueeze(1)
+        static_enrichment = self.enrichment(static_var).unsqueeze(1)
+
+        past_selection, _ = self.past_selection([past_target_proj, past_time_feat_proj], static_selection)
+
+        future_selection, _ = self.future_selection([future_target_proj, future_time_feat_proj], static_selection)
+
+        c_h = self.state_h(static_var)
+        c_c = self.state_c(static_var)
+        states = [c_h.unsqueeze(0), c_c.unsqueeze(0)]
+
+        enc_out = self.temporal_encoder(past_selection, future_selection, states)
+
+        dec_output = self.temporal_decoder(enc_out, static_enrichment)
+
+        return self.param_proj(dec_output)
 
     def get_encoder(self):
         return self.encoder
