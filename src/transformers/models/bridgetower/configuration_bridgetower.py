@@ -313,6 +313,7 @@ class BridgeTowerConfig(PretrainedConfig):
         mlp_ratio=4,
         num_attention_heads=12,
         num_hidden_layers=6,
+        tie_word_embeddings=False,
         text_config=None,
         vision_config=None,
         **kwargs
@@ -333,6 +334,7 @@ class BridgeTowerConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
+        self.tie_word_embeddings = tie_word_embeddings
 
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
