@@ -157,14 +157,32 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
 
             # Test we can also load the slow version
-            processor = AutoProcessor.from_pretrained(
+            new_processor = AutoProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
             )
-            tokenizer = processor.tokenizer
-            self.assertTrue(tokenizer.special_attribute_present)
-            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+            new_tokenizer = new_processor.tokenizer
+            self.assertTrue(new_tokenizer.special_attribute_present)
+            self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizer")
         else:
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+
+        # Test processor can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+            reloaded_processor = AutoProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
+        self.assertTrue(reloaded_processor.special_attribute_present)
+        self.assertEqual(reloaded_processor.__class__.__name__, "NewProcessor")
+
+        reloaded_feature_extractor = processor.feature_extractor
+        self.assertTrue(reloaded_feature_extractor.special_attribute_present)
+        self.assertEqual(reloaded_feature_extractor.__class__.__name__, "NewFeatureExtractor")
+
+        reloaded_tokenizer = reloaded_processor.tokenizer
+        self.assertTrue(reloaded_tokenizer.special_attribute_present)
+        if is_tokenizers_available():
+            self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizerFast")
+        else:
+            self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
 
     def test_new_processor_registration(self):
         try:
