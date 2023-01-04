@@ -202,10 +202,10 @@ Start by defining some constants.
 >>> mean = image_processor.image_mean
 >>> std = image_processor.image_std
 >>> if "shortest_edge" in image_processor.size:
->>>     height = width = image_processor.size["shortest_edge"]
+...     height = width = image_processor.size["shortest_edge"]
 >>> else:
->>>     height = image_processor.size["height"]
->>>     width = image_processor.size["width"]
+...     height = image_processor.size["height"]
+...     width = image_processor.size["width"]
 >>> resize_to = (height, width)
 
 >>> num_frames_to_sample = model.config.num_frames
