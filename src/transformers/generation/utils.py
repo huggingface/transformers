@@ -691,8 +691,8 @@ class GenerationMixin:
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
-        # update past
-        model_kwargs["past"] = self._extract_past_from_model_output(
+        # update past_key_values
+        model_kwargs["past_key_values"] = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
         )
 
@@ -1742,7 +1742,7 @@ class GenerationMixin:
 
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
-            if model_kwargs.get("past") is None:
+            if model_kwargs.get("past_key_values") is None:
 
                 # prepare inputs
                 model_kwargs["use_cache"] = True
@@ -1775,13 +1775,13 @@ class GenerationMixin:
                     expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
                 )
 
-                past = model_kwargs.get("past")
-                if past is None:
+                past_key_values = model_kwargs.get("past_key_values")
+                if past_key_values is None:
                     raise ValueError(
                         f"{self.__class__.__name__} does not support caching and therefore **can't** be used "
                         "for contrastive search."
                     )
-                elif not isinstance(past[0], (tuple, torch.Tensor)) or past[0][0].shape[0] != batch_size:
+                elif not isinstance(past_key_values[0], (tuple, torch.Tensor)) or past_key_values[0][0].shape[0] != batch_size:
                     raise ValueError(
                         f"{self.__class__.__name__} does not have a standard cache format and therefore **can't** be "
                         "used for contrastive search without further modifications."
@@ -1816,13 +1816,13 @@ class GenerationMixin:
 
             # Replicates the new past_key_values to match the `top_k` candidates
             new_key_values = []
-            for layer in model_kwargs["past"]:
+            for layer in model_kwargs["past_key_values"]:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
                     items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(items)
-            model_kwargs["past"] = new_key_values
+            model_kwargs["past_key_values"] = new_key_values
 
             # compute the candidate tokens by the language model and collects their hidden_states
             next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
@@ -2696,8 +2696,8 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+            if model_kwargs["past_key_values"] is not None:
+                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3016,8 +3016,8 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+            if model_kwargs["past_key_values"] is not None:
+                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3384,8 +3384,8 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
+            if model_kwargs["past_key_values"] is not None:
+                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], reordering_indices)
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -3704,8 +3704,8 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+            if model_kwargs["past_key_values"] is not None:
+                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             # increase cur_len
             cur_len = cur_len + 1
