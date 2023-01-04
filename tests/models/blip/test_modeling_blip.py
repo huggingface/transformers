@@ -847,7 +847,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         text = "A woman and her dog sitting in a beach"
-        model.eval()
+        # model.eval()
 
         inputs = processor(image, text, return_tensors="pt").to(torch_device)
 
