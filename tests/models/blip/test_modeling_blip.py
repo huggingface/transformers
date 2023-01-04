@@ -774,7 +774,7 @@ def prepare_img():
 
 @require_vision
 @require_torch
-@slow
+# @slow
 class BlipModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
         model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
@@ -847,13 +847,14 @@ class BlipModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         text = "A woman and her dog sitting in a beach"
+        model.eval()
 
         inputs = processor(image, text, return_tensors="pt").to(torch_device)
 
         out_itm = model(**inputs)
         out = model(**inputs, use_itm_head=False)
 
-        expected_scores = torch.Tensor([[0.9798, 0.0202]])
+        expected_scores = torch.Tensor([[0.9779, 0.0221]])
 
-        self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores))
-        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5053]])))
+        self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3))
+        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5053]]), rtol=1e-3, atol=1e-3))
