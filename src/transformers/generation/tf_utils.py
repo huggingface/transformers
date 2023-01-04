@@ -451,6 +451,11 @@ class TFGenerationMixin:
 
     supports_xla_generation = True
 
+    def prepare_inputs_for_generation(self, *args, **kwargs):
+        raise NotImplementedError(
+            "A model class needs to define a `prepare_inputs_for_generation` method in order to use `generate`."
+        )
+
     def adjust_logits_during_generation(
         self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
     ):
@@ -785,7 +790,6 @@ class TFGenerationMixin:
             )
 
         # 8. determine generation mode
-        # TODO(Matt, Joao, Patrick) - add more use cases here
         is_contrastive_search_gen_mode = (
             generation_config.top_k is not None
             and generation_config.top_k > 1
@@ -918,10 +922,10 @@ class TFGenerationMixin:
                     f" {generation_config.num_return_sequences} (respectivelly)"
                 )
 
-            # 10. prepare logits warper
+            # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config=generation_config)
 
-            # 11. broadcast inputs to the desired number of beams
+            # 12. broadcast inputs to the desired number of beams
             input_ids = self._expand_to_num_beams(input_ids, num_beams=generation_config.num_beams)
 
             if "encoder_outputs" in model_kwargs:
@@ -934,7 +938,7 @@ class TFGenerationMixin:
                     model_kwargs["attention_mask"], num_beams=generation_config.num_beams
                 )
 
-            # 12. run beam sample (beam search with sampling)
+            # 13. run beam sample (beam search with sampling)
             return self.beam_search(
                 input_ids,
                 do_sample=True,
