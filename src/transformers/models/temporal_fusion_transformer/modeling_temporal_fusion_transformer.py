@@ -50,7 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "temporal-fusion-transformer"
 _CONFIG_FOR_DOC = "TemporalFusionTransformerConfig"
-_TOKENIZER_FOR_DOC = "TemporalFusionTransformerTokenizer"
 
 
 TEMPORAL_FUSION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1400,29 +1399,26 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(TEMPORAL_FUSION_TRANSFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        past_values: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_observed_mask: torch.Tensor,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1430,6 +1426,16 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_inputs, time_feat, scale, embedded_cat, static_feat = self.create_network_inputs(
+            past_values=past_values,
+            past_time_features=past_time_features,
+            past_observed_mask=past_observed_mask,
+            static_categorical_features=static_categorical_features,
+            static_real_features=static_real_features,
+            future_values=future_values,
+            future_time_features=future_time_features,
+        )
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
