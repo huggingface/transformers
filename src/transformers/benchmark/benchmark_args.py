@@ -17,7 +17,7 @@
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from ..utils import cached_property, is_torch_available, is_torch_tpu_available, logging, torch_required
+from ..utils import cached_property, is_torch_available, is_torch_tpu_available, logging, requires_backends
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -76,8 +76,8 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
     )
 
     @cached_property
-    @torch_required
     def _setup_devices(self) -> Tuple["torch.device", int]:
+        requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
         if not self.cuda:
             device = torch.device("cpu")
@@ -95,19 +95,19 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
         return is_torch_tpu_available() and self.tpu
 
     @property
-    @torch_required
     def device_idx(self) -> int:
+        requires_backends(self, ["torch"])
         # TODO(PVP): currently only single GPU is supported
         return torch.cuda.current_device()
 
     @property
-    @torch_required
     def device(self) -> "torch.device":
+        requires_backends(self, ["torch"])
         return self._setup_devices[0]
 
     @property
-    @torch_required
     def n_gpu(self):
+        requires_backends(self, ["torch"])
         return self._setup_devices[1]
 
     @property

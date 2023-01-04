@@ -20,6 +20,7 @@ import os
 from typing import Any, Dict, Optional, Union
 
 from .. import __version__
+from ..configuration_utils import PretrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
     PushToHubMixin,
@@ -36,7 +37,23 @@ logger = logging.get_logger(__name__)
 
 class GenerationConfig(PushToHubMixin):
     r"""
-    Class that holds a configuration for a generation task.
+    Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
+    for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
+
+        - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
+            `do_sample=False`.
+        - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0.`
+            and `top_k>1`
+        - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
+            `do_sample=True`.
+        - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
+            `do_sample=False`.
+        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if
+            `num_beams>1` and `do_sample=True`.
+        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if
+            `num_beams>1` and `num_beam_groups>1`.
+        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
+            `constraints!=None` or `force_words_ids!=None`.
 
     <Tip>
 
@@ -44,6 +61,9 @@ class GenerationConfig(PushToHubMixin):
     does **not** change a model configuration or weights. It only affects the model's behavior at generation time.
 
     </Tip>
+
+    Most of these parameters are explained in more detail in [this blog
+    post](https://huggingface.co/blog/how-to-generate).
 
     Arg:
         > Parameters that control the length of the output
@@ -73,6 +93,9 @@ class GenerationConfig(PushToHubMixin):
             [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
         penalty_alpha (`float`, *optional*):
             The values balance the model confidence and the degeneration penalty in contrastive search decoding.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should use the past last key/values attentions (if applicable to the model) to
+            speed up decoding.
 
         > Parameters for manipulation of the model output logits
 
@@ -108,19 +131,20 @@ class GenerationConfig(PushToHubMixin):
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
             triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
             can allow different forms of each word.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should use the past last key/values attentions (if applicable to the model) to
-            speed up decoding.
         renormalize_logits (`bool`, *optional*, defaults to `False`):
             Whether to renormalize the logits after applying all the logits processors or warpers (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
             are normalized but some logit processors or warpers break the normalization.
+        constraints (`List[Constraint]`, *optional*):
+            Custom constraints that can be added to the generation to ensure that the output will contain the use of
+            certain tokens as defined by `Constraint` objects, in the most sensible way possible.
         forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
             language token.
-        forced_eos_token_id (`int`, *optional*, defaults to `model.config.forced_eos_token_id`):
-            The id of the token to force as the last generated token when `max_length` is reached.
+        forced_eos_token_id (`Union[int, List[int]]`, *optional*, defaults to `model.config.forced_eos_token_id`):
+            The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
+            list to set multiple *end-of-sequence* tokens.
         remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
             Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
@@ -129,10 +153,10 @@ class GenerationConfig(PushToHubMixin):
             generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
             penalty starts and `decay_factor` represents the factor of exponential decay
         suppress_tokens  (`List[int]`, *optional*):
-            A list of tokens that will be supressed at generation. The `SupressTokens` logit processor will set their
+            A list of tokens that will be suppressed at generation. The `SupressTokens` logit processor will set their
             log probs to `-inf` so that they are not sampled.
         begin_suppress_tokens  (`List[int]`, *optional*):
-            A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens` logit
+            A list of tokens that will be suppressed at the beginning of the generation. The `SupressBeginTokens` logit
             processor will set their log probs to `-inf` so that they are not sampled.
         forced_decoder_ids (`List[List[int]]`, *optional*):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
@@ -160,8 +184,8 @@ class GenerationConfig(PushToHubMixin):
             The id of the *padding* token.
         bos_token_id (`int`, *optional*):
             The id of the *beginning-of-sequence* token.
-        eos_token_id (`int`, *optional*):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`, *optional*):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
         > Generation parameters exclusive to encoder-decoder models
 
@@ -191,6 +215,7 @@ class GenerationConfig(PushToHubMixin):
         self.num_beams = kwargs.pop("num_beams", 1)
         self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
+        self.use_cache = kwargs.pop("use_cache", True)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
@@ -202,7 +227,9 @@ class GenerationConfig(PushToHubMixin):
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.force_word_ids = kwargs.pop("force_word_ids", None)
+        self.force_words_ids = kwargs.pop("force_words_ids", None)
+        self.renormalize_logits = kwargs.pop("renormalize_logits", False)
+        self.constraints = kwargs.pop("constraints", None)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
@@ -230,12 +257,20 @@ class GenerationConfig(PushToHubMixin):
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
-        # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the the hub interface.
+        # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the the hub
+        # interface.
+        self._from_model_config = kwargs.pop("_from_model_config", False)
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
 
     def __eq__(self, other):
-        return self.__dict__ == other.__dict__
+        self_dict = self.__dict__.copy()
+        other_dict = other.__dict__.copy()
+        # ignore metadata
+        for metadata_field in ("_from_model_config", "_commit_hash", "transformers_version"):
+            self_dict.pop(metadata_field, None)
+            other_dict.pop(metadata_field, None)
+        return self_dict == other_dict
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
@@ -484,18 +519,11 @@ class GenerationConfig(PushToHubMixin):
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         config = cls(**config_dict)
-
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
+        unused_kwargs = config.update(**kwargs)
 
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
-            return config, kwargs
+            return config, unused_kwargs
         else:
             return config
 
@@ -568,3 +596,54 @@ class GenerationConfig(PushToHubMixin):
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
+
+    @classmethod
+    def from_model_config(cls, model_config: PretrainedConfig) -> "GenerationConfig":
+        """
+        Instantiates a [`GenerationConfig`] from a [`PretrainedConfig`]. This function is useful to convert legacy
+        [`PretrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
+
+        Args:
+            model_config (`PretrainedConfig`):
+                The model config that will be used to instantiate the generation config.
+
+        Returns:
+            [`GenerationConfig`]: The configuration object instantiated from those parameters.
+        """
+        config_dict = model_config.to_dict()
+        config = cls.from_dict(config_dict, return_unused_kwargs=False)
+
+        # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
+        # generation config.
+        for decoder_name in ("decoder", "generator"):
+            if decoder_name in config_dict:
+                default_generation_config = GenerationConfig()
+                decoder_config = config_dict[decoder_name]
+                for attr in config.to_dict().keys():
+                    if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
+                        setattr(config, attr, decoder_config[attr])
+
+        config._from_model_config = True
+        return config
+
+    def update(self, **kwargs):
+        """
+        Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
+        returning all the unused kwargs.
+
+        Args:
+            kwargs (`Dict[str, Any]`):
+                Dictionary of attributes to tentatively update this class.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
+        """
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+                to_remove.append(key)
+
+        # remove all the attributes that were updated, without modifying the input dict
+        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
+        return unused_kwargs
