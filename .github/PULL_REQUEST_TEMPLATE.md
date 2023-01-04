@@ -57,7 +57,7 @@ Integrations:
 - deepspeed: @stas00
 - ray/raytune: @richardliaw, @amogkam
 
-Documentation: @sgugger and @stevhliu
+Documentation: @sgugger, @stevhliu and @MKhalusova
 
 HF projects:
 
