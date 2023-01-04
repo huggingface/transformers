@@ -722,12 +722,6 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
         return TFCausalLMOutputWithPast(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns)
 
-    @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[tf.Tensor]], beam_idx: tf.Tensor) -> Tuple[Tuple[tf.Tensor]]:
-        return tuple(
-            tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past) for layer_past in past
-        )
-
 
 @add_start_docstrings(
     """
