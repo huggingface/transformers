@@ -3037,7 +3037,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         text = """Hello, my dog is cute and"""
         tokens = tokenizer(text, return_tensors="pt")
 
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
         torch.manual_seed(0)
         eos_token_id = 873
@@ -3062,7 +3062,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         text = """Hello, my dog is cute and"""
         tokens = tokenizer(text, return_tensors="pt")
 
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
         torch.manual_seed(0)
         eos_token_id = 225
@@ -3088,7 +3088,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         text = """Hello, my dog is cute and"""
         tokens = tokenizer(text, return_tensors="pt")
 
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
         torch.manual_seed(0)
         eos_token_id = 846
@@ -3111,7 +3111,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         text = """Hello, my dog is cute and"""
         tokens = tokenizer(text, return_tensors="pt")
 
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
         torch.manual_seed(0)
         eos_token_id = 873
