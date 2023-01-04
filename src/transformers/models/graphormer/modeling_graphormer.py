@@ -27,15 +27,7 @@ from ...modeling_outputs import SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_graphormer import GraphormerConfig
-
-
-try:
-    from fairseq.modules import LayerDropModuleList, quant_noise
-
-    FAIRSEQ_AVAILABLE = True
-except (ImportError, ModuleNotFoundError):
-    FAIRSEQ_AVAILABLE = False
-
+from .fairseq_utils import LayerDropModuleList, quant_noise
 
 logger = logging.get_logger(__name__)
 
@@ -202,17 +194,15 @@ class MultiheadAttention(nn.Module):
         self.dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
 
         self.head_dim = config.embedding_dim // config.num_attention_heads
-        assert (
-            self.head_dim * config.num_attention_heads == self.embedding_dim
-        ), "embedding_dim must be divisible by num_heads"
+        if not (self.head_dim * config.num_attention_heads == self.embedding_dim):
+            raise AssertionError("The embedding_dim must be divisible by num_heads.")
         self.scaling = self.head_dim**-0.5
 
         self.self_attention = True  # config.self_attention
-        assert self.self_attention, "Only support self attention"
-
-        assert (
-            not self.self_attention or self.qkv_same_dim
-        ), "Self-attention requires query, key and value to be of the same size"
+        if not (self.self_attention):
+            raise NotImplementedError("The Graphormer model only supports self attention for now.")
+        if (self.self_attention and not self.qkv_same_dim):
+            raise AssertionError("Self-attention requires query, key and value to be of the same size.")
 
         self.k_proj = quant_noise(
             nn.Linear(self.kdim, config.embedding_dim, bias=config.bias),
@@ -290,14 +280,16 @@ class MultiheadAttention(nn.Module):
 
         tgt_len, bsz, embedding_dim = query.size()
         src_len = tgt_len
-        assert embedding_dim == self.embedding_dim, f"query dim {embedding_dim} != {self.embedding_dim}"
-        assert list(query.size()) == [tgt_len, bsz, embedding_dim]
+        if not (embedding_dim == self.embedding_dim):
+            raise AssertionError(f"The query embedding dimension {embedding_dim} is not equal to the expected embedding_dim {self.embedding_dim}.")
+        if not (list(query.size()) == [tgt_len, bsz, embedding_dim]):
+            raise AssertionError("Query size incorrect in Graphormer, compared to model dimensions.")
+
         if key is not None:
             src_len, key_bsz, _ = key.size()
             if not torch.jit.is_scripting():
-                assert key_bsz == bsz
-                assert value is not None
-                assert src_len, bsz == value.shape[:2]
+                if (key_bsz != bsz) or (value is None) or not (src_len, bsz == value.shape[:2]):
+                    raise AssertionError("The batch shape does not match the key or value shapes provided to the attention.")
 
         q = self.q_proj(query)
         k = self.k_proj(query)  # shouldn't this be key
@@ -310,8 +302,8 @@ class MultiheadAttention(nn.Module):
         if v is not None:
             v = v.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
-        assert k is not None
-        assert k.size(1) == src_len
+        if (k is None) or not (k.size(1) == src_len):
+            raise AssertionError("The shape of the key generated in the attention is incorrect")
 
         # This is part of a workaround to get around fork/join parallelism
         # not supporting Optional types.
@@ -319,12 +311,13 @@ class MultiheadAttention(nn.Module):
             key_padding_mask = None
 
         if key_padding_mask is not None:
-            assert key_padding_mask.size(0) == bsz
-            assert key_padding_mask.size(1) == src_len
+            if key_padding_mask.size(0) != bsz or key_padding_mask.size(1) != src_len:
+                raise AssertionError("The shape of the generated padding mask for the key does not match expected dimensions.")
         attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
-        assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
+        if list(attn_weights.size()) != [bsz * self.num_heads, tgt_len, src_len]:
+            raise AssertionError("The attention weights generated do not match the expected dimensions.")
 
         if attn_bias is not None:
             attn_weights += attn_bias.view(bsz * self.num_heads, tgt_len, src_len)
@@ -348,9 +341,12 @@ class MultiheadAttention(nn.Module):
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 
-        assert v is not None
+        if v is None:
+            raise AssertionError("No value generated")
         attn = torch.bmm(attn_probs, v)
-        assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
+        if list(attn.size()) != [bsz * self.num_heads, tgt_len, self.head_dim]:
+            raise AssertionError("The attention generated do not match the expected dimensions.")
+
 
         attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embedding_dim)
         attn = self.out_proj(attn)
@@ -599,11 +595,9 @@ class GraphormerGraphEncoder(nn.Module):
             return inner_states, graph_rep
 
 
-class GraphormerEncoder(nn.Module):
+class GraphormerModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        assert FAIRSEQ_AVAILABLE, "The Graphormer model requires `pip install fairseq`"
-
         self.max_nodes = config.max_nodes
 
         self.graph_encoder = GraphormerGraphEncoder(config)
@@ -691,14 +685,14 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GraphormerEncoder):
+        if isinstance(module, GraphormerModel):
             module.gradient_checkpointing = value
 
 
 class GraphormerForGraphClassification(GraphormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.encoder = GraphormerEncoder(config)
+        self.encoder = GraphormerModel(config)
         self.embedding_dim = config.embedding_dim
 
         # Initialize weights and apply final processing
