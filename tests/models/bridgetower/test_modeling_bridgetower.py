@@ -46,7 +46,7 @@ class BridgeTowerModelTester:
     def __init__(
         self,
         parent,
-        cross_modal_transform_shared=True,
+        share_cross_modal_transformer_layers=True,
         drop_rate=0.1,
         head_hidden_scale=2,
         hidden_act="gelu",
@@ -56,19 +56,19 @@ class BridgeTowerModelTester:
         input_text_embed_size=768,
         is_encoder_decoder=False,
         layer_norm_eps=1e-05,
-        link_tower_shared=False,
+        share_link_tower_layers=False,
         link_tower_type="add",
         max_text_len=50,
         mlp_ratio=4,
         num_attention_heads=12,
         num_hidden_layers=6,
-        text_config=None,
         tie_word_embeddings=False,
+        text_config=None,
         vision_config=None,
-        vocab_size=50265,
+        #vocab_size=50265,
     ):
         self.parent = parent
-        self.cross_modal_transform_shared = cross_modal_transform_shared
+        self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
         self.drop_rate = drop_rate
         self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
@@ -78,14 +78,14 @@ class BridgeTowerModelTester:
         self.input_text_embed_size = input_text_embed_size
         self.is_encoder_decoder = is_encoder_decoder
         self.layer_norm_eps = layer_norm_eps
-        self.link_tower_shared = link_tower_shared
+        self.share_link_tower_layers = share_link_tower_layers
         self.link_tower_type = link_tower_type
         self.max_text_len = max_text_len
         self.mlp_ratio = mlp_ratio
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
+        self.vocab_size = 50265
         self.num_channels = 3
         self.seq_length = 4
         self.batch_size = 1
@@ -104,7 +104,7 @@ class BridgeTowerModelTester:
 
     def get_config(self):
         return BridgeTowerConfig(
-            cross_modal_transform_shared=self.cross_modal_transform_shared,
+            share_cross_modal_transformer_layers=self.share_cross_modal_transformer_layers,
             drop_rate=self.drop_rate,
             head_hidden_scale=self.head_hidden_scale,
             hidden_act=self.hidden_act,
@@ -114,14 +114,14 @@ class BridgeTowerModelTester:
             input_text_embed_size=self.input_text_embed_size,
             is_encoder_decoder=self.is_encoder_decoder,
             layer_norm_eps=self.layer_norm_eps,
-            link_tower_shared=self.link_tower_shared,
+            share_link_tower_layers=self.share_link_tower_layers,
             link_tower_type=self.link_tower_type,
             max_text_len=self.max_text_len,
             mlp_ratio=self.mlp_ratio,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
-            tie_word_embeddings=self.tie_word_embeddings,
-            vocab_size=self.vocab_size,
+            tie_word_embeddings=self.tie_word_embeddings
+            #vocab_size=self.vocab_size,
         )
 
     def create_and_check_model(
@@ -210,8 +210,8 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BridgeTowerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37)
-
+        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=50265)
+            
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -292,7 +292,7 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. So this test is not applicable.""")
     def test_model_common_attributes(self):
         pass
-
+    
     @unittest.skip(
         reason="""Bridge Tower model currently only supports pretrained model. Thus this test is not needed."""
     )
