@@ -219,7 +219,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
-        image_size = self.image_size if hasattr(self, "image_size") else image_size
         size = size if size is not None else {"shortest_edge": image_size}
         size = get_size_dict(size, default_to_square=False)
 

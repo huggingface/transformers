@@ -14,11 +14,8 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The BridgeTower model was proposed in [BridgeTower: Building Bridges Between Encoders in Vision-Language Representative Learning](https://arxiv.org/pdf/2206.08657.pdf) by Xiao Xu, Chenfei Wu, Shachar Rosenman, Vasudev Lal, Wanxiang Che, Nan Duan.
-
-The model was pretrained on English language using masked language modeling (MLM) and image text matching (ITM) objectives. It was introduced in
-[this paper](https://arxiv.org/pdf/2206.08657.pdf) and first released in
-[this repository](https://github.com/microsoft/BridgeTower)
+The BridgeTower model was proposed in [BridgeTower: Building Bridges Between Encoders in Vision-Language Representative Learning](https://arxiv.org/abs/2206.08657) by Xiao Xu, Chenfei Wu, Shachar Rosenman, Vasudev Lal, Wanxiang Che, Nan Duan. The goal of this model is to build a
+bridge between each uni-modal encoder and the cross-modal encoder to enable comprehensive and detailed interaction at each layer of the cross-modal encoder thus achieving remarkable performance on various downstream tasks with almost negligible additional performance and computational costs.
 
 This paper has been accepted to the [AAAI'23](https://aaai.org/Conferences/AAAI-23/) conference. 
 
@@ -32,7 +29,10 @@ In particular, on the VQAv2 test-std set, BRIDGETOWER achieves an accuracy of 78
 Notably, when further scaling the model, BRIDGETOWER achieves an accuracy of 81.15%, surpassing models that are pre-trained on orders-of-magnitude larger datasets.
 *
 
-Please refer to [Figure 2](https://arxiv.org/pdf/2206.08657.pdf) for an illustration of BridgeTower's architecture.
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/bridgetower_architecture.jpg"
+alt="drawing" width="600"/>
+
+<small> BridgeTower architecture. Taken from the <a href="https://arxiv.org/abs/2206.08657">original paper.</a> </small>
 
 ## Usage
 
