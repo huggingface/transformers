@@ -853,7 +853,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
         out_itm = model(**inputs)
         out = model(**inputs, use_itm_head=False)
 
-        expected_scores = torch.Tensor([1.898925542831421])
+        expected_scores = torch.Tensor([[0.9798, 0.0202]])
 
-        self.assertTrue(torch.allclose(out_itm[0][0][0].cpu(), expected_scores))
-        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([0.5052775740623474])))
+        self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores))
+        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5053]])))
