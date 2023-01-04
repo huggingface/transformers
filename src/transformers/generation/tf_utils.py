@@ -18,7 +18,7 @@ import copy
 import inspect
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -804,7 +804,7 @@ class TFGenerationMixin:
             and generation_config.do_sample is False
         )
         is_sample_gen_mode = (generation_config.num_beams == 1) and generation_config.do_sample is True
-        is_beam_sample_gen_mode = (num_beams > 1) and do_sample is True
+        is_beam_sample_gen_mode = (generation_config.num_beams > 1) and generation_config.do_sample is True
 
         # 9. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
@@ -878,14 +878,9 @@ class TFGenerationMixin:
         elif is_beam_gen_mode:
             if generation_config.num_beams < generation_config.num_return_sequences:
                 raise ValueError(
-<<<<<<< HEAD
-                    "Beam search decoding cannot return more sequences than it has beams. Please set "
-                    f"num_beams >= num_return_sequences, got {num_beams} and {num_return_sequences} (respectivelly)"
-=======
-                    "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams"
-                    f" >= num_return_sequences, got {generation_config.num_beams} and"
+                    "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
+                    f" num_return_sequences, got {generation_config.num_beams} and"
                     f" {generation_config.num_return_sequences} (respectivelly)"
->>>>>>> 80d697bd7 (tmp commit)
                 )
 
             # 11. broadcast inputs to the desired number of beams
@@ -916,41 +911,42 @@ class TFGenerationMixin:
             )
 
         elif is_beam_sample_gen_mode:
-            if num_beams < num_return_sequences:
+            if generation_config.num_beams < generation_config.num_return_sequences:
                 raise ValueError(
-                    "Beam search decoding cannot return more sequences than it has beams. Please set "
-                    f"num_beams >= num_return_sequences, got {num_beams} and {num_return_sequences} (respectivelly)"
+                    "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
+                    f" num_return_sequences, got {generation_config.num_beams} and"
+                    f" {generation_config.num_return_sequences} (respectivelly)"
                 )
 
             # 10. prepare logits warper
-            logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
+            logits_warper = self._get_logits_warper(generation_config=generation_config)
 
             # 11. broadcast inputs to the desired number of beams
-            input_ids = self._expand_to_num_beams(input_ids, num_beams=num_beams)
+            input_ids = self._expand_to_num_beams(input_ids, num_beams=generation_config.num_beams)
 
             if "encoder_outputs" in model_kwargs:
                 model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
-                    model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=num_beams
+                    model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
                 )
 
             if "attention_mask" in model_kwargs:
                 model_kwargs["attention_mask"] = self._expand_to_num_beams(
-                    model_kwargs["attention_mask"], num_beams=num_beams
+                    model_kwargs["attention_mask"], num_beams=generation_config.num_beams
                 )
 
             # 12. run beam sample (beam search with sampling)
             return self.beam_search(
                 input_ids,
                 do_sample=True,
-                max_length=max_length,
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
-                length_penalty=length_penalty,
-                early_stopping=early_stopping,
+                max_length=generation_config.max_length,
+                pad_token_id=generation_config.pad_token_id,
+                eos_token_id=generation_config.eos_token_id,
+                length_penalty=generation_config.length_penalty,
+                early_stopping=generation_config.early_stopping,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
-                return_dict_in_generate=return_dict_in_generate,
-                num_return_sequences=num_return_sequences,
+                return_dict_in_generate=generation_config.return_dict_in_generate,
+                num_return_sequences=generation_config.num_return_sequences,
                 **model_kwargs,
             )
 
