@@ -531,7 +531,7 @@ class DonutSwinLayer(nn.Module):
         self.output = DonutSwinOutput(config, dim)
 
     def set_shift_and_window_size(self, input_resolution):
-        if min(input_resolution) < self.window_size:
+        if min(input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
             self.shift_size = 0
             self.window_size = min(input_resolution)
