@@ -40,9 +40,6 @@ class Data2VecVisionConfig(PretrainedConfig):
     [facebook/data2vec-vision-base](https://huggingface.co/facebook/data2vec-vision-base) architecture.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 8092):
-            Vocabulary size of the Data2VecVision model. Defines the number of different image tokens that can be used
-            during pre-training.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -118,7 +115,6 @@ class Data2VecVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=8192,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -150,7 +146,6 @@ class Data2VecVisionConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
