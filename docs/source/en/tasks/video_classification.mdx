@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Video classification is the task of assigning a label or class to an entire video. Videos are expected to have only one class for each video. Video classification models take a video as input and return a prediction about which class the video belongs to. These models can be used to categorize what a video is all about. A real-world application of video classification is action / activity recognition which is useful for fitness applications. It is also helpful for vision-impaired individuals especially when they are commuting.
+Video classification is the task of assigning a label or class to an entire video. Videos are expected to have only one class for each video. Video classification models take a video as input and return a prediction about which class the video belongs to. These models can be used to categorize what a video is all about. A real-world application of video classification is action / activity recognition, which is useful for fitness applications. It is also helpful for vision-impaired individuals, especially when they are commuting.
 
 This guide will show you how to:
 
@@ -55,7 +55,7 @@ Start by loading a subset of the UCF-101 dataset. This will give you a chance to
 >>> file_path = hf_hub_download(repo_id=hf_dataset_identifier, filename=filename, repo_type="dataset")
 ```
 
-After the subset has been downloaded, you need to un-archive it:
+After the subset has been downloaded, you need to extract the compressed archive:
 
 ```py 
 >>> import tarfile
@@ -64,7 +64,7 @@ After the subset has been downloaded, you need to un-archive it:
 ...      t.extractall(".")
 ```
 
-Broadly, the dataset is organized like so:
+At a high level, the dataset is organized like so:
 
 ```bash
 UCF101_subset/
