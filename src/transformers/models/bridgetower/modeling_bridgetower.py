@@ -158,8 +158,19 @@ class BridgeTowerResidualAttention(nn.Module):
     def attention(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor):
         if attention_mask is not None:
             attention_mask = attention_mask.to(dtype=torch.bool, device=hidden_state.device)
-        self.attn_mask = self.attn_mask.to(dtype=hidden_state.dtype, device=hidden_state.device) if self.attn_mask is not None else None
-        return self.attn(hidden_state, hidden_state, hidden_state, need_weights=False, attn_mask=self.attn_mask, key_padding_mask=attention_mask)[0]
+        self.attn_mask = (
+            self.attn_mask.to(dtype=hidden_state.dtype, device=hidden_state.device)
+            if self.attn_mask is not None
+            else None
+        )
+        return self.attn(
+            hidden_state,
+            hidden_state,
+            hidden_state,
+            need_weights=False,
+            attn_mask=self.attn_mask,
+            key_padding_mask=attention_mask,
+        )[0]
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor = None):
         residual_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
@@ -230,13 +241,16 @@ class BridgeTowerVisualTransformer(nn.Module):
 
         scale = hidden_size**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(hidden_size))
-        self.positional_embedding = nn.Parameter(
-            scale * torch.randn((image_size // patch_size) ** 2 + 1, hidden_size)
-        )
+        self.positional_embedding = nn.Parameter(scale * torch.randn((image_size // patch_size) ** 2 + 1, hidden_size))
         self.ln_pre = BridgeTowerLayerNorm(hidden_size)
 
         self.transformer = BridgeTowerTransformer(
-            hidden_size, num_hidden_layers, heads, model_type=model_type, stop_gradient=stop_gradient, vit_remove_last=vit_remove_last
+            hidden_size,
+            num_hidden_layers,
+            heads,
+            model_type=model_type,
+            stop_gradient=stop_gradient,
+            vit_remove_last=vit_remove_last,
         )
         self.ln_post = BridgeTowerLayerNorm(hidden_size)
         self.model_type = model_type
@@ -310,8 +324,6 @@ class BridgeTowerCLIP(nn.Module):
 
     def __init__(
         self,
-        #embed_dim: int,
-        # vision
         num_hidden_layers: Union[Tuple[int, int, int, int], int],
         hidden_size: int,
         patch_size: int,
@@ -373,66 +385,66 @@ class LinkTower(nn.Module):
             raise NotImplementedError(f"link_tower_type {self.link_tower_type} is not implemented")
 
 
-class BridgeTowerBertCrossLayer(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BridgeTower
+class BridgeTowerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = BridgeTowerAttention(config)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
-        self.crossattention = BridgeTowerAttention(config)
-        self.intermediate = BridgeTowerIntermediate(config)
-        self.output = BridgeTowerOutput(config)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self,
-        hidden_states,
-        encoder_hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask=attention_mask,
-            head_mask=None,
-            output_attentions=output_attentions,
-            past_key_value=None,
-        )
-        attention_output = self_attention_outputs[0]
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
 
-        # if decoder, the last output is tuple of self-attn cache
-        # add self attentions if we output attention weights
-        outputs = self_attention_outputs[1:]
 
-        cross_attention_outputs = self.crossattention(
-            attention_output,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-        )
-        attention_output = cross_attention_outputs[0]
-        # add cross attentions if we output attention weights
-        outputs = outputs + cross_attention_outputs[1:-1]
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BridgeTower
+class BridgeTowerIntermediate(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
 
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
-        outputs = (layer_output,) + outputs
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
 
-        return outputs
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->BridgeTower
+class BridgeTowerOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->BridgeTower
+class BridgeTowerPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
 
 
 class BridgeTowerSelfAttention(nn.Module):
@@ -530,7 +542,7 @@ class BridgeTowerSelfAttention(nn.Module):
             distance = position_ids_l - position_ids_r
 
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)
 
             if self.position_embedding_type == "relative_key":
                 relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
@@ -552,7 +564,6 @@ class BridgeTowerSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
@@ -567,21 +578,6 @@ class BridgeTowerSelfAttention(nn.Module):
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
-
-
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BridgeTower
-class BridgeTowerSelfOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower
@@ -634,51 +630,66 @@ class BridgeTowerAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BridgeTower
-class BridgeTowerIntermediate(nn.Module):
+class BridgeTowerBertCrossLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
+        self.attention = BridgeTowerAttention(config)
+        self.is_decoder = config.is_decoder
+        self.add_cross_attention = config.add_cross_attention
+        self.crossattention = BridgeTowerAttention(config)
+        self.intermediate = BridgeTowerIntermediate(config)
+        self.output = BridgeTowerOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
+    def forward(
+        self,
+        hidden_states,
+        encoder_hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_attention_mask=None,
+        past_key_value=None,
+        output_attentions=False,
+    ):
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attention_outputs = self.attention(
+            hidden_states,
+            attention_mask=attention_mask,
+            head_mask=None,
+            output_attentions=output_attentions,
+            past_key_value=None,
+        )
+        attention_output = self_attention_outputs[0]
 
+        # if decoder, the last output is tuple of self-attn cache
+        # add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:]
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->BridgeTower
-class BridgeTowerOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        cross_attention_outputs = self.crossattention(
+            attention_output,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+        )
+        attention_output = cross_attention_outputs[0]
+        # add cross attentions if we output attention weights
+        outputs = outputs + cross_attention_outputs[1:-1]
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+        layer_output = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        )
+        outputs = (layer_output,) + outputs
 
+        return outputs
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->BridgeTower
-class BridgeTowerPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
+    def feed_forward_chunk(self, attention_output):
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
+        return layer_output
 
 
 class BridgeTowerTextLayer(nn.Module):
@@ -1013,7 +1024,9 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         if isinstance(module, BridgeTowerCLIP):
-            proj_std = (module.visual.transformer.hidden_size**-0.5) * ((2 * module.visual.transformer.num_hidden_layers) ** -0.5)
+            proj_std = (module.visual.transformer.hidden_size**-0.5) * (
+                (2 * module.visual.transformer.num_hidden_layers) ** -0.5
+            )
             attn_std = module.visual.transformer.hidden_size**-0.5
             fc_std = (2 * module.visual.transformer.hidden_size) ** -0.5
             for block in module.visual.transformer.resblocks:
@@ -1206,9 +1219,13 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
+
+
 @add_start_docstrings(
-    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-    " top.",
+    (
+        "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
+        " top."
+    ),
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
@@ -1432,6 +1449,50 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         return torch.cat([cls_feats_text, cls_feats_image], dim=-1)
 
 
+# Copied from transformers.models.vilt.modeling_vilt.ViltPredictionHeadTransform with Vilt->BridgeTower
+class BridgeTowerPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class BridgeTowerMLMHead(nn.Module):
+    def __init__(self, config, weight=None):
+        super().__init__()
+        self.config = config
+        self.transform = BridgeTowerPredictionHeadTransform(config)
+        self.decoder = nn.Linear(config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.text_config.vocab_size))
+        if weight is not None:
+            self.decoder.weight = weight
+
+    def forward(self, x):
+        mlm_score = self.transform(x)
+        mlm_score = self.decoder(mlm_score) + self.bias
+        return mlm_score
+
+
+class BridgeTowerITMHead(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.fc = nn.Linear(hidden_size, 2)
+
+    def forward(self, x):
+        itm_score = self.fc(x)
+        return itm_score
+
+
 @add_start_docstrings(
     """
     BridgeTower Model with a language modeling head on top as done during pretraining.
@@ -1522,50 +1583,6 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             return tuple(mlm_logits)
 
         return MaskedLMOutput(logits=mlm_logits)
-
-
-# Copied from transformers.models.vilt.modeling_vilt.ViltPredictionHeadTransform with Vilt->BridgeTower
-class BridgeTowerPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-class BridgeTowerMLMHead(nn.Module):
-    def __init__(self, config, weight=None):
-        super().__init__()
-        self.config = config
-        self.transform = BridgeTowerPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.text_config.vocab_size))
-        if weight is not None:
-            self.decoder.weight = weight
-
-    def forward(self, x):
-        mlm_score = self.transform(x)
-        mlm_score = self.decoder(mlm_score) + self.bias
-        return mlm_score
-
-
-class BridgeTowerITMHead(nn.Module):
-    def __init__(self, hidden_size):
-        super().__init__()
-        self.fc = nn.Linear(hidden_size, 2)
-
-    def forward(self, x):
-        itm_score = self.fc(x)
-        return itm_score
 
 
 @add_start_docstrings(
