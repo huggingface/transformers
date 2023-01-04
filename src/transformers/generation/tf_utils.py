@@ -722,6 +722,7 @@ class TFGenerationMixin:
         # 5. Prepare other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
         model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
+        model_kwargs["use_cache"] = generation_config.use_cache
 
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
@@ -1396,6 +1397,7 @@ class TFGenerationMixin:
             if return_dict_in_generate is not None
             else self.generation_config.return_dict_in_generate
         )
+        use_cache = model_kwargs.pop("use_cache", self.generation_config.use_cache)
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
@@ -1431,9 +1433,7 @@ class TFGenerationMixin:
                 input_ids = generated[:, :cur_len]
             else:
                 input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
-            model_inputs = self.prepare_inputs_for_generation(
-                input_ids, use_cache=self.generation_config.use_cache, **model_kwargs
-            )
+            model_inputs = self.prepare_inputs_for_generation(input_ids, use_cache=use_cache, **model_kwargs)
             # forward pass to get next token logits
             model_outputs = self(
                 **model_inputs,
@@ -1674,6 +1674,7 @@ class TFGenerationMixin:
             if return_dict_in_generate is not None
             else self.generation_config.return_dict_in_generate
         )
+        use_cache = model_kwargs.pop("use_cache", self.generation_config.use_cache)
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
@@ -1705,9 +1706,7 @@ class TFGenerationMixin:
                 input_ids = generated[:, :cur_len]
             else:
                 input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
-            model_inputs = self.prepare_inputs_for_generation(
-                input_ids, use_cache=self.generation_config.use_cache, **model_kwargs
-            )
+            model_inputs = self.prepare_inputs_for_generation(input_ids, use_cache=use_cache, **model_kwargs)
             # forward pass to get next token logits
             model_outputs = self(
                 **model_inputs,
@@ -2007,6 +2006,7 @@ class TFGenerationMixin:
         length_penalty = length_penalty if length_penalty is not None else self.generation_config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.generation_config.early_stopping
 
+        use_cache = model_kwargs.pop("use_cache", self.generation_config.use_cache)
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
@@ -2097,7 +2097,7 @@ class TFGenerationMixin:
             else:
                 input_ids = tf.expand_dims(running_sequences[:, :, cur_len - 1], -1)
             model_inputs = self.prepare_inputs_for_generation(
-                flatten_beam_dim(input_ids), use_cache=self.generation_config.use_cache, **model_kwargs
+                flatten_beam_dim(input_ids), use_cache=use_cache, **model_kwargs
             )
             model_outputs = self(
                 **model_inputs,
@@ -2435,6 +2435,7 @@ class TFGenerationMixin:
             if return_dict_in_generate is not None
             else self.generation_config.return_dict_in_generate
         )
+        use_cache = True  # In contrastive search, we always use cache
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
@@ -2474,8 +2475,9 @@ class TFGenerationMixin:
             if model_kwargs.get("past") is None:
 
                 # prepare inputs
-                model_inputs = self.prepare_inputs_for_generation(generated[:, :cur_len], **model_kwargs)
-                model_inputs["use_cache"] = True
+                model_inputs = self.prepare_inputs_for_generation(
+                    generated[:, :cur_len], use_cache=use_cache, **model_kwargs
+                )
 
                 # encode the given prefix and prepare model inputs; encoder-decoder model process the prefix and save
                 # the `encoder_outputs`
@@ -2565,8 +2567,9 @@ class TFGenerationMixin:
             )
 
             # compute the candidate tokens by the language model and collects their hidden_states
-            next_model_inputs = self.prepare_inputs_for_generation(tf.reshape(top_k_ids, [-1, 1]), **model_kwargs)
-            next_model_inputs["use_cache"] = True
+            next_model_inputs = self.prepare_inputs_for_generation(
+                tf.reshape(top_k_ids, [-1, 1]), use_cache=use_cache, **model_kwargs
+            )
             outputs = self(
                 **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
             )
