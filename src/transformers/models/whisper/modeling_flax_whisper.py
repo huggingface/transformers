@@ -801,6 +801,7 @@ class FlaxWhisperModule(nn.Module):
 class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix: str = "model"
+    main_input_name = "input_features"
     module_class: nn.Module = None
 
     def __init__(

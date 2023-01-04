@@ -192,6 +192,7 @@ def partialclass(cls, *args, **kwargs):
 def make_partial_class(full_class, *args, **kwargs):
     partial_class = partialclass(full_class, *args, **kwargs)
     partial_class.__name__ = full_class.__name__
+    partial_class.__module__ = full_class.__module__
 
     return partial_class
 
@@ -452,6 +453,52 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_model.save_pretrained(tmpdirname)
                 base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
+
+                base_params = flatten_dict(unfreeze(base_model.params))
+
+                for key in base_params_from_head.keys():
+                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    # overwrite because of `input_features`
+    def test_save_load_from_base(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = base_class(config)
+            base_params = flatten_dict(unfreeze(model.params))
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                head_model = model_class.from_pretrained(tmpdirname)
+
+                base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
+
+                for key in base_param_from_head.keys():
+                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    # overwrite because of `input_features`
+    def test_save_load_to_base(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config)
+            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                base_model = base_class.from_pretrained(tmpdirname)
 
                 base_params = flatten_dict(unfreeze(base_model.params))
 
