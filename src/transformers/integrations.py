@@ -668,16 +668,16 @@ class WandbCallback(TrainerCallback):
         variables:
 
         Environment:
-            WANDB_LOG_MODEL (`bool`, *optional*, defaults to `False`):
-                Whether or not to log model as artifact at the end of training. Use along with
-                *TrainingArguments.load_best_model_at_end* to upload best model.
-            WANDB_WATCH (`str`, *optional* defaults to `"gradients"`):
-                Can be `"gradients"`, `"all"` or `"false"`. Set to `"false"` to disable gradient logging or `"all"` to
-                log gradients and parameters.
-            WANDB_PROJECT (`str`, *optional*, defaults to `"huggingface"`):
-                Set this to a custom string to store results in a different project.
-            WANDB_DISABLED (`bool`, *optional*, defaults to `False`):
-                Whether or not to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
+        - **WANDB_LOG_MODEL** (`bool`, *optional*, defaults to `False`):
+            Whether or not to log model as artifact at the end of training. Use along with
+            [`~transformers.TrainingArguments.load_best_model_at_end`] to upload best model.
+        - **WANDB_WATCH** (`str`, *optional*, defaults to `gradients`):
+            Can be `gradients`, `all` or `false`. Set to `false` to disable gradient logging or `all` to log gradients
+            and parameters.
+        - **WANDB_PROJECT** (`str`, *optional*, defaults to `huggingface`):
+            Set this to a custom string to store results in a different project.
+        - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
+            Whether or not to disable wandb entirely. Set `WANDB_DISABLED=True` to disable.
         """
         if self._wandb is None:
             return
@@ -784,16 +784,16 @@ class CometCallback(TrainerCallback):
         Setup the optional Comet.ml integration.
 
         Environment:
-            COMET_MODE (`str`, *optional*):
-                Whether to create an online, offline experiment or disable Comet logging. Can be "OFFLINE", "ONLINE",
-                or "DISABLED". Defaults to "ONLINE".
-            COMET_PROJECT_NAME (`str`, *optional*):
-                Comet project name for experiments
-            COMET_OFFLINE_DIRECTORY (`str`, *optional*):
-                Folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
-            COMET_LOG_ASSETS (`str`, *optional*):
-                Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be "TRUE", or
-                "FALSE". Defaults to "TRUE".
+        - **COMET_MODE** (`str`, *optional*, defaults to `ONLINE`):
+            Whether to create an online, offline experiment or disable Comet logging. Can be `OFFLINE`, `ONLINE`, or
+            `DISABLED`.
+        - **COMET_PROJECT_NAME** (`str`, *optional*):
+            Comet project name for experiments.
+        - **COMET_OFFLINE_DIRECTORY** (`str`, *optional*):
+            Folder to use for saving offline experiments when `COMET_MODE` is `OFFLINE`.
+        - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
+            Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be `TRUE`, or
+            `FALSE`.
 
         For a number of configurable items in the environment, see
         [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
@@ -892,28 +892,27 @@ class MLflowCallback(TrainerCallback):
         Setup the optional MLflow integration.
 
         Environment:
-            HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
-                Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if logging to a
-                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
-                [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
-                storage will just copy the files to your artifact location.
-            MLFLOW_EXPERIMENT_NAME (`str`, *optional*):
-                Whether to use an MLflow experiment_name under which to launch the run. Default to "None" which will
-                point to the "Default" experiment in MLflow. Otherwise, it is a case sensitive name of the experiment
-                to be activated. If an experiment with this name does not exist, a new experiment with this name is
-                created.
-            MLFLOW_TAGS (`str`, *optional*):
-                A string dump of a dictionary of key/value pair to be added to the MLflow run as tags. Example:
-                os.environ['MLFLOW_TAGS']='{"release.candidate": "RC1", "release.version": "2.2.0"}'
-            MLFLOW_NESTED_RUN (`str`, *optional*):
-                Whether to use MLflow nested runs. If set to `True` or *1*, will create a nested run inside the current
-                run.
-            MLFLOW_RUN_ID (`str`, *optional*):
-                Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint.
-                When MLFLOW_RUN_ID environment variable is set, start_run attempts to resume a run with the specified
-                run ID and other parameters are ignored.
-            MLFLOW_FLATTEN_PARAMS (`str`, *optional*):
-                Whether to flatten the parameters dictionary before logging. Default to `False`.
+        - **HF_MLFLOW_LOG_ARTIFACTS** (`str`, *optional*):
+            Whether to use MLflow `.log_artifact()` facility to log artifacts. This only makes sense if logging to a
+            remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
+            [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
+            storage will just copy the files to your artifact location.
+        - **MLFLOW_EXPERIMENT_NAME** (`str`, *optional*, defaults to `None`):
+            Whether to use an MLflow experiment_name under which to launch the run. Default to `None` which will point
+            to the `Default` experiment in MLflow. Otherwise, it is a case sensitive name of the experiment to be
+            activated. If an experiment with this name does not exist, a new experiment with this name is created.
+        - **MLFLOW_TAGS** (`str`, *optional*):
+            A string dump of a dictionary of key/value pair to be added to the MLflow run as tags. Example:
+            `os.environ['MLFLOW_TAGS']='{"release.candidate": "RC1", "release.version": "2.2.0"}'`.
+        - **MLFLOW_NESTED_RUN** (`str`, *optional*):
+            Whether to use MLflow nested runs. If set to `True` or *1*, will create a nested run inside the current
+            run.
+        - **MLFLOW_RUN_ID** (`str`, *optional*):
+            Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint. When
+            `MLFLOW_RUN_ID` environment variable is set, `start_run` attempts to resume a run with the specified run ID
+            and other parameters are ignored.
+        - **MLFLOW_FLATTEN_PARAMS** (`str`, *optional*, defaults to `False`):
+            Whether to flatten the parameters dictionary before logging.
         """
         self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
@@ -1310,10 +1309,10 @@ class ClearMLCallback(TrainerCallback):
     A [`TrainerCallback`] that sends the logs to [ClearML](https://clear.ml/).
 
     Environment:
-            CLEARML_PROJECT (`str`, *optional*, defaults to `"HuggingFace Transformers"`):
-                ClearML project name.
-            CLEARML_TASK (`str`, *optional* defaults to `"Trainer"`):
-                ClearML task name.
+    - **CLEARML_PROJECT** (`str`, *optional*, defaults to `HuggingFace Transformers`):
+        ClearML project name.
+    - **CLEARML_TASK** (`str`, *optional*, defaults to `Trainer`):
+        ClearML task name.
     """
 
     def __init__(self):
