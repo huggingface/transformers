@@ -801,7 +801,8 @@ class DetrImageProcessor(BaseImageProcessor):
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        create using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600, max_size=800)`
+        created using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600,
+        max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
