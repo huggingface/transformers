@@ -466,6 +466,7 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
 
         # extract fbank features
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
+        fbank_sizes = [len(x) for x in features]
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_values": features})
@@ -488,6 +489,12 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+
+        # make labels for stop prediction
+        labels = np.zeros((padded_inputs["input_values"].shape[0], padded_inputs["input_values"].shape[1]))
+        for i, l in enumerate(fbank_sizes):
+            labels[i, l - 1 :] = 1.0
+        padded_inputs["stop_labels"] = labels
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

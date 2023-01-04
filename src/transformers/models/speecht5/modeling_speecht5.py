@@ -2553,6 +2553,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
+        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         decoder_input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
@@ -2563,8 +2564,12 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             `past_key_values`).
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            TODO
+        labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
+            Float values of target mel spectrogram.
+        stop_labels (`torch.FloatTensor` of shape `(batch_size, unreduced_sequence_length)`, *optional*):
+            Labels for computing the stop token loss. Values are 0.0 until the end of the sequence, after which
+            they become 1.0. The sequence length of this tensor is config.reduction_factor times larger than the
+            length of the target mel spectrogram.
 
         Returns:
 

@@ -178,4 +178,5 @@ class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
             return encodings
         else:
             inputs["labels"] = encodings["input_values"]
+            inputs["stop_labels"] = encodings["stop_labels"]
             return inputs
