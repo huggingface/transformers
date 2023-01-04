@@ -774,7 +774,7 @@ def prepare_img():
 
 @require_vision
 @require_torch
-# @slow
+@slow
 class BlipModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
         model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
