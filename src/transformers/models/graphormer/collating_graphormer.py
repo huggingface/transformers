@@ -22,7 +22,6 @@ def convert_to_single_emb(x, offset: int = 512):
 def preprocess_item(item, keep_features=True, task_list=None):
     task_list = ["y"] if task_list is None else task_list
 
-    # ! If you are using Random Gaussian Features, use keep_features = True
     if keep_features and "edge_attr" in item.keys():  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
     else:
@@ -36,22 +35,22 @@ def preprocess_item(item, keep_features=True, task_list=None):
     edge_index = np.asarray(item["edge_index"], dtype=np.int64)
 
     x = convert_to_single_emb(node_feature) + 1
-    N = item["num_nodes"]
+    num_nodes = item["num_nodes"]
 
     if len(edge_attr.shape) == 1:
         edge_attr = edge_attr[:, None]
-    attn_edge_type = np.zeros([N, N, edge_attr.shape[-1]], dtype=np.int64)
+    attn_edge_type = np.zeros([num_nodes, num_nodes, edge_attr.shape[-1]], dtype=np.int64)
     attn_edge_type[edge_index[0], edge_index[1]] = convert_to_single_emb(edge_attr) + 1
 
-    # node adj matrix [N, N] bool
-    adj = np.zeros([N, N], dtype=bool)
+    # node adj matrix [num_nodes, num_nodes] bool
+    adj = np.zeros([num_nodes, num_nodes], dtype=bool)
     adj[edge_index[0], edge_index[1]] = True
 
     shortest_path_result, path = algos_graphormer.floyd_warshall(adj)
     max_dist = np.amax(shortest_path_result)
 
     edge_input = algos_graphormer.gen_edge_input(max_dist, path, attn_edge_type)
-    attn_bias = np.zeros([N + 1, N + 1], dtype=np.single)  # with graph token
+    attn_bias = np.zeros([num_nodes + 1, num_nodes + 1], dtype=np.single)  # with graph token
 
     # combine
     item["x"] = x + 1  # we shift all indices by one for padding
@@ -78,13 +77,12 @@ class GraphormerDataCollator:
 
     def __call__(self, features: List[dict]) -> Dict[str, Any]:
         if self.on_the_fly_processing:
-            features = [preprocess_item(i, task_list=self.task_list) for i in features]
+            features = [preprocess_item(i) for i in features]
 
         if not isinstance(features[0], Mapping):
             features = [vars(f) for f in features]
         batch = {}
-        # max_node_num = max(i["x"].shape[0] for i in features)
-        # max_dist = max(i["edge_input"].shape[-2] for i in features)
+
         max_node_num = max(len(i["x"]) for i in features)
         node_feat_size = len(features[0]["x"][0])
         edge_feat_size = len(features[0]["attn_edge_type"][0][0])
@@ -92,10 +90,9 @@ class GraphormerDataCollator:
         edge_input_size = len(features[0]["edge_input"][0][0][0])
         batch_size = len(features)
 
-        # test : print(batch_size, max_node_num + 1, max_node_num + 1, max_dist)
         batch["attn_bias"] = torch.zeros(
             batch_size, max_node_num + 1, max_node_num + 1, dtype=torch.float
-        )  # float or int?
+        ) 
         batch["attn_edge_type"] = torch.zeros(batch_size, max_node_num, max_node_num, edge_feat_size, dtype=torch.long)
         batch["spatial_pos"] = torch.zeros(batch_size, max_node_num, max_node_num, dtype=torch.long)
         batch["in_degree"] = torch.zeros(batch_size, max_node_num, dtype=torch.long)
@@ -104,8 +101,6 @@ class GraphormerDataCollator:
             batch_size, max_node_num, max_node_num, max_dist, edge_input_size, dtype=torch.long
         )
 
-        # Handling of all other possible keys.
-        # Again, we will use the first element to figure out which key/values are not None for this model.
         for ix, f in enumerate(features):
             for k in ["attn_bias", "attn_edge_type", "spatial_pos", "in_degree", "x", "edge_input"]:
                 f[k] = torch.tensor(f[k])
@@ -129,12 +124,12 @@ class GraphormerDataCollator:
         sample = features[0]["labels"]
         if len(sample) == 1:  # one task
             if isinstance(sample[0], float):  # regression
-                batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features]))  # [B,]
+                batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features])) 
             else:  # binary classification
-                batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features]))  # [B,]
+                batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features])) 
         else:  # multi task classification, left to float to keep the NaNs
             batch["labels"] = torch.from_numpy(
                 np.stack([i["labels"] for i in features], dim=0)
-            )  # , dtype=torch.float)  # [B,]
+            )  
 
         return batch
