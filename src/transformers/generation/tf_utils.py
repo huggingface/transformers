@@ -608,7 +608,6 @@ class TFGenerationMixin:
 
         ```python
         >>> from transformers import AutoTokenizer, TFAutoModelForCausalLM, GenerationConfig
-        >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
@@ -620,9 +619,9 @@ class TFGenerationMixin:
         >>> generation_config = GenerationConfig.from_pretrained("gpt2")
         >>> generation_config.max_length = 30
         >>> generation_config.do_sample = True
-        >>> outputs = model.generate(input_ids, generation_config=generation_config, seed=[0, 42])
+        >>> outputs = model.generate(input_ids, generation_config=generation_config, seed=[0, 0])
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get rid of discrimination," said Rep. Mark Pocan (D-Wis.).\n\n"Just look at the']
+        ["Today I believe we can finally start taking a bold stand against climate change and climate change mitigation efforts such as President Obama's climate ban and President Trump's"]
         ```
 
         Beam-search decoding, using a freshly initialized generation configuration:
