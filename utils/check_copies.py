@@ -66,8 +66,8 @@ LOCALIZED_READMES = {
         "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
         "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
         "format_model_list": (
-            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
-            " {paper_authors}.{supplements}"
+            "**[{title}]({model_link})** ({paper_affiliations} 에서 제공)은 {paper_authors}.{supplements}의"
+            " {paper_title_link}논문과 함께 발표했습니다."
         ),
     },
     "README_es.md": {
