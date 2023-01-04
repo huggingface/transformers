@@ -39,7 +39,7 @@ from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import TFGenerationMixin
+from .generation import GenerationConfig, TFGenerationMixin
 from .tf_utils import shape_list
 from .utils import (
     DUMMY_INPUTS,
@@ -1137,6 +1137,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
@@ -1199,6 +1200,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 The output returned by the model.
         """
         raise NotImplementedError
+
+    def can_generate(self) -> bool:
+        """
+        Returns whether this model can generate sequences with `.generate()`.
+
+        Returns:
+            `bool`: Whether this model can generate sequences with `.generate()`.
+        """
+        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
+        if "GenerationMixin" in str(self.prepare_inputs_for_generation):
+            return False
+        return True
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -2831,6 +2844,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
                 " to use it for predictions and inference."
             )
+
+        # If it is a model with generation capabilities, attempt to load the generation config
+        if model.can_generate():
+            try:
+                model.generation_config = GenerationConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _from_auto=from_auto_class,
+                    _from_pipeline=from_pipeline,
+                    **kwargs,
+                )
+            except OSError:
+                logger.info(
+                    "Generation config file not found, using a generation config created from the model config."
+                )
+                pass
 
         if output_loading_info:
             loading_info = {
