@@ -862,7 +862,7 @@ class MT5Stack(MT5PreTrainedModel):
         # Set final layer norm to last device
         self.final_layer_norm = self.final_layer_norm.to(self.last_device)
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
         self.model_parallel = False
         self.device_map = None
