@@ -834,7 +834,9 @@ class TemporalFusionTransformerEncoder(TemporalFusionTransformerPreTrainedModel)
 
     def forward(
         self,
-        inputs_embeds,
+        past_values,
+        future_values,
+        states,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1224,7 +1226,7 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
 
         self.static_selection = VariableSelectionNetwork(
             d_hidden=config.variable_dimension,
-            n_vars=2,  # cat, static_feat
+            n_vars=2,  # cat, static real feat
             dropout=config.dropout,
         )
 
@@ -1362,7 +1364,7 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
             static_feat,
         )
 
-    def enc_dec_outputs(self, transformer_inputs, time_feat, embedded_cat, static_feat):
+    def encoder_inputs(self, transformer_inputs, time_feat, embedded_cat, static_feat):
         target_proj = self.target_proj(transformer_inputs)
 
         past_target_proj = target_proj[:, : self.config.context_length, ...]
@@ -1376,7 +1378,6 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
 
         static_var, _ = self.static_selection(embedded_cat + [static_feat_proj])
         static_selection = self.selection(static_var).unsqueeze(1)
-        static_enrichment = self.enrichment(static_var).unsqueeze(1)
 
         past_selection, _ = self.past_selection([past_target_proj, past_time_feat_proj], static_selection)
 
@@ -1386,11 +1387,7 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
         c_c = self.state_c(static_var)
         states = [c_h.unsqueeze(0), c_c.unsqueeze(0)]
 
-        encoder_outputs = self.temporal_encoder(past_selection, future_selection, states)
-
-        decoder_outputs = self.temporal_decoder(encoder_outputs, static_enrichment)
-
-        return encoder_outputs, decoder_outputs
+        return past_selection, future_selection, states
 
     def get_encoder(self):
         return self.encoder
@@ -1438,12 +1435,14 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
         )
 
         if encoder_outputs is None:
+            past_selection, future_selection, states = self.encoder_inputs(
+                transformer_inputs, time_feat, embedded_cat, static_feat
+            )
+
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
+                past_values=past_selection,
+                future_values=future_selection,
+                states=states,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
