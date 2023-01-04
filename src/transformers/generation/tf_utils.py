@@ -723,7 +723,6 @@ class TFGenerationMixin:
         # 5. Prepare other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
         model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
-        model_kwargs["use_cache"] = generation_config.use_cache
 
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
@@ -1387,12 +1386,16 @@ class TFGenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
         )
         return_dict_in_generate = (
-            return_dict_in_generate if return_dict_in_generate is not None else self.generation_config.return_dict_in_generate
+            return_dict_in_generate
+            if return_dict_in_generate is not None
+            else self.generation_config.return_dict_in_generate
         )
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
@@ -1429,7 +1432,9 @@ class TFGenerationMixin:
                 input_ids = generated[:, :cur_len]
             else:
                 input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, use_cache=self.generation_config.use_cache, **model_kwargs
+            )
             # forward pass to get next token logits
             model_outputs = self(
                 **model_inputs,
@@ -1659,12 +1664,16 @@ class TFGenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
         )
         return_dict_in_generate = (
-            return_dict_in_generate if return_dict_in_generate is not None else self.generation_config.return_dict_in_generate
+            return_dict_in_generate
+            if return_dict_in_generate is not None
+            else self.generation_config.return_dict_in_generate
         )
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
@@ -1697,7 +1706,9 @@ class TFGenerationMixin:
                 input_ids = generated[:, :cur_len]
             else:
                 input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, use_cache=self.generation_config.use_cache, **model_kwargs
+            )
             # forward pass to get next token logits
             model_outputs = self(
                 **model_inputs,
@@ -1981,13 +1992,17 @@ class TFGenerationMixin:
             num_return_sequences if num_return_sequences is not None else self.generation_config.num_return_sequences
         )
 
-        output_attentions = output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
         )
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         return_dict_in_generate = (
-            return_dict_in_generate if return_dict_in_generate is not None else self.generation_config.return_dict_in_generate
+            return_dict_in_generate
+            if return_dict_in_generate is not None
+            else self.generation_config.return_dict_in_generate
         )
 
         length_penalty = length_penalty if length_penalty is not None else self.generation_config.length_penalty
@@ -2082,7 +2097,9 @@ class TFGenerationMixin:
                 input_ids = running_sequences[:, :, :cur_len]
             else:
                 input_ids = tf.expand_dims(running_sequences[:, :, cur_len - 1], -1)
-            model_inputs = self.prepare_inputs_for_generation(flatten_beam_dim(input_ids), **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(
+                flatten_beam_dim(input_ids), use_cache=self.generation_config.use_cache, **model_kwargs
+            )
             model_outputs = self(
                 **model_inputs,
                 return_dict=True,
@@ -2408,12 +2425,16 @@ class TFGenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.generation_config.output_attentions
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
         )
         return_dict_in_generate = (
-            return_dict_in_generate if return_dict_in_generate is not None else self.generation_config.return_dict_in_generate
+            return_dict_in_generate
+            if return_dict_in_generate is not None
+            else self.generation_config.return_dict_in_generate
         )
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
