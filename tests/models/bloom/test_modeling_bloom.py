@@ -37,7 +37,10 @@ if is_torch_available():
         BloomModel,
         BloomTokenizerFast,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10, is_torch_less_than_1_9
+else:
+    is_torch_greater_or_equal_than_1_10 = False
+    is_torch_less_than_1_9 = True
 
 
 @require_torch
@@ -502,7 +505,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         self.path_bigscience_model = "bigscience/bigscience-small-testing"
 
     @unittest.skipIf(
-        not is_torch_available() or not is_torch_greater_or_equal_than_1_10,
+        not is_torch_greater_or_equal_than_1_10,
         "Test failed with torch < 1.10 (`LayerNormKernelImpl` not implemented for `BFloat16`)",
     )
     @require_torch
@@ -737,6 +740,9 @@ class BloomEmbeddingTest(unittest.TestCase):
                 self.assertAlmostEqual(EMBEDDINGS_DS_AFTER_LN[key][idx], output_dict_norm[key][idx], places=1)
 
     @require_torch
+    @unittest.skipIf(
+        is_torch_less_than_1_9, reason="Test failed with torch < 1.9 (`min_cuda` not implemented for `BFloat16`)"
+    )
     def test_hidden_states_transformers(self):
         cuda_available = torch.cuda.is_available()
         model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
