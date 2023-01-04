@@ -23,7 +23,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "graphormer-base-pcqm4mv1": "https://huggingface.co/graphormer-base-pcqm4mv1/resolve/main/config.json",
+    # pcqm4mv1 now deprecated
+    "graphormer-base": "https://huggingface.co/graphormer-base-pcqm4mv2/resolve/main/config.json",
     # See all Graphormer models at https://huggingface.co/models?filter=graphormer
 }
 
@@ -63,7 +64,7 @@ class GraphormerConfig(PretrainedConfig):
             Function to use for initialisation of layer TODO.
         max_nodes (`int`, *optional*, defaults to 512):
             Maximum number of nodes which can be parsed for the input graphs.
-        share_input_output_embed (`bool`, *optional*, defaults to False):
+        share_input_output_embed (`bool`, *optional*, defaults to `False`):
             Shares the embedding layer between encoder and decoder - careful, True is not implemented.
         num_layers (`int`, *optional*, defaults to 12):
             Number of layers.
@@ -73,7 +74,7 @@ class GraphormerConfig(PretrainedConfig):
             Dimension of the "intermediate" (often named feed-forward) layer in encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads in the encoder.
-        self_attention (`bool`, *optional*, defaults to True):
+        self_attention (`bool`, *optional*, defaults to `True`):
             Model is self attentive (False not implemented).
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
@@ -84,24 +85,24 @@ class GraphormerConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for activations inside the fully connected layer.
-        layerdrop: (`float`, *optional*, defaults to 0.0):
+        layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see
             https://arxiv.org/abs/1909.11556) for more details.
-        bias (`bool`, *optional*, defaults to True):
+        bias (`bool`, *optional*, defaults to `True`):
             Uses bias in the attention module - unsupported at the moment
         embed_scale(`float`, *optional*, defaults to None):
             TODO
         num_trans_layers_to_freeze (`int`, *optional*, defaults to 0):
             Number of transformer layers to freeze
-        encoder_normalize_before (`bool`, *optional*, defaults to False):
+        encoder_normalize_before (`bool`, *optional*, defaults to `False`):
             Normalize features before encoding the graph.
-        pre_layernorm (`bool`, *optional*, defaults to False):
+        pre_layernorm (`bool`, *optional*, defaults to `False`):
             Normalize layer before. # todo
-        apply_graphormer_init (`bool`, *optional*, defaults to False):
+        apply_graphormer_init (`bool`, *optional*, defaults to `False`):
             Apply a graphormer initialisation to the model before training.
-        freeze_embeddings (`bool`, *optional*, defaults to False):
+        freeze_embeddings (`bool`, *optional*, defaults to `False`):
             Freeze the embedding layer, or train it along the model.
-        encoder_normalize_before (`bool`, *optional*, defaults to False):
+        encoder_normalize_before (`bool`, *optional*, defaults to `False`):
             Normalize features before encoding the graph.
         q_noise (`float`, *optional*, defaults to 0.0):
             Noise.
@@ -113,24 +114,25 @@ class GraphormerConfig(PretrainedConfig):
             Dimension of the value in the attention, if different from the other values
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        export (`bool`, *optional*, defaults to False):
+        export (`bool`, *optional*, defaults to `False`):
             TODO
-        traceable (`bool`, *optional*, defaults to False):
+        traceable (`bool`, *optional*, defaults to `False`):
             TODO
+
         Example:
+            ```python
+            >>> from transformers import GraphormerModel, GraphormerConfig
 
-    ```python
-    >>> from transformers import GraphormerModel, GraphormerConfig
+            >>> # Initializing a Graphormer graphormer-base-pcqm4mv1 style configuration
+            >>> configuration = GraphormerConfig()
 
-    >>> # Initializing a Graphormer graphormer-base-pcqm4mv1 style configuration
-    >>> configuration = GraphormerConfig()
+            >>> # Initializing a model from the graphormer-base-pcqm4mv1 style configuration
+            >>> model = GraphormerModel(configuration)
 
-    >>> # Initializing a model from the graphormer-base-pcqm4mv1 style configuration
-    >>> model = GraphormerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
+            ```
+    """
     model_type = "graphormer"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -221,85 +223,5 @@ class GraphormerConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            **kwargs,
-        )
-
-
-class GraphormerConfigSmall(GraphormerConfig):
-    def __init__(self, **kwargs):
-        super().__init__(
-            share_encoder_input_output_embed=False,
-            num_layers=2,
-            embedding_dim=120,
-            ffn_embedding_dim=120,
-            num_attention_heads=3,
-            dropout=0.1,
-            attention_dropout=0.1,
-            activation_dropout=0.0,
-            encoder_normalize_before=True,
-            pre_layernorm=False,
-            apply_graphormer_init=True,
-            activation_fn="gelu",
-            no_token_positional_embeddings=False,
-            **kwargs,
-        )
-
-
-class GraphormerConfigBase(GraphormerConfig):
-    def __init__(self, **kwargs):
-        super().__init__(
-            share_input_output_embed=False,
-            num_layers=12,
-            embedding_dim=768,
-            ffn_embedding_dim=768,
-            num_attention_heads=32,
-            dropout=0.0,
-            attention_dropout=0.1,
-            activation_dropout=0.1,
-            encoder_normalize_before=True,
-            pre_layernorm=False,
-            apply_graphormer_init=True,
-            activation_fn="gelu",
-            no_token_positional_embeddings=False,
-            **kwargs,
-        )
-
-
-class GraphormerConfigSlim(GraphormerConfig):
-    def __init__(self, **kwargs):
-        super().__init__(
-            share_input_output_embed=False,
-            num_layers=12,
-            embedding_dim=80,
-            ffn_embedding_dim=80,
-            num_attention_heads=8,
-            dropout=0.0,
-            attention_dropout=0.1,
-            activation_dropout=0.1,
-            encoder_normalize_before=True,
-            pre_layernorm=False,
-            apply_graphormer_init=True,
-            activation_fn="gelu",
-            no_token_positional_embeddings=False,
-            **kwargs,
-        )
-
-
-class GraphormerConfigLarge(GraphormerConfig):
-    def __init__(self, **kwargs):
-        super().__init__(
-            share_input_output_embed=False,
-            num_layers=24,
-            embedding_dim=1024,
-            ffn_embedding_dim=1024,
-            num_attention_heads=32,
-            dropout=0.0,
-            attention_dropout=0.1,
-            activation_dropout=0.1,
-            encoder_normalize_before=True,
-            pre_layernorm=False,
-            apply_graphormer_init=True,
-            activation_fn="gelu",
-            no_token_positional_embeddings=False,
             **kwargs,
         )
