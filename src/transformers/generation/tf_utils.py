@@ -702,11 +702,11 @@ class TFGenerationMixin:
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
-            logger.warning(
-                f"Setting `pad_token_id` to {generation_config.eos_token_id} (first `eos_token_id`) to generate"
-                " sequence"
-            )
-            generation_config.pad_token_id = generation_config.eos_token_id
+            eos_token_id = generation_config.eos_token_id
+            if isinstance(eos_token_id, list):
+                eos_token_id = eos_token_id[0]
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            generation_config.pad_token_id = eos_token_id
 
         use_xla = not tf.executing_eagerly()
         if use_xla and not self.supports_xla_generation:
