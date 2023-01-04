@@ -67,7 +67,7 @@ fsspec==2022.2.0
 fugashi==1.1.2
 gast==0.5.3
 gitdb==4.0.9
-GitPython==3.1.18
+GitPython==3.1.30
 glfw==2.5.1
 google-auth==2.6.2
 google-auth-oauthlib==0.4.6
