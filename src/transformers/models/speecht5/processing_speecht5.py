@@ -156,26 +156,26 @@ class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        text = kwargs.pop("text", None)
         audio = kwargs.pop("audio", None)
         sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
 
         if len(args) > 0:
             text = args[0]
             args = args[1:]
 
-        if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+        if text is None and audio is None:
+            raise ValueError("You need to specify either a `text` or `audio` input to process.")
 
-        if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            inputs = self.tokenizer(text, **kwargs)
+        if audio is not None:
+            encodings = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
 
-        if text is None:
+        if audio is None:
             return inputs
-        elif audio is None:
+        elif text is None:
             return encodings
         else:
-            inputs["labels"] = encodings["input_ids"]
+            inputs["labels"] = encodings["input_values"]
             return inputs
