@@ -1300,57 +1300,63 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
 
     def create_network_inputs(
         self,
-        feat_static_cat: torch.Tensor,
-        feat_static_real: torch.Tensor,
-        past_time_feat: torch.Tensor,
-        past_target: torch.Tensor,
-        past_observed_values: torch.Tensor,
-        future_time_feat: Optional[torch.Tensor] = None,
-        future_target: Optional[torch.Tensor] = None,
+        past_values: torch.Tensor,
+        past_time_features: torch.Tensor,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
     ):
         # time feature
         time_feat = (
             torch.cat(
                 (
-                    past_time_feat[:, self._past_length - self.context_length :, ...],
-                    future_time_feat,
+                    past_time_features[:, self._past_length - self.config.context_length :, ...],
+                    future_time_features,
                 ),
                 dim=1,
             )
-            if future_target is not None
-            else past_time_feat[:, self._past_length - self.context_length :, ...]
+            if future_values is not None
+            else past_time_features[:, self._past_length - self.config.context_length :, ...]
         )
 
         # calculate scale
-        context = past_target[:, -self.context_length :]
-        observed_context = past_observed_values[:, -self.context_length :]
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
+        context = past_values[:, -self.config.context_length :]
+        observed_context = past_observed_mask[:, -self.config.context_length :]
         _, scale = self.scaler(context, observed_context)
 
         # scale the target and create lag features of targets
-        target = (
-            torch.cat((past_target, future_target), dim=1) / scale
-            if future_target is not None
-            else past_target / scale
+        inputs = (
+            torch.cat((past_values, future_values), dim=1) / scale
+            if future_values is not None
+            else past_values / scale
         )
+
         subsequences_length = (
-            self.context_length + self.prediction_length if future_target is not None else self.context_length
+            self.config.context_length + self.config.prediction_length
+            if future_values is not None
+            else self.config.context_length
         )
 
         lagged_target = self.get_lagged_subsequences(
-            sequence=target,
+            sequence=inputs,
             subsequences_length=subsequences_length,
         )
         lags_shape = lagged_target.shape
         reshaped_lagged_target = lagged_target.reshape(lags_shape[0], lags_shape[1], -1)
 
         # embeddings
-        embedded_cat = self.embedder(feat_static_cat)
-        log_scale = scale.log() if self.input_size == 1 else scale.squeeze(1).log()
-        static_feat = torch.cat((feat_static_real, log_scale), dim=1)
+        embedded_cat = self.embedder(static_categorical_features)
+        log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        static_feat = torch.cat((static_real_features, log_scale), dim=1)
 
         # return the network inputs
         return (
-            reshaped_lagged_target,  # target
+            reshaped_lagged_target,  # transformer inputs
             time_feat,  # dynamic real covariates
             scale,  # scale
             embedded_cat,  # static covariates
@@ -1364,8 +1370,8 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
         future_target_proj = target_proj[:, self.config.context_length :, ...]
 
         time_feat_proj = self.dynamic_proj(time_feat)
-        past_time_feat_proj = time_feat_proj[:, : self.context_length, ...]
-        future_time_feat_proj = time_feat_proj[:, self.context_length :, ...]
+        past_time_feat_proj = time_feat_proj[:, : self.config.context_length, ...]
+        future_time_feat_proj = time_feat_proj[:, self.config.context_length :, ...]
 
         static_feat_proj = self.static_feat_proj(static_feat)
 
@@ -1381,11 +1387,11 @@ class TemporalFusionTransformerModel(TemporalFusionTransformerPreTrainedModel):
         c_c = self.state_c(static_var)
         states = [c_h.unsqueeze(0), c_c.unsqueeze(0)]
 
-        enc_out = self.temporal_encoder(past_selection, future_selection, states)
+        encoder_outputs = self.temporal_encoder(past_selection, future_selection, states)
 
-        dec_output = self.temporal_decoder(enc_out, static_enrichment)
+        decoder_outputs = self.temporal_decoder(encoder_outputs, static_enrichment)
 
-        return self.param_proj(dec_output)
+        return encoder_outputs, decoder_outputs
 
     def get_encoder(self):
         return self.encoder
