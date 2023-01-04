@@ -716,6 +716,12 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("layoutlmv3", "LayoutLMv3ForTokenClassification"),
+    ]
+)
+
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
@@ -926,6 +932,9 @@ MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
 MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
 )
+MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING_NAMES
+)
 MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
@@ -1058,6 +1067,15 @@ AutoModelForDocumentQuestionAnswering = auto_class_update(
     AutoModelForDocumentQuestionAnswering,
     head_doc="document question answering",
     checkpoint_for_example='impira/layoutlm-document-qa", revision="52e01b3',
+)
+
+class AutoModelForDocumentTokenClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING
+
+AutoModelForDocumentTokenClassification = auto_class_update(
+    AutoModelForDocumentTokenClassification,
+    head_doc="document token classification",
+    checkpoint_for_example='microsoft/layoutlmv3-base", revision="07c9b08',
 )
 
 

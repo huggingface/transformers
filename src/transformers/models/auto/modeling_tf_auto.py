@@ -344,6 +344,11 @@ TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("layoutlmv3", "TFLayoutLMv3ForTokenClassification"),
+    ]
+)
 
 TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
@@ -441,6 +446,9 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
 )
 TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
+)
+TF_MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING_NAMES
 )
 TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES
@@ -561,6 +569,14 @@ TFAutoModelForDocumentQuestionAnswering = auto_class_update(
     checkpoint_for_example='impira/layoutlm-document-qa", revision="52e01b3',
 )
 
+class TFAutoModelForDocumentTokenClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING
+
+TFAutoModelForDocumentTokenClassification = auto_class_update(
+    TFAutoModelForDocumentTokenClassification,
+    head_doc="document token classification",
+    checkpoint_for_example='microsoft/layoutlmv3-base", revision="07c9b08',
+)
 
 class TFAutoModelForTableQuestionAnswering(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING

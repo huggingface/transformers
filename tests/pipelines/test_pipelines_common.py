@@ -81,7 +81,7 @@ ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS = [
 
 def get_checkpoint_from_architecture(architecture):
     try:
-        module = importlib.import_module(architecture.__module__)
+        module = importlib.import_module(str(architecture.__module__))
     except ImportError:
         logger.error(f"Ignoring architecture {architecture}")
         return
