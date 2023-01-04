@@ -119,7 +119,7 @@ class BridgeTowerModelTester:
             mlp_ratio=self.mlp_ratio,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
-            tie_word_embeddings=self.tie_word_embeddings
+            tie_word_embeddings=self.tie_word_embeddings,
         )
 
     def create_and_check_model(
