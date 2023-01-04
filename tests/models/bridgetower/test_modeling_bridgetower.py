@@ -65,7 +65,7 @@ class BridgeTowerModelTester:
         tie_word_embeddings=False,
         text_config=None,
         vision_config=None,
-        #vocab_size=50265,
+        # vocab_size=50265,
     ):
         self.parent = parent
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
@@ -121,7 +121,7 @@ class BridgeTowerModelTester:
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             tie_word_embeddings=self.tie_word_embeddings
-            #vocab_size=self.vocab_size,
+            # vocab_size=self.vocab_size,
         )
 
     def create_and_check_model(
@@ -211,7 +211,7 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = BridgeTowerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=50265)
-            
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -292,7 +292,7 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. So this test is not applicable.""")
     def test_model_common_attributes(self):
         pass
-    
+
     @unittest.skip(
         reason="""Bridge Tower model currently only supports pretrained model. Thus this test is not needed."""
     )
