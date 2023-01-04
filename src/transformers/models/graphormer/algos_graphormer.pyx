@@ -1,4 +1,4 @@
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Microsoft Corporation and HuggingFace
 # Licensed under the MIT License.
 
 import cython
