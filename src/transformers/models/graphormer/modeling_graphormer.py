@@ -226,8 +226,6 @@ class MultiheadAttention(nn.Module):
             config.qn_block_size,
         )
 
-        self.reset_parameters()
-
         self.onnx_trace = False
 
     def reset_parameters(self):
@@ -351,7 +349,7 @@ class MultiheadAttention(nn.Module):
         attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embedding_dim)
         attn = self.out_proj(attn)
 
-        attn_weights: Optional[torch.Tensor] = None
+        attn_weights = None
         if need_weights:
             attn_weights = attn_weights_float.contiguous().view(bsz, self.num_heads, tgt_len, src_len).transpose(1, 0)
             if not need_head_weights:
@@ -451,31 +449,6 @@ class GraphormerGraphEncoderLayer(nn.Module):
         return x, attn
 
 
-def init_graphormer_params(module):
-    """
-    Initialize the weights specific to the Graphormer Model.
-    """
-
-    def normal_(data):
-        # with FSDP, module params will be on CUDA, so we cast them back to CPU
-        # so that the RNG is consistent with and without FSDP
-        # data.copy_(data.cpu().normal_(mean=0.0, std=0.02).to(data.device))
-        data.normal_(mean=0.0, std=0.02)
-
-    if isinstance(module, nn.Linear):
-        normal_(module.weight.data)
-        if module.bias is not None:
-            module.bias.data.zero_()
-    if isinstance(module, nn.Embedding):
-        normal_(module.weight.data)
-        if module.padding_idx is not None:
-            module.weight.data[module.padding_idx].zero_()
-    if isinstance(module, MultiheadAttention):
-        normal_(module.q_proj.weight.data)
-        normal_(module.k_proj.weight.data)
-        normal_(module.v_proj.weight.data)
-
-
 class GraphormerGraphEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -515,9 +488,6 @@ class GraphormerGraphEncoder(nn.Module):
         self.layers.extend([GraphormerGraphEncoderLayer(config) for _ in range(config.num_layers)])
 
         # Apply initialization of model params after building the model
-        if self.apply_graphormer_init:
-            self.apply(init_graphormer_params)
-
         if config.freeze_embeddings:
             raise NotImplementedError("Freezing embeddings is not implemented yet.")
 
@@ -603,7 +573,6 @@ class GraphormerModel(nn.Module):
         self.graph_encoder = GraphormerGraphEncoder(config)
 
         self.share_input_output_embed = config.share_input_output_embed
-        self.embed_out = None
         self.lm_output_learned_bias = None
 
         # Remove head is set to true during fine-tuning
@@ -615,8 +584,6 @@ class GraphormerModel(nn.Module):
 
     def reset_output_layer_parameters(self):
         self.lm_output_learned_bias = nn.Parameter(torch.zeros(1))
-        if self.embed_out is not None:
-            self.embed_out.reset_parameters()
 
     def forward(self, batched_data, perturb=None, masked_tokens=None, **unused):
         inner_states, graph_rep = self.graph_encoder(batched_data, perturb=perturb)
@@ -666,6 +633,28 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    def normal_(self, data):
+        # with FSDP, module params will be on CUDA, so we cast them back to CPU
+        # so that the RNG is consistent with and without FSDP
+        data.copy_(data.cpu().normal_(mean=0.0, std=0.02).to(data.device))
+
+    def init_graphormer_params(self, module):
+        """
+        Initialize the weights specific to the Graphormer Model.
+        """
+        if isinstance(module, nn.Linear):
+            self.normal_(module.weight.data)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        if isinstance(module, nn.Embedding):
+            self.normal_(module.weight.data)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        if isinstance(module, MultiheadAttention):
+            self.normal_(module.q_proj.weight.data)
+            self.normal_(module.k_proj.weight.data)
+            self.normal_(module.v_proj.weight.data)
+
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -680,6 +669,14 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             module.q_proj.weight.data.normal_(mean=0.0, std=0.02)
             module.k_proj.weight.data.normal_(mean=0.0, std=0.02)
             module.v_proj.weight.data.normal_(mean=0.0, std=0.02)
+            module.reset_parameters()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, GraphormerGraphEncoder):
+            if module.apply_graphormer_init:
+                module.apply(self.init_graphormer_params)
+
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -695,10 +692,10 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         self.encoder = GraphormerModel(config)
         self.embedding_dim = config.embedding_dim
 
+        self.classifier = GraphormerDecoderHead(self.embedding_dim, config.num_labels)
+
         # Initialize weights and apply final processing
         self.post_init()
-
-        self.classifier = GraphormerDecoderHead(self.embedding_dim, config.num_labels)
 
     def forward(
         self,
