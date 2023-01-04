@@ -65,7 +65,6 @@ class BridgeTowerModelTester:
         tie_word_embeddings=False,
         text_config=None,
         vision_config=None,
-        # vocab_size=50265,
     ):
         self.parent = parent
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
@@ -121,7 +120,6 @@ class BridgeTowerModelTester:
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             tie_word_embeddings=self.tie_word_embeddings
-            # vocab_size=self.vocab_size,
         )
 
     def create_and_check_model(
