@@ -661,13 +661,12 @@ class WandbCallback(TrainerCallback):
 
     def setup(self, args, state, model, **kwargs):
         """
-        Setup the optional Weights & Biases (*wandb*) integration.
+        Setup the optional Weights & Biases (*wandb*) integration with the following environment variables.
 
         One can subclass and override this method to customize the setup if needed. Find more information
-        [here](https://docs.wandb.ai/integrations/huggingface). You can also override the following environment
-        variables:
+        [here](https://docs.wandb.ai/integrations/huggingface).
 
-        Environment:
+        Args:
             WANDB_LOG_MODEL (`bool`, *optional*, defaults to `False`):
                 Whether or not to log model as artifact at the end of training. Use along with
                 *TrainingArguments.load_best_model_at_end* to upload best model.
@@ -781,9 +780,9 @@ class CometCallback(TrainerCallback):
 
     def setup(self, args, state, model):
         """
-        Setup the optional Comet.ml integration.
+        Setup the optional Comet.ml integration with the following environment variables.
 
-        Environment:
+        Args:
             COMET_MODE (`str`, *optional*):
                 Whether to create an online, offline experiment or disable Comet logging. Can be "OFFLINE", "ONLINE",
                 or "DISABLED". Defaults to "ONLINE".
@@ -889,9 +888,9 @@ class MLflowCallback(TrainerCallback):
 
     def setup(self, args, state, model):
         """
-        Setup the optional MLflow integration.
+        Setup the optional MLflow integration with the following environment variables.
 
-        Environment:
+        Args:
             HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
                 Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if logging to a
                 remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
@@ -1307,9 +1306,10 @@ class CodeCarbonCallback(TrainerCallback):
 
 class ClearMLCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that sends the logs to [ClearML](https://clear.ml/).
+    A [`TrainerCallback`] that sends the logs to [ClearML](https://clear.ml/). Setup the optional ClearML integration
+    with the following environment variables.
 
-    Environment:
+    Args:
             CLEARML_PROJECT (`str`, *optional*, defaults to `"HuggingFace Transformers"`):
                 ClearML project name.
             CLEARML_TASK (`str`, *optional* defaults to `"Trainer"`):
