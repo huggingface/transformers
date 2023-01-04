@@ -83,12 +83,21 @@ class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "center_crop"))
+    def test_feat_extract_properties(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        self.assertTrue(hasattr(feature_extractor, "do_resize"))
+        self.assertTrue(hasattr(feature_extractor, "size"))
+        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "crop_size"))
+
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"shortest_edge": 20})
+        self.assertEqual(feature_extractor.crop_size, {"height": 18, "width": 18})
+
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42, crop_size=84)
+        self.assertEqual(feature_extractor.size, {"shortest_edge": 42})
+        self.assertEqual(feature_extractor.crop_size, {"height": 84, "width": 84})
 
     def test_batch_feature(self):
         pass
