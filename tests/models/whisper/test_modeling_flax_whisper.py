@@ -466,7 +466,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
         base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
 
         for model_class in self.all_model_classes:
-            if model_class == base_class:
+            if model_class.__name__ == base_class.__name__:
                 continue
 
             model = base_class(config)
@@ -489,7 +489,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
         base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
 
         for model_class in self.all_model_classes:
-            if model_class == base_class:
+            if model_class.__name__ == base_class.__name__:
                 continue
 
             model = model_class(config)
