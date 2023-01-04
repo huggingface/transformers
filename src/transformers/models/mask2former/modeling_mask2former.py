@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Mask2FormerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/mask2former-swin-small-coco-instance"
-_IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
+_IMAGE_PROCESSOR_FOR_DOC = "MaskFormerImageProcessor"
 
 MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/mask2former-swin-small-coco-instance",
@@ -202,10 +202,10 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     """
     Class for outputs of [`Mask2FormerForUniversalSegmentationOutput`].
 
-    This output can be directly passed to [`~Mask2FormerImageProcessor.post_process_semantic_segmentation`] or
-    [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] or
-    [`~Mask2FormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~Mask2FormerImageProcessor] for details regarding usage.
+    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or
+    [`~MaskFormerImageProcessor.post_process_instance_segmentation`] or
+    [`~MaskFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~MaskFormerImageProcessor] for details regarding usage.
 
     Args:
         loss (`torch.Tensor`, *optional*):
@@ -2249,22 +2249,19 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import Mask2FormerImageProcessor, Mask2FormerModel
+        >>> from transformers import AutoImageProcessor, Mask2FormerModel
 
         >>> # download texting image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> # Load image preprocessor and Mask2FormerModel trained on ADE20K instance segmentation dataset
-        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-instance")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-instance")
         >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-instance")
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-
-        >>> mask_predictions = outputs.masks_queries_logits
-        >>> class_predictions = outputs.class_queries_logits
         ```
         """
 
@@ -2407,14 +2404,14 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import Mask2FormerImageProcessor, Mask2FormerForUniversalSegmentation
+        >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import requests
         >>> import torch
 
-        >>> # Load Mask2Former trained on ADE20K instance segmentation dataset
-        >>> image_processor = Mask2FormerImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-instance")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-instance")
+        >>> # Load Mask2Former trained on ADE20K panoptic segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-panoptic")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-panoptic")
 
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
@@ -2431,13 +2428,13 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> masks_queries_logits = outputs.masks_queries_logits
 
         >>> # Perform post-processing to get semantic, instance or panoptic segmentation maps
-        >>> pred_semantic_map = feature_extractor.post_process_semantic_segmentation(
+        >>> pred_semantic_map = image_processor.post_process_semantic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]
-        >>> pred_instance_map = feature_extractor.post_process_instance_segmentation(
+        >>> pred_instance_map = image_processor.post_process_instance_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
-        >>> pred_panoptic_map = feature_extractor.post_process_panoptic_segmentation(
+        >>> pred_panoptic_map = image_processor.post_process_panoptic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
         ```

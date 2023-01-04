@@ -33,8 +33,8 @@ from huggingface_hub import hf_hub_download
 from transformers import (
     Mask2FormerConfig,
     Mask2FormerForUniversalSegmentation,
-    Mask2FormerImageProcessor,
     Mask2FormerModel,
+    MaskFormerImageProcessor,
     SwinConfig,
 )
 from transformers.models.mask2former.modeling_mask2former import (
@@ -191,11 +191,11 @@ class OriginalMask2FormerConfigToOursConverter:
 
 
 class OriginalMask2FormerConfigToFeatureExtractorConverter:
-    def __call__(self, original_config: object) -> Mask2FormerImageProcessor:
+    def __call__(self, original_config: object) -> MaskFormerImageProcessor:
         model = original_config.MODEL
         model_input = original_config.INPUT
 
-        return Mask2FormerImageProcessor(
+        return MaskFormerImageProcessor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
@@ -677,7 +677,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
             yield config, checkpoint
 
 
-def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature_extractor: Mask2FormerImageProcessor):
+def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature_extractor: MaskFormerImageProcessor):
     with torch.no_grad():
         original_model = original_model.eval()
         our_model = our_model.eval()
