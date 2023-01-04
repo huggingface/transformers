@@ -179,7 +179,10 @@ In 🤗 Transformers, we add a question answering head - a linear layer on top o
 >>> from transformers import pipeline
 
 >>> question_answerer = pipeline(task="question-answering")
->>> question_answerer(question="What is the name of the repository?", context="The name of the repository is huggingface/transformers")
+>>> question_answerer(
+...     question="What is the name of the repository?",
+...     context="The name of the repository is huggingface/transformers",
+... )
 ```
 
 ### Summarization
@@ -197,7 +200,9 @@ In 🤗 Transformers, we add a sequence-to-sequence language modeling head on to
 >>> from transformers import pipeline
 
 >>> summarizer = pipeline(task="summarization")
->>> summarizer("Hugging Face is a French company based in New York City. Its headquarters are in DUMBO, therefore very close to the Manhattan Bridge which is visible from the window.")
+>>> summarizer(
+...     "Hugging Face is a French company based in New York City. Its headquarters are in DUMBO, therefore very close to the Manhattan Bridge which is visible from the window."
+... )
 ```
 
 ### Translation
@@ -209,7 +214,7 @@ In 🤗 Transformers, we add a sequence-to-sequence language modeling head on to
 ```py
 >>> from transformers import pipeline
 
->>> text="translate English to French: Hugging Face is a community-based open-source platform for machine learning."
+>>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
 >>> translator = pipeline(task="translation")
 >>> translator(text)
 ```
@@ -227,13 +232,13 @@ In 🤗 Transformers, we add a language modeling head on top of the base languag
 
 ```py
 >>> from transformers import pipeline
-
 # causal language modeling
->>> prompt="Hugging Face is a"
+
+>>> prompt = "Hugging Face is a"
 >>> text_generator = pipeline(task="text-generation")
 >>> text_generator(prompt)
-
 # masked language modeling
+
 >>> text = "Hugging Face is a <mask> company based in New York City."
 >>> fill_mask = pipeline(task="fill-mask")
 >>> fill_mask(text, top_k=3)
