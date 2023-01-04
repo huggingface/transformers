@@ -116,7 +116,7 @@ class ViTEmbeddings(nn.Module):
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        
+
         if bool_masked_pos is not None:
             seq_length = embeddings.shape[1]
             mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
@@ -135,6 +135,7 @@ class ViTEmbeddings(nn.Module):
             embeddings = embeddings + self.position_embeddings
 
         embeddings = self.dropout(embeddings)
+
         return embeddings
 
 
@@ -172,7 +173,6 @@ class ViTPatchEmbeddings(nn.Module):
                     f"Input image size ({height}*{width}) doesn't match model"
                     f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
-
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
@@ -299,7 +299,6 @@ class ViTIntermediate(nn.Module):
     def __init__(self, config: ViTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -322,8 +321,7 @@ class ViTOutput(nn.Module):
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        #print(hidden_states.shape)
-        #print(hidden_states)
+
         hidden_states = hidden_states + input_tensor
 
         return hidden_states
@@ -348,14 +346,12 @@ class ViTLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
@@ -367,8 +363,7 @@ class ViTLayer(nn.Module):
 
         # second residual connection is done here
         layer_output = self.output(layer_output, hidden_states)
-        #print(layer_output.shape)
-        #print(layer_output)
+
         outputs = (layer_output,) + outputs
 
         return outputs
@@ -399,6 +394,7 @@ class ViTEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
+
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         return module(*inputs, output_attentions)
@@ -414,9 +410,6 @@ class ViTEncoder(nn.Module):
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
-            #if i == 0:
-            #    print(hidden_states.shape)
-            #    print(hidden_states)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -580,7 +573,6 @@ class ViTModel(ViTPreTrainedModel):
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
-
 
         embedding_output = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
