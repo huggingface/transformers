@@ -115,6 +115,17 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         self.assertTrue(hasattr(feature_extractor, "image_std"))
         self.assertTrue(hasattr(feature_extractor, "do_reduce_labels"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"height": 30, "width": 30})
+        self.assertEqual(feature_extractor.do_reduce_labels, False)
+
+        feature_extractor = self.feature_extraction_class.from_dict(
+            self.feat_extract_dict, size=42, reduce_labels=True
+        )
+        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+        self.assertEqual(feature_extractor.do_reduce_labels, True)
+
     def test_batch_feature(self):
         pass
 
