@@ -135,6 +135,17 @@ class DeformableDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unit
         self.assertTrue(hasattr(feature_extractor, "do_pad"))
         self.assertTrue(hasattr(feature_extractor, "size"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"shortest_edge": 18, "longest_edge": 1333})
+        self.assertEqual(feature_extractor.do_pad, True)
+
+        feature_extractor = self.feature_extraction_class.from_dict(
+            self.feat_extract_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
+        )
+        self.assertEqual(feature_extractor.size, {"shortest_edge": 42, "longest_edge": 84})
+        self.assertEqual(feature_extractor.do_pad, False)
+
     def test_batch_feature(self):
         pass
 

@@ -30,6 +30,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("albert", "AlbertConfig"),
+        ("altclip", "AltCLIPConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
@@ -78,6 +79,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetConfig"),
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
+        ("git", "GitConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
         ("gpt2", "GPT2Config"),
@@ -191,6 +193,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -236,6 +239,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("git", "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt_neo", "GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -335,6 +339,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("albert", "ALBERT"),
+        ("altclip", "AltCLIP"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
@@ -393,6 +398,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("fnet", "FNet"),
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),
+        ("git", "GIT"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),
         ("gpt2", "OpenAI GPT-2"),

@@ -65,8 +65,8 @@ def enable_full_determinism(seed: int):
     set_seed(seed)
 
     if is_torch_available():
-        #  Enable PyTorch deterministic mode. This potentially requires either the environment
-        #  variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
+        # Enable PyTorch deterministic mode. This potentially requires either the environment
+        # variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
         # depending on the CUDA version, so we set them both here
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"

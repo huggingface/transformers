@@ -43,7 +43,7 @@ body:
           - deepspeed: @stas00
           - ray/raytune: @richardliaw, @amogkam
         
-        Documentation: @sgugger and @stevhliu
+        Documentation: @sgugger, @stevhliu and @MKhalusova
         
         Model hub:
 

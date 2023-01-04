@@ -27,7 +27,8 @@ RUN python3 -m pip install torch-tensorrt==1.3.0 --find-links https://github.com
 # recompile apex
 RUN python3 -m pip uninstall -y apex
 RUN git clone https://github.com/NVIDIA/apex
-RUN cd apex && python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
+#  `MAX_JOBS=1` disables parallel building to avoid cpu memory OOM when building image on GitHub Action (standard) runners
+RUN cd apex && MAX_JOBS=1 python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
 
 # Pre-build **latest** DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
