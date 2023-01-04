@@ -193,6 +193,21 @@ class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         self.assertTrue(hasattr(feature_extractor, "codebook_image_mean"))
         self.assertTrue(hasattr(feature_extractor, "codebook_image_std"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"height": 224, "width": 224})
+        self.assertEqual(feature_extractor.crop_size, {"height": 224, "width": 224})
+        self.assertEqual(feature_extractor.codebook_size, {"height": 112, "width": 112})
+        self.assertEqual(feature_extractor.codebook_crop_size, {"height": 112, "width": 112})
+
+        feature_extractor = self.feature_extraction_class.from_dict(
+            self.feat_extract_dict, size=42, crop_size=84, codebook_size=33, codebook_crop_size=66
+        )
+        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+        self.assertEqual(feature_extractor.crop_size, {"height": 84, "width": 84})
+        self.assertEqual(feature_extractor.codebook_size, {"height": 33, "width": 33})
+        self.assertEqual(feature_extractor.codebook_crop_size, {"height": 66, "width": 66})
+
     def test_batch_feature(self):
         pass
 

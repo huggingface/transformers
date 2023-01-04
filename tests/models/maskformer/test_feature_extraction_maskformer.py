@@ -152,6 +152,17 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         self.assertTrue(hasattr(feature_extractor, "ignore_index"))
         self.assertTrue(hasattr(feature_extractor, "num_labels"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"shortest_edge": 32, "longest_edge": 1333})
+        self.assertEqual(feature_extractor.size_divisor, 0)
+
+        feature_extractor = self.feature_extraction_class.from_dict(
+            self.feat_extract_dict, size=42, max_size=84, size_divisibility=8
+        )
+        self.assertEqual(feature_extractor.size, {"shortest_edge": 42, "longest_edge": 84})
+        self.assertEqual(feature_extractor.size_divisor, 8)
+
     def test_batch_feature(self):
         pass
 

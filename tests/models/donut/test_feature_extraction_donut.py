@@ -103,6 +103,17 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"height": 18, "width": 20})
+
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42)
+        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+
+        # Previous config had dimensions in (width, height) order
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=(42, 84))
+        self.assertEqual(feature_extractor.size, {"height": 84, "width": 42})
+
     def test_batch_feature(self):
         pass
 
