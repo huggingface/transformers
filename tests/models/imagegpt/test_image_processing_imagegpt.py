@@ -96,17 +96,17 @@ class ImageGPTImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Tes
         self.assertTrue(hasattr(image_processing, "size"))
         self.assertTrue(hasattr(image_processing, "do_normalize"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"height": 18, "width": 18})
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict)
+        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42)
-        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict, size=42)
+        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-    def test_feat_extract_to_json_string(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
-        obj = json.loads(feat_extract.to_json_string())
-        for key, value in self.feat_extract_dict.items():
+    def test_image_processor_to_json_string(self):
+        image_processor = self.image_processing_class(**self.image_proc_dict)
+        obj = json.loads(image_processor.to_json_string())
+        for key, value in self.image_proc_dict.items():
             if key == "clusters":
                 self.assertTrue(np.array_equal(value, obj[key]))
             else:

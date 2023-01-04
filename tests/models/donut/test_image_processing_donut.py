@@ -104,16 +104,16 @@ class DonutImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"height": 18, "width": 20})
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict)
+        self.assertEqual(image_processor.size, {"height": 18, "width": 20})
 
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42)
-        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict, size=42)
+        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
         # Previous config had dimensions in (width, height) order
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=(42, 84))
-        self.assertEqual(feature_extractor.size, {"height": 84, "width": 42})
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict, size=(42, 84))
+        self.assertEqual(image_processor.size, {"height": 84, "width": 42})
 
     def test_batch_feature(self):
         pass

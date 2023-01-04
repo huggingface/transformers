@@ -153,16 +153,16 @@ class MaskFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.T
         self.assertTrue(hasattr(image_processing, "ignore_index"))
         self.assertTrue(hasattr(image_processing, "num_labels"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"shortest_edge": 32, "longest_edge": 1333})
-        self.assertEqual(feature_extractor.size_divisor, 0)
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict)
+        self.assertEqual(image_processor.size, {"shortest_edge": 32, "longest_edge": 1333})
+        self.assertEqual(image_processor.size_divisor, 0)
 
-        feature_extractor = self.feature_extraction_class.from_dict(
-            self.feat_extract_dict, size=42, max_size=84, size_divisibility=8
+        image_processor = self.image_processing_class.from_dict(
+            self.image_proc_dict, size=42, max_size=84, size_divisibility=8
         )
-        self.assertEqual(feature_extractor.size, {"shortest_edge": 42, "longest_edge": 84})
-        self.assertEqual(feature_extractor.size_divisor, 8)
+        self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
+        self.assertEqual(image_processor.size_divisor, 8)
 
     def test_batch_feature(self):
         pass
@@ -276,7 +276,7 @@ class MaskFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.T
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
-        # Test whether the method "pad_and_return_pixel_mask" and calling the feature extractor return the same tensors
+        # Test whether the method "pad_and_return_pixel_mask" and calling the image processor return the same tensors
         encoded_images_with_method = image_processing_1.encode_inputs(image_inputs, return_tensors="pt")
         encoded_images = image_processing_2(image_inputs, return_tensors="pt")
 
@@ -389,7 +389,7 @@ class MaskFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.T
         instance_seg1, inst2class1 = get_instance_segmentation_and_mapping(annotation1)
         instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
 
-        # create a feature extractor
+        # create a image processor
         image_processing = MaskFormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
@@ -432,7 +432,7 @@ class MaskFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.T
             hf_hub_download(repo_id=repo_id, filename="semantic_segmentation_annotation_2.png", repo_type="dataset")
         )
 
-        # create a feature extractor
+        # create a image processor
         image_processing = MaskFormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
@@ -489,7 +489,7 @@ class MaskFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.T
         panoptic_map1, inst2class1 = create_panoptic_map(annotation1, segments_info1)
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
-        # create a feature extractor
+        # create a image processor
         image_processing = MaskFormerImageProcessor(ignore_index=0, do_resize=False)
 
         # prepare the images and annotations
@@ -592,15 +592,15 @@ class MaskFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.T
             )
 
     def test_post_process_label_fusing(self):
-        feature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes)
-        outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
+        image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        outputs = self.image_processor_tester.get_fake_maskformer_outputs()
 
-        segmentation = feature_extractor.post_process_panoptic_segmentation(
+        segmentation = image_processor.post_process_panoptic_segmentation(
             outputs, threshold=0, mask_threshold=0, overlap_mask_area_threshold=0
         )
         unfused_segments = [el["segments_info"] for el in segmentation]
 
-        fused_segmentation = feature_extractor.post_process_panoptic_segmentation(
+        fused_segmentation = image_processor.post_process_panoptic_segmentation(
             outputs, threshold=0, mask_threshold=0, overlap_mask_area_threshold=0, label_ids_to_fuse={1}
         )
         fused_segments = [el["segments_info"] for el in fused_segmentation]

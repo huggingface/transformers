@@ -101,14 +101,14 @@ class LevitImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         self.assertTrue(hasattr(image_processing, "do_center_crop"))
         self.assertTrue(hasattr(image_processing, "size"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"shortest_edge": 18})
-        self.assertEqual(feature_extractor.crop_size, {"height": 18, "width": 18})
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict)
+        self.assertEqual(image_processor.size, {"shortest_edge": 18})
+        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42, crop_size=84)
-        self.assertEqual(feature_extractor.size, {"shortest_edge": 42})
-        self.assertEqual(feature_extractor.crop_size, {"height": 84, "width": 84})
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict, size=42, crop_size=84)
+        self.assertEqual(image_processor.size, {"shortest_edge": 42})
+        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     def test_batch_feature(self):
         pass

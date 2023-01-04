@@ -137,16 +137,16 @@ class DetrImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
         self.assertTrue(hasattr(image_processing, "size"))
         self.assertTrue(hasattr(image_processing, "do_pad"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"shortest_edge": 18, "longest_edge": 1333})
-        self.assertEqual(feature_extractor.do_pad, True)
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_proc_dict)
+        self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
+        self.assertEqual(image_processor.do_pad, True)
 
-        feature_extractor = self.feature_extraction_class.from_dict(
-            self.feat_extract_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
+        image_processor = self.image_processing_class.from_dict(
+            self.image_proc_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
         )
-        self.assertEqual(feature_extractor.size, {"shortest_edge": 42, "longest_edge": 84})
-        self.assertEqual(feature_extractor.do_pad, False)
+        self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
+        self.assertEqual(image_processor.do_pad, False)
 
     def test_batch_feature(self):
         pass
@@ -258,7 +258,7 @@ class DetrImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCas
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
-        # Test whether the method "pad_and_return_pixel_mask" and calling the feature extractor return the same tensors
+        # Test whether the method "pad_and_return_pixel_mask" and calling the image processor return the same tensors
         encoded_images_with_method = image_processing_1.pad_and_create_pixel_mask(image_inputs, return_tensors="pt")
         encoded_images = image_processing_2(image_inputs, return_tensors="pt")
 
