@@ -135,13 +135,13 @@ There are 10 unique classes. For each class, there are 30 videos in the training
 
 ## Load a model to fine-tune
 
-Instantiate a video classification model from a pretrained checkpoint. The model's encoder comes with pre-trained parameters, and the classification head is randomly initialized. Also, initialize the feature extractor associated to the model. This will come in handy during writing the preprocessing pipeline for our dataset.
+Instantiate a video classification model from a pretrained checkpoint and its associated image processor. The model's encoder comes with pre-trained parameters, and the classification head is randomly initialized. The image processor will come in handy when writing the preprocessing pipeline for our dataset.
 
 ```py 
->>> from transformers import VideoMAEFeatureExtractor, VideoMAEForVideoClassification
+>>> from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
 
 >>> model_ckpt = "MCG-NJU/videomae-base"
->>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained(model_ckpt)
+>>> image_processor = VideoMAEImageProcessor.from_pretrained(model_ckpt)
 >>> model = VideoMAEForVideoClassification.from_pretrained(
 ...     model_ckpt,
 ...     label2id=label2id,
@@ -160,9 +160,9 @@ Some weights of VideoMAEForVideoClassification were not initialized from the mod
 You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
 ```
 
-The warning is telling us we are throwing away some weights (e.g. the weights and bias of the `classifier` layer) and randomly initializing some other (the weights and bias of a new `classifier` layer). This is expected in this case, because we are adding a new head for which we don't have pretrained weights, so the library warns us we should fine-tune this model before using it for inference, which is exactly what we are going to do.
+The warning is telling us we are throwing away some weights (e.g. the weights and bias of the `classifier` layer) and randomly initializing some others (the weights and bias of a new `classifier` layer). This is expected in this case, because we are adding a new head for which we don't have pretrained weights, so the library warns us we should fine-tune this model before using it for inference, which is exactly what we are going to do.
 
-**Note** that [this checkpoint](https://huggingface.co/MCG-NJU/videomae-base-finetuned-kinetics) leads to better performance on this task as the checkpoint was obtained fine-tuning on a similar downstream task having considerable domain overlap. You can check out [this checkpoint](https://huggingface.co/sayakpaul/videomae-base-finetuned-kinetics-finetuned-ucf101-subset) which was obtained by fine-tuning `MCG-NJU/videomae-base-finetuned-kinetics` and it obtains much better performance.  
+**Note** that [this checkpoint](https://huggingface.co/MCG-NJU/videomae-base-finetuned-kinetics) leads to better performance on this task as the checkpoint was obtained fine-tuning on a similar downstream task having considerable domain overlap. You can check out [this checkpoint](https://huggingface.co/sayakpaul/videomae-base-finetuned-kinetics-finetuned-ucf101-subset) which was obtained by fine-tuning `MCG-NJU/videomae-base-finetuned-kinetics`.  
 
 ## Prepare the datasets for training
 
@@ -191,7 +191,7 @@ For preprocessing the videos, you will leverage the [PyTorchVideo library](https
 
 For the training dataset transformations, use a combination of uniform temporal subsampling, pixel normalization, random cropping, and random horizontal flipping. For the validation and evaluation dataset transformations, keep the same transformation chain except for random cropping and horizontal flipping. To learn more about the details of these transformations check out the [official documentation of PyTorchVideo](https://pytorchvideo.org).  
 
-Use the `feature_extractor` associated with the pre-trained model to obtain the following information:
+Use the `image_processor` associated with the pre-trained model to obtain the following information:
 
 * Image mean and standard deviation with which the video frame pixels will be normalized.
 * Spatial resolution to which the video frames will be resized.
@@ -199,9 +199,14 @@ Use the `feature_extractor` associated with the pre-trained model to obtain the 
 Start by defining some constants.
 
 ```py
->>> mean = feature_extractor.image_mean
->>> std = feature_extractor.image_std
->>> resize_to = feature_extractor.size
+>>> mean = image_processor.image_mean
+>>> std = image_processor.image_std
+>>> if "shortest_edge" in image_processor.size:
+>>>     height = width = image_processor.size["shortest_edge"]
+>>> else:
+>>>     height = image_processor.size["height"]
+>>>     width = image_processor.size["width"]
+>>> resize_to = (height, width)
 
 >>> num_frames_to_sample = model.config.num_frames
 >>> sample_rate = 4
@@ -250,7 +255,7 @@ The same sequence of workflow can be applied to the validation and evaluation se
 ...                     UniformTemporalSubsample(num_frames_to_sample),
 ...                     Lambda(lambda x: x / 255.0),
 ...                     Normalize(mean, std),
-...                     Resize((resize_to, resize_to)),
+...                     Resize(resize_to),
 ...                 ]
 ...             ),
 ...         ),
@@ -354,7 +359,7 @@ Most of the training arguments are self-explanatory, but one that is quite impor
 ... )
 ```
 
-There is no need to define `max_steps` when instantiating `TrainingArguments`. Since the dataset returned by `pytorchvideo.data.Ucf101()` doesn't implement the `__len__()` method we had to specify `max_steps`.  
+The dataset returned by `pytorchvideo.data.Ucf101()` doesn't implement the `__len__` method. As such, we must define `max_steps` when instantiating `TrainingArguments`. 
 
 Next, you need to define a function to compute the metrics from the predictions, which will use the `metric` you'll load now. The only preprocessing you have to do is to take the argmax of our predicted logits:
 
@@ -393,13 +398,13 @@ Then you just pass all of this along with the datasets to `Trainer`:
 ...     args,
 ...     train_dataset=train_dataset,
 ...     eval_dataset=val_dataset,
-...     tokenizer=feature_extractor,
+...     tokenizer=image_processor,
 ...     compute_metrics=compute_metrics,
 ...     data_collator=collate_fn,
 ... )
 ```
 
-You might wonder why you passed along the `feature_extractor` as a tokenizer when you preprocessed the data already. This is only to make sure the feature extractor configuration file (stored as JSON) will also be uploaded to the repo on the Hub.
+You might wonder why you passed along the `image_processor` as a tokenizer when you preprocessed the data already. This is only to make sure the image processor configuration file (stored as JSON) will also be uploaded to the repo on the Hub.
 
 Now fine-tune our model by calling the `train` method:
 
