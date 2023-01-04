@@ -142,13 +142,16 @@ class TFVideoMAEEmbeddings(tf.keras.layers.Layer):
         embeddings = self.patch_embeddings(pixel_values)
 
         # add position embeddings
+        print(f"Before adding position embeddings: {tf.shape(embeddings)}")
         embeddings = embeddings + self.position_embeddings
 
         # only keep visible patches
         # ~bool_masked_pos means visible
         if bool_masked_pos is not None:
             batch_size, _, num_channels = tf.shape(embeddings)
+            print(f"From TFVideoMAEEmbeddings: {tf.shape(embeddings)}, {tf.shape(bool_masked_pos)}")
             embeddings = embeddings[~bool_masked_pos]
+            print(f"From TFVideoMAEEmbeddings: {tf.shape(embeddings)}")
             embeddings = tf.reshape(embeddings, (batch_size, -1, num_channels))
 
         return embeddings
@@ -623,6 +626,62 @@ class TFVideoMAEPreTrainedModel(TFPreTrainedModel):
         return self.serving_output(output)
 
 
+class TFVideoMAEPretrainingPreTrainedModel(TFPreTrainedModel):
+    """
+    An abstract class to specifically handle weights initialization and a simple interface for downloading and loading pretrained
+    models. This class is specifc to `TFVideoMAEForPreTraining`.
+    """
+
+    config_class = VideoMAEConfig
+    base_model_prefix = "videomae"
+    main_input_name = "pixel_values"
+
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        batch_size = 1
+        pixel_values = tf.random.uniform(
+            shape=(
+                batch_size,
+                self.config.num_frames,
+                self.config.num_channels,
+                self.config.image_size,
+                self.config.image_size,
+            ),
+            dtype=tf.float32,
+        )
+        num_patches_per_frame = (self.config.image_size // self.config.patch_size) ** 2
+        seq_length = (self.config.num_frames // self.config.tubelet_size) * num_patches_per_frame
+        bool_masked_pos = tf.experimental.numpy.random.randint(0, 2, (batch_size, seq_length))
+        bool_masked_pos = tf.cast(bool_masked_pos, "bool")
+        return {"pixel_values": tf.constant(pixel_values), "bool_masked_pos": tf.constant(bool_masked_pos)}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None, None), tf.float32, name="pixel_values"),
+                "bool_masked_pos": tf.TensorSpec((None, None), tf.bool, name="bool_masked_pos")
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+
 VIDEOMAE_START_DOCSTRING = r"""
 
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -847,7 +906,7 @@ class TFVideoMAEDecoder(tf.keras.layers.Layer):
     "The VideoMAE Model transformer with the decoder on top for self-supervised pre-training.",
     VIDEOMAE_START_DOCSTRING,
 )
-class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
+class TFVideoMAEForPreTraining(TFVideoMAEPretrainingPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -870,7 +929,7 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         self.mask_token = self.add_weight(
             shape=(1, 1, self.config.decoder_hidden_size), initializer="zeros", name="mask_token"
         )
-        super().build(input_shape)
+        # super().build(input_shape)
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(VIDEOMAE_INPUTS_DOCSTRING)
@@ -936,8 +995,11 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
             raise ValueError("One must provide a boolean mask ")
         expanded_position_embeddings = tf.tile(self.position_embeddings, (batch_size, 1, 1))
         expanded_position_embeddings = tf.cast(expanded_position_embeddings, pixel_values.dtype)
-        pos_emb_visible = expanded_position_embeddings[~bool_masked_pos]
-        pos_emb_visible = tf.reshape(pos_emb_visible, (batch_size, -1, num_channels))
+        print(f"From TFVideoMAEForPreTraining expanded_position_embeddings: {expanded_position_embeddings.shape}")
+        print(f"From VideoMAEForPreTraining bool_masked_pos: {bool_masked_pos.shape}")
+        
+        pos_emb_visible = tf.reshape(expanded_position_embeddings[~bool_masked_pos], (batch_size, -1, num_channels))
+        print(f"From TFVideoMAEForPreTraining pos_emb_visible: {pos_emb_visible.shape}")
         pos_emb_mask = tf.reshape(expanded_position_embeddings[bool_masked_pos], (batch_size, -1, num_channels))
 
         # [batch_size, num_patches, decoder_hidden_size]

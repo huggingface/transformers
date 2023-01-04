@@ -142,8 +142,10 @@ class VideoMAEEmbeddings(nn.Module):
         # only keep visible patches
         # ~bool_masked_pos means visible
         if bool_masked_pos is not None:
+            print(f"From VideoMAEEmbeddings: {embeddings.shape}, {bool_masked_pos.shape}")
             batch_size, _, num_channels = embeddings.shape
             embeddings = embeddings[~bool_masked_pos]
+            print(f"From VideoMAEEmbeddings after filtering: {embeddings.shape}")
             embeddings = embeddings.reshape(batch_size, -1, num_channels)
 
         return embeddings
@@ -803,11 +805,15 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         # we don't unshuffle the correct visible token order, but shuffle the position embeddings accordingly.
         if bool_masked_pos is None:
-            raise ValueError("One must provided a boolean mask ")
+            raise ValueError("One must provide a boolean mask ")
         expanded_position_embeddings = self.position_embeddings.expand(batch_size, -1, -1).type_as(pixel_values)
         expanded_position_embeddings = expanded_position_embeddings.to(pixel_values.device).clone().detach()
+        print(f"From VideoMAEForPreTraining expanded_position_embeddings: {expanded_position_embeddings.size()}")
+        print(f"From VideoMAEForPreTraining bool_masked_pos: {bool_masked_pos.size()}")
         pos_emb_visible = expanded_position_embeddings[~bool_masked_pos].reshape(batch_size, -1, num_channels)
         pos_emb_mask = expanded_position_embeddings[bool_masked_pos].reshape(batch_size, -1, num_channels)
+        print(f"From VideoMAEForPreTraining pos_emb_visible: {pos_emb_visible.size()}")
+        print(f"From VideoMAEForPreTraining pos_emb_mask: {pos_emb_mask.size()}")
 
         # [batch_size, num_patches, decoder_hidden_size]
         x_full = torch.cat([sequence_output + pos_emb_visible, self.mask_token + pos_emb_mask], dim=1)
