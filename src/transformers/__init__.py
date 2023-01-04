@@ -124,6 +124,13 @@ _import_structure = {
     "models": [],
     # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
+    "models.altclip": [
+        "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AltCLIPConfig",
+        "AltCLIPProcessor",
+        "AltCLIPTextConfig",
+        "AltCLIPVisionConfig",
+    ],
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ASTConfig",
@@ -168,6 +175,13 @@ _import_structure = {
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
+    ],
+    "models.blip": [
+        "BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BlipConfig",
+        "BlipProcessor",
+        "BlipTextConfig",
+        "BlipVisionConfig",
     ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
@@ -249,6 +263,7 @@ _import_structure = {
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
@@ -354,6 +369,7 @@ _import_structure = {
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
+    "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
@@ -753,6 +769,7 @@ else:
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
+    _import_structure["models.blip"].extend(["BlipImageProcessor"])
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
@@ -877,6 +894,7 @@ else:
             "MaxLengthCriteria",
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
+            "MinNewTokensLengthLogitsProcessor",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PhrasalConstraint",
@@ -910,7 +928,15 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
-
+    _import_structure["models.altclip"].extend(
+        [
+            "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AltCLIPModel",
+            "AltCLIPPreTrainedModel",
+            "AltCLIPTextModel",
+            "AltCLIPVisionModel",
+        ]
+    )
     _import_structure["models.audio_spectrogram_transformer"].extend(
         [
             "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1092,6 +1118,18 @@ else:
             "BlenderbotSmallForConditionalGeneration",
             "BlenderbotSmallModel",
             "BlenderbotSmallPreTrainedModel",
+        ]
+    )
+    _import_structure["models.blip"].extend(
+        [
+            "BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BlipForConditionalGeneration",
+            "BlipForImageTextRetrieval",
+            "BlipForQuestionAnswering",
+            "BlipModel",
+            "BlipPreTrainedModel",
+            "BlipTextModel",
+            "BlipVisionModel",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -1423,6 +1461,15 @@ else:
             "FunnelModel",
             "FunnelPreTrainedModel",
             "load_tf_weights_in_funnel",
+        ]
+    )
+    _import_structure["models.git"].extend(
+        [
+            "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GitForCausalLM",
+            "GitModel",
+            "GitPreTrainedModel",
+            "GitVisionModel",
         ]
     )
     _import_structure["models.glpn"].extend(
@@ -1984,6 +2031,19 @@ else:
             "RobertaForTokenClassification",
             "RobertaModel",
             "RobertaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.roberta_prelayernorm"].extend(
+        [
+            "ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RobertaPreLayerNormForCausalLM",
+            "RobertaPreLayerNormForMaskedLM",
+            "RobertaPreLayerNormForMultipleChoice",
+            "RobertaPreLayerNormForQuestionAnswering",
+            "RobertaPreLayerNormForSequenceClassification",
+            "RobertaPreLayerNormForTokenClassification",
+            "RobertaPreLayerNormModel",
+            "RobertaPreLayerNormPreTrainedModel",
         ]
     )
     _import_structure["models.roc_bert"].extend(
@@ -2931,6 +2991,20 @@ else:
             "TFRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roberta_prelayernorm"].extend(
+        [
+            "TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRobertaPreLayerNormForCausalLM",
+            "TFRobertaPreLayerNormForMaskedLM",
+            "TFRobertaPreLayerNormForMultipleChoice",
+            "TFRobertaPreLayerNormForQuestionAnswering",
+            "TFRobertaPreLayerNormForSequenceClassification",
+            "TFRobertaPreLayerNormForTokenClassification",
+            "TFRobertaPreLayerNormMainLayer",
+            "TFRobertaPreLayerNormModel",
+            "TFRobertaPreLayerNormPreTrainedModel",
+        ]
+    )
     _import_structure["models.roformer"].extend(
         [
             "TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3297,6 +3371,18 @@ else:
             "FlaxRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roberta_prelayernorm"].extend(
+        [
+            "FlaxRobertaPreLayerNormForCausalLM",
+            "FlaxRobertaPreLayerNormForMaskedLM",
+            "FlaxRobertaPreLayerNormForMultipleChoice",
+            "FlaxRobertaPreLayerNormForQuestionAnswering",
+            "FlaxRobertaPreLayerNormForSequenceClassification",
+            "FlaxRobertaPreLayerNormForTokenClassification",
+            "FlaxRobertaPreLayerNormModel",
+            "FlaxRobertaPreLayerNormPreTrainedModel",
+        ]
+    )
     _import_structure["models.roformer"].extend(
         [
             "FlaxRoFormerForMaskedLM",
@@ -3411,6 +3497,13 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.altclip import (
+        ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AltCLIPConfig,
+        AltCLIPProcessor,
+        AltCLIPTextConfig,
+        AltCLIPVisionConfig,
+    )
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
@@ -3450,6 +3543,13 @@ if TYPE_CHECKING:
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
+    )
+    from .models.blip import (
+        BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BlipConfig,
+        BlipProcessor,
+        BlipTextConfig,
+        BlipVisionConfig,
     )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.byt5 import ByT5Tokenizer
@@ -3527,6 +3627,7 @@ if TYPE_CHECKING:
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
@@ -3624,6 +3725,10 @@ if TYPE_CHECKING:
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.roberta_prelayernorm import (
+        ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RobertaPreLayerNormConfig,
+    )
     from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
@@ -3966,6 +4071,7 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
+        from .models.blip import BlipImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
@@ -4068,6 +4174,7 @@ if TYPE_CHECKING:
             MaxLengthCriteria,
             MaxTimeCriteria,
             MinLengthLogitsProcessor,
+            MinNewTokensLengthLogitsProcessor,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
             PhrasalConstraint,
@@ -4095,6 +4202,13 @@ if TYPE_CHECKING:
             AlbertModel,
             AlbertPreTrainedModel,
             load_tf_weights_in_albert,
+        )
+        from .models.altclip import (
+            ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AltCLIPModel,
+            AltCLIPPreTrainedModel,
+            AltCLIPTextModel,
+            AltCLIPVisionModel,
         )
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4254,6 +4368,16 @@ if TYPE_CHECKING:
             BlenderbotSmallForConditionalGeneration,
             BlenderbotSmallModel,
             BlenderbotSmallPreTrainedModel,
+        )
+        from .models.blip import (
+            BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BlipForConditionalGeneration,
+            BlipForImageTextRetrieval,
+            BlipForQuestionAnswering,
+            BlipModel,
+            BlipPreTrainedModel,
+            BlipTextModel,
+            BlipVisionModel,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4525,6 +4649,13 @@ if TYPE_CHECKING:
             FunnelModel,
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
+        )
+        from .models.git import (
+            GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GitForCausalLM,
+            GitModel,
+            GitPreTrainedModel,
+            GitVisionModel,
         )
         from .models.glpn import (
             GLPN_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4978,6 +5109,17 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
             RobertaPreTrainedModel,
+        )
+        from .models.roberta_prelayernorm import (
+            ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RobertaPreLayerNormForCausalLM,
+            RobertaPreLayerNormForMaskedLM,
+            RobertaPreLayerNormForMultipleChoice,
+            RobertaPreLayerNormForQuestionAnswering,
+            RobertaPreLayerNormForSequenceClassification,
+            RobertaPreLayerNormForTokenClassification,
+            RobertaPreLayerNormModel,
+            RobertaPreLayerNormPreTrainedModel,
         )
         from .models.roc_bert import (
             ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5745,6 +5887,18 @@ if TYPE_CHECKING:
             TFRobertaModel,
             TFRobertaPreTrainedModel,
         )
+        from .models.roberta_prelayernorm import (
+            TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRobertaPreLayerNormForCausalLM,
+            TFRobertaPreLayerNormForMaskedLM,
+            TFRobertaPreLayerNormForMultipleChoice,
+            TFRobertaPreLayerNormForQuestionAnswering,
+            TFRobertaPreLayerNormForSequenceClassification,
+            TFRobertaPreLayerNormForTokenClassification,
+            TFRobertaPreLayerNormMainLayer,
+            TFRobertaPreLayerNormModel,
+            TFRobertaPreLayerNormPreTrainedModel,
+        )
         from .models.roformer import (
             TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRoFormerForCausalLM,
@@ -6021,6 +6175,16 @@ if TYPE_CHECKING:
             FlaxRobertaForTokenClassification,
             FlaxRobertaModel,
             FlaxRobertaPreTrainedModel,
+        )
+        from .models.roberta_prelayernorm import (
+            FlaxRobertaPreLayerNormForCausalLM,
+            FlaxRobertaPreLayerNormForMaskedLM,
+            FlaxRobertaPreLayerNormForMultipleChoice,
+            FlaxRobertaPreLayerNormForQuestionAnswering,
+            FlaxRobertaPreLayerNormForSequenceClassification,
+            FlaxRobertaPreLayerNormForTokenClassification,
+            FlaxRobertaPreLayerNormModel,
+            FlaxRobertaPreLayerNormPreTrainedModel,
         )
         from .models.roformer import (
             FlaxRoFormerForMaskedLM,

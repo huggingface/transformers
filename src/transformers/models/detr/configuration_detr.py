@@ -135,7 +135,6 @@ class DetrConfig(PretrainedConfig):
         self,
         num_channels=3,
         num_queries=100,
-        max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=2048,
         encoder_attention_heads=8,
@@ -171,7 +170,6 @@ class DetrConfig(PretrainedConfig):
     ):
         self.num_channels = num_channels
         self.num_queries = num_queries
-        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers

@@ -39,6 +39,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitImageProcessor"),
         ("bit", "BitImageProcessor"),
+        ("blip", "BlipImageProcessor"),
         ("chinese_clip", "ChineseCLIPImageProcessor"),
         ("clip", "CLIPImageProcessor"),
         ("clipseg", "ViTImageProcessor"),
@@ -53,6 +54,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("donut-swin", "DonutImageProcessor"),
         ("dpt", "DPTImageProcessor"),
         ("flava", "FlavaImageProcessor"),
+        ("git", ("CLIPImageProcessor", "VideoMAEImageProcessor")),
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),

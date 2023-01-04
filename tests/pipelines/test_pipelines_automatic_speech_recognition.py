@@ -145,6 +145,19 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
+    @slow
+    @require_torch
+    def test_whisper_fp16(self):
+        if not torch.cuda.is_available():
+            self.skipTest("Cuda is necessary for this test")
+        speech_recognizer = pipeline(
+            model="openai/whisper-base",
+            device=0,
+            torch_dtype=torch.float16,
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        speech_recognizer(waveform)
+
     @require_torch
     def test_small_model_pt_seq2seq(self):
         speech_recognizer = pipeline(
@@ -155,6 +168,17 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "あл ش 湯 清 ه ܬ া लᆨしث ल eか u w 全 u"})
+
+    @require_torch
+    def test_small_model_pt_seq2seq_gen_kwargs(self):
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/tiny-random-speech-encoder-decoder",
+            framework="pt",
+        )
+
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform, max_new_tokens=10, generate_kwargs={"num_beams": 2})
+        self.assertEqual(output, {"text": "あл † γ ت ב オ 束 泣 足"})
 
     @slow
     @require_torch
