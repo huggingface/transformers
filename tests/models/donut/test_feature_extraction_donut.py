@@ -18,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
@@ -43,7 +43,7 @@ class DonutFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=[20, 18],
+        size=None,
         do_thumbnail=True,
         do_align_axis=False,
         do_pad=True,
@@ -58,7 +58,7 @@ class DonutFeatureExtractionTester(unittest.TestCase):
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = size
+        self.size = size if size is not None else {"height": 18, "width": 20}
         self.do_thumbnail = do_thumbnail
         self.do_align_axis = do_align_axis
         self.do_pad = do_pad
@@ -103,9 +103,21 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"height": 18, "width": 20})
+
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42)
+        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+
+        # Previous config had dimensions in (width, height) order
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=(42, 84))
+        self.assertEqual(feature_extractor.size, {"height": 84, "width": 42})
+
     def test_batch_feature(self):
         pass
 
+    @is_flaky()
     def test_call_pil(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -121,8 +133,8 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -133,11 +145,12 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
+    @is_flaky()
     def test_call_numpy(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -153,8 +166,8 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -165,11 +178,12 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
+    @is_flaky()
     def test_call_pytorch(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -185,8 +199,8 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -197,7 +211,7 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )

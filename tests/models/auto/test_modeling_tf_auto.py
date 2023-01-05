@@ -281,7 +281,7 @@ class TFAutoModelTest(unittest.TestCase):
     def test_model_file_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named tf_model.h5",
+            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
         ):
             _ = TFAutoModel.from_pretrained("hf-internal-testing/config-no-model")
 

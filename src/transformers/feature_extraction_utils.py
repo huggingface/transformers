@@ -40,14 +40,15 @@ from .utils import (
     is_tf_available,
     is_torch_available,
     is_torch_device,
+    is_torch_dtype,
     logging,
-    torch_required,
+    requires_backends,
 )
 
 
 if TYPE_CHECKING:
     if is_torch_available():
-        import torch
+        import torch  # noqa
 
 
 logger = logging.get_logger(__name__)
@@ -138,7 +139,7 @@ class BatchFeature(UserDict):
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-            import torch
+            import torch  # noqa
 
             def as_tensor(value):
                 if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
@@ -174,26 +175,48 @@ class BatchFeature(UserDict):
 
         return self
 
-    @torch_required
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.to with BatchEncoding->BatchFeature
-    def to(self, device: Union[str, "torch.device"]) -> "BatchFeature":
+    def to(self, *args, **kwargs) -> "BatchFeature":
         """
-        Send all values to device by calling `v.to(device)` (PyTorch only).
+        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
+        different `dtypes` and sending the `BatchFeature` to a different `device`.
 
         Args:
-            device (`str` or `torch.device`): The device to put the tensors on.
+            args (`Tuple`):
+                Will be passed to the `to(...)` function of the tensors.
+            kwargs (`Dict`, *optional*):
+                Will be passed to the `to(...)` function of the tensors.
 
         Returns:
             [`BatchFeature`]: The same instance after modification.
         """
+        requires_backends(self, ["torch"])
+        import torch  # noqa
 
-        # This check catches things like APEX blindly calling "to" on all inputs to a module
-        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
-        # into a HalfTensor
-        if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) for k, v in self.data.items()}
-        else:
-            logger.warning(f"Attempting to cast a BatchFeature to type {str(device)}. This is not supported.")
+        new_data = {}
+        device = kwargs.get("device")
+        # Check if the args are a device or a dtype
+        if device is None and len(args) > 0:
+            # device should be always the first argument
+            arg = args[0]
+            if is_torch_dtype(arg):
+                # The first argument is a dtype
+                pass
+            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                device = arg
+            else:
+                # it's something else
+                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        for k, v in self.items():
+            # check if v is a floating point
+            if torch.is_floating_point(v):
+                # cast and send to device
+                new_data[k] = v.to(*args, **kwargs)
+            elif device is not None:
+                new_data[k] = v.to(device=device)
+            else:
+                new_data[k] = v
+        self.data = new_data
         return self
 
 
@@ -575,6 +598,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
 
 FeatureExtractionMixin.push_to_hub = copy_func(FeatureExtractionMixin.push_to_hub)
-FeatureExtractionMixin.push_to_hub.__doc__ = FeatureExtractionMixin.push_to_hub.__doc__.format(
-    object="feature extractor", object_class="AutoFeatureExtractor", object_files="feature extractor file"
-)
+if FeatureExtractionMixin.push_to_hub.__doc__ is not None:
+    FeatureExtractionMixin.push_to_hub.__doc__ = FeatureExtractionMixin.push_to_hub.__doc__.format(
+        object="feature extractor", object_class="AutoFeatureExtractor", object_files="feature extractor file"
+    )

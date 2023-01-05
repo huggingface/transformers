@@ -16,12 +16,16 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 
+import requests
+
 from ..utils import is_torch_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
 
 
 if TYPE_CHECKING:
+    from pyctcdecode import BeamSearchDecoderCTC
+
     from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 logger = logging.get_logger(__name__)
@@ -50,13 +54,15 @@ def rescale_stride(stride, ratio):
     return new_strides
 
 
-def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
+def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, dtype=None):
     inputs_len = inputs.shape[0]
     step = chunk_len - stride_left - stride_right
     for i in range(0, inputs_len, step):
         # add start and end paddings to the chunk
         chunk = inputs[i : i + chunk_len]
         processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+        if dtype is not None:
+            processed = processed.to(dtype=dtype)
         _stride_left = 0 if i == 0 else stride_left
         is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
@@ -106,6 +112,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should be installed for
     to support multiple audio formats
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> transcriber = pipeline(model="openai/whisper-base")
+    >>> transcriber("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+    {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour-fatten sauce.'}
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
@@ -150,10 +168,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             [PyCTCDecode's
             BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
             can be passed for language model boosted decoding. See [`Wav2Vec2ProcessorWithLM`] for more information.
+
     """
 
-    def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        feature_extractor: Union["SequenceFeatureExtractor", str],
+        *,
+        decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
         self.feature_extractor = feature_extractor
 
         if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
@@ -161,9 +186,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         elif (
             feature_extractor._processor_class
             and feature_extractor._processor_class.endswith("WithLM")
-            and kwargs.get("decoder", None) is not None
+            and decoder is not None
         ):
-            self.decoder = kwargs["decoder"]
+            self.decoder = decoder
             self.type = "ctc_with_lm"
         else:
             self.type = "ctc"
@@ -179,8 +204,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
-        information.
+        Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
+        documentation for more information.
 
         Args:
             inputs (`np.ndarray` or `bytes` or `str` or `dict`):
@@ -204,6 +229,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 `timestamps` along the text for every word in the text. For instance if you get `[{"text": "hi ",
                 "timestamps": (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model
                 predicts that the word "hi" was pronounced after `0.5` and before `0.9` seconds.
+            generate_kwargs (`dict`, *optional*):
+                The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
+                complete overview of generate, check the [following
+                guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
+            max_new_tokens (`int`, *optional*):
+                The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
 
         Return:
             `Dict`: A dictionary with the following keys:
@@ -216,28 +247,53 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         """
         return super().__call__(inputs, **kwargs)
 
-    def _sanitize_parameters(self, **kwargs):
+    def _sanitize_parameters(
+        self,
+        chunk_length_s=None,
+        stride_length_s=None,
+        ignore_warning=None,
+        decoder_kwargs=None,
+        return_timestamps=None,
+        generate_kwargs=None,
+        max_new_tokens=None,
+    ):
         # No parameters on this pipeline right now
         preprocess_params = {}
-        if "chunk_length_s" in kwargs:
-            preprocess_params["chunk_length_s"] = kwargs["chunk_length_s"]
-        if "stride_length_s" in kwargs:
-            preprocess_params["stride_length_s"] = kwargs["stride_length_s"]
-        if "ignore_warning" in kwargs:
-            preprocess_params["ignore_warning"] = kwargs["ignore_warning"]
+        if chunk_length_s is not None:
+            preprocess_params["chunk_length_s"] = chunk_length_s
+        if stride_length_s is not None:
+            preprocess_params["stride_length_s"] = stride_length_s
+        if ignore_warning is not None:
+            preprocess_params["ignore_warning"] = ignore_warning
+
+        forward_params = {"generate_kwargs": {}}
+        if max_new_tokens is not None:
+            forward_params["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+        if generate_kwargs is not None:
+            if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
+                raise ValueError(
+                    "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
+                    " only 1 version"
+                )
+            forward_params["generate_kwargs"].update(generate_kwargs)
 
         postprocess_params = {}
-        if "decoder_kwargs" in kwargs:
-            postprocess_params["decoder_kwargs"] = kwargs["decoder_kwargs"]
-        if "return_timestamps" in kwargs:
-            postprocess_params["return_timestamps"] = kwargs["return_timestamps"]
+        if decoder_kwargs is not None:
+            postprocess_params["decoder_kwargs"] = decoder_kwargs
+        if return_timestamps is not None:
+            postprocess_params["return_timestamps"] = return_timestamps
 
-        return preprocess_params, {}, postprocess_params
+        return preprocess_params, forward_params, postprocess_params
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, ignore_warning=False):
         if isinstance(inputs, str):
-            with open(inputs, "rb") as f:
-                inputs = f.read()
+            if inputs.startswith("http://") or inputs.startswith("https://"):
+                # We need to actually check for a real protocol, otherwise it's impossible to use a local file
+                # like http_huggingface_co.png
+                inputs = requests.get(inputs).content
+            else:
+                with open(inputs, "rb") as f:
+                    inputs = f.read()
 
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
@@ -312,12 +368,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("Chunk length must be superior to stride length")
 
             # make sure that
-            for item in chunk_iter(inputs, self.feature_extractor, chunk_len, stride_left, stride_right):
+            for item in chunk_iter(
+                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.torch_dtype
+            ):
                 yield item
         else:
             processed = self.feature_extractor(
                 inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
             )
+            if self.torch_dtype is not None:
+                processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
                 if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
                     raise ValueError("Stride is only usable with CTC models, try removing it")
@@ -325,7 +385,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs):
+    def _forward(self, model_inputs, generate_kwargs=None):
+        if generate_kwargs is None:
+            generate_kwargs = {}
+
         is_last = model_inputs.pop("is_last")
         if self.type == "seq2seq":
             encoder = self.model.get_encoder()
@@ -346,9 +409,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # `generate` magic to create the mask automatically won't work, we basically need to help
             # it here.
             attention_mask = model_inputs.pop("attention_mask", None)
+
             tokens = self.model.generate(
                 encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
+                **generate_kwargs,
             )
 
             out = {"tokens": tokens}

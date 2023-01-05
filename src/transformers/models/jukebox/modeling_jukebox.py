@@ -16,7 +16,7 @@
 
 import math
 import os
-from typing import List
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -737,7 +737,7 @@ class JukeboxVQVAE(PreTrainedModel):
         ]
         return self.decode(music_tokens)
 
-    def forward(self, raw_audio):
+    def forward(self, raw_audio: torch.FloatTensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of the VQ-VAE, encodes the `raw_audio` to latent states, which are then decoded for each level.
         The commit loss, which ensure that the encoder's computed embeddings are close to the codebook vectors, is
@@ -748,7 +748,7 @@ class JukeboxVQVAE(PreTrainedModel):
                 Audio input which will be encoded and decoded.
 
         Returns:
-            `Tuple[torch.Tensor, torch.Tensor`
+            `Tuple[torch.Tensor, torch.Tensor]`
 
 
         Example:
@@ -2228,7 +2228,13 @@ class JukeboxPrior(PreTrainedModel):
         else:
             return loss, metrics
 
-    def forward(self, hidden_states, metadata=None, decode=False, get_preds=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        metadata: Optional[List[torch.LongTensor]],
+        decode: Optional[bool] = False,
+        get_preds: Optional[bool] = False,
+    ) -> List[torch.Tensor]:
         """
         Encode the hidden states using the `vqvae` encoder, and then predicts the next token in the `forward_tokens`
         function. The loss is the sum of the `encoder` loss and the `decoder` loss.

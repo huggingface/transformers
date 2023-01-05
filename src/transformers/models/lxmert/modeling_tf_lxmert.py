@@ -655,7 +655,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         """
         batch_size = 2
         num_visual_features = 10
-        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]])
+        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]], dtype=tf.int32)
         visual_feats = tf.random.uniform((batch_size, num_visual_features, self.config.visual_feat_dim))
         visual_pos = tf.random.uniform((batch_size, num_visual_features, 4))
 
@@ -817,12 +817,12 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
                 "visual_feats": tf.TensorSpec((None, None, None), tf.float32, name="visual_feats"),
                 "visual_pos": tf.TensorSpec((None, None, None), tf.float32, name="visual_pos"),
-                "visual_attention_mask": tf.TensorSpec((None, None), tf.int64, name="visual_attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
+                "visual_attention_mask": tf.TensorSpec((None, None), tf.int32, name="visual_attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1160,7 +1160,7 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
             visual_losses["obj"] = {"shape": (-1,), "num": config.num_object_labels}
         if config.visual_attr_loss:
             visual_losses["attr"] = {"shape": (-1,), "num": config.num_attr_labels}
-        if config.visual_obj_loss:
+        if config.visual_feat_loss:
             visual_losses["feat"] = {"shape": (-1, 2048), "num": config.visual_feat_dim}
         self.visual_losses = visual_losses
 
@@ -1228,7 +1228,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
                 "num": config.num_attr_labels,
                 "loss": "visn_ce",
             }
-        if config.visual_obj_loss:
+        if config.visual_feat_loss:
             visual_losses["feat"] = {
                 "shape": (-1, config.visual_feat_dim),
                 "num": config.visual_feat_dim,
@@ -1246,7 +1246,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         """
         batch_size = 2
         num_visual_features = 10
-        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]])
+        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]], dtype=tf.int32)
         visual_feats = tf.random.uniform((batch_size, num_visual_features, self.config.visual_feat_dim))
         visual_pos = tf.random.uniform((batch_size, num_visual_features, 4))
 

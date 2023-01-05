@@ -63,7 +63,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIPSeg.html
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
@@ -171,7 +171,11 @@ class CLIPSegVisionEmbeddings(nn.Module):
         self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=False
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            bias=False,
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
@@ -420,7 +424,6 @@ class CLIPSegEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->CLIPSeg
 class CLIPSegPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -713,7 +716,7 @@ class CLIPSegTextTransformer(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is None:
-            raise ValueError("You have to specify either input_ids")
+            raise ValueError("You have to specify input_ids")
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
@@ -747,7 +750,8 @@ class CLIPSegTextTransformer(nn.Module):
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
-            torch.arange(last_hidden_state.shape[0], device=input_ids.device), input_ids.to(torch.int).argmax(dim=-1)
+            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
+            input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
         ]
 
         if not return_dict:

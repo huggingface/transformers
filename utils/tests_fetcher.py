@@ -376,6 +376,10 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "models/gpt2/test_modeling_gpt2.py",
         "models/megatron_gpt2/test_modeling_megatron_gpt2.py",
     ],
+    "models/dpt/modeling_dpt.py": [
+        "models/dpt/test_modeling_dpt.py",
+        "models/dpt/test_modeling_dpt_hybrid.py",
+    ],
     "optimization.py": "optimization/test_optimization.py",
     "optimization_tf.py": "optimization/test_optimization_tf.py",
     "pipelines/__init__.py": "pipelines/test_pipelines_*.py",

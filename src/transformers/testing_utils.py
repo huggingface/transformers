@@ -39,6 +39,7 @@ from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
 from .integrations import (
+    is_clearml_available,
     is_fairscale_available,
     is_optuna_available,
     is_ray_available,
@@ -50,13 +51,16 @@ from .utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_decord_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
     is_ipex_available,
     is_jumanpp_available,
+    is_keras_nlp_available,
     is_librosa_available,
+    is_natten_available,
     is_onnx_available,
     is_pandas_available,
     is_phonemizer_available,
@@ -281,6 +285,16 @@ def require_timm(test_case):
     return unittest.skipUnless(is_timm_available(), "test requires Timm")(test_case)
 
 
+def require_natten(test_case):
+    """
+    Decorator marking a test that requires NATTEN.
+
+    These tests are skipped when NATTEN isn't installed.
+
+    """
+    return unittest.skipUnless(is_natten_available(), "test requires natten")(test_case)
+
+
 def require_torch(test_case):
     """
     Decorator marking a test that requires PyTorch.
@@ -380,6 +394,13 @@ def require_tensorflow_text(test_case):
     return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
 
 
+def require_keras_nlp(test_case):
+    """
+    Decorator marking a test that requires keras_nlp. These tests are skipped when keras_nlp isn't installed.
+    """
+    return unittest.skipUnless(is_keras_nlp_available(), "test requires keras_nlp")(test_case)
+
+
 def require_pandas(test_case):
     """
     Decorator marking a test that requires pandas. These tests are skipped when pandas isn't installed.
@@ -424,6 +445,13 @@ def require_spacy(test_case):
     Decorator marking a test that requires SpaCy. These tests are skipped when SpaCy isn't installed.
     """
     return unittest.skipUnless(is_spacy_available(), "test requires spacy")(test_case)
+
+
+def require_decord(test_case):
+    """
+    Decorator marking a test that requires decord. These tests are skipped when decord isn't installed.
+    """
+    return unittest.skipUnless(is_decord_available(), "test requires decord")(test_case)
 
 
 def require_torch_multi_gpu(test_case):
@@ -577,6 +605,16 @@ def require_wandb(test_case):
 
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
+
+
+def require_clearml(test_case):
+    """
+    Decorator marking a test requires clearml.
+
+    These tests are skipped when clearml isn't installed.
+
+    """
+    return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
 
 
 def require_soundfile(test_case):

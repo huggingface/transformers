@@ -261,7 +261,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        decoder_input_ids = tf.constant(DUMMY_INPUTS)
+        decoder_input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         batch_size, seq_len = decoder_input_ids.shape
 
         VISION_DUMMY_INPUTS = tf.random.uniform(
@@ -756,7 +756,3 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             "Resizing the embedding layers via the TFVisionEncoderDecoderModel directly is not supported."
             "Please use the respective methods of the wrapped objects (model.decoder.resize_token_embeddings(...))"
         )
-
-    def _reorder_cache(self, past, beam_idx):
-        # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past, beam_idx)

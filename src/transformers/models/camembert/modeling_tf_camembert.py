@@ -891,7 +891,7 @@ class TFCamembertPreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS)}
+        dummy = {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
         # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
         if self.config.add_cross_attention:
             batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
@@ -904,8 +904,8 @@ class TFCamembertPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -1390,7 +1390,7 @@ class TFCamembertForMultipleChoice(TFCamembertPreTrainedModel, TFMultipleChoiceL
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
@@ -1726,11 +1726,3 @@ class TFCamembertForCausalLM(TFCamembertPreTrainedModel, TFCausalLanguageModelin
         return TFCausalLMOutputWithCrossAttentions(
             logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
         )
-
-    @staticmethod
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel._reorder_cache
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
-        return reordered_past

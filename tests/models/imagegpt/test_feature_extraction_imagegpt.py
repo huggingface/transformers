@@ -96,6 +96,13 @@ class ImageGPTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
         self.assertTrue(hasattr(feature_extractor, "size"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"height": 18, "width": 18})
+
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42)
+        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+
     def test_feat_extract_to_json_string(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         obj = json.loads(feat_extract.to_json_string())

@@ -75,6 +75,10 @@ def is_wandb_available():
     return importlib.util.find_spec("wandb") is not None
 
 
+def is_clearml_available():
+    return importlib.util.find_spec("clearml") is not None
+
+
 def is_comet_available():
     return _has_comet
 
@@ -514,7 +518,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
 
 def get_available_reporting_integrations():
     integrations = []
-    if is_azureml_available():
+    if is_azureml_available() and not is_mlflow_available():
         integrations.append("azure_ml")
     if is_comet_available():
         integrations.append("comet_ml")
@@ -528,6 +532,8 @@ def get_available_reporting_integrations():
         integrations.append("wandb")
     if is_codecarbon_available():
         integrations.append("codecarbon")
+    if is_clearml_available():
+        integrations.append("clearml")
     return integrations
 
 
@@ -662,16 +668,16 @@ class WandbCallback(TrainerCallback):
         variables:
 
         Environment:
-            WANDB_LOG_MODEL (`bool`, *optional*, defaults to `False`):
-                Whether or not to log model as artifact at the end of training. Use along with
-                *TrainingArguments.load_best_model_at_end* to upload best model.
-            WANDB_WATCH (`str`, *optional* defaults to `"gradients"`):
-                Can be `"gradients"`, `"all"` or `"false"`. Set to `"false"` to disable gradient logging or `"all"` to
-                log gradients and parameters.
-            WANDB_PROJECT (`str`, *optional*, defaults to `"huggingface"`):
-                Set this to a custom string to store results in a different project.
-            WANDB_DISABLED (`bool`, *optional*, defaults to `False`):
-                Whether or not to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
+        - **WANDB_LOG_MODEL** (`bool`, *optional*, defaults to `False`):
+            Whether or not to log model as artifact at the end of training. Use along with
+            [`~transformers.TrainingArguments.load_best_model_at_end`] to upload best model.
+        - **WANDB_WATCH** (`str`, *optional*, defaults to `gradients`):
+            Can be `gradients`, `all` or `false`. Set to `false` to disable gradient logging or `all` to log gradients
+            and parameters.
+        - **WANDB_PROJECT** (`str`, *optional*, defaults to `huggingface`):
+            Set this to a custom string to store results in a different project.
+        - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
+            Whether or not to disable wandb entirely. Set `WANDB_DISABLED=True` to disable.
         """
         if self._wandb is None:
             return
@@ -778,16 +784,16 @@ class CometCallback(TrainerCallback):
         Setup the optional Comet.ml integration.
 
         Environment:
-            COMET_MODE (`str`, *optional*):
-                Whether to create an online, offline experiment or disable Comet logging. Can be "OFFLINE", "ONLINE",
-                or "DISABLED". Defaults to "ONLINE".
-            COMET_PROJECT_NAME (`str`, *optional*):
-                Comet project name for experiments
-            COMET_OFFLINE_DIRECTORY (`str`, *optional*):
-                Folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
-            COMET_LOG_ASSETS (`str`, *optional*):
-                Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be "TRUE", or
-                "FALSE". Defaults to "TRUE".
+        - **COMET_MODE** (`str`, *optional*, defaults to `ONLINE`):
+            Whether to create an online, offline experiment or disable Comet logging. Can be `OFFLINE`, `ONLINE`, or
+            `DISABLED`.
+        - **COMET_PROJECT_NAME** (`str`, *optional*):
+            Comet project name for experiments.
+        - **COMET_OFFLINE_DIRECTORY** (`str`, *optional*):
+            Folder to use for saving offline experiments when `COMET_MODE` is `OFFLINE`.
+        - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
+            Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be `TRUE`, or
+            `FALSE`.
 
         For a number of configurable items in the environment, see
         [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
@@ -886,28 +892,27 @@ class MLflowCallback(TrainerCallback):
         Setup the optional MLflow integration.
 
         Environment:
-            HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
-                Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if logging to a
-                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
-                [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
-                storage will just copy the files to your artifact location.
-            MLFLOW_EXPERIMENT_NAME (`str`, *optional*):
-                Whether to use an MLflow experiment_name under which to launch the run. Default to "None" which will
-                point to the "Default" experiment in MLflow. Otherwise, it is a case sensitive name of the experiment
-                to be activated. If an experiment with this name does not exist, a new experiment with this name is
-                created.
-            MLFLOW_TAGS (`str`, *optional*):
-                A string dump of a dictionary of key/value pair to be added to the MLflow run as tags. Example:
-                os.environ['MLFLOW_TAGS']='{"release.candidate": "RC1", "release.version": "2.2.0"}'
-            MLFLOW_NESTED_RUN (`str`, *optional*):
-                Whether to use MLflow nested runs. If set to `True` or *1*, will create a nested run inside the current
-                run.
-            MLFLOW_RUN_ID (`str`, *optional*):
-                Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint.
-                When MLFLOW_RUN_ID environment variable is set, start_run attempts to resume a run with the specified
-                run ID and other parameters are ignored.
-            MLFLOW_FLATTEN_PARAMS (`str`, *optional*):
-                Whether to flatten the parameters dictionary before logging. Default to `False`.
+        - **HF_MLFLOW_LOG_ARTIFACTS** (`str`, *optional*):
+            Whether to use MLflow `.log_artifact()` facility to log artifacts. This only makes sense if logging to a
+            remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
+            [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
+            storage will just copy the files to your artifact location.
+        - **MLFLOW_EXPERIMENT_NAME** (`str`, *optional*, defaults to `None`):
+            Whether to use an MLflow experiment_name under which to launch the run. Default to `None` which will point
+            to the `Default` experiment in MLflow. Otherwise, it is a case sensitive name of the experiment to be
+            activated. If an experiment with this name does not exist, a new experiment with this name is created.
+        - **MLFLOW_TAGS** (`str`, *optional*):
+            A string dump of a dictionary of key/value pair to be added to the MLflow run as tags. Example:
+            `os.environ['MLFLOW_TAGS']='{"release.candidate": "RC1", "release.version": "2.2.0"}'`.
+        - **MLFLOW_NESTED_RUN** (`str`, *optional*):
+            Whether to use MLflow nested runs. If set to `True` or *1*, will create a nested run inside the current
+            run.
+        - **MLFLOW_RUN_ID** (`str`, *optional*):
+            Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint. When
+            `MLFLOW_RUN_ID` environment variable is set, `start_run` attempts to resume a run with the specified run ID
+            and other parameters are ignored.
+        - **MLFLOW_FLATTEN_PARAMS** (`str`, *optional*, defaults to `False`):
+            Whether to flatten the parameters dictionary before logging.
         """
         self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
@@ -1299,6 +1304,112 @@ class CodeCarbonCallback(TrainerCallback):
             self.tracker.stop()
 
 
+class ClearMLCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that sends the logs to [ClearML](https://clear.ml/).
+
+    Environment:
+    - **CLEARML_PROJECT** (`str`, *optional*, defaults to `HuggingFace Transformers`):
+        ClearML project name.
+    - **CLEARML_TASK** (`str`, *optional*, defaults to `Trainer`):
+        ClearML task name.
+    """
+
+    def __init__(self):
+        if is_clearml_available():
+            import clearml
+
+            self._clearml = clearml
+        else:
+            raise RuntimeError("ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`.")
+
+        self._initialized = False
+        self._clearml_task = None
+
+    def setup(self, args, state, model, tokenizer, **kwargs):
+        if self._clearml is None:
+            return
+        if state.is_world_process_zero:
+            logger.info("Automatic ClearML logging enabled.")
+            if self._clearml_task is None:
+                self._clearml_task = self._clearml.Task.init(
+                    project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                    auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                    output_uri=True,
+                )
+                self._initialized = True
+                logger.info("ClearML Task has been initialized.")
+
+            self._clearml_task.connect(args, "Args")
+            if hasattr(model, "config") and model.config is not None:
+                self._clearml_task.connect(model.config, "Model Configuration")
+
+    def on_train_begin(self, args, state, control, model=None, tokenizer=None, **kwargs):
+        if self._clearml is None:
+            return
+        if state.is_hyper_param_search:
+            self._initialized = False
+        if not self._initialized:
+            self.setup(args, state, model, tokenizer, **kwargs)
+
+    def on_train_end(self, args, state, control, model=None, tokenizer=None, metrics=None, logs=None, **kwargs):
+        if self._clearml is None:
+            return
+        if self._clearml_task and state.is_world_process_zero:
+            # Close ClearML Task at the end end of training
+            self._clearml_task.close()
+
+    def on_log(self, args, state, control, model=None, tokenizer=None, logs=None, **kwargs):
+        if self._clearml is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, model, tokenizer, **kwargs)
+        if state.is_world_process_zero:
+            eval_prefix = "eval_"
+            eval_prefix_len = len(eval_prefix)
+            test_prefix = "test_"
+            test_prefix_len = len(test_prefix)
+            single_value_scalars = [
+                "train_runtime",
+                "train_samples_per_second",
+                "train_steps_per_second",
+                "train_loss",
+                "total_flos",
+                "epoch",
+            ]
+            for k, v in logs.items():
+                if isinstance(v, (int, float)):
+                    if k in single_value_scalars:
+                        self._clearml_task.get_logger().report_single_value(name=k, value=v)
+                    elif k.startswith(eval_prefix):
+                        self._clearml_task.get_logger().report_scalar(
+                            title=k[eval_prefix_len:], series="eval", value=v, iteration=state.global_step
+                        )
+                    elif k.startswith(test_prefix):
+                        self._clearml_task.get_logger().report_scalar(
+                            title=k[test_prefix_len:], series="test", value=v, iteration=state.global_step
+                        )
+                    else:
+                        self._clearml_task.get_logger().report_scalar(
+                            title=k, series="train", value=v, iteration=state.global_step
+                        )
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
+                        "This invocation of ClearML logger's  report_scalar() "
+                        "is incorrect so we dropped this attribute."
+                    )
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._clearml_task and state.is_world_process_zero:
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
+            self._clearml_task.update_output_model(artifact_path, iteration=state.global_step, auto_delete_file=False)
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -1307,6 +1418,7 @@ INTEGRATION_TO_CALLBACK = {
     "tensorboard": TensorBoardCallback,
     "wandb": WandbCallback,
     "codecarbon": CodeCarbonCallback,
+    "clearml": ClearMLCallback,
 }
 
 
@@ -1316,4 +1428,5 @@ def get_reporting_integration_callbacks(report_to):
             raise ValueError(
                 f"{integration} is not supported, only {', '.join(INTEGRATION_TO_CALLBACK.keys())} are supported."
             )
+
     return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]

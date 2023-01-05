@@ -466,11 +466,11 @@ class TFBlenderbotPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         pad_token = 1
-        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
+        input_ids = tf.convert_to_tensor(DUMMY_INPUTS, dtype=tf.int32)
+        decoder_input_ids = tf.convert_to_tensor(DUMMY_INPUTS, dtype=tf.int32)
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
+            "attention_mask": tf.cast(input_ids != pad_token, tf.int32),
             "input_ids": input_ids,
         }
         return dummy_inputs
@@ -1473,14 +1473,3 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
-
-    @staticmethod
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            # cached cross_attention states don't have to be reordered -> they are always the same
-            reordered_past += (
-                tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past[:2]) + layer_past[2:],
-            )
-        return reordered_past

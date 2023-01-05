@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
-_import_structure = {}
+_import_structure = {"configuration_utils": ["GenerationConfig"]}
 
 
 try:
@@ -51,6 +51,7 @@ else:
         "LogitsProcessorList",
         "LogitsWarper",
         "MinLengthLogitsProcessor",
+        "MinNewTokensLengthLogitsProcessor",
         "NoBadWordsLogitsProcessor",
         "NoRepeatNGramLogitsProcessor",
         "PrefixConstrainedLogitsProcessor",
@@ -149,6 +150,8 @@ else:
     ]
 
 if TYPE_CHECKING:
+    from .configuration_utils import GenerationConfig
+
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
@@ -169,6 +172,7 @@ if TYPE_CHECKING:
             LogitsProcessorList,
             LogitsWarper,
             MinLengthLogitsProcessor,
+            MinNewTokensLengthLogitsProcessor,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
             PrefixConstrainedLogitsProcessor,

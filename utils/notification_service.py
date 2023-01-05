@@ -98,7 +98,9 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 
 class Message:
-    def __init__(self, title: str, ci_title: str, model_results: Dict, additional_results: Dict):
+    def __init__(
+        self, title: str, ci_title: str, model_results: Dict, additional_results: Dict, selected_warnings: List = None
+    ):
         self.title = title
         self.ci_title = ci_title
 
@@ -135,6 +137,10 @@ class Message:
         self.additional_results = additional_results
 
         self.thread_ts = None
+
+        if selected_warnings is None:
+            selected_warnings = []
+        self.selected_warnings = selected_warnings
 
     @property
     def time(self) -> str:
@@ -195,6 +201,22 @@ class Message:
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
                 "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
+
+    @property
+    def warnings(self) -> Dict:
+        return {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": f"There were {len(self.selected_warnings)} warnings being selected.",
+                "emoji": True,
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check warnings", "emoji": True},
+                "url": f"{github_actions_job_links['Extract warnings in CI artifacts']}",
             },
         }
 
@@ -383,6 +405,9 @@ class Message:
 
         if self.n_model_failures == 0 and self.n_additional_failures == 0:
             blocks.append(self.no_failures)
+
+        if len(self.selected_warnings) > 0:
+            blocks.append(self.warnings)
 
         return json.dumps(blocks)
 
@@ -910,7 +935,13 @@ if __name__ == "__main__":
                             {"line": line, "trace": stacktraces.pop(0)}
                         )
 
-    message = Message(title, ci_title, model_results, additional_results)
+    selected_warnings = []
+    if "warnings_in_ci" in available_artifacts:
+        directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
+        with open(os.path.join(directory, "selected_warnings.json")) as fp:
+            selected_warnings = json.load(fp)
+
+    message = Message(title, ci_title, model_results, additional_results, selected_warnings=selected_warnings)
 
     # send report only if there is any failure (for push CI)
     if message.n_failures or ci_event != "push":
