@@ -247,13 +247,13 @@ class TestTrainerExt(TestCasePlus):
         # thus we should expect ~300MB total memory saved.
         # peak memory can be the same - but the total should be different by about that margin
 
-        # leave this for now if CI gets very different results
-        print(f"{gpu_alloc_mem_orig=}MB {gpu_peak_mem_orig=}MB {gpu_alloc_mem_orig+gpu_peak_mem_orig=}MB")
-        print(f" {gpu_alloc_mem_bnb=}MB  {gpu_peak_mem_bnb=} MB  {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=}MB")
-        print(f"{gpu_alloc_mem_diff=}MB")
-        print(f"{gpu_peak_mem_diff=}MB")
-        print(f"{gpu_total_mem_orig=}MB, {gpu_total_mem_bnb=}MB")
-        print(f"{gpu_total_mem_diff=}MB, {gpu_total_mem_diff=}MB")
+        # leave this for now if CI gets very different results - requires py38 for a new print feature
+        # print(f"{gpu_alloc_mem_orig=}MB {gpu_peak_mem_orig=}MB {gpu_alloc_mem_orig+gpu_peak_mem_orig=}MB")
+        # print(f" {gpu_alloc_mem_bnb=}MB  {gpu_peak_mem_bnb=} MB  {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=}MB")
+        # print(f"{gpu_alloc_mem_diff=}MB")
+        # print(f"{gpu_peak_mem_diff=}MB")
+        # print(f"{gpu_total_mem_orig=}MB, {gpu_total_mem_bnb=}MB")
+        # print(f"{gpu_total_mem_diff=}MB, {gpu_total_mem_diff=}MB")
 
         self.assertGreater(
             gpu_alloc_mem_diff,
