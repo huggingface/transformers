@@ -239,13 +239,12 @@ class DataTrainingArguments:
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
-        else:
-            if self.train_file is not None:
-                extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+        if self.train_file is not None:
+            extension = self.train_file.split(".")[-1]
+            assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
+        if self.validation_file is not None:
+            extension = self.validation_file.split(".")[-1]
+            assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
 @flax.struct.dataclass
@@ -428,11 +427,10 @@ def generate_batch_splits(samples_idx: np.ndarray, batch_size: int, drop_last=Tr
         if samples_to_remove != 0:
             samples_idx = samples_idx[:-samples_to_remove]
         sections_split = num_samples // batch_size
-        samples_idx = samples_idx.reshape((sections_split, batch_size))
-    else:
-        sections_split = math.ceil(num_samples / batch_size)
-        samples_idx = np.array_split(samples_idx, sections_split)
-    return samples_idx
+        return samples_idx.reshape((sections_split, batch_size))
+
+    sections_split = math.ceil(num_samples / batch_size)
+    return np.array_split(samples_idx, sections_split)
 
 
 def write_train_metric(summary_writer, train_metrics, train_time, step):
@@ -494,118 +492,19 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    # Handle the repository creation
-    if training_args.push_to_hub:
-        if training_args.hub_model_id is None:
-            repo_name = get_full_repo_name(
-                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
-            )
-        else:
-            repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
-
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
     #
     # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
     # 'text' is found. You can easily tweak this behavior (see below).
-    if data_args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-
-        if "validation" not in datasets.keys():
-            datasets["validation"] = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                split=f"train[:{data_args.validation_split_percentage}%]",
-                cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
-            )
-            datasets["train"] = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                split=f"train[{data_args.validation_split_percentage}%:]",
-                cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
-            )
-    else:
-        data_files = {}
-        if data_args.train_file is not None:
-            data_files["train"] = data_args.train_file
-        if data_args.validation_file is not None:
-            data_files["validation"] = data_args.validation_file
-        extension = data_args.train_file.split(".")[-1]
-        if extension == "txt":
-            extension = "text"
-        datasets = load_dataset(
-            extension,
-            data_files=data_files,
-            cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-
-        if "validation" not in datasets.keys():
-            datasets["validation"] = load_dataset(
-                extension,
-                data_files=data_files,
-                split=f"train[:{data_args.validation_split_percentage}%]",
-                cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
-            )
-            datasets["train"] = load_dataset(
-                extension,
-                data_files=data_files,
-                split=f"train[{data_args.validation_split_percentage}%:]",
-                cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
-            )
+    datasets = load_datasets(model_args, data_args)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     # Load pretrained model and tokenizer
-
-    if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name,
-            cache_dir=model_args.cache_dir,
-            use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-    elif model_args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-    else:
-        raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
-            "You can do it from another script, save it, and load it from here, using --tokenizer_name."
-        )
-
-    if model_args.config_name:
-        config = BartConfig.from_pretrained(
-            model_args.config_name,
-            cache_dir=model_args.cache_dir,
-            vocab_size=len(tokenizer),
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-    elif model_args.model_name_or_path:
-        config = BartConfig.from_pretrained(
-            model_args.model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-    else:
-        config = CONFIG_MAPPING[model_args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+    tokenizer = load_tokenizer(model_args)
+    config = load_config(model_args, logger, tokenizer)
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
@@ -785,64 +684,11 @@ def main():
     # Setup train state
     state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=optimizer)
 
-    # Define gradient update step fn
-    def train_step(state, batch, dropout_rng):
-        dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
-
-        def loss_fn(params):
-            labels = batch.pop("labels")
-
-            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-
-            # compute loss, ignore padded input tokens and special tokens
-            label_mask = jnp.where(labels > 0, 1.0, 0.0)
-            loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
-
-            # take average
-            loss = loss.sum()
-            num_labels = label_mask.sum()
-
-            return loss, num_labels
-
-        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        (loss, num_labels), grad = grad_fn(state.params)
-        num_labels = jax.lax.psum(num_labels, "batch")
-
-        # true loss = total loss / total samples
-        loss = jax.lax.psum(loss, "batch")
-        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
-
-        # true grad = total grad / total samples
-        grad = jax.lax.psum(grad, "batch")
-        grad = jax.tree_util.tree_map(lambda x: x / num_labels, grad)
-        new_state = state.apply_gradients(grads=grad)
-
-        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
-        return new_state, metrics, new_dropout_rng
-
     # Create parallel version of the train step
-    p_train_step = jax.pmap(train_step, "batch", donate_argnums=(0,))
+    p_train_step = jax.pmap(
+        get_train_step_fn(linear_decay_lr_schedule_fn), "batch", donate_argnums=(0,))
 
-    # Define eval fn
-    def eval_step(params, batch):
-        labels = batch.pop("labels")
-
-        logits = model(**batch, params=params, train=False)[0]
-
-        # compute loss, ignore padded input tokens and special tokens
-        label_mask = jnp.where(labels > 0, 1.0, 0.0)
-        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
-
-        # compute accuracy
-        accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels) * label_mask
-
-        # summarize metrics
-        metrics = {"loss": loss.sum(), "accuracy": accuracy.sum(), "normalizer": label_mask.sum()}
-        metrics = jax.lax.psum(metrics, axis_name="batch")
-
-        return metrics
-
-    p_eval_step = jax.pmap(eval_step, "batch", donate_argnums=(0,))
+    p_eval_step = jax.pmap(get_eval_step_fn(model), "batch", donate_argnums=(0,))
 
     # Replicate the train state on each device
     state = jax_utils.replicate(state)
@@ -927,6 +773,15 @@ def main():
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
+                        # Handle the repository creation
+                        if training_args.hub_model_id is None:
+                            repo_name = get_full_repo_name(
+                                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
+                            )
+                        else:
+                            repo_name = training_args.hub_model_id
+                        repo = Repository(training_args.output_dir, clone_from=repo_name)
+
                         repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
 
     # Eval after training
@@ -964,6 +819,163 @@ def main():
             path = os.path.join(training_args.output_dir, "eval_results.json")
             with open(path, "w") as f:
                 json.dump(eval_metrics, f, indent=4, sort_keys=True)
+
+
+def get_eval_step_fn(model):
+    # Define eval fn
+    def eval_step(params, batch):
+        labels = batch.pop("labels")
+
+        logits = model(**batch, params=params, train=False)[0]
+
+        # compute loss, ignore padded input tokens and special tokens
+        label_mask = jnp.where(labels > 0, 1.0, 0.0)
+        loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
+
+        # compute accuracy
+        accuracy = jnp.equal(jnp.argmax(logits, axis=-1), labels) * label_mask
+
+        # summarize metrics
+        metrics = {"loss": loss.sum(), "accuracy": accuracy.sum(), "normalizer": label_mask.sum()}
+        metrics = jax.lax.psum(metrics, axis_name="batch")
+
+        return metrics
+
+    return eval_step
+
+
+def get_train_step_fn(linear_decay_lr_schedule_fn):
+    # Define gradient update step fn
+    def train_step(state, batch, dropout_rng):
+        dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+
+        def loss_fn(params):
+            labels = batch.pop("labels")
+
+            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
+
+            # compute loss, ignore padded input tokens and special tokens
+            label_mask = jnp.where(labels > 0, 1.0, 0.0)
+            loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])) * label_mask
+
+            # take average
+            loss = loss.sum()
+            num_labels = label_mask.sum()
+
+            return loss, num_labels
+
+        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+        (loss, num_labels), grad = grad_fn(state.params)
+        num_labels = jax.lax.psum(num_labels, "batch")
+
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
+        # true grad = total grad / total samples
+        grad = jax.lax.psum(grad, "batch")
+        grad = jax.tree_util.tree_map(lambda x: x / num_labels, grad)
+        new_state = state.apply_gradients(grads=grad)
+
+        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
+        return new_state, metrics, new_dropout_rng
+
+    return train_step
+
+
+def load_config(model_args, logger, tokenizer):
+    if model_args.config_name:
+        return BartConfig.from_pretrained(
+            model_args.config_name,
+            cache_dir=model_args.cache_dir,
+            vocab_size=len(tokenizer),
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+
+    if model_args.model_name_or_path:
+        return BartConfig.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+
+    logger.warning("You are instantiating a new config instance from scratch.")
+    return CONFIG_MAPPING[model_args.model_type]()
+
+
+def load_tokenizer(model_args):
+    tokenizer_name = model_args.tokenizer_name or model_args.model_name_or_path
+    if not tokenizer_name:
+        raise ValueError(
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+        )
+    return AutoTokenizer.from_pretrained(
+        tokenizer_name,
+        cache_dir=model_args.cache_dir,
+        use_fast=model_args.use_fast_tokenizer,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
+
+
+def load_datasets(model_args, data_args):
+    if data_args.dataset_name is not None:
+        # Downloading and loading a dataset from the hub.
+        datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+
+        if "validation" not in datasets.keys():
+            datasets["validation"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
+            )
+            datasets["train"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
+            )
+        return datasets
+
+    data_files = {}
+    if data_args.train_file is not None:
+        data_files["train"] = data_args.train_file
+    if data_args.validation_file is not None:
+        data_files["validation"] = data_args.validation_file
+    extension = data_args.train_file.split(".")[-1]
+    if extension == "txt":
+        extension = "text"
+    datasets = load_dataset(
+        extension,
+        data_files=data_files,
+        cache_dir=model_args.cache_dir,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
+
+    if "validation" not in datasets.keys():
+        datasets["validation"] = load_dataset(
+            extension,
+            data_files=data_files,
+            split=f"train[:{data_args.validation_split_percentage}%]",
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+        datasets["train"] = load_dataset(
+            extension,
+            data_files=data_files,
+            split=f"train[{data_args.validation_split_percentage}%:]",
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+    return datasets
 
 
 if __name__ == "__main__":
