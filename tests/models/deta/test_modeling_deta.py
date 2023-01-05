@@ -20,9 +20,9 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import DetaConfig, is_torch_available, is_vision_available
+from transformers import DetaConfig, is_torch_available, is_torchvision_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torchvision, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -32,6 +32,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_torch_available():
     import torch
 
+if is_torchvision_available():
     from transformers import DetaForObjectDetection, DetaModel
 
 
@@ -165,7 +166,7 @@ class DetaModelTester:
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
-@require_torch
+@require_torchvision
 class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (DetaModel, DetaForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -506,7 +507,7 @@ def prepare_img():
     return image
 
 
-@require_torch
+@require_torchvision
 @require_vision
 @slow
 class DetaModelIntegrationTests(unittest.TestCase):
