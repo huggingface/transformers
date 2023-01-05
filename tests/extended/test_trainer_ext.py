@@ -22,7 +22,6 @@ from typing import Tuple
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers import AutoModel
 from transformers.testing_utils import (
     CaptureStderr,
     ExtendSysPath,
@@ -208,7 +207,7 @@ class TestTrainerExt(TestCasePlus):
         from transformers.training_args import OptimizerNames
 
         def train_and_return_metrics(optim: str) -> Tuple[int, float]:
-            extra_args = f"--skip_memory_metrics 0"
+            extra_args = "--skip_memory_metrics 0"
 
             output_dir = self.run_trainer(
                 max_len=128,
@@ -235,7 +234,7 @@ class TestTrainerExt(TestCasePlus):
         gpu_peak_mem_bnb, gpu_alloc_mem_bnb, loss_bnb = train_and_return_metrics(OptimizerNames.ADAMW_BNB.value)
 
         gpu_alloc_mem_diff = gpu_alloc_mem_orig - gpu_alloc_mem_bnb
-        gpu_peak_mem_diff = gpu_peak_mem_orig - gpu_peak_mem_bnb
+        # gpu_peak_mem_diff = gpu_peak_mem_orig - gpu_peak_mem_bnb
 
         gpu_total_mem_orig = gpu_peak_mem_orig + gpu_alloc_mem_orig
         gpu_total_mem_bnb = gpu_peak_mem_bnb + gpu_alloc_mem_bnb
@@ -249,7 +248,7 @@ class TestTrainerExt(TestCasePlus):
 
         # leave this for now if CI gets very different results - requires py38 for a new print feature
         # print(f"{gpu_alloc_mem_orig=}MB {gpu_peak_mem_orig=}MB {gpu_alloc_mem_orig+gpu_peak_mem_orig=}MB")
-        # print(f" {gpu_alloc_mem_bnb=}MB  {gpu_peak_mem_bnb=} MB  {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=}MB")
+        # print(f" {gpu_alloc_mem_bnb=}MB  {gpu_peak_mem_bnb=}MB  {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=}MB")
         # print(f"{gpu_alloc_mem_diff=}MB")
         # print(f"{gpu_peak_mem_diff=}MB")
         # print(f"{gpu_total_mem_orig=}MB, {gpu_total_mem_bnb=}MB")
@@ -355,7 +354,7 @@ class TestTrainerExt(TestCasePlus):
         if distributed:
 
             if n_gpus_to_use is None:
-                n_gpu_to_use = get_gpu_count()
+                n_gpus_to_use = get_gpu_count()
             master_port = get_torch_dist_unique_port()
             distributed_args = f"""
                 -m torch.distributed.launch
