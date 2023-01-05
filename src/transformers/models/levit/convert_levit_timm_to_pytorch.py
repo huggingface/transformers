@@ -174,7 +174,6 @@ if __name__ == "__main__":
         action="store_false",
         help="Do not push model and feature extractor to the hub",
     )
-    parser.set_defaults(push_to_hub=True)
 
     args = parser.parse_args()
     pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
