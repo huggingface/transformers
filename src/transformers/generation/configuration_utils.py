@@ -115,7 +115,7 @@ class GenerationConfig(PushToHubMixin):
         repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
-        encoder_repetition_penalty (`float`, *optional*, defaults to `model.config.encoder_repetition_penalty` or 1.0 if the config does not set any value):
+        encoder_repetition_penalty (`float`, *optional*, defaults to 1.0):
             The paramater for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
             original input. 1.0 means no penalty.
         length_penalty (`float`, *optional*, defaults to 1.0):
