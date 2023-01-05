@@ -55,12 +55,10 @@ _HIDDEN_STATES_START_POSITION = 1
 
 # General docstring
 _CONFIG_FOR_DOC = "SpeechT5Config"
-_PROCESSOR_FOR_DOC = "SpeechT5ProcessorForSpeechToText"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "TODO"
 
 # CTC docstring
+_CTC_PROCESSOR_FOR_DOC = "SpeechT5ProcessorForSpeechToText"
+_CTC_CHECKPOINT_FOR_DOC = "TODO"
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
 _CTC_EXPECTED_LOSS = 53.48
 
@@ -2110,8 +2108,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             Tensor containing the speaker embeddings.
 
         Returns:
-
-        Example: TODO
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2233,8 +2229,8 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         self.speecht5.encoder.prenet.freeze_feature_encoder()
 
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        processor_class=_CTC_PROCESSOR_FOR_DOC,
+        checkpoint=_CTC_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_CTC_EXPECTED_OUTPUT,
@@ -2459,7 +2455,38 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
 
         Returns:
 
-        Example: TODO
+        Example:
+
+        ```python
+        >>> from transformers import SpeechT5ProcessorForSpeechToText, SpeechT5ForSpeechToText
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> dataset = dataset.sort("id")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> processor = SpeechT5ProcessorForSpeechToText.from_pretrained("TODO")
+        >>> model = SpeechT5ForSpeechToText.from_pretrained("TODO")
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+        >>> predicted_ids = model.generate(**inputs, max_length=100)
+
+        >>> # transcribe speech
+        >>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        >>> transcription[0]
+        'mister quilter is the apostle of the middle classes and we are glad to welcome his gospel'
+        ```
+
+        ```python
+        >>> inputs["labels"] = processor(text=dataset[0]["text"], return_tensors="pt").input_ids
+
+        >>> # compute loss
+        >>> loss = model(**inputs).loss
+        >>> round(loss.item(), 2)
+        19.88
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2625,7 +2652,24 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         Returns:
 
-        Example: TODO
+        Example:
+
+        ```python
+        >>> from transformers import SpeechT5ProcessorForTextToSpeech, SpeechT5ForTextToSpeech, SpeechT5HiFiGAN
+        >>> import torch
+
+        >>> processor = SpeechT5ProcessorForTextToSpeech.from_pretrained("TODO")
+        >>> model = SpeechT5ForTextToSpeech.from_pretrained("TODO")
+        >>> vocoder = SpeechT5HiFiGAN.from_pretrained("TODO")
+
+        >>> inputs = processor("Hello, my dog is cute", return_tensors="pt")
+        >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
+
+        >>> # generate speech
+        >>> speech = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
+        >>> speech.shape
+        torch.Size([15872])
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
