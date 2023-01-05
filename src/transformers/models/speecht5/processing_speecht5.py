@@ -42,7 +42,7 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
+        This method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
         [`~SpeechT5WaveformFeatureExtractor.__call__`] and returns its output.
 
         You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
@@ -81,7 +81,7 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
+        This method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
         [`~SpeechT5WaveformFeatureExtractor.pad`] and returns its output.
 
         You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
@@ -147,7 +147,7 @@ class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to SpeechT5Tokenizer's
+        This method forwards all its arguments to SpeechT5Tokenizer's
         [`~SpeechT5Tokenizer.__call__`] and returns its output.
 
         You can process your labels by using the argument `audio` (either in the same call as your text inputs, or in a

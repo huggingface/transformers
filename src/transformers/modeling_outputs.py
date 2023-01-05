@@ -1364,8 +1364,8 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss.
-        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
+            Spectrogram generation loss.
+        spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
             The predicted spectrogram.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape

@@ -48,14 +48,14 @@ The original code can be found [here](https://github.com/microsoft/SpeechT5).
     - decode
     - batch_decode
 
-## SpeechT5SpectrogramFeatureExtractor
-
-[[autodoc]] SpeechT5SpectrogramFeatureExtractor
-    - __call__
-
 ## SpeechT5WaveformFeatureExtractor
 
 [[autodoc]] SpeechT5WaveformFeatureExtractor
+    - __call__
+
+## SpeechT5SpectrogramFeatureExtractor
+
+[[autodoc]] SpeechT5SpectrogramFeatureExtractor
     - __call__
 
 ## SpeechT5ProcessorForSpeechToText
@@ -72,11 +72,8 @@ The original code can be found [here](https://github.com/microsoft/SpeechT5).
 
 [[autodoc]] SpeechT5ProcessorForTextToSpeech
     - __call__
-    - pad
     - from_pretrained
     - save_pretrained
-    - batch_decode
-    - decode
 
 ## SpeechT5 specific outputs
 
