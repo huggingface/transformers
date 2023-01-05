@@ -15,7 +15,7 @@
 """Image processor class for Beit."""
 
 import warnings
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -130,6 +130,17 @@ class BeitImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_reduce_labels = do_reduce_labels
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
+        is created using from_dict and kwargs e.g. `BeitImageProcessor.from_pretrained(checkpoint, reduce_labels=True)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "reduce_labels" in kwargs:
+            image_processor_dict["reduce_labels"] = kwargs.pop("reduce_labels")
+        return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
         self,

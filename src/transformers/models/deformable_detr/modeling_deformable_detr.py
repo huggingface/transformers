@@ -1965,9 +1965,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
-                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
-                outputs_class = self.class_embed(intermediate)
-                outputs_coord = self.bbox_embed(intermediate).sigmoid()
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
             if self.config.two_stage:
