@@ -265,11 +265,11 @@ class StdScaler(nn.Module):
             Dimension along which to calculate the mean and standard deviation.
         keepdim (`bool`, *optional*, defaults to `False`):
             Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-        minimum_scale (`float`, *optional*, defaults to 1e-10):
+        minimum_scale (`float`, *optional*, defaults to 1e-5):
             Default scale that is used for elements that are constantly zero along dimension `dim`.
     """
 
-    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
         super().__init__()
         if not dim > 0:
             raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
@@ -278,19 +278,14 @@ class StdScaler(nn.Module):
         self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
 
     def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        weighted_data = data * weights
-        mean_data = weighted_data.mean(self.dim, keepdim=self.keepdim).detach()
+        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+        denominator = denominator.clamp_min(1.0)
+        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
 
-        std_data = torch.sqrt(
-            torch.var(weighted_data - mean_data, dim=self.dim, keepdim=self.keepdim, unbiased=False)
-            + self.minimum_scale
-        ).detach()
+        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        scale = torch.sqrt(variance + self.minimum_scale)
 
-        return (
-            (data - mean_data) / std_data,
-            mean_data if self.keepdim else mean_data.squeeze(dim=self.dim),
-            std_data if self.keepdim else std_data.squeeze(dim=self.dim),
-        )
+        return (data - loc) / scale, loc, scale
 
 
 class MeanScaler(nn.Module):
@@ -1608,16 +1603,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
 
         return transformer_inputs, loc, scale, static_feat
-
-    def enc_dec_outputs(self, transformer_inputs):
-        enc_input = transformer_inputs[:, : self.config.context_length, ...]
-        dec_input = transformer_inputs[:, self.config.context_length :, ...]
-
-        encoder_outputs = self.encoder(inputs_embeds=enc_input)
-        decoder_outputs = self.decoder(
-            inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state
-        )
-        return encoder_outputs, decoder_outputs
 
     def get_encoder(self):
         return self.encoder
