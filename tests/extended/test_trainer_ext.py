@@ -202,6 +202,7 @@ class TestTrainerExt(TestCasePlus):
         assert "predict_results.json" in contents
 
     @slow
+    @require_torch_multi_gpu
     @require_bitsandbytes
     def test_run_seq2seq_bnb(self):
         from transformers.training_args import OptimizerNames
