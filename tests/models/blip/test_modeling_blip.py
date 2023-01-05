@@ -570,6 +570,68 @@ class BlipTextImageModelsModelTester:
 
 
 @require_torch
+@require_vision
+class BlipVQAModelTest(unittest.TestCase):
+    all_model_classes = (BlipForQuestionAnswering,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = BlipModelTester(self)
+
+    def _prepare_inputs_for_vqa(self):
+        _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["labels"] = inputs_dict["input_ids"]
+        inputs_dict.pop("return_loss")
+        return inputs_dict
+
+    def test_class_name_consistency(self):
+        """
+        Tests that all VQA models have a class name that ends with "ForQuestionAnswering"
+        """
+        for model_class in self.all_model_classes:
+            model = model_class(self.model_tester.get_config())
+            self.assertTrue(
+                model.__class__.__name__.endswith("ForQuestionAnswering"),
+                f"Class name should end with 'ForVisualQuestionAnswering' got {model.__class__.__name__}",
+            )
+
+    def test_training(self):
+        """
+        Tests that all VQA models can be trained on a single batch
+        """
+        for model_class in self.all_model_classes:
+            model = model_class(self.model_tester.get_config()).to(torch_device)
+            model.train()
+            loss = model(**self._prepare_inputs_for_vqa()).loss
+            loss.backward()
+
+            # verify the gradients are not None
+            for name, param in model.named_parameters():
+                self.assertIsNotNone(param.grad, f"Gradients should not be None - got {param.grad} for {name}")
+
+    def test_forward_signature(self):
+        """
+        Test if the forward function has the expected arguments.
+        """
+        for model_class in self.all_model_classes:
+            model = model_class(self.model_tester.get_config())
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so args are the first n entries
+            args = list(signature.parameters.keys())
+            expected_args = [
+                "input_ids",
+                "attention_mask",
+                "labels",
+                "decoder_input_ids",
+                "decoder_attention_mask",
+            ]
+            for arg in expected_args:
+                self.assertTrue(
+                    arg in args,
+                    f"Argument {arg} of forward function signature should include {arg}. Found {args}.",
+                )
+
+
+@require_torch
 class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (

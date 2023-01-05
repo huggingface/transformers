@@ -1125,13 +1125,26 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         self.text_decoder = BlipTextLMHeadModel(config.text_config)
 
         self.decoder_pad_token_id = config.text_config.pad_token_id
-        self.decoder_bos_token_id = config.text_config.bos_token_id
+        self.decoder_start_token_id = config.text_config.bos_token_id
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
+
+    # Adapted from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right
+    def _shift_right(self, input_ids):
+        pad_token_id = self.decoder_pad_token_id
+
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = self.decoder_start_token_id
+
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+        return shifted_input_ids
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
@@ -1191,10 +1204,17 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
 
-        if decoder_input_ids is None:
-            decoder_input_ids = torch.LongTensor([self.decoder_bos_token_id]).repeat((batch_size, 1))
+        if labels is not None and decoder_input_ids is None:
+            # get decoder inputs from shifting lm labels to the right - this is used in training mode
+            decoder_input_ids = self._shift_right(labels)
+            # replace possible -100 values in labels by `pad_token_id`
+            labels = labels.masked_fill(labels == self.decoder_pad_token_id, -100)
+        elif decoder_input_ids is None:
+            # by default use BOS token as decoder_input_ids
+            decoder_input_ids = torch.LongTensor([self.decoder_start_token_id]).repeat((batch_size, 1))
 
         if labels is None:
+            # labels is None, but decoder_input_ids is not None, this is used for inference
             labels = decoder_input_ids.masked_fill(decoder_input_ids == self.decoder_pad_token_id, -100)
 
         answer_output = self.text_decoder(
@@ -1288,7 +1308,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         question_attention_mask = torch.ones(question_embeds.size()[:-1], dtype=torch.long).to(question_embeds.device)
 
         bos_ids = torch.full(
-            (question_embeds.size(0), 1), fill_value=self.decoder_bos_token_id, device=question_embeds.device
+            (question_embeds.size(0), 1), fill_value=self.decoder_start_token_id, device=question_embeds.device
         )
 
         outputs = self.text_decoder.generate(
@@ -1330,8 +1350,16 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         # image text matching head
         self.itm_head = nn.Linear(config.text_config.hidden_size, 2)
 
-        self.decoder_pad_token_id = config.text_config.pad_token_id
-        self.decoder_bos_token_id = config.text_config.bos_token_id
+        self.decoder_pad_token_id = (
+            config.text_config.pad_token_id
+            if not hasattr(config, "decoder_pad_token_id")
+            else config.decoder_pad_token_id
+        )
+        self.decoder_start_token_id = (
+            config.text_config.bos_token_id
+            if not hasattr(config, "decoder_start_token_id")
+            else config.decoder_start_token_id
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
