@@ -264,7 +264,7 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        dataset = load_dataset(args.dataset_name, task="image-classification")
+        dataset = load_dataset(args.dataset_name, task="image-classification", cache_dir="mycache")
     else:
         data_files = {}
         if args.train_dir is not None:
