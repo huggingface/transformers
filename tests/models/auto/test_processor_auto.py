@@ -157,12 +157,12 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
 
             # Test we can also load the slow version
-            processor = AutoProcessor.from_pretrained(
+            new_processor = AutoProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
             )
-            tokenizer = processor.tokenizer
-            self.assertTrue(tokenizer.special_attribute_present)
-            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+            new_tokenizer = new_processor.tokenizer
+            self.assertTrue(new_tokenizer.special_attribute_present)
+            self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizer")
         else:
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
 

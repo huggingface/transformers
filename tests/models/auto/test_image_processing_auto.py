@@ -130,10 +130,16 @@ class AutoImageProcessorTest(unittest.TestCase):
             _ = AutoImageProcessor.from_pretrained("hf-internal-testing/config-no-model")
 
     def test_from_pretrained_dynamic_image_processor(self):
-        model = AutoImageProcessor.from_pretrained(
+        image_processor = AutoImageProcessor.from_pretrained(
             "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True
         )
-        self.assertEqual(model.__class__.__name__, "NewImageProcessor")
+        self.assertEqual(image_processor.__class__.__name__, "NewImageProcessor")
+
+        # Test image processor can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_processor.save_pretrained(tmp_dir)
+            reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
+        self.assertEqual(reloaded_image_processor.__class__.__name__, "NewImageProcessor")
 
     def test_new_image_processor_registration(self):
         try:

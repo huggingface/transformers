@@ -110,3 +110,9 @@ class AutoConfigTest(unittest.TestCase):
     def test_from_pretrained_dynamic_config(self):
         config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertEqual(config.__class__.__name__, "NewModelConfig")
+
+        # Test config can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            reloaded_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
+        self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")

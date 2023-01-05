@@ -302,8 +302,15 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_from_pretrained_dynamic_tokenizer(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True)
         self.assertTrue(tokenizer.special_attribute_present)
+        # Test tokenizer can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True)
+        self.assertTrue(reloaded_tokenizer.special_attribute_present)
+
         if is_tokenizers_available():
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
+            self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizerFast")
 
             # Test we can also load the slow version
             tokenizer = AutoTokenizer.from_pretrained(
@@ -311,8 +318,15 @@ class AutoTokenizerTest(unittest.TestCase):
             )
             self.assertTrue(tokenizer.special_attribute_present)
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+            # Test tokenizer can be reloaded.
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tokenizer.save_pretrained(tmp_dir)
+                reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True, use_fast=False)
+            self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
+            self.assertTrue(reloaded_tokenizer.special_attribute_present)
         else:
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+            self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
 
     def test_from_pretrained_dynamic_tokenizer_legacy_format(self):
         tokenizer = AutoTokenizer.from_pretrained(
