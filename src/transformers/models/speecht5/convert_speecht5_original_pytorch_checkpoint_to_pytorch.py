@@ -331,6 +331,7 @@ def convert_speecht5_checkpoint(
     pytorch_dump_folder_path,
     config_path=None,
     vocab_path=None,
+    push_to_hub=False,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
@@ -345,14 +346,17 @@ def convert_speecht5_checkpoint(
     if task == "s2t":
         processor_class = SpeechT5ProcessorForSpeechToText
         model = SpeechT5ForSpeechToText(config)
+        model_name = "speecht5_asr"
     elif task == "ctc":
         tokenizer_class = SpeechT5CTCTokenizer
         processor_class = SpeechT5ProcessorForCTC
         model = SpeechT5ForCTC(config)
+        model_name = "speecht5_ctc"
     elif task == "t2s":
         config.max_speech_positions = 1876
         config.max_text_positions = 600
         model = SpeechT5ForTextToSpeech(config)
+        model_name = "speecht5_tts"
     else:
         raise ValueError(f"Unknown task name: {task}")
 
@@ -387,6 +391,12 @@ def convert_speecht5_checkpoint(
 
     model.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        print("Pushing to the hub...")
+        repo_id = "Matthijs/" + model_name
+        processor.push_to_hub(repo_id)
+        model.push_to_hub(repo_id)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -402,6 +412,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
+
     args = parser.parse_args()
     convert_speecht5_checkpoint(
         args.task,
@@ -409,4 +423,5 @@ if __name__ == "__main__":
         args.pytorch_dump_folder_path,
         args.config_path,
         args.vocab_path,
+        args.push_to_hub,
     )

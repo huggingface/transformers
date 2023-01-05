@@ -58,7 +58,7 @@ _CONFIG_FOR_DOC = "SpeechT5Config"
 
 # CTC docstring
 _CTC_PROCESSOR_FOR_DOC = "SpeechT5ProcessorForCTC"
-_CTC_CHECKPOINT_FOR_DOC = "TODO"
+_CTC_CHECKPOINT_FOR_DOC = "Matthijs/speecht5_ctc"
 _CTC_EXPECTED_OUTPUT = "'mister quilter is the appossel of the middle classes and we are glad to welcome his gospl'"
 _CTC_EXPECTED_LOSS = 3791.12
 
@@ -2466,8 +2466,8 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> processor = SpeechT5ProcessorForSpeechToText.from_pretrained("TODO")
-        >>> model = SpeechT5ForSpeechToText.from_pretrained("TODO")
+        >>> processor = SpeechT5ProcessorForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+        >>> model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
 
         >>> # audio file is decoded on the fly
         >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
@@ -2658,9 +2658,9 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         >>> from transformers import SpeechT5ProcessorForTextToSpeech, SpeechT5ForTextToSpeech, SpeechT5HiFiGAN
         >>> import torch
 
-        >>> processor = SpeechT5ProcessorForTextToSpeech.from_pretrained("TODO")
-        >>> model = SpeechT5ForTextToSpeech.from_pretrained("TODO")
-        >>> vocoder = SpeechT5HiFiGAN.from_pretrained("TODO")
+        >>> processor = SpeechT5ProcessorForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
+        >>> model = SpeechT5ForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
+        >>> vocoder = SpeechT5HiFiGAN.from_pretrained("Matthijs/speecht5_hifigan")
 
         >>> inputs = processor("Hello, my dog is cute", return_tensors="pt")
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file

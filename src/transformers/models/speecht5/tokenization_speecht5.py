@@ -32,12 +32,17 @@ VOCAB_FILES_NAMES = {"vocab_file": "spm_char.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "speecht5": "https://huggingface.co/TODO/resolve/main/spm_char.model",
+        "Matthijs/speecht5_asr": "https://huggingface.co/Matthijs/speecht5_asr/resolve/main/spm_char.model",
+        "Matthijs/speecht5_ctc": "https://huggingface.co/Matthijs/speecht5_ctc/resolve/main/spm_char.model",
+        "Matthijs/speecht5_tts": "https://huggingface.co/Matthijs/speecht5_tts/resolve/main/spm_char.model",
     }
 }
 
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"speecht5": 1024}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "Matthijs/speecht5_asr": 1024,
+    "Matthijs/speecht5_ctc": 1024,
+    "Matthijs/speecht5_tts": 1024,
+}
 
 
 class SpeechT5Tokenizer(PreTrainedTokenizer):
