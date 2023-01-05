@@ -536,7 +536,7 @@ class FlaxGenerationMixin:
 
         batch_size, cur_len = input_ids.shape
 
-        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32)
+        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None)
         pad_token_id = jnp.array(pad_token_id, dtype=jnp.int32)
         cur_len = jnp.array(cur_len)
 
@@ -625,7 +625,7 @@ class FlaxGenerationMixin:
 
         batch_size, cur_len = input_ids.shape
 
-        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32)
+        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None)
         pad_token_id = jnp.array(pad_token_id, dtype=jnp.int32)
         cur_len = jnp.array(cur_len)
 
@@ -759,7 +759,7 @@ class FlaxGenerationMixin:
 
         batch_size, num_beams, cur_len = input_ids.shape
 
-        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32)
+        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None)
         pad_token_id = jnp.array(pad_token_id, dtype=jnp.int32)
         cur_len = jnp.array(cur_len)
 
