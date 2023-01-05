@@ -1362,7 +1362,7 @@ class TFGenerationMixin:
         >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
-        >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
         >>> input_ids = tokenizer(input_prompt, return_tensors="tf").input_ids
@@ -1370,7 +1370,7 @@ class TFGenerationMixin:
         >>> # instantiate logits processors
         >>> logits_processor = TFLogitsProcessorList(
         ...     [
-        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.generation_config.eos_token_id),
         ...     ]
         ... )
 
@@ -1629,7 +1629,7 @@ class TFGenerationMixin:
         >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
-        >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
         >>> input_ids = tokenizer(input_prompt, return_tensors="tf").input_ids
@@ -1637,7 +1637,7 @@ class TFGenerationMixin:
         >>> # instantiate logits processors
         >>> logits_processor = TFLogitsProcessorList(
         ...     [
-        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.generation_config.eos_token_id),
         ...     ]
         ... )
         >>> # instantiate logits processors
@@ -1947,7 +1947,7 @@ class TFGenerationMixin:
         >>> num_beams = 3
         >>> # define decoder start token ids
         >>> input_ids = tf.ones((1, num_beams, 1), dtype=tf.int32)
-        >>> input_ids = input_ids * model.config.decoder_start_token_id
+        >>> input_ids = input_ids * model.generation_config.decoder_start_token_id
 
         >>> # add encoder_outputs to model keyword arguments
         >>> encoder_outputs = model.get_encoder()(encoder_input_ids, return_dict=True)
@@ -1958,7 +1958,7 @@ class TFGenerationMixin:
 
         >>> # instantiate logits processors
         >>> logits_processor = TFLogitsProcessorList(
-        ...     [TFMinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)]
+        ...     [TFMinLengthLogitsProcessor(5, eos_token_id=model.generation_config.eos_token_id)]
         ... )
 
         >>> outputs = model.beam_search(input_ids, logits_processor=logits_processor, **model_kwargs)
