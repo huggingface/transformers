@@ -28,6 +28,7 @@ from transformers import (
     SpeechT5ForCTC,
     SpeechT5ForSpeechToText,
     SpeechT5ForTextToSpeech,
+    SpeechT5ProcessorForCTC,
     SpeechT5ProcessorForSpeechToText,
     SpeechT5ProcessorForTextToSpeech,
     SpeechT5SpectrogramFeatureExtractor,
@@ -342,9 +343,11 @@ def convert_speecht5_checkpoint(
     tokenizer_class = SpeechT5Tokenizer
 
     if task == "s2t":
+        processor_class = SpeechT5ProcessorForSpeechToText
         model = SpeechT5ForSpeechToText(config)
     elif task == "ctc":
         tokenizer_class = SpeechT5CTCTokenizer
+        processor_class = SpeechT5ProcessorForCTC
         model = SpeechT5ForCTC(config)
     elif task == "t2s":
         config.max_speech_positions = 1876
@@ -371,7 +374,7 @@ def convert_speecht5_checkpoint(
                 do_normalize=False,
                 return_attention_mask=True,
             )
-            processor = SpeechT5ProcessorForSpeechToText(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = processor_class(feature_extractor=feature_extractor, tokenizer=tokenizer)
             processor.save_pretrained(pytorch_dump_folder_path)
 
         if task == "t2s":

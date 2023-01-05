@@ -57,10 +57,10 @@ _HIDDEN_STATES_START_POSITION = 1
 _CONFIG_FOR_DOC = "SpeechT5Config"
 
 # CTC docstring
-_CTC_PROCESSOR_FOR_DOC = "SpeechT5ProcessorForSpeechToText"
+_CTC_PROCESSOR_FOR_DOC = "SpeechT5ProcessorForCTC"
 _CTC_CHECKPOINT_FOR_DOC = "TODO"
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 53.48
+_CTC_EXPECTED_OUTPUT = "'mister quilter is the appossel of the middle classes and we are glad to welcome his gospl'"
+_CTC_EXPECTED_LOSS = 3791.12
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -2250,9 +2250,9 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
             input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio
                 file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip
-                install soundfile*). To prepare the array into `input_values`, the [`SpeechT5ProcessorForSpeechToText`]
+                install soundfile*). To prepare the array into `input_values`, the [`SpeechT5ProcessorForCTC`]
                 should be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-                [`SpeechT5ProcessorForSpeechToText.__call__`] for details.
+                [`SpeechT5ProcessorForCTC.__call__`] for details.
 
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
