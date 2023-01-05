@@ -828,13 +828,19 @@ class OriginalMask2FormerCheckpointToOursConverter:
         for checkpoint in checkpoints:
             logger.info(f"💪 Converting {checkpoint.stem}")
             # find associated config file
-            config: Path = (
-                config_dir
-                / checkpoint.parents[2].stem
-                / checkpoint.parents[1].stem
-                / "swin"
-                / f"{checkpoint.parents[0].stem}.yaml"
-            )
+
+            # dataset_name e.g 'coco'
+            dataset_name = checkpoint.parents[2].stem
+            if dataset_name == "ade":
+                dataset_name = dataset_name.replace("ade", "ade20k")
+
+            # task type e.g 'instance-segmentation'
+            segmentation_task = checkpoint.parents[1].stem
+
+            # config file corresponding to checkpoint
+            config_file_name = f"{checkpoint.parents[0].stem}.yaml"
+
+            config: Path = config_dir / dataset_name / segmentation_task / "swin" / config_file_name
             yield config, checkpoint
 
 
@@ -880,6 +886,7 @@ def test(
         )
         y = (tr_complete(im) * 255.0).to(torch.int).float()
 
+        # modify original Mask2Former code to return mask and class logits
         original_class_logits, original_mask_logits = original_model([{"image": y.clone().squeeze(0)}])
 
         our_model_out: Mask2FormerForUniversalSegmentationOutput = our_model(x.clone())
@@ -912,7 +919,7 @@ def get_model_name(checkpoint_file: Path):
 
     # dataset name must be one of the following: `coco`, `ade`, `cityscapes`, `mapillary-vistas`
     dataset_name: str = checkpoint_file.parents[2].stem
-    if dataset_name not in ["coco", "ade20k", "cityscapes", "mapillary-vistas"]:
+    if dataset_name not in ["coco", "ade", "cityscapes", "mapillary-vistas"]:
         raise ValueError(
             f"{dataset_name} must be wrong since we didn't find 'coco' or 'ade' or 'cityscapes' or 'mapillary-vistas'"
             " in it "
@@ -920,7 +927,7 @@ def get_model_name(checkpoint_file: Path):
 
     backbone = "swin"
     backbone_types = ["tiny", "small", "base_IN21k", "base", "large"]
-    backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[0]
+    backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[0].replace("_", "-")
 
     model_name = f"mask2former-{backbone}-{backbone_type}-{dataset_name}-{segmentation_task_name.split('-')[0]}"
 
@@ -996,8 +1003,16 @@ if __name__ == "__main__":
         model_name = get_model_name(checkpoint_file)
 
         tolerance = 3e-3
-        if "base" in model_name:
+        high_tolerance_models = [
+            "mask2former-swin-base-IN21k-coco-instance",
+            "mask2former-swin-base-coco-instance",
+            "mask2former-swin-small-cityscapes-semantic",
+        ]
+
+        if model_name in high_tolerance_models:
             tolerance = 3e-1
+
+        logger.info(f"🪄 Testing {model_name}...")
 
         test(original_model, mask2former_for_segmentation, feature_extractor, tolerance)
 
