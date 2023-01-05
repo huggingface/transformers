@@ -220,6 +220,7 @@ class TestTrainerExt(TestCasePlus):
                 extra_args_str=extra_args,
                 do_eval=False,
                 do_predict=False,
+                n_gpus_to_use=1, # to allow deterministic fixed memory usage
             )
 
             # Check metrics
@@ -288,6 +289,7 @@ class TestTrainerExt(TestCasePlus):
         do_train: bool = True,
         do_eval: bool = True,
         do_predict: bool = True,
+        n_gpus_to_use: int = None,
     ):
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
@@ -351,11 +353,13 @@ class TestTrainerExt(TestCasePlus):
             args += extra_args_str.split()
 
         if distributed:
-            n_gpu = get_gpu_count()
+
+            if n_gpus_to_use is None:
+                n_gpu_to_use = get_gpu_count()
             master_port = get_torch_dist_unique_port()
             distributed_args = f"""
                 -m torch.distributed.launch
-                --nproc_per_node={n_gpu}
+                --nproc_per_node={n_gpus_to_use}
                 --master_port={master_port}
                 {self.examples_dir_str}/pytorch/translation/run_translation.py
             """.split()
