@@ -12,7 +12,7 @@ on:
       - check_example_ci
 
 env:
-  HF_HOME: /mnt/cache
+  # HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   #OMP_NUM_THREADS: 8
   #MKL_NUM_THREADS: 8
