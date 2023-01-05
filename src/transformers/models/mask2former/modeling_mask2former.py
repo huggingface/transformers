@@ -1396,9 +1396,10 @@ class Mask2FormerPixelLevelModule(nn.Module):
         """
         super().__init__()
 
-        backbone_config = MaskFormerSwinConfig.from_dict(config.backbone_config.to_dict())
-        self.encoder = AutoBackbone.from_config(backbone_config)
+        backbone_config_dict = config.backbone_config.to_dict()
+        backbone_config = MaskFormerSwinConfig.from_dict(backbone_config_dict)
 
+        self.encoder = AutoBackbone.from_config(backbone_config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:

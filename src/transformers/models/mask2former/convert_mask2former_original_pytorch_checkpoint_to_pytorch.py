@@ -125,6 +125,8 @@ class OriginalMask2FormerConfigToOursConverter:
             filename = "coco-panoptic-id2label.json"
         elif model.SEM_SEG_HEAD.NUM_CLASSES == 19:
             filename = "cityscapes-id2label.json"
+        elif model.SEM_SEG_HEAD.NUM_CLASSES == 8:
+            filename = "cityscapes-instance-id2label.json"
         elif model.SEM_SEG_HEAD.NUM_CLASSES == 65:
             filename = "mapillary-vistas-id2label.json"
 
