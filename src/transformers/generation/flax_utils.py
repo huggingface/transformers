@@ -284,7 +284,7 @@ class FlaxGenerationMixin:
 
         >>> # Generate up to 30 tokens
         >>> outputs = model.generate(input_ids, do_sample=False, max_length=30)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        >>> tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
         ['Today I believe we can finally get to the point where we can make a difference in the lives of the people of the United States of America.\n']
         ```
 
@@ -292,6 +292,7 @@ class FlaxGenerationMixin:
 
         ```python
         >>> from transformers import AutoTokenizer, FlaxAutoModelForCausalLM, GenerationConfig
+        >>> import numpy as np
 
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = FlaxAutoModelForCausalLM.from_pretrained("gpt2")
@@ -303,9 +304,11 @@ class FlaxGenerationMixin:
         >>> generation_config = GenerationConfig.from_pretrained("gpt2")
         >>> generation_config.max_length = 30
         >>> generation_config.do_sample = True
-        >>> outputs = model.generate(input_ids, generation_config=generation_config, seed=[0, 0])
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["Today I believe we can finally start taking a bold stand against climate change and climate change mitigation efforts such as President Obama's climate ban and President Trump's"]
+        >>> outputs = model.generate(
+        ...     input_ids, generation_config=generation_config, prng_key=np.asarray([0, 0], dtype=np.uint32)
+        ... )
+        >>> tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
+        ['Today I believe we can finally get a change in that system. The way I saw it was this: a few years ago, this company would not']
         ```
 
         Beam-search decoding, using a freshly initialized generation configuration:
@@ -329,7 +332,7 @@ class FlaxGenerationMixin:
         ...     bad_words_ids=[[58100]],
         ... )
         >>> outputs = model.generate(input_ids, generation_config=generation_config)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        >>> tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
         ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
         # Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
