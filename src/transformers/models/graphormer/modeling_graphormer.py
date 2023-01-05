@@ -75,13 +75,13 @@ class GraphNodeFeature(nn.Module):
         # initializes all embedding parameters
         self.apply(lambda module: init_params(module, num_layers=config.num_layers))
 
-    def forward(self, batched_data):
-        n_graph, n_node = batched_data["x"].size()[:2]
+    def forward(self, x, in_degree, out_degree):
+        n_graph, n_node = x.size()[:2]
 
         node_feature = (  # node feature + graph token
-            self.atom_encoder(batched_data["x"]).sum(dim=-2)  # [n_graph, n_node, n_hidden]
-            + self.in_degree_encoder(batched_data["in_degree"])
-            + self.out_degree_encoder(batched_data["out_degree"])
+            self.atom_encoder(x).sum(dim=-2)  # [n_graph, n_node, n_hidden]
+            + self.in_degree_encoder(in_degree)
+            + self.out_degree_encoder(out_degree)
         )
 
         graph_token_feature = self.graph_token.weight.unsqueeze(0).repeat(n_graph, 1, 1)
@@ -118,18 +118,7 @@ class GraphAttnBias(nn.Module):
 
         self.apply(lambda module: init_params(module, num_layers=config.num_layers))
 
-    def forward(self, batched_data):
-        # could have its own input
-        attn_bias, spatial_pos, x = (
-            batched_data["attn_bias"],
-            batched_data["spatial_pos"],
-            batched_data["x"],
-        )
-        edge_input, attn_edge_type = (
-            batched_data["edge_input"],
-            batched_data["attn_edge_type"],
-        )
-
+    def forward(self, x, attn_bias, spatial_pos, edge_input, attn_edge_type):
         n_graph, n_node = x.size()[:2]
         graph_attn_bias = attn_bias.clone()
         graph_attn_bias = graph_attn_bias.unsqueeze(1).repeat(
@@ -507,28 +496,34 @@ class GraphormerGraphEncoder(nn.Module):
 
     def forward(
         self,
-        batched_data,
+        x,
+        attn_bias,
+        in_degree,
+        out_degree,
+        spatial_pos,
+        edge_input,
+        attn_edge_type,
         perturb=None,
         last_state_only: bool = False,
         token_embeddings: Optional[torch.Tensor] = None,
         attn_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.torch.Tensor, torch.Tensor]:
         # compute padding mask. This is needed for multi-head attention
-        data_x = batched_data["x"]
+        data_x = x
         n_graph, n_node = data_x.size()[:2]
         padding_mask = (data_x[:, :, 0]).eq(0)
         padding_mask_cls = torch.zeros(n_graph, 1, device=padding_mask.device, dtype=padding_mask.dtype)
         padding_mask = torch.cat((padding_mask_cls, padding_mask), dim=1)
 
+        attn_bias = self.graph_attn_bias(x, attn_bias, spatial_pos, edge_input, attn_edge_type)
+
         if token_embeddings is not None:
             x = token_embeddings
         else:
-            x = self.graph_node_feature(batched_data)
+            x = self.graph_node_feature(x, in_degree, out_degree)
 
         if perturb is not None:
             x[:, 1:, :] += perturb
-
-        attn_bias = self.graph_attn_bias(batched_data)
 
         if self.embed_scale is not None:
             x = x * self.embed_scale
@@ -566,56 +561,6 @@ class GraphormerGraphEncoder(nn.Module):
             return torch.stack(inner_states), graph_rep
         else:
             return inner_states, graph_rep
-
-
-class GraphormerModel(nn.Module):
-    """The Graphormer model is a graph-encoder model.
-
-    It goes from a graph to its representation. If you want to use the model for a downstream classification task, use
-    GraphormerForGraphClassification instead. For any other downstream task, feel free to add a new class, or combine
-    this model with a downstream model of your choice, following the example in GraphormerForGraphClassification.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.max_nodes = config.max_nodes
-
-        self.graph_encoder = GraphormerGraphEncoder(config)
-
-        self.share_input_output_embed = config.share_input_output_embed
-        self.lm_output_learned_bias = None
-
-        # Remove head is set to true during fine-tuning
-        self.load_softmax = not getattr(config, "remove_head", False)
-
-        self.lm_head_transform_weight = nn.Linear(config.embedding_dim, config.embedding_dim)
-        self.activation_fn = ACT2FN[config.activation_fn]
-        self.layer_norm = nn.LayerNorm(config.embedding_dim)
-
-    def reset_output_layer_parameters(self):
-        self.lm_output_learned_bias = nn.Parameter(torch.zeros(1))
-
-    def forward(self, batched_data, perturb=None, masked_tokens=None, **unused):
-        inner_states, graph_rep = self.graph_encoder(batched_data, perturb=perturb)
-
-        # last inner state, then revert Batch and Graph len
-        x = inner_states[-1].transpose(0, 1)
-
-        # project masked tokens only
-        if masked_tokens is not None:
-            raise NotImplementedError
-
-        x = self.layer_norm(self.activation_fn(self.lm_head_transform_weight(x)))
-
-        # project back to size of vocabulary
-        if self.share_input_output_embed and hasattr(self.graph_encoder.embed_tokens, "weight"):
-            x = torch.nn.functional.linear(x, self.graph_encoder.embed_tokens.weight)
-
-        return x
-
-    def max_nodes(self):
-        """Maximum output length supported by the encoder."""
-        return self.max_nodes
 
 
 class GraphormerDecoderHead(nn.Module):
@@ -696,6 +641,76 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
+class GraphormerModel(GraphormerPreTrainedModel):
+    """The Graphormer model is a graph-encoder model.
+
+    It goes from a graph to its representation. If you want to use the model for a downstream classification task, use
+    GraphormerForGraphClassification instead. For any other downstream task, feel free to add a new class, or combine
+    this model with a downstream model of your choice, following the example in GraphormerForGraphClassification.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.max_nodes = config.max_nodes
+
+        self.graph_encoder = GraphormerGraphEncoder(config)
+
+        self.share_input_output_embed = config.share_input_output_embed
+        self.lm_output_learned_bias = None
+
+        # Remove head is set to true during fine-tuning
+        self.load_softmax = not getattr(config, "remove_head", False)
+
+        self.lm_head_transform_weight = nn.Linear(config.embedding_dim, config.embedding_dim)
+        self.activation_fn = ACT2FN[config.activation_fn]
+        self.layer_norm = nn.LayerNorm(config.embedding_dim)
+
+        self.post_init()
+
+    def reset_output_layer_parameters(self):
+        self.lm_output_learned_bias = nn.Parameter(torch.zeros(1))
+
+    def get_input_embeddings(self):
+        # This function does not make a lot of sense, as we combine at least 4 different types of embeddings for graph data (node, edges, features, ...)
+        return
+
+    def forward(
+        self,
+        x,
+        attn_bias,
+        in_degree,
+        out_degree,
+        spatial_pos,
+        edge_input,
+        attn_edge_type,
+        perturb=None,
+        masked_tokens=None,
+        **unused
+    ):
+        inner_states, graph_rep = self.graph_encoder(
+            x, attn_bias, in_degree, out_degree, spatial_pos, edge_input, attn_edge_type, perturb=perturb
+        )
+
+        # last inner state, then revert Batch and Graph len
+        x = inner_states[-1].transpose(0, 1)
+
+        # project masked tokens only
+        if masked_tokens is not None:
+            raise NotImplementedError
+
+        x = self.layer_norm(self.activation_fn(self.lm_head_transform_weight(x)))
+
+        # project back to size of vocabulary
+        if self.share_input_output_embed and hasattr(self.graph_encoder.embed_tokens, "weight"):
+            x = torch.nn.functional.linear(x, self.graph_encoder.embed_tokens.weight)
+
+        return x
+
+    def max_nodes(self):
+        """Maximum output length supported by the encoder."""
+        return self.max_nodes
+
+
 class GraphormerForGraphClassification(GraphormerPreTrainedModel):
     """
     This model can be used for graph-level classification or regression tasks.
@@ -729,18 +744,7 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         attn_edge_type,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        batched_data = {
-            "x": x,
-            "attn_bias": attn_bias,
-            "in_degree": in_degree,
-            "out_degree": out_degree,
-            "spatial_pos": spatial_pos,
-            "edge_input": edge_input,
-            "attn_edge_type": attn_edge_type,
-        }
-        # test : import pdb; pdb.set_trace()
-
-        outputs = self.encoder(batched_data)
+        outputs = self.encoder(x, attn_bias, in_degree, out_degree, spatial_pos, edge_input, attn_edge_type)
 
         head_outputs = self.classifier(outputs)
         logits = head_outputs[:, 0, :].contiguous()

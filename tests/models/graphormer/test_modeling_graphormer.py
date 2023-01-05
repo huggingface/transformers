@@ -21,11 +21,12 @@ from transformers import GraphormerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
     import torch
+    from torch import tensor
 
     from transformers import GraphormerForGraphClassification, GraphormerModel
     from transformers.models.graphormer.modeling_graphormer import GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -35,182 +36,203 @@ class GraphormerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        seq_length=7,
+        num_classes=2,
+        num_atoms=512 * 9,
+        num_edges=512 * 3,
+        num_in_degree=512,
+        num_out_degree=512,
+        num_spatial=512,
+        num_edge_dis=128,
+        multi_hop_max_dist=5,  # sometimes is 20
+        spatial_pos_max=1024,
+        edge_type="multi_hop",
+        init_fn=None,
+        max_nodes=512,
+        share_input_output_embed=False,
+        num_layers=12,
+        embedding_dim=768,
+        ffn_embedding_dim=768,
+        num_attention_heads=32,
+        dropout=0.1,
+        attention_dropout=0.1,
+        activation_dropout=0.1,
+        layerdrop=0.0,
+        encoder_normalize_before=False,
+        pre_layernorm=False,
+        apply_graphormer_init=False,
+        activation_fn="gelu",
+        embed_scale=None,
+        freeze_embeddings=False,
+        num_trans_layers_to_freeze=0,
+        traceable=False,
+        q_noise=0.0,
+        qn_block_size=8,
+        kdim=None,
+        vdim=None,
+        bias=True,
+        self_attention=True,
+        batch_size=10,
+        graph_size=20,
         is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
     ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
+        self.num_classes = num_classes
+        self.num_labels = num_classes
+        self.num_atoms = num_atoms
+        self.num_in_degree = num_in_degree
+        self.num_out_degree = num_out_degree
+        self.num_edges = num_edges
+        self.num_spatial = num_spatial
+        self.num_edge_dis = num_edge_dis
+        self.edge_type = edge_type
+        self.multi_hop_max_dist = multi_hop_max_dist
+        self.spatial_pos_max = spatial_pos_max
+        self.max_nodes = max_nodes
+        self.num_layers = num_layers
+        self.num_hidden_layers = num_layers
+        self.embedding_dim = embedding_dim
+        self.hidden_size = embedding_dim
+        self.ffn_embedding_dim = ffn_embedding_dim
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.layerdrop = layerdrop
+        self.encoder_normalize_before = encoder_normalize_before
+        self.pre_layernorm = pre_layernorm
+        self.apply_graphormer_init = apply_graphormer_init
+        self.activation_fn = activation_fn
+        self.embed_scale = embed_scale
+        self.freeze_embeddings = freeze_embeddings
+        self.num_trans_layers_to_freeze = num_trans_layers_to_freeze
+        self.share_input_output_embed = share_input_output_embed
+        self.traceable = traceable
+        self.q_noise = q_noise
+        self.qn_block_size = qn_block_size
+        self.init_fn = init_fn
+        self.kdim = kdim
+        self.vdim = vdim
+        self.self_attention = self_attention
+        self.bias = bias
+        self.batch_size = batch_size
+        self.graph_size = graph_size
+        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+        attn_bias = ids_tensor(
+            [self.batch_size, self.graph_size + 1, self.graph_size + 1], self.num_atoms
+        )  # Def not sure here
+        attn_edge_type = ids_tensor([self.batch_size, self.graph_size, self.graph_size, 1], self.num_edges)
+        spatial_pos = ids_tensor([self.batch_size, self.graph_size, self.graph_size], self.spatial_pos_max)
+        in_degree = ids_tensor([self.batch_size, self.graph_size], self.num_in_degree)
+        out_degree = ids_tensor([self.batch_size, self.graph_size], self.num_out_degree)
+        x = ids_tensor([self.batch_size, self.graph_size, 1], self.num_atoms)
+        edge_input = ids_tensor(
+            [self.batch_size, self.graph_size, self.graph_size, self.multi_hop_max_dist, 1], self.num_edges
+        )
+        labels = ids_tensor([self.batch_size], self.num_classes)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, x, edge_input, labels
 
     def get_config(self):
         return GraphormerConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
+            num_atoms=self.num_atoms,
+            num_in_degree=self.num_in_degree,
+            num_out_degree=self.num_out_degree,
+            num_edges=self.num_edges,
+            num_spatial=self.num_spatial,
+            num_edge_dis=self.num_edge_dis,
+            edge_type=self.edge_type,
+            multi_hop_max_dist=self.multi_hop_max_dist,
+            spatial_pos_max=self.spatial_pos_max,
+            max_nodes=self.max_nodes,
+            num_layers=self.num_layers,
+            embedding_dim=self.embedding_dim,
+            hidden_size=self.embedding_dim,
+            ffn_embedding_dim=self.ffn_embedding_dim,
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-        )
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            activation_dropout=self.activation_dropout,
+            layerdrop=self.layerdrop,
+            encoder_normalize_before=self.encoder_normalize_before,
+            pre_layernorm=self.pre_layernorm,
+            apply_graphormer_init=self.apply_graphormer_init,
+            activation_fn=self.activation_fn,
+            embed_scale=self.embed_scale,
+            freeze_embeddings=self.freeze_embeddings,
+            num_trans_layers_to_freeze=self.num_trans_layers_to_freeze,
+            share_input_output_embed=self.share_input_output_embed,
+            traceable=self.traceable,
+            q_noise=self.q_noise,
+            qn_block_size=self.qn_block_size,
+            init_fn=self.init_fn,
+            kdim=self.kdim,
+            vdim=self.vdim,
+            self_attention=self.self_attention,
+            bias=self.bias,
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, x, edge_input, labels
     ):
         model = GraphormerModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = GraphormerModel(config)
-        model.to(torch_device)
-        model.eval()
         result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            x=x,
+            attn_bias=attn_bias,
+            in_degree=in_degree,
+            out_degree=out_degree,
+            spatial_pos=spatial_pos,
+            edge_input=edge_input,
+            attn_edge_type=attn_edge_type,
+            labels=labels,
         )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result, (self.batch_size, self.graph_size, self.hidden_size))
 
     def create_and_check_for_graph_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, x, edge_input, labels
     ):
-        config.num_labels = self.num_labels
         model = GraphormerForGraphClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        result = model(
+            x=x,
+            attn_bias=attn_bias,
+            in_degree=in_degree,
+            out_degree=out_degree,
+            spatial_pos=spatial_pos,
+            edge_input=edge_input,
+            attn_edge_type=attn_edge_type,
+            labels=labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
+            attn_bias,
+            attn_edge_type,
+            spatial_pos,
+            in_degree,
+            out_degree,
+            x,
+            edge_input,
+            labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "attn_bias": attn_bias,
+            "attn_edge_type": attn_edge_type,
+            "spatial_pos": spatial_pos,
+            "in_degree": in_degree,
+            "out_degree": out_degree,
+            "x": x,
+            "edge_input": edge_input,
+            "labels": labels,
+        }
         return config, inputs_dict
 
 
@@ -231,87 +253,1176 @@ class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
+    def test_for_graph_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
-
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-
-        input_mask = None
-
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
+        self.model_tester.create_and_check_for_graph_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GraphormerModel.from_pretrained(model_name)
+            model = GraphormerForGraphClassification.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
 class GraphormerModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = GraphormerForGraphClassification.from_pretrained("graphormer-base-pcqm4mv1")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+    def test_inference_graph_classification(self):
+        model = GraphormerForGraphClassification.from_pretrained("graphormer-base-pcqm4mv2")
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        # Actual real graph data from the MUTAG dataset
+        model_input = {
+            "attn_bias": tensor(
+                [
+                    [
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    ],
+                    [
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                            float("-inf"),
+                        ],
+                    ],
+                ]
+            ),
+            "attn_edge_type": tensor(
+                [
+                    [
+                        [[0], [3], [0], [0], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [3], [0], [3], [0], [0], [0], [0], [3], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [3], [0], [3], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[3], [0], [0], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [3], [0], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [3], [0], [3], [0], [0], [0], [3], [0], [0], [0]],
+                        [[0], [0], [0], [3], [0], [0], [0], [0], [3], [0], [3], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [3], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [3], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [3], [3], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0], [0], [3], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0], [3], [3]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0]],
+                    ],
+                    [
+                        [[0], [3], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0], [0], [0], [0], [0], [0]],
+                        [[3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [3], [0], [3], [0], [0], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [3], [0], [0], [0], [3], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [3], [0], [3], [3], [0], [0], [0], [0], [0], [0]],
+                        [[3], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0], [3], [3], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [3], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                        [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
+                    ],
+                ]
+            ),
+            "spatial_pos": tensor(
+                [
+                    [
+                        [1, 2, 3, 4, 3, 2, 4, 5, 6, 5, 6, 7, 8, 7, 9, 10, 10],
+                        [2, 1, 2, 3, 4, 3, 5, 6, 5, 4, 5, 6, 7, 6, 8, 9, 9],
+                        [3, 2, 1, 2, 3, 4, 4, 5, 4, 3, 4, 5, 6, 5, 7, 8, 8],
+                        [4, 3, 2, 1, 2, 3, 3, 4, 3, 2, 3, 4, 5, 4, 6, 7, 7],
+                        [3, 4, 3, 2, 1, 2, 2, 3, 4, 3, 4, 5, 6, 5, 7, 8, 8],
+                        [2, 3, 4, 3, 2, 1, 3, 4, 5, 4, 5, 6, 7, 6, 8, 9, 9],
+                        [4, 5, 4, 3, 2, 3, 1, 2, 3, 4, 5, 6, 5, 4, 6, 7, 7],
+                        [5, 6, 5, 4, 3, 4, 2, 1, 2, 3, 4, 5, 4, 3, 5, 6, 6],
+                        [6, 5, 4, 3, 4, 5, 3, 2, 1, 2, 3, 4, 3, 2, 4, 5, 5],
+                        [5, 4, 3, 2, 3, 4, 4, 3, 2, 1, 2, 3, 4, 3, 5, 6, 6],
+                        [6, 5, 4, 3, 4, 5, 5, 4, 3, 2, 1, 2, 3, 4, 4, 5, 5],
+                        [7, 6, 5, 4, 5, 6, 6, 5, 4, 3, 2, 1, 2, 3, 3, 4, 4],
+                        [8, 7, 6, 5, 6, 7, 5, 4, 3, 4, 3, 2, 1, 2, 2, 3, 3],
+                        [7, 6, 5, 4, 5, 6, 4, 3, 2, 3, 4, 3, 2, 1, 3, 4, 4],
+                        [9, 8, 7, 6, 7, 8, 6, 5, 4, 5, 4, 3, 2, 3, 1, 2, 2],
+                        [10, 9, 8, 7, 8, 9, 7, 6, 5, 6, 5, 4, 3, 4, 2, 1, 3],
+                        [10, 9, 8, 7, 8, 9, 7, 6, 5, 6, 5, 4, 3, 4, 2, 3, 1],
+                    ],
+                    [
+                        [1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 4, 5, 5, 0, 0, 0, 0],
+                        [2, 1, 2, 3, 4, 5, 4, 3, 4, 3, 5, 6, 6, 0, 0, 0, 0],
+                        [3, 2, 1, 2, 3, 4, 3, 2, 3, 4, 4, 5, 5, 0, 0, 0, 0],
+                        [4, 3, 2, 1, 2, 3, 4, 3, 4, 5, 5, 6, 6, 0, 0, 0, 0],
+                        [5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 6, 7, 7, 0, 0, 0, 0],
+                        [6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 5, 6, 6, 0, 0, 0, 0],
+                        [5, 4, 3, 4, 3, 2, 1, 2, 3, 4, 4, 5, 5, 0, 0, 0, 0],
+                        [4, 3, 2, 3, 4, 3, 2, 1, 2, 3, 3, 4, 4, 0, 0, 0, 0],
+                        [3, 4, 3, 4, 5, 4, 3, 2, 1, 2, 2, 3, 3, 0, 0, 0, 0],
+                        [2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 3, 4, 4, 0, 0, 0, 0],
+                        [4, 5, 4, 5, 6, 5, 4, 3, 2, 3, 1, 2, 2, 0, 0, 0, 0],
+                        [5, 6, 5, 6, 7, 6, 5, 4, 3, 4, 2, 1, 3, 0, 0, 0, 0],
+                        [5, 6, 5, 6, 7, 6, 5, 4, 3, 4, 2, 3, 1, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    ],
+                ]
+            ),
+            "in_degree": tensor(
+                [
+                    [3, 3, 3, 4, 4, 3, 3, 3, 4, 4, 3, 3, 4, 3, 4, 2, 2],
+                    [3, 3, 4, 3, 3, 3, 3, 4, 4, 3, 4, 2, 2, 0, 0, 0, 0],
+                ]
+            ),
+            "out_degree": tensor(
+                [
+                    [3, 3, 3, 4, 4, 3, 3, 3, 4, 4, 3, 3, 4, 3, 4, 2, 2],
+                    [3, 3, 4, 3, 3, 3, 3, 4, 4, 3, 4, 2, 2, 0, 0, 0, 0],
+                ]
+            ),
+            "x": tensor(
+                [
+                    [[3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3]],
+                    [[3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [0], [0], [0], [0]],
+                ]
+            ),
+            "edge_input": tensor(
+                [
+                    [
+                        [
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                    ],
+                    [
+                        [
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [4]],
+                            [[4], [4], [4], [4], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[4], [4], [4], [0], [0]],
+                            [[4], [0], [0], [0], [0]],
+                            [[4], [4], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                        [
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                            [[0], [0], [0], [0], [0]],
+                        ],
+                    ],
+                ]
+            ),
+            "labels": tensor([1, 0]),
+        }
 
-        expected_shape = torch.Size((1, 6, vocab_size))
+        output = model(**model_input)["logits"]
+
+        print(output.shape)
+        print(output)
+
+        expected_shape = torch.Size(())
         self.assertEqual(output.shape, expected_shape)
 
         # TODO Replace values below with what was printed above.
