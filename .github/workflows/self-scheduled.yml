@@ -12,7 +12,7 @@ on:
       - check_example_ci
 
 env:
-  # HF_HOME: /mnt/cache
+  HF_HOME: /transformers/mycache
   TRANSFORMERS_IS_CI: yes
   #OMP_NUM_THREADS: 8
   #MKL_NUM_THREADS: 8
@@ -94,5 +94,7 @@ jobs:
         working-directory: /transformers
 #          pip install -r examples/pytorch/_tests_requirements.txt
         run: |
+          mkdir mycache
           python3 -m pytest -v examples/pytorch/test_accelerate_examples.py::ExamplesTestsNoTrainer::test_run_image_classification_no_trainer
+          ls -l mycache
 
