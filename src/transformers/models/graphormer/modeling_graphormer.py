@@ -23,7 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutputWithNoAttention, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_graphormer import GraphormerConfig
@@ -670,10 +670,6 @@ class GraphormerModel(GraphormerPreTrainedModel):
     def reset_output_layer_parameters(self):
         self.lm_output_learned_bias = nn.Parameter(torch.zeros(1))
 
-    def get_input_embeddings(self):
-        # This function does not make a lot of sense, as we combine at least 4 different types of embeddings for graph data (node, edges, features, ...)
-        return
-
     def forward(
         self,
         x,
@@ -704,7 +700,7 @@ class GraphormerModel(GraphormerPreTrainedModel):
         if self.share_input_output_embed and hasattr(self.graph_encoder.embed_tokens, "weight"):
             x = torch.nn.functional.linear(x, self.graph_encoder.embed_tokens.weight)
 
-        return x
+        return BaseModelOutputWithNoAttention(last_hidden_state=x, hidden_states=inner_states)
 
     def max_nodes(self):
         """Maximum output length supported by the encoder."""
@@ -744,7 +740,7 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         attn_edge_type,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        outputs = self.encoder(x, attn_bias, in_degree, out_degree, spatial_pos, edge_input, attn_edge_type)
+        outputs = self.encoder(x, attn_bias, in_degree, out_degree, spatial_pos, edge_input, attn_edge_type)[0]
 
         head_outputs = self.classifier(outputs)
         logits = head_outputs[:, 0, :].contiguous()
