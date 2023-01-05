@@ -5515,13 +5515,6 @@ class SpeechT5ForCTC(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SpeechT5ForPreTraining(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SpeechT5ForSpeechToText(metaclass=DummyObject):
     _backends = ["torch"]
 

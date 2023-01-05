@@ -26,7 +26,6 @@ from transformers import (
     SpeechT5Config,
     SpeechT5CTCTokenizer,
     SpeechT5ForCTC,
-    SpeechT5ForPreTraining,
     SpeechT5ForSpeechToText,
     SpeechT5ForTextToSpeech,
     SpeechT5ProcessorForSpeechToText,
@@ -351,8 +350,6 @@ def convert_speecht5_checkpoint(
         config.max_speech_positions = 1876
         config.max_text_positions = 600
         model = SpeechT5ForTextToSpeech(config)
-    elif task == "pretrain":
-        model = SpeechT5ForPreTraining(config)
     else:
         raise ValueError(f"Unknown task name: {task}")
 
@@ -394,7 +391,7 @@ if __name__ == "__main__":
         "--task",
         default="s2t",
         type=str,
-        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 't2s', 'pretrain'.",
+        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 't2s'.",
     )
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--vocab_path", default=None, type=str, help="Path to SentencePiece model")

@@ -66,21 +66,6 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 53.48
 
 
-# TODO implement this
-@dataclass
-class SpeechT5ForPreTrainingOutput(ModelOutput):
-    """
-    Output type of [`SpeechT5ForPreTraining`], with potential hidden states and attentions.
-
-    Args:
-        loss (TODO)
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -2788,56 +2773,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             return vocoder(spectrogram)
         else:
             return spectrogram
-
-
-@add_start_docstrings("""SpeechT5 Model with a TODO on top.""", SPEECHT5_START_DOCSTRING)
-class SpeechT5ForPreTraining(SpeechT5PreTrainedModel):
-    def __init__(self, config: SpeechT5Config):
-        super().__init__(config)
-        self.speecht5 = SpeechT5Model(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def freeze_feature_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        self.speecht5.encoder.prenet.freeze_feature_encoder()
-
-    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SpeechT5ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SpeechT5ForPreTrainingOutput]:
-        r"""
-        Returns:
-
-        Example: TODO
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if mask_time_indices is not None:
-            mask_time_indices = mask_time_indices.to(torch.bool)
-
-        # TODO run the model
-
-        if not return_dict:
-            return (None,)
-
-        return SpeechT5ForPreTrainingOutput(
-            loss=None,
-            hidden_states=None,
-            attentions=None,
-        )
 
 
 HIFIGAN_START_DOCSTRING = r"""
