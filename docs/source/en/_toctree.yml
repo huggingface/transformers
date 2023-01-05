@@ -73,6 +73,10 @@
       title: Image classification
     - local: tasks/semantic_segmentation
       title: Semantic segmentation
+    - local: tasks/video_classification
+      title: Video classification
+    - local: tasks/object_detection
+      title: Object detection
     title: Computer Vision
   - sections:
     - local: performance
@@ -498,6 +502,8 @@
       title: Audio models
     - isExpanded: false
       sections:
+      - local: model_doc/altclip
+        title: AltCLIP
       - local: model_doc/blip
         title: BLIP
       - local: model_doc/chinese_clip
@@ -512,6 +518,8 @@
         title: Donut
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/git
+        title: GIT
       - local: model_doc/groupvit
         title: GroupViT
       - local: model_doc/layoutlmv2
