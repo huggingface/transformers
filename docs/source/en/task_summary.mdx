@@ -12,26 +12,26 @@ specific language governing permissions and limitations under the License.
 
 # What 🤗 Transformers can do
 
-The [Transformer](https://arxiv.org/abs/1706.03762) is a uniquely flexible and powerful architecture. While the Transformer is typically associated with natural language processing tasks (initially designed for translation), other fields like computer vision and speech processing are increasingly adopting Transformer-based architectures to solve tasks in their area. If you look at a deep learning benchmark or peer under the hood of some of today's deep learning products, odds are that you'll find some variant of a Transformer in it. That is because it turns out the Transformer is a very general architecture that can be applied to a wide range of tasks as long as the inputs and outputs are formulated as a sequence!
+The [Transformer](https://arxiv.org/abs/1706.03762) is a uniquely flexible and powerful architecture. While it is typically associated with natural language processing (NLP) tasks, other fields like computer vision and speech processing are increasingly adopting Transformer architectures to solve tasks in their area. If you look at some of the underlying technology behind popular consumer products like smartphones, apps, and self-driving cars, odds are that you'll find some variant of a Transformer behind it. That is because the Transformer is a very general architecture that can be applied to many different types of tasks!
 
-This page will provide an overview of some of the different tasks in audio, computer vision, and natural language processing that can be solved by Transformer-based models and we'll show you how easy it is using 🤗 Transformers.
+This page will provide an overview of some of the different audio, computer vision, and natural language processing tasks that can be solved by Transformer models. We'll also show you how easy it is to solve these tasks with 🤗 Transformers in just three lines of code!
 
 ## Audio
 
-Classical approaches to speech and audio processing tasks typically involved Gaussian mixture models, Hidden Markov models, and recurrent neural networks (RNNs). But these have been eclipsed by more modern approaches like [sequence-to-sequence models](./glossary#sequencetosequence-seq2seq) and [connectionist temporal classification (CTC)](./glossary#connectionist-temporal-classification-ctc), which made training end-to-end audio and speech processing systems dramatically simpler and performance much better.
+Classical speech and audio processing techniques typically involved Gaussian mixture models, Hidden Markov models, and recurrent neural networks (RNNs). But these have been eclipsed by more modern approaches like [sequence-to-sequence models](./glossary#sequencetosequence-seq2seq) and [connectionist temporal classification (CTC)](./glossary#connectionist-temporal-classification-ctc), which makes training end-to-end audio and speech processing systems dramatically simpler and performance much better.
 
-With the [wav2vec2](./model_doc/wav2vec2) model, we began to see some of the first Transformer-based models for speech processing, adapting ideas that made pretrained language models like BERT so successful. For instance, wav2vec2 was pretrained on raw unlabeled speech and used a Transformer encoder to contextualize the representations. It's pretraining objective was to predict masked parts of the audio, just like the [masked language modeling](./glossary#masked-language-modeling) objective in BERT! wav2vec2 is now one of the most popular model for speech and audio tasks.
+The [wav2vec2](./model_doc/wav2vec2) model was one of the first successful Transformer-based speech processing models. It adapted some of the ideas that made pretrained language models like BERT so successful. For instance, wav2vec2 pretrained on raw unlabeled speech and used a Transformer encoder to contextualize the speech representations. Its pretraining objective was to predict masked parts of the audio, just like the [masked language modeling](./glossary#masked-language-modeling) objective in BERT!
+
+Speech and audio tasks today continue to rely on Transformer architectures, with greater emphasis being placed on models with multilingual capabilities. This makes it possible to build more robust speech processing systems that can be used across many languages and dialects, especially low-resource languages.
 
 ### Audio classification
 
-Audio classification is a broad category with many specific applications, but it is essentially the task of labeling audio from a predefined set of classes. There are many examples, some of which include:
+Audio classification is a type of task that labels audio data from a predefined set of classes. It is a broad category with many specific applications, some of which include:
 
 * acoustic scene classification: label audio with a scene label ("office", "beach", "stadium")
 * acoustic event detection: label audio with a sound event label ("car horn", "whale calling", "glass breaking")
 * tagging: label audio containing multiple sounds (birdsongs, speaker identification in a meeting)
 * music classification: label music with a genre label ("metal", "hip-hop", "country")
-
-In 🤗 Transformers, we add a sequence classification head - a linear layer over the pooled output - on top of the base audio model for these types of tasks. In practice, it is as easy as:
 
 ```py
 >>> from transformers import pipeline
@@ -42,9 +42,9 @@ In 🤗 Transformers, we add a sequence classification head - a linear layer ove
 
 ### Automatic speech recognition
 
-Automatic speech recognition (ASR) transcribes speech into text. It is one of the most common audio tasks due in part to speech being such a natural form of human communication. Today, we see ASR systems embedded in "smart" technology products like speakers, phones, and cars. We can ask our virtual assistants to play music, set reminders, and tell us the weather. But perhaps one of the key challenges Transformer-based architectures have helped is in low-resource languages. By pretraining on large amounts of labeled speech, finetuning the model on only one hour of labeled speech data in a low-resource language can still produce high-quality results compared to previous ASR systems trained on 100x more labeled data. This enables building more robust ASR systems across more languages and dialects that previously required more transcribed audio data.
+Automatic speech recognition (ASR) transcribes speech into text. It is one of the most common audio tasks due in part to speech being such a natural form of human communication. Today, ASR systems are embedded in "smart" technology products like speakers, phones, and cars. We can ask our virtual assistants to play music, set reminders, and tell us the weather. 
 
-In 🤗 Transformers, we add a language modeling head on top of the base audio model for CTC. In practice, it is as easy as:
+But one of the key challenges Transformer architectures have helped is in low-resource languages. By pretraining on large amounts of speech data, finetuning the model on only one hour of labeled speech data in a low-resource language can still produce high-quality results compared to previous ASR systems trained on 100x more labeled data.
 
 ```py
 >>> from transformers import pipeline
@@ -55,20 +55,20 @@ In 🤗 Transformers, we add a language modeling head on top of the base audio m
 
 ## Computer vision
 
-One of the first and earliest successful computer vision task was recognizing zip code numbers using a [convolutional neural network (CNN)](glossary#convolution). For many years, CNNs have become the go-to for computer vision tasks and modern CNNs like [ConvNeXT](./model_doc/convnext) continue to enjoy strong usage with competitive performance. 
+One of the first and earliest successful computer vision application was recognizing zip code numbers using a [convolutional neural network (CNN)](glossary#convolution). For many years, CNNs have become the go-to for computer vision tasks, and modern CNNs like [ConvNeXT](./model_doc/convnext) continue to see strong usage with competitive performance.
 
-However, with the introduction of [Vision Transformers (ViTs)](./model_doc/vit), many computer vision tasks have now shifted towards Transformer-based architectures. Instead of training a CNN for each imaging task, large and scalable pretrained ViTs can be used for many vision tasks. Unlike audio and NLP though, we continue to see ideas from CNNs incorporated in ViTs and hybrid convolution-Transformer architectures.
+However, with the introduction of the [Vision Transformers (ViT)](./model_doc/vit), many computer vision tasks have now shifted towards Transformer architectures. Drawing on the success of Transformers in NLP, ViT splits an image into patches and passed these to the encoder, similar to how text is tokenized. Instead of training a CNN for each type of computer vision task, a large and scalable pretrained ViT can be used for many different vision tasks. Today, it is common for other vision Transformer models to use ViT as a [backbone](.glossary#backcone).
+
+While speech and NLP tasks today mainly use Transformer models, in computer vision, convolutions are still a powerful tool for building up an understanding of an image and have not been completely replaced. There are computer vision models that combine convolutions with Transformers like [CvT](./model_doc/cvt) or use a pretrained convolutional backbone such as [DETR](./model_doc/detr).
 
 ### Image classification
 
-Image classification labels an entire image from a predefined set of classes. Typically, CNNs solved image classification tasks by building up an understanding from the low-level to high-level features of an image. ViT models on the other hand divide an image into patches and feed them as a sequence of tokens to a Transformer encoder. Like most classification tasks, there are many practical use-cases for image classification, some of which include:
+Image classification labels an entire image from a predefined set of classes. Like most classification tasks, there are many practical use cases for image classification, some of which include:
 
 * healthcare: label medical images to detect disease or monitor patient health
-* environment: label satellite images for to monitor deforestation, inform wildland management or detect wildfires
+* environment: label satellite images to monitor deforestation, inform wildland management or detect wildfires
 * agriculture: label images of crops to monitor plant health or satellite images for land use monitoring 
 * ecology: label images of animal or plant species to monitor wildlife populations or track endangered species
-
-In 🤗 Transformers, we add an image classification head - a linear layer on top of the final hidden state - on top of the base image model for these types of tasks. In practice, it is as easy as:
 
 ```py
 >>> from transformers import pipeline
@@ -79,13 +79,11 @@ In 🤗 Transformers, we add an image classification head - a linear layer on to
 
 ### Object detection
 
-Object detection identifies multiple objects within an image unlike image classification. This gives you more information about the different instances of objects in an image as well as the positions of the objects in an image (also known as the bounding box). Some examples of object detection include:
+Object detection identifies multiple objects within an image unlike image classification. This gives you more information about the different instances of objects in an image as well as the positions of the objects in an image (defined by the bounding box). Some example applications of object detection include:
 
-* self-driving: detect common traffic objects such as other vehicles, pedestrians, and traffic lights
+* self-driving vehicles: detect common traffic objects such as other vehicles, pedestrians, and traffic lights
 * remote sensing: disaster monitoring, urban planning, and weather forecasting
 * anomaly detection: detect cracks or structural damage in buildings, manufacturing defects, and cell anomalies
-
-In 🤗 Transformers, we add an object detection head on top of the base vision model. In practice, it is as easy as:
 
 ```py
 >>> from transformers import pipeline
@@ -96,12 +94,10 @@ In 🤗 Transformers, we add an object detection head on top of the base vision 
 
 ### Image segmentation
 
-Image segmentation is a pixel-level task for assigning every pixel in an image as belonging to a class. It is different from object detection, which uses bounding boxes to label and predict objects in an image, because segmentation is more granular being able to detect objects at a pixel-level. There are several types of image segmentation:
+Image segmentation is a pixel-level task that assigns every pixel in an image to a class. It is different from object detection, which uses bounding boxes to label and predict objects in an image, because segmentation is more granular. Segmentation can detect objects at a pixel-level. There are several types of image segmentation:
 
-* instance segmentation in addition to labeling the class of an object, it also labels each distinct instance of an object ("dog-1", "dog-2")
-* panoptic segmentation is a combination of semantic and instance segmentation; it labels each pixel with a semantic class **and** each distinct instance of an object
-
-In 🤗 Transformers, we add a semantic segmentation head on top of the base vision model. In practice, it is as easy as:
+* instance segmentation: in addition to labeling the class of an object, it also labels each distinct instance of an object ("dog-1", "dog-2")
+* panoptic segmentation: a combination of semantic and instance segmentation; it labels each pixel with a semantic class **and** each distinct instance of an object
 
 ```py
 >>> from transformers import pipeline
@@ -112,14 +108,12 @@ In 🤗 Transformers, we add a semantic segmentation head on top of the base vis
 
 ### Depth estimation
 
-Depth estimation predicts the distance of each pixel in an image from the camera. This type of computer vision task is especially important for scene understanding and reconstruction. For example, in self-driving cars, the vehicles need to understand how far objects like pedestrians, traffic signs, and other vehicles are to avoid obstacles and collision. Depth information is also useful for constructing 3D representations from 2D images, and can be used to create high-quality 3D representations of biological structures or buildings.
+Depth estimation predicts the distance of each pixel in an image from the camera. This type of computer vision task is especially important for scene understanding and reconstruction. For example, in self-driving cars, vehicles need to understand how far objects like pedestrians, traffic signs, and other vehicles are to avoid obstacles and collision. Depth information is also useful for constructing 3D representations from 2D images, and can be used to create high-quality 3D representations of biological structures or buildings.
 
 There are two approaches to depth estimation:
 
 * stereo: depths are estimated by comparing two images of the same image from slightly different angles
 * monocular: depths are estimated from a single image
-
-In 🤗 Transformers, we add a depth estimation head on top of the base vision model. In practice, it is as easy as:
 
 ```py
 >>> from transformers import pipeline
@@ -130,16 +124,14 @@ In 🤗 Transformers, we add a depth estimation head on top of the base vision m
 
 ## Natural language processing
 
-The Transformer was introduced in the [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762) paper for tasks such as language modeling, translation, and summarization. At the time, NLP tasks were typically solved with recurrent neural networks (RNNs), but the Transformer introduced a new architecture based entirely on attention mechanisms. The Transformer didn't only outperform previous models, it was also more efficient and faster to train! Since then, Transformer-based models have driven most of the recent progress in NLP and sparked a new wave of research in the field, especially in training large language models (LLMs).
+The Transformer was introduced in the, [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762), paper for tasks such as language modeling, translation, and summarization. At the time, NLP tasks were typically solved with long short-term memory (LSTM) networks and recurrent neural networks (RNNs). But the Transformer introduced a new architecture based entirely on self-attention mechanisms. These attention layers allows the Transformer to focus on specific words when learning the representation of each word. As a result, the Transformer didn't only outperform previous models, it was also more efficient and faster to train! Since then, Transformer models have driven most of the recent progress in NLP.
 
 ### Text classification
 
 Like classification tasks in any modality, text classification labels a sequence of text (it can be sentence-level, a paragraph or a document) from a predefined set of classes. There are many useful applications for text classification, some of which include:
 
 * sentiment analysis: label text according to some polarity like `positive` or `negative` which can inform and support decision making in fields like politics, finance, and marketing
-* content classification: label text according to some topic like `spam` for email inboxes or `weather` and `sports` which can help organize and filter information in news and social media feeds
-
-In 🤗 Transformers, we add a sequence classification head - a linear layer on top of the pooled output - on top of the base language model for these types of tasks. In practice, it is as easy as:
+* content classification: label text according to some topic to help organize and filter information in news and social media feeds (`weather`, `sports`, `finance`, etc.)
 
 ```py
 >>> from transformers import pipeline
@@ -155,8 +147,6 @@ In any NLP task, text is preprocessed by separating the sequence of text into in
 * named entity recognition (NER): label a token according to an entity category like organization, person, location or date. NER is especially popular in the biomedical domain where it can be used to label genes, proteins, and drug names.
 * part-of-speech tagging (POS): label a token according to it's part-of-speech like noun, verb or adjective. POS is useful for helping translation systems understand how two identical words are grammatically different (bank as a noun versus bank as a verb).
 
-In 🤗 Transformers, we add a token classification head - a linear layer on top of the hidden states - on top of the base language model for these types of tasks. In practice, it is as easy as:
-
 ```py
 >>> from transformers import pipeline
 
@@ -171,9 +161,7 @@ Question answering is another token-level task that returns an answer to a quest
 * extractive: given a question and some context, the answer is a span of text from the context the model must extract
 * abstractive: given a question and some context, the answer is generated from the context
 
-This type of task can be used by virtual assistants to tell you whether a restaurant is open, provide customer or technical support, and help search engines retrieve the relevant information you're looking for.
-
-In 🤗 Transformers, we add a question answering head - a linear layer on top of the hidden states - on top of the base language model for these types of tasks. In practice, it is as easy as:
+This type of task is seen whenever we ask a virtual assistants to tell us whether a restaurant is open, or it can also provide customer or technical support, and help search engines retrieve the relevant information you're asking for.
 
 ```py
 >>> from transformers import pipeline
@@ -187,14 +175,12 @@ In 🤗 Transformers, we add a question answering head - a linear layer on top o
 
 ### Summarization
 
-Summarization creates a shorter version of a text from a longer one while trying to preserve most of the meaning. There are a lot of long-form documents that could be summarizatied which would help readers quickly understand the main points of a document. Legislative bills, legal and financial documents, patents, and scientific papers are just a few examples of documents that could be summarized and save readers time. 
+Summarization creates a shorter version of a text from a longer one while trying to preserve most of the meaning of the original document. Summarization is a type of sequence-to-sequence task, it just outputs a shorter sequence of text than the input. There are a lot of long-form documents that could be summarized which would help readers quickly understand the main points. Legislative bills, legal and financial documents, patents, and scientific papers are just a few examples of documents that could be summarized to save readers time and serve as a reading aid.
 
 Like question answering, there are two types of summarization:
 
 * extractive: identify and extract the most important sentences from the original text
-* abstractive: generate the target summary (which may include new words not in the text) from the original text
-
-In 🤗 Transformers, we add a sequence-to-sequence language modeling head on top of the base language model for these types of tasks. In practice, it is as easy as:
+* abstractive: generate the target summary (which may include new words not in the input document) from the original text
 
 ```py
 >>> from transformers import pipeline
@@ -207,9 +193,9 @@ In 🤗 Transformers, we add a sequence-to-sequence language modeling head on to
 
 ### Translation
 
-Translation converts a sequence of text in one language to another. It is important for helping people from different backgrounds communicate with each other, help translate content to reach wider audiences, and it can even be used as a learning tool to help people learn a new language. Along with summarization, translation is a sequence-to-sequence task, meaning the model receives an input sequence and returns a target output sequence. In the early days, translation models were mostly monolingual but recently, there is increasing interest in multilingual models that can translate between many pairs of languages.
+Translation converts a sequence of text in one language to another. It is important for helping people from different backgrounds communicate with each other, help translate content to reach wider audiences, and it can even be used as a learning tool to help people learn a new language. Along with summarization, translation is a sequence-to-sequence task, meaning the model receives an input sequence and returns a target output sequence. 
 
-In 🤗 Transformers, we add a sequence-to-sequence language modeling head on top of the base language model for these types of tasks. In practice, it is as easy as:
+In the early days, translation models were mostly monolingual but recently, there is increasing interest in multilingual models that can translate between many pairs of languages.
 
 ```py
 >>> from transformers import pipeline
@@ -228,8 +214,6 @@ There are two types of language modeling:
 * causal: the model's objective is to predict the next token in a sequence, and future tokens are masked
 * masked: the model's objective is to predict a masked token in a sequence with full access to the tokens in the sequence
 
-In 🤗 Transformers, we add a language modeling head on top of the base language model for these types of tasks. In practice, it is as easy as:
-
 ```py
 >>> from transformers import pipeline
 # causal language modeling
@@ -244,4 +228,4 @@ In 🤗 Transformers, we add a language modeling head on top of the base languag
 >>> fill_mask(text, top_k=3)
 ```
 
-Hopefully, this has given you an overview of the different types of tasks you can solve with 🤗 Transformers! In the next section, you'll learn **how** 🤗 Transformers work to solve these tasks.
+Hopefully, this has given you some more background information about all these tasks and the practical importance of each one. The Transformer really changed the paradigm for how we approach all these different tasks and it's exciting to see how Transformer models are being used to solve problems new and old. In the next section, you'll learn **how** 🤗 Transformers work to solve these tasks.
