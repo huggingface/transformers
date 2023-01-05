@@ -220,7 +220,7 @@ class TestTrainerExt(TestCasePlus):
                 extra_args_str=extra_args,
                 do_eval=False,
                 do_predict=False,
-                n_gpus_to_use=1, # to allow deterministic fixed memory usage
+                n_gpus_to_use=1,  # to allow deterministic fixed memory usage
             )
 
             # Check metrics
