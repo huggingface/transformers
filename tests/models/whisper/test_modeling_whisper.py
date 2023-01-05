@@ -46,7 +46,7 @@ if is_torch_available():
         WhisperProcessor,
         set_seed,
     )
-    from transformers.generation.logits_process import TimeStampLogitsProcessor
+    from transformers.generation.logits_process import WhisperTimeStampLogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
 
 
@@ -1084,7 +1084,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
         model.config.forced_decoder_ids = [(1, 50259), (2, 50359), (3, 50364)]
-        timestamp_processor = [TimeStampLogitsProcessor(len(model.config.forced_decoder_ids))]
+        timestamp_processor = [WhisperTimeStampLogitsProcessor(len(model.config.forced_decoder_ids))]
         generated_ids = model.generate(input_features, max_length=448, logits_processor=timestamp_processor).to("cpu")
 
         # fmt: off

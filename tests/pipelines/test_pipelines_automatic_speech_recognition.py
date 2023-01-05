@@ -160,6 +160,19 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         ):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
+    @slow
+    @require_torch
+    def test_whisper_fp16(self):
+        if not torch.cuda.is_available():
+            self.skipTest("Cuda is necessary for this test")
+        speech_recognizer = pipeline(
+            model="openai/whisper-base",
+            device=0,
+            torch_dtype=torch.float16,
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        speech_recognizer(waveform)
+
     @require_torch
     def test_small_model_pt_seq2seq(self):
         speech_recognizer = pipeline(
@@ -170,6 +183,17 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "あл ش 湯 清 ه ܬ া लᆨしث ल eか u w 全 u"})
+
+    @require_torch
+    def test_small_model_pt_seq2seq_gen_kwargs(self):
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/tiny-random-speech-encoder-decoder",
+            framework="pt",
+        )
+
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform, max_new_tokens=10, generate_kwargs={"num_beams": 2})
+        self.assertEqual(output, {"text": "あл † γ ت ב オ 束 泣 足"})
 
     @slow
     @require_torch
@@ -280,6 +304,106 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
+
+    @slow
+    @require_torch
+    def test_whisper_timestamp_prediction(self):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        array = np.concatenate(
+            [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
+        )
+        pipe = pipeline(
+            model="openai/whisper-tiny",
+            return_timestamps=True,
+        )
+
+        output = pipe(ds[40]["audio"])
+        self.assertDictEqual(
+            output,
+            # TODO This is not great, we're missing the last segment.
+            {
+                "text": " A man said to the universe, Sir, I exist.",
+                "chunks": [{"text": " A man said to the universe,", "timestamp": (0.0, 2.48)}],
+            },
+        )
+
+        output = pipe(array, chunk_length_s=30)
+        self.assertDictEqual(
+            output,
+            {
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the"
+                    " tight-wing cloth that was the only garment you wore. The cut on his chest still dripping blood."
+                    " The ache of his overstrain dyes. Even the soaring arena around him with thousands of spectators,"
+                    " retrievalidies not worth thinking about."
+                ),
+                "chunks": [
+                    {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
+                    {
+                        "text": (
+                            " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only"
+                            " garment"
+                        ),
+                        "timestamp": (5.5, 10.24),
+                    },
+                    {"text": " you wore.", "timestamp": (10.24, 11.74)},
+                    {"text": " The cut on his chest still dripping blood.", "timestamp": (11.74, 14.88)},
+                    {"text": " The ache of his overstrain dyes.", "timestamp": (14.88, 17.6)},
+                    {
+                        "text": (
+                            " Even the soaring arena around him with thousands of spectators, retrievalidies not worth"
+                        ),
+                        "timestamp": (17.6, 23.28),
+                    },
+                    # TODO Seems like a bug, no ?
+                    {"text": " thinking about.", "timestamp": (23.28, 1026.98)},
+                ],
+            },
+        )
+
+        output = pipe(array, chunk_length_s=10)
+        self.assertDictEqual(
+            nested_simplify(output),
+            {
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Brian's body, trickling into the titling"
+                    " cloth that was the only girl. body, trickling into the titling cloth that was the only garment"
+                    " you wore. The cut on his chest still dripping blood. The ache of his overstrained eyes. in"
+                    " blood. The ache of his overstrain dyes. Even the soaring arena around him with thousands of"
+                    " spectators, or trivialities not worth thinking about. His instant panic was followed by a small"
+                    " sharp blow high on his chest."
+                ),
+                "chunks": [
+                    {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
+                    {
+                        "text": (
+                            " Sweat covered Brian's body, trickling into the titling cloth that was the only girl."
+                        ),
+                        "timestamp": (5.5, 10.0),
+                    },
+                    {
+                        "text": (
+                            " body, trickling into the titling cloth that was the only garment you wore. The cut on"
+                            " his chest"
+                        ),
+                        "timestamp": (25.0, 31.18),
+                    },
+                    {"text": " still dripping blood. The ache of his overstrained eyes.", "timestamp": (31.18, 34.82)},
+                    {
+                        "text": (
+                            " in blood. The ache of his overstrain dyes. Even the soaring arena around him with"
+                            " thousands"
+                        ),
+                        "timestamp": (50.0, 57.0),
+                    },
+                    {"text": " of spectators, or trivialities not worth thinking about.", "timestamp": (74.96, 79.76)},
+                    {
+                        "text": " His instant panic was followed by a small sharp blow high on his chest.",
+                        "timestamp": (79.76, 84.96),
+                    },
+                ],
+            },
+        )
 
     @require_torch
     @slow

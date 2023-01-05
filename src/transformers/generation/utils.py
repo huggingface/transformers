@@ -1215,7 +1215,7 @@ class GenerationMixin:
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length == 20
+        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             warnings.warn(
                 "Neither `max_length` nor `max_new_tokens` has been set, `max_length` will default to"
@@ -2024,7 +2024,7 @@ class GenerationMixin:
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
-        >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
 
         >>> input_prompt = "It might be possible to"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
@@ -2032,7 +2032,7 @@ class GenerationMixin:
         >>> # instantiate logits processors
         >>> logits_processor = LogitsProcessorList(
         ...     [
-        ...         MinLengthLogitsProcessor(10, eos_token_id=model.config.eos_token_id),
+        ...         MinLengthLogitsProcessor(10, eos_token_id=model.generation_config.eos_token_id),
         ...     ]
         ... )
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
@@ -2264,6 +2264,7 @@ class GenerationMixin:
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
         >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> model.generation_config.pad_token_id = model.config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
@@ -2271,7 +2272,7 @@ class GenerationMixin:
         >>> # instantiate logits processors
         >>> logits_processor = LogitsProcessorList(
         ...     [
-        ...         MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...         MinLengthLogitsProcessor(15, eos_token_id=model.generation_config.eos_token_id),
         ...     ]
         ... )
         >>> # instantiate logits processors

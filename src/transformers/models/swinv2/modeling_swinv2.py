@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -494,7 +493,9 @@ class Swinv2SelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # cosine attention
-        attention_scores = F.normalize(query_layer, dim=-1) @ F.normalize(key_layer, dim=-1).transpose(-2, -1)
+        attention_scores = nn.functional.normalize(query_layer, dim=-1) @ nn.functional.normalize(
+            key_layer, dim=-1
+        ).transpose(-2, -1)
         logit_scale = torch.clamp(self.logit_scale, max=math.log(1.0 / 0.01)).exp()
         attention_scores = attention_scores * logit_scale
         relative_position_bias_table = self.continuous_position_bias_mlp(self.relative_coords_table).view(
