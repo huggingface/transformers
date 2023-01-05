@@ -28,7 +28,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("graphormer", "GraphormerModel"),
         ("albert", "AlbertModel"),
         ("altclip", "AltCLIPModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
@@ -86,6 +85,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt_neox", "GPTNeoXModel"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseModel"),
         ("gptj", "GPTJModel"),
+        ("graphormer", "GraphormerModel"),
         ("groupvit", "GroupViTModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),

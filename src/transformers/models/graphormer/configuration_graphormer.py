@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Graphormer model configuration """
+""" Graphormer model configuration"""
 
 from typing import Callable
 
@@ -31,14 +31,13 @@ GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GraphormerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~GraphormerModel`].
-    It is used to instantiate an Graphormer model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the Graphormer [graphormer-base-pcqm4mv1](https://huggingface.co/graphormer-base-pcqm4mv1) architecture.
+    This is the configuration class to store the configuration of a [`~GraphormerModel`]. It is used to instantiate an
+    Graphormer model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Graphormer
+    [graphormer-base-pcqm4mv1](https://huggingface.co/graphormer-base-pcqm4mv1) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -57,7 +56,8 @@ class GraphormerConfig(PretrainedConfig):
         multi_hop_max_dist (`int`, *optional*, defaults to 20):
             Maximum distance of multi hop edges between two nodes.
         spatial_pos_max (`int`, *optional*, defaults to 1024):
-            Maximum distance between nodes in the graph attention bias matrices, used during preprocessing and collation.
+            Maximum distance between nodes in the graph attention bias matrices, used during preprocessing and
+            collation.
         edge_type (`str`, *optional*, defaults to multihop):
             Type of edge relation chosen.
         init_fn (`Callable`, *optional*, defaults to None):
@@ -77,8 +77,8 @@ class GraphormerConfig(PretrainedConfig):
         self_attention (`bool`, *optional*, defaults to `True`):
             Model is self attentive (False not implemented).
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
@@ -86,8 +86,8 @@ class GraphormerConfig(PretrainedConfig):
         activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability after activation in the FFN.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         bias (`bool`, *optional*, defaults to `True`):
             Uses bias in the attention module - unsupported at the moment.
         embed_scale(`float`, *optional*, defaults to None):
@@ -97,7 +97,8 @@ class GraphormerConfig(PretrainedConfig):
         encoder_normalize_before (`bool`, *optional*, defaults to `False`):
             Normalize features before encoding the graph.
         pre_layernorm (`bool`, *optional*, defaults to `False`):
-            Apply layernorm before self attention and the feed forward network. Without this, post layernorm will be used.
+            Apply layernorm before self attention and the feed forward network. Without this, post layernorm will be
+            used.
         apply_graphormer_init (`bool`, *optional*, defaults to `False`):
             Apply a custom graphormer initialisation to the model before training.
         freeze_embeddings (`bool`, *optional*, defaults to `False`):
@@ -105,8 +106,8 @@ class GraphormerConfig(PretrainedConfig):
         encoder_normalize_before (`bool`, *optional*, defaults to `False`):
             Apply the layer norm before each encoder block.
         q_noise (`float`, *optional*, defaults to 0.0):
-            Amount of quantization noise (see "Training with Quantization Noise for Extreme Model Compression").
-            (For more detail, see fairseq's documentation on quant_noise).
+            Amount of quantization noise (see "Training with Quantization Noise for Extreme Model Compression"). (For
+            more detail, see fairseq's documentation on quant_noise).
         qn_block_size (`int`, *optional*, defaults to 8):
             Size of the blocks for subsequent quantization with iPQ (see q_noise).
         kdim (`int`, *optional*, defaults to None):
@@ -116,7 +117,7 @@ class GraphormerConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         traceable (`bool`, *optional*, defaults to `False`):
-            Changes return value of the encoder's inner_state to stacked tensors. 
+            Changes return value of the encoder's inner_state to stacked tensors.
 
         Example:
             ```python
@@ -144,7 +145,7 @@ class GraphormerConfig(PretrainedConfig):
         num_out_degree: int = 512,
         num_spatial: int = 512,
         num_edge_dis: int = 128,
-        multi_hop_max_dist: int = 5, # sometimes is 20
+        multi_hop_max_dist: int = 5,  # sometimes is 20
         spatial_pos_max: int = 1024,
         edge_type: str = "multi_hop",
         init_fn: Callable = None,

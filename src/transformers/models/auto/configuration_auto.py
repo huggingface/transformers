@@ -29,7 +29,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("graphormer", "GraphormerConfig"),
         ("albert", "AlbertConfig"),
         ("altclip", "AltCLIPConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
@@ -87,6 +86,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gpt_neox", "GPTNeoXConfig"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseConfig"),
         ("gptj", "GPTJConfig"),
+        ("graphormer", "GraphormerConfig"),
         ("groupvit", "GroupViTConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
@@ -192,7 +192,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("graphormer", "GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -246,6 +245,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("gpt_neox", "GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt_neox_japanese", "GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("graphormer", "GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("groupvit", "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -338,7 +338,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("graphormer", "Graphormer"),
         ("albert", "ALBERT"),
         ("altclip", "AltCLIP"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
@@ -406,6 +405,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gpt_neox", "GPT NeoX"),
         ("gpt_neox_japanese", "GPT NeoX Japanese"),
         ("gptj", "GPT-J"),
+        ("graphormer", "Graphormer"),
         ("groupvit", "GroupViT"),
         ("herbert", "HerBERT"),
         ("hubert", "Hubert"),

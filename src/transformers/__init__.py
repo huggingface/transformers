@@ -948,6 +948,7 @@ else:
             "ASTPreTrainedModel",
         ]
     )
+
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",

@@ -8,6 +8,7 @@ import torch
 
 import pyximport
 
+
 pyximport.install(setup_args={"include_dirs": np.get_include()})
 from . import algos_graphormer
 
@@ -90,9 +91,7 @@ class GraphormerDataCollator:
         edge_input_size = len(features[0]["edge_input"][0][0][0])
         batch_size = len(features)
 
-        batch["attn_bias"] = torch.zeros(
-            batch_size, max_node_num + 1, max_node_num + 1, dtype=torch.float
-        ) 
+        batch["attn_bias"] = torch.zeros(batch_size, max_node_num + 1, max_node_num + 1, dtype=torch.float)
         batch["attn_edge_type"] = torch.zeros(batch_size, max_node_num, max_node_num, edge_feat_size, dtype=torch.long)
         batch["spatial_pos"] = torch.zeros(batch_size, max_node_num, max_node_num, dtype=torch.long)
         batch["in_degree"] = torch.zeros(batch_size, max_node_num, dtype=torch.long)
@@ -124,12 +123,10 @@ class GraphormerDataCollator:
         sample = features[0]["labels"]
         if len(sample) == 1:  # one task
             if isinstance(sample[0], float):  # regression
-                batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features])) 
+                batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features]))
             else:  # binary classification
-                batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features])) 
+                batch["labels"] = torch.from_numpy(np.concatenate([i["labels"] for i in features]))
         else:  # multi task classification, left to float to keep the NaNs
-            batch["labels"] = torch.from_numpy(
-                np.stack([i["labels"] for i in features], dim=0)
-            )  
+            batch["labels"] = torch.from_numpy(np.stack([i["labels"] for i in features], dim=0))
 
         return batch

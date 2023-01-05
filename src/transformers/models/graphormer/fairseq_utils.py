@@ -10,9 +10,8 @@ import torch.nn as nn
 
 def quant_noise(module, p, block_size):
     """
-    Wraps modules and applies quantization noise to the weights for
-    subsequent quantization with Iterative Product Quantization as
-    described in "Training with Quantization Noise for Extreme Model Compression"
+    Wraps modules and applies quantization noise to the weights for subsequent quantization with Iterative Product
+    Quantization as described in "Training with Quantization Noise for Extreme Model Compression"
 
     Args:
         - module: nn.Module
@@ -22,10 +21,10 @@ def quant_noise(module, p, block_size):
     Remarks:
         - Module weights must have the right sizes wrt the block size
         - Only Linear, Embedding and Conv2d modules are supported for the moment
-        - For more detail on how to quantize by blocks with convolutional weights,
-          see "And the Bit Goes Down: Revisiting the Quantization of Neural Networks"
-        - We implement the simplest form of noise here as stated in the paper
-          which consists in randomly dropping blocks
+        - For more detail on how to quantize by blocks with convolutional weights, see "And the Bit Goes Down:
+          Revisiting the Quantization of Neural Networks"
+        - We implement the simplest form of noise here as stated in the paper which consists in randomly dropping
+          blocks
     """
 
     # if no quantization noise, don't register hook
@@ -40,17 +39,13 @@ def quant_noise(module, p, block_size):
 
     # 2D matrix
     if not is_conv:
-        assert (
-            module.weight.size(1) % block_size == 0
-        ), "Input features must be a multiple of block sizes"
+        assert module.weight.size(1) % block_size == 0, "Input features must be a multiple of block sizes"
 
     # 4D matrix
     else:
         # 1x1 convolutions
         if module.kernel_size == (1, 1):
-            assert (
-                module.in_channels % block_size == 0
-            ), "Input channels must be a multiple of block sizes"
+            assert module.in_channels % block_size == 0, "Input channels must be a multiple of block sizes"
         # regular convolutions
         else:
             k = module.kernel_size[0] * module.kernel_size[1]
@@ -66,9 +61,7 @@ def quant_noise(module, p, block_size):
                 out_features = weight.size(0)
 
                 # split weight matrix into blocks and randomly drop selected blocks
-                mask = torch.zeros(
-                    in_features // block_size * out_features, device=weight.device
-                )
+                mask = torch.zeros(in_features // block_size * out_features, device=weight.device)
                 mask.bernoulli_(p)
                 mask = mask.repeat_interleave(block_size, -1).view(-1, in_features)
 
@@ -87,20 +80,12 @@ def quant_noise(module, p, block_size):
                     mask.bernoulli_(p)
                     mask = mask.repeat_interleave(block_size, -1).view(-1, in_channels)
                 else:
-                    mask = torch.zeros(
-                        weight.size(0), weight.size(1), device=weight.device
-                    )
+                    mask = torch.zeros(weight.size(0), weight.size(1), device=weight.device)
                     mask.bernoulli_(p)
-                    mask = (
-                        mask.unsqueeze(2)
-                        .unsqueeze(3)
-                        .repeat(1, 1, mod.kernel_size[0], mod.kernel_size[1])
-                    )
+                    mask = mask.unsqueeze(2).unsqueeze(3).repeat(1, 1, mod.kernel_size[0], mod.kernel_size[1])
 
             # scale weights and apply mask
-            mask = mask.to(
-                torch.bool
-            )  # x.bool() is not currently supported in TorchScript
+            mask = mask.to(torch.bool)  # x.bool() is not currently supported in TorchScript
             s = 1 / (1 - p)
             mod.weight.data = s * weight.masked_fill(mask, 0)
 
@@ -108,30 +93,21 @@ def quant_noise(module, p, block_size):
     return module
 
 
-"""
-LayerDrop as described in https://arxiv.org/abs/1909.11556.
-"""
-
-import torch
-import torch.nn as nn
-
-
 class LayerDropModuleList(nn.ModuleList):
     """
-    A LayerDrop implementation based on :class:`torch.nn.ModuleList`.
+    A LayerDrop implementation based on :class:`torch.nn.ModuleList`. LayerDrop as described in https://arxiv.org/abs/1909.11556.
 
-    We refresh the choice of which layers to drop every time we iterate
-    over the LayerDropModuleList instance. During evaluation we always
-    iterate over all layers.
+    We refresh the choice of which layers to drop every time we iterate over the LayerDropModuleList instance. During
+    evaluation we always iterate over all layers.
 
     Usage::
 
-        layers = LayerDropList(p=0.5, modules=[layer1, layer2, layer3])
-        for layer in layers:  # this might iterate over layers 1 and 3
+        layers = LayerDropList(p=0.5, modules=[layer1, layer2, layer3]) for layer in layers: # this might iterate over
+        layers 1 and 3
             x = layer(x)
-        for layer in layers:  # this might iterate over all layers
+        for layer in layers: # this might iterate over all layers
             x = layer(x)
-        for layer in layers:  # this might not iterate over any layers
+        for layer in layers: # this might not iterate over any layers
             x = layer(x)
 
     Args:

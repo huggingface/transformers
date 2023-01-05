@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Graphormer model. """
+""" PyTorch Graphormer model."""
 
 
 import math
@@ -28,6 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_graphormer import GraphormerConfig
 from .fairseq_utils import LayerDropModuleList, quant_noise
+
 
 logger = logging.get_logger(__name__)
 
@@ -77,7 +78,7 @@ class GraphNodeFeature(nn.Module):
     def forward(self, batched_data):
         n_graph, n_node = batched_data["x"].size()[:2]
 
-        node_feature = (  # node feauture + graph token
+        node_feature = (  # node feature + graph token
             self.atom_encoder(batched_data["x"]).sum(dim=-2)  # [n_graph, n_node, n_hidden]
             + self.in_degree_encoder(batched_data["in_degree"])
             + self.out_degree_encoder(batched_data["out_degree"])
@@ -183,6 +184,7 @@ class MultiheadAttention(nn.Module):
 
     See "Attention Is All You Need" for more details.
     """
+
     def __init__(self, config):
         super().__init__()
         self.embedding_dim = config.embedding_dim
@@ -201,7 +203,7 @@ class MultiheadAttention(nn.Module):
         self.self_attention = True  # config.self_attention
         if not (self.self_attention):
             raise NotImplementedError("The Graphormer model only supports self attention for now.")
-        if (self.self_attention and not self.qkv_same_dim):
+        if self.self_attention and not self.qkv_same_dim:
             raise AssertionError("Self-attention requires query, key and value to be of the same size.")
 
         self.k_proj = quant_noise(
@@ -259,18 +261,17 @@ class MultiheadAttention(nn.Module):
         """
         Args:
             key_padding_mask (Bytetorch.Tensor, optional): mask to exclude
-                keys that are pads, of shape `(batch, src_len)`, where
-                padding elements are indicated by 1s.
+                keys that are pads, of shape `(batch, src_len)`, where padding elements are indicated by 1s.
             need_weights (bool, optional): return the attention weights,
                 averaged over heads (default: False).
             attn_mask (Bytetorch.Tensor, optional): typically used to
-                implement causal attention, where the mask prevents the
-                attention from looking forward in time (default: None).
+                implement causal attention, where the mask prevents the attention from looking forward in time
+                (default: None).
             before_softmax (bool, optional): return the raw attention
                 weights and values before the attention softmax.
             need_head_weights (bool, optional): return the attention
-                weights for each head. Implies *need_weights*. Default:
-                return the average attention weights over all heads.
+                weights for each head. Implies *need_weights*. Default: return the average attention weights over all
+                heads.
         """
         if need_head_weights:
             need_weights = True
@@ -278,7 +279,10 @@ class MultiheadAttention(nn.Module):
         tgt_len, bsz, embedding_dim = query.size()
         src_len = tgt_len
         if not (embedding_dim == self.embedding_dim):
-            raise AssertionError(f"The query embedding dimension {embedding_dim} is not equal to the expected embedding_dim {self.embedding_dim}.")
+            raise AssertionError(
+                f"The query embedding dimension {embedding_dim} is not equal to the expected embedding_dim"
+                f" {self.embedding_dim}."
+            )
         if not (list(query.size()) == [tgt_len, bsz, embedding_dim]):
             raise AssertionError("Query size incorrect in Graphormer, compared to model dimensions.")
 
@@ -286,11 +290,13 @@ class MultiheadAttention(nn.Module):
             src_len, key_bsz, _ = key.size()
             if not torch.jit.is_scripting():
                 if (key_bsz != bsz) or (value is None) or not (src_len, bsz == value.shape[:2]):
-                    raise AssertionError("The batch shape does not match the key or value shapes provided to the attention.")
+                    raise AssertionError(
+                        "The batch shape does not match the key or value shapes provided to the attention."
+                    )
 
         q = self.q_proj(query)
-        k = self.k_proj(query)  
-        v = self.v_proj(query)  
+        k = self.k_proj(query)
+        v = self.v_proj(query)
 
         q *= self.scaling
 
@@ -310,7 +316,9 @@ class MultiheadAttention(nn.Module):
 
         if key_padding_mask is not None:
             if key_padding_mask.size(0) != bsz or key_padding_mask.size(1) != src_len:
-                raise AssertionError("The shape of the generated padding mask for the key does not match expected dimensions.")
+                raise AssertionError(
+                    "The shape of the generated padding mask for the key does not match expected dimensions."
+                )
         attn_weights = torch.bmm(q, k.transpose(1, 2))
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
@@ -345,10 +353,9 @@ class MultiheadAttention(nn.Module):
         if list(attn.size()) != [bsz * self.num_heads, tgt_len, self.head_dim]:
             raise AssertionError("The attention generated do not match the expected dimensions.")
 
-
         attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embedding_dim)
         attn = self.out_proj(attn)
-        
+
         attn_weights = None
         if need_weights:
             attn_weights = attn_weights_float.contiguous().view(bsz, self.num_heads, tgt_len, src_len).transpose(1, 0)
@@ -415,8 +422,8 @@ class GraphormerGraphEncoderLayer(nn.Module):
         self_attn_padding_mask: Optional[torch.Tensor] = None,
     ):
         """
-        nn.LayerNorm is applied either before or after the self-attention/ffn
-        modules similar to the original Transformer implementation.
+        nn.LayerNorm is applied either before or after the self-attention/ffn modules similar to the original
+        Transformer implementation.
         """
         residual = x
         if self.pre_layernorm:
@@ -509,7 +516,7 @@ class GraphormerGraphEncoder(nn.Module):
         # compute padding mask. This is needed for multi-head attention
         data_x = batched_data["x"]
         n_graph, n_node = data_x.size()[:2]
-        padding_mask = (data_x[:, :, 0]).eq(0)  
+        padding_mask = (data_x[:, :, 0]).eq(0)
         padding_mask_cls = torch.zeros(n_graph, 1, device=padding_mask.device, dtype=padding_mask.dtype)
         padding_mask = torch.cat((padding_mask_cls, padding_mask), dim=1)
 
@@ -564,10 +571,9 @@ class GraphormerGraphEncoder(nn.Module):
 class GraphormerModel(nn.Module):
     """The Graphormer model is a graph-encoder model.
 
-    It goes from a graph to its representation. 
-    If you want to use the model for a downstream classification task, use GraphormerForGraphClassification instead.
-    For any other downstream task, feel free to add a new class, or combine this model with a downstream model of 
-    your choice, following the example in GraphormerForGraphClassification.
+    It goes from a graph to its representation. If you want to use the model for a downstream classification task, use
+    GraphormerForGraphClassification instead. For any other downstream task, feel free to add a new class, or combine
+    this model with a downstream model of your choice, following the example in GraphormerForGraphClassification.
     """
 
     def __init__(self, config):
@@ -631,6 +637,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = GraphormerConfig
     base_model_prefix = "graphormer"
     supports_gradient_checkpointing = True
@@ -691,13 +698,16 @@ class GraphormerPreTrainedModel(PreTrainedModel):
 
 class GraphormerForGraphClassification(GraphormerPreTrainedModel):
     """
-    This model can be used for graph-level classification or regression tasks. 
+    This model can be used for graph-level classification or regression tasks.
 
-    It can be trained on 
-    - regression (by setting config.num_classes to 1); there should be one float-type label per graph 
-    - one task classification (by setting config.num_classes to the number of classes); there should be one integer label per graph
-    - binary multi-task classification (by setting config.num_classes to the number of labels); there should be a list of integer labels for each graph.
+    It can be trained on
+    - regression (by setting config.num_classes to 1); there should be one float-type label per graph
+    - one task classification (by setting config.num_classes to the number of classes); there should be one integer
+      label per graph
+    - binary multi-task classification (by setting config.num_classes to the number of labels); there should be a list
+      of integer labels for each graph.
     """
+
     def __init__(self, config):
         super().__init__(config)
         self.encoder = GraphormerModel(config)
