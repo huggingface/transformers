@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 
 from transformers import BigBirdConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -227,3 +227,15 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
             return
         else:
             super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
+
+    @is_pt_flax_cross_test
+    # due to jit compilation flax version has to use jax.random with
+    # provided PRGN key instead of np.random
+    def test_equivalence_flax_to_pt(self):
+        pass
+
+    @is_pt_flax_cross_test
+    # due to jit compilation flax version has to use jax.random with
+    # provided PRGN key instead of np.random
+    def test_equivalence_pt_to_flax(self):
+        pass
