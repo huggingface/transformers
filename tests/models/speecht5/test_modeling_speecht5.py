@@ -29,12 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_atte
 
 
 if is_torch_available():
-    from transformers import (
-        SpeechT5ForCTC,
-        SpeechT5ForSpeechToText,
-        SpeechT5ForTextToSpeech,
-        SpeechT5Model,
-    )
+    from transformers import SpeechT5ForCTC, SpeechT5ForSpeechToText, SpeechT5ForTextToSpeech, SpeechT5Model
 
 
 class SpeechT5ModelTester:

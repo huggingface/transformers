@@ -16,7 +16,6 @@
 
 import math
 import random
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -38,7 +37,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
 from ...utils import (
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -2708,7 +2706,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 spectrogram.
 
         Returns:
-            `torch.FloatTensor` of shape `(output_sequence_length, config.num_mel_bins)`: Tensor containing the
+            `torch.FloatTensor`: Tensor of shape `(output_sequence_length, config.num_mel_bins)` containing the
             predicted mel spectrogram, or a tensor with shape `(num_frames,)` containing the speech waveform.
         """
         encoder_attention_mask = torch.ones_like(input_ids)
@@ -2924,7 +2922,7 @@ class SpeechT5HiFiGAN(PreTrainedModel):
                 Tensor containing the log-mel spectrogram.
 
         Returns:
-            `torch.FloatTensor` of shape `(num_frames,)`: Tensor containing the speech waveform.
+            `torch.FloatTensor`: Tensor of shape `(num_frames,)` containing the speech waveform.
         """
         if self.config.normalize_before:
             spectrogram = (spectrogram - self.mean) / self.scale
