@@ -795,6 +795,15 @@ class GenerationMixin:
                     num_beam_groups=generation_config.num_beam_groups,
                 )
             )
+        if (
+            generation_config.encoder_repetition_penalty is not None
+            and generation_config.encoder_repetition_penalty != 1.0
+        ):
+            processors.append(
+                EncoderRepetitionPenaltyLogitsProcessor(
+                    penalty=generation_config.encoder_repetition_penalty, encoder_input_ids=encoder_input_ids
+                )
+            )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
