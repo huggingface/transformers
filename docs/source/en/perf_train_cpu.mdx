@@ -60,101 +60,21 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 
 ### Performance Examples
 
-[bert-base-cased](https://huggingface.co/bert-base-cased), [distilbert-base-uncased](https://huggingface.co/distilbert-base-uncased) and [bert-large-uncased](https://huggingface.co/bert-large-uncased) are selected as examples with different model sizes to demonstrate the BFloat16 training performance achieved by IPEX and speed-up ratio against Stock PyTorch FP32 on the 3rd Generation Xeon® Scalable Processors (Intel® Xeon® Platinum 8380H CPU). All the benchmarkings are using [IPEX CPU launcher](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/performance_tuning/launch_script.html) to set system configs to ensure a best-to-best comparison, like numactl (--node_id 0 , i.e., one socket full cores) and jemalloc (--enable_jemalloc).
+[bert-base-cased](https://huggingface.co/bert-base-cased), [distilbert-base-uncased](https://huggingface.co/distilbert-base-uncased), and [bert-large-uncased](https://huggingface.co/bert-large-uncased) are selected as examples with different model sizes to demonstrate the BFloat16 training performance achieved by IPEX and the speed-up ratio against native PyTorch Float32 on the 3rd Generation Xeon® Scalable Processors (Intel® Xeon® Platinum 8380H CPU). All the benchmarking is using [IPEX CPU launcher](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/performance_tuning/launch_script.html) to set system configs to ensure the best-to-best comparison, including numactl (--node_id 0, i.e., one socket full cores), jemalloc (--enable_jemalloc) and Intel OpenMP library.
 
 
-The examples are refering to the [Text-classification](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) (based on the script [run_glue.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py)), and SST-2, STSB and RTE are scoped from the [GLUE](https://gluebenchmark.com/) benchmark of fine-tuning the library models for sequence classification (taking samples/second as the performance metric).
+The examples are referring to the [Text-classification](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) (based on the script [run_glue.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py)), and SST-2, STSB and RTE are scoped from the [GLUE](https://gluebenchmark.com/) benchmark of fine-tuning the library models for sequence classification. Some setups for the training script are: per_device_train_batch_size is 128, max_seq_len is 128, num_train_epochs is 3 and learning_rate is 2e-5. Besides, we are taking the training samples per second as the performance metric to get the speed-up ratio of IPEX BFloat16 vs native PyTorch Float32.
 
 #### Software configuration:
-| Software | Version|
-|-------|------------------------------|
-| PyTorch  | v1.12.1+cpu  |
-| IPEX  | v1.12.100+cpu  |
-|Transformers| [main](https://github.com/huggingface/transformers/commit/0ea53822f8bdc2c0c41b45bcd04fa6c031e5e700) |
 
-#### Training configuration:
-| GLUE Task  | Setups |
-|-------|------------------------------|
-| SST-2; STS-B; RTE |per_device_train_batch_size=128 ; max_seq_len=128 ; num_train_epochs=3 ; learning_rate=2e-5|
+| Item              | Version                                                                                             |
+| :---------------: | :----------:                                                                                        |
+| PyTorch           | v1.12.1+cpu                                                                                         |
+| IPEX              | v1.12.100+cpu                                                                                       |
+|Transformers       | [main](https://github.com/huggingface/transformers/commit/0ea53822f8bdc2c0c41b45bcd04fa6c031e5e700) |
 
 #### Performance speed-up ratio:
 
-<table>
-<tbody>
-  <tr>
-    <th rowspan="2">Workload</th>
-    <th colspan="2">Training samples per second</th>
-  </tr>
-  <tr>
-    <th>Task</th>
-    <th>IPEX BFloat16  vs PT Float32</th>
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle" rowspan="10">Bert-base-cased</td>    
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle">SST-2</td>
-    <td style="text-align: center; vertical-align: middle">1.72x</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle">STS-B</td>
-    <td style="text-align: center; vertical-align: middle">1.69x</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle">RTE</td>
-    <td style="text-align: center; vertical-align: middle">1.68x</td>
-  </tr>
-</tbody>
-</table>
+<image src="https://user-images.githubusercontent.com/83276252/210765922-1649fd07-5fbd-4a94-86a0-473f011ff827.png" width="70%">
 
-<table>
-<tbody>
-  <tr>
-    <th rowspan="2">Workload</th>
-    <th colspan="2">Training samples per second</th>
-  </tr>
-  <tr>
-    <th scope="col">Task</th>
-    <th scope="col">IPEX BFloat16  vs PT Float32</th>
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle" rowspan="10">Distilbert-base-uncased</td>    
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle">SST-2</td>
-    <td style="text-align: center; vertical-align: middle">1.69x</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle">STS-B</td>
-    <td style="text-align: center; vertical-align: middle">1.69x</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle">RTE</td>
-    <td style="text-align: center; vertical-align: middle">1.67x</td>
-  </tr>
-</tbody>
-</table>
 
-<table>
-<tbody>
-  <tr>
-    <th rowspan="2">Workload</th>
-    <th colspan="2">Training samples per second</th>
-  </tr>
-  <tr>
-    <th scope="col">Task</th>
-    <th scope="col">IPEX BFloat16  vs PT Float32</th>
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle" rowspan="10">Bert-large-uncased</td>    
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle">SST-2</td>
-    <td style="text-align: center; vertical-align: middle">1.79x</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; vertical-align: middle">STS-B</td>
-    <td style="text-align: center; vertical-align: middle">1.78x</td>
-  </tr>
-</tbody>
-</table>
