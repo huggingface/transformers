@@ -647,25 +647,27 @@ class JumanppTokenizer:
         self.trim_whitespace = trim_whitespace
 
         try:
-            import pyknp
+            import rhoknp
         except ImportError:
             raise ImportError(
-                "You need to install pyknp to use JumanppTokenizer. "
-                "See https://github.com/ku-nlp/pyknp for installation."
+                "You need to install rhoknp to use JumanppTokenizer. "
+                "See https://github.com/ku-nlp/rhoknp for installation."
             )
 
-        self.juman = pyknp.Juman(jumanpp=True)
+        self.juman = rhoknp.Jumanpp()
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
         if self.normalize_text:
             text = unicodedata.normalize("NFKC", text)
 
+        text = text.strip()
+
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
 
-        for mrph in self.juman.analysis(text).mrph_list():
-            token = mrph.midasi
+        for mrph in self.juman.apply_to_sentence(text).morphemes:
+            token = mrph.text
 
             if self.do_lower_case and token not in never_split:
                 token = token.lower()

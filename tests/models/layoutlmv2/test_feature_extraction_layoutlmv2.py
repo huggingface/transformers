@@ -80,6 +80,13 @@ class LayoutLMv2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         self.assertTrue(hasattr(feature_extractor, "size"))
         self.assertTrue(hasattr(feature_extractor, "apply_ocr"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"height": 18, "width": 18})
+
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42)
+        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+
     def test_batch_feature(self):
         pass
 

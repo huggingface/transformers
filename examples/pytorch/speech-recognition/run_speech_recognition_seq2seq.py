@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.25.0.dev0")
+check_min_version("4.26.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -327,6 +327,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.train_split_name,
+            cache_dir=model_args.cache_dir,
             use_auth_token=True if model_args.use_auth_token else None,
         )
 
@@ -335,6 +336,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
+            cache_dir=model_args.cache_dir,
             use_auth_token=True if model_args.use_auth_token else None,
         )
 

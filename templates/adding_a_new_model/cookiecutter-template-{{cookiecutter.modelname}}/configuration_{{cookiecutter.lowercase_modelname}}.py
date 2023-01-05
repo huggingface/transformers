@@ -163,7 +163,6 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        is_encoder_decoder=False,
         {% else -%}
         vocab_size=50265,
         max_position_embeddings=1024,

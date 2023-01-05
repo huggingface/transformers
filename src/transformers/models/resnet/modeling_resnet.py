@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import BackboneMixin, PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -267,7 +267,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ResNetModel):
+        if isinstance(module, ResNetEncoder):
             module.gradient_checkpointing = value
 
 
@@ -431,14 +431,15 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     """,
     RESNET_START_DOCSTRING,
 )
-class ResNetBackbone(ResNetPreTrainedModel):
+class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
 
         self.stage_names = config.stage_names
-        self.resnet = ResNetModel(config)
+        self.embedder = ResNetEmbeddings(config)
+        self.encoder = ResNetEncoder(config)
 
-        self.out_features = config.out_features
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
 
         out_feature_channels = {}
         out_feature_channels["stem"] = config.embedding_size
@@ -474,18 +475,25 @@ class ResNetBackbone(ResNetPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
-        >>> model = AutoBackbone.from_pretrained("microsoft/resnet-50")
+        >>> model = AutoBackbone.from_pretrained(
+        ...     "microsoft/resnet-50", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ... )
 
         >>> inputs = processor(image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 2048, 7, 7]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.resnet(pixel_values, output_hidden_states=True, return_dict=True)
+        embedding_output = self.embedder(pixel_values)
+
+        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
 
         hidden_states = outputs.hidden_states
 
