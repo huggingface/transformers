@@ -634,8 +634,8 @@ class TFGenerationMixin:
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
             use_cache (`bool`, *optional*, defaults to `True`):
-                Whether or not the model should use the past_key_values last key/values attentions (if applicable to the model) to
-                speed up decoding.
+                Whether or not the model should use the past_key_values last key/values attentions (if applicable to
+                the model) to speed up decoding.
             seed (`List[int]`, *optional*):
                 Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
                 `seed` argument from stateless functions in `tf.random`.
