@@ -853,6 +853,7 @@ class AutoConfig:
             config_class = get_class_from_dynamic_module(
                 pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
             )
+            config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
