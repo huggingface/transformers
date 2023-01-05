@@ -1503,8 +1503,8 @@ class DetaModel(DetaPreTrainedModel):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
-        valid_height = torch.sum(~mask[:, :, 0], 1)
-        valid_width = torch.sum(~mask[:, 0, :], 1)
+        valid_height = torch.sum(mask[:, :, 0], 1)
+        valid_width = torch.sum(mask[:, 0, :], 1)
         valid_ratio_heigth = valid_height.float() / height
         valid_ratio_width = valid_width.float() / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)

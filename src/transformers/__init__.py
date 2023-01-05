@@ -881,8 +881,8 @@ try:
 except OptionalDependencyNotAvailable:
     from .utils import dummy_torchvision_objects
 
-    _import_structure["utils.dummmy_torchvision_objects"] = [
-        name for name in dir(dummmy_torchvision_objects) if not name.startswith("_")
+    _import_structure["utils.dummy_torchvision_objects"] = [
+        name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
     ]
 else:
     _import_structure["models.deta"].extend(
