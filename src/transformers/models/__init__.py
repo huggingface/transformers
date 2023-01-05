@@ -18,6 +18,7 @@
 
 from . import (
     albert,
+    altclip,
     audio_spectrogram_transformer,
     auto,
     bart,
@@ -34,6 +35,7 @@ from . import (
     bit,
     blenderbot,
     blenderbot_small,
+    blip,
     bloom,
     bort,
     byt5,
@@ -72,6 +74,7 @@ from . import (
     fnet,
     fsmt,
     funnel,
+    git,
     glpn,
     gpt2,
     gpt_neo,
@@ -137,6 +140,7 @@ from . import (
     resnet,
     retribert,
     roberta,
+    roberta_prelayernorm,
     roc_bert,
     roformer,
     segformer,

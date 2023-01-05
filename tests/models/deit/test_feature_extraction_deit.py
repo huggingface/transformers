@@ -103,6 +103,15 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
 
+    def test_feat_extract_from_dict_with_kwargs(self):
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
+        self.assertEqual(feature_extractor.size, {"height": 20, "width": 20})
+        self.assertEqual(feature_extractor.crop_size, {"height": 18, "width": 18})
+
+        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42, crop_size=84)
+        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+        self.assertEqual(feature_extractor.crop_size, {"height": 84, "width": 84})
+
     def test_batch_feature(self):
         pass
 

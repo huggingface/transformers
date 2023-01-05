@@ -35,10 +35,12 @@ PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
+    "AltRobertaModel",
     "DPRSpanPredictor",
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
+    "MT5Stack",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -112,6 +114,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
+    "TFRobertaPreLayerNormForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "TFWhisperEncoder",  # Building part of bigger (tested) model.
     "TFWhisperDecoder",  # Building part of bigger (tested) model.
@@ -120,6 +123,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
     "OPTDecoderWrapper",
     "TFSegformerDecodeHead",  # Not a regular model.
+    "AltRobertaModel",  # Building part of bigger (tested) model.
+    "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -146,6 +151,13 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "GitVisionModel",
+    "BlipForConditionalGeneration",
+    "BlipForImageTextRetrieval",
+    "BlipForQuestionAnswering",
+    "BlipVisionModel",
+    "BlipTextLMHeadModel",
+    "BlipTextModel",
     "Swin2SRForImageSuperResolution",
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
@@ -242,6 +254,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFHubertForCTC",
     "XCLIPVisionModel",
     "XCLIPTextModel",
+    "AltCLIPTextModel",
+    "AltCLIPVisionModel",
+    "AltRobertaModel",
 ]
 
 # Update this list for models that have multiple model types for the same
@@ -664,6 +679,7 @@ UNDOCUMENTED_OBJECTS = [
     "logger",  # Internal logger
     "logging",  # External module
     "requires_backends",  # Internal function
+    "AltRobertaModel",  # Internal module
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
