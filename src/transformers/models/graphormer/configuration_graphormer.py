@@ -145,7 +145,7 @@ class GraphormerConfig(PretrainedConfig):
         num_out_degree: int = 512,
         num_spatial: int = 512,
         num_edge_dis: int = 128,
-        multi_hop_max_dist: int = 20,
+        multi_hop_max_dist: int = 5, # sometimes is 20
         spatial_pos_max: int = 1024,
         edge_type: str = "multi_hop",
         init_fn: Callable = None,
