@@ -24,6 +24,8 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+from torch.autograd import Function
+from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -32,6 +34,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
+    is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
     requires_backends,
@@ -39,8 +42,9 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import logging
+from ...utils import is_ninja_available, logging
 from .configuration_deformable_detr import DeformableDetrConfig
+from .load_custom import load_cuda_kernels
 
 
 if is_vision_available():
@@ -54,6 +58,18 @@ if is_timm_available():
 
 logger = logging.get_logger(__name__)
 
+# Move this to not compile only when importing, this needs to happen later, like in __init__.
+if is_torch_cuda_available() and is_ninja_available():
+    logger.info("Loading custom CUDA kernels...")
+    try:
+        MultiScaleDeformableAttention = load_cuda_kernels()
+    except Exception as e:
+        logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+        MultiScaleDeformableAttention = None
+else:
+    MultiScaleDeformableAttention = None
+
+
 _CONFIG_FOR_DOC = "DeformableDetrConfig"
 _CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
 
@@ -61,6 +77,54 @@ DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sensetime/deformable-detr",
     # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
 ]
+
+
+class MultiScaleDeformableAttentionFunction(Function):
+    @staticmethod
+    def forward(
+        context,
+        value,
+        value_spatial_shapes,
+        value_level_start_index,
+        sampling_locations,
+        attention_weights,
+        im2col_step,
+    ):
+        context.im2col_step = im2col_step
+        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            context.im2col_step,
+        )
+        context.save_for_backward(
+            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
+        )
+        return output
+
+    @staticmethod
+    @once_differentiable
+    def backward(context, grad_output):
+        (
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+        ) = context.saved_tensors
+        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            grad_output,
+            context.im2col_step,
+        )
+
+        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
 
 @dataclass
@@ -495,7 +559,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
+    def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int, use_custom_kernel: bool):
         super().__init__()
         if embed_dim % num_heads != 0:
             raise ValueError(
@@ -516,6 +580,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         self.n_levels = n_levels
         self.n_heads = num_heads
         self.n_points = n_points
+        self.use_custom_kernel = use_custom_kernel
 
         self.sampling_offsets = nn.Linear(embed_dim, num_heads * n_levels * n_points * 2)
         self.attention_weights = nn.Linear(embed_dim, num_heads * n_levels * n_points)
@@ -599,7 +664,23 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
-        output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+        # Use custom CUDA kernel to speed up on GPU
+        if self.use_custom_kernel:
+            try:
+                output = MultiScaleDeformableAttentionFunction.apply(
+                    value,
+                    spatial_shapes,
+                    level_start_index,
+                    sampling_locations,
+                    attention_weights,
+                    self.im2col_step,
+                )
+            # Fall back to PyTorch implementation
+            except Exception:
+                output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+        else:
+            output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -731,6 +812,7 @@ class DeformableDetrEncoderLayer(nn.Module):
             num_heads=config.encoder_attention_heads,
             n_levels=config.num_feature_levels,
             n_points=config.encoder_n_points,
+            use_custom_kernel=config.use_custom_kernel,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -832,6 +914,7 @@ class DeformableDetrDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             n_levels=config.num_feature_levels,
             n_points=config.decoder_n_points,
+            use_custom_kernel=config.use_custom_kernel,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         # feedforward neural networks

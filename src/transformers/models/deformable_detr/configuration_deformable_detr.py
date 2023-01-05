@@ -116,6 +116,8 @@ class DeformableDetrConfig(PretrainedConfig):
             based on the predictions from the previous layer.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
+        use_custom_kernel (`bool`, *optional*, defaults to `False`):
+            Whether to use custom CUDA kernel to speed up inference and training on GPU.
 
     Examples:
 
@@ -177,6 +179,7 @@ class DeformableDetrConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
         focal_alpha=0.25,
+        use_custom_kernel=False,
         **kwargs
     ):
         self.num_queries = num_queries
@@ -220,6 +223,7 @@ class DeformableDetrConfig(PretrainedConfig):
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
+        self.use_custom_kernel = use_custom_kernel
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
