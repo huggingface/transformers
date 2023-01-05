@@ -96,6 +96,6 @@ jobs:
 #          pip install -r examples/pytorch/_tests_requirements.txt
         run: |
           python3 -m pytest -v examples/pytorch/test_accelerate_examples.py::ExamplesTestsNoTrainer::test_run_image_classification_no_trainer
-          ls -l mycache
-          ls -l mycache/downloads
-          ls -l mycache/hf-internal-testing___cats_vs_dogs_sample
+#          ls -l mycache
+#          ls -l mycache/downloads
+#          ls -l mycache/hf-internal-testing___cats_vs_dogs_sample
