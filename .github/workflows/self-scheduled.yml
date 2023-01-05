@@ -12,8 +12,8 @@ on:
       - check_example_ci
 
 env:
-#  HF_HOME: /transformers/mycache
-  HF_HOME: /mnt/cache
+  HF_HOME: /transformers/mycache
+#  HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   #OMP_NUM_THREADS: 8
   #MKL_NUM_THREADS: 8
@@ -96,6 +96,7 @@ jobs:
 #          pip install -r examples/pytorch/_tests_requirements.txt
         run: |
           python3 -m pytest -v examples/pytorch/test_accelerate_examples.py::ExamplesTestsNoTrainer::test_run_image_classification_no_trainer
-#          ls -l mycache
-#          ls -l mycache/downloads
-#          ls -l mycache/hf-internal-testing___cats_vs_dogs_sample
+          ls -l mycache
+          ls -l mycache/downloads
+          ls -l mycache/hf-internal-testing___cats_vs_dogs_sample
+          ls -l mycache/downloads/extracted
