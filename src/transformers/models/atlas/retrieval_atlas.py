@@ -100,7 +100,6 @@ class AtlasRetrieverIndex:
 
         for i in range(len(docs)):
             docs[i]['score'] = scores[i]
-            self.remove_ignore_ids(docs[i], ignore_ids)
                     
         print(docs)
 
