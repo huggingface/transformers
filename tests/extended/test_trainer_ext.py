@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import unittest
+from pathlib import Path
 from typing import Tuple
 from unittest.mock import patch
 
@@ -207,19 +208,14 @@ class TestTrainerExt(TestCasePlus):
         from transformers.training_args import OptimizerNames
 
         def train_and_return_metrics(optim: str) -> Tuple[int, float]:
-            from pathlib import Path
-
-            extra_args = (
-                f"--skip_memory_metrics 0 --optim {optim} --do_eval False --do_predict "
-                "False --adafactor False --log_level debug"
-            )
+            extra_args = f"--skip_memory_metrics 0"
 
             output_dir = self.run_trainer(
-                eval_steps=2,
                 max_len=128,
                 model_name=MARIAN_MODEL,
                 learning_rate=3e-4,
                 num_train_epochs=1,
+                optim=optim,
                 distributed=True,  # force run in a new process
                 extra_args_str=extra_args,
                 do_eval=False,
@@ -228,71 +224,66 @@ class TestTrainerExt(TestCasePlus):
 
             # Check metrics
             logs = TrainerState.load_from_json(Path(output_dir, "trainer_state.json")).log_history
-            gpu_peak_mem = logs[0]["train_mem_gpu_peaked_delta"]
-            gpu_alloc_mem = logs[0]["train_mem_gpu_alloc_delta"]
+            gpu_peak_mem_mb = int(logs[0]["train_mem_gpu_peaked_delta"] / 2**20)
+            gpu_alloc_mem_mb = int(logs[0]["train_mem_gpu_alloc_delta"] / 2**20)
 
             loss = logs[0]["train_loss"]
-            return gpu_peak_mem, gpu_alloc_mem, loss
+            return gpu_peak_mem_mb, gpu_alloc_mem_mb, loss
 
         gpu_peak_mem_orig, gpu_alloc_mem_orig, loss_orig = train_and_return_metrics(OptimizerNames.ADAMW_TORCH.value)
         gpu_peak_mem_bnb, gpu_alloc_mem_bnb, loss_bnb = train_and_return_metrics(OptimizerNames.ADAMW_BNB.value)
 
-        gpu_peak_mem_diff_bytes = gpu_peak_mem_orig - gpu_peak_mem_bnb
-        gpu_peak_mem_diff_percent = gpu_peak_mem_diff_bytes / gpu_peak_mem_bnb
+        gpu_alloc_mem_diff = gpu_alloc_mem_orig - gpu_alloc_mem_bnb
+        gpu_peak_mem_diff = gpu_peak_mem_orig - gpu_peak_mem_bnb
 
         gpu_total_mem_orig = gpu_peak_mem_orig + gpu_alloc_mem_orig
         gpu_total_mem_bnb = gpu_peak_mem_bnb + gpu_alloc_mem_bnb
+        gpu_total_mem_diff = gpu_total_mem_orig - gpu_total_mem_bnb
 
-        gpu_total_mem_diff_bytes = gpu_total_mem_orig - gpu_total_mem_bnb
-        gpu_total_mem_diff_percent = gpu_total_mem_diff_bytes / gpu_total_mem_bnb
+        # sshleifer/student_marian_en_ro_6_1 is 54M params, so optim memory usage:
+        # - normal 54*8=~400MB (8 bytes per param)
+        # - bnb    54*2=~100MB (2 bytes per param)
+        # thus we should expect ~300MB total memory saved.
+        # peak memory can be the same - but the total should be different by about that margin
 
         # leave this for now if CI gets very different results
-        # print(f"{gpu_alloc_mem_orig=:010d} {gpu_peak_mem_orig=:010d} {gpu_alloc_mem_orig+gpu_peak_mem_orig=:010d}" )
-        # print(f" {gpu_alloc_mem_bnb=:010d}  {gpu_peak_mem_bnb=:010d}   {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=:010d}")
-        # print(f"{gpu_peak_mem_diff_bytes=}, {gpu_peak_mem_diff_percent=}")
-        # print(f"{gpu_total_mem_orig=}, {gpu_total_mem_bnb=}")
-        # print(f"{gpu_total_mem_diff_bytes=}, {gpu_total_mem_diff_percent=}")
+        print(f"{gpu_alloc_mem_orig=}MB {gpu_peak_mem_orig=}MB {gpu_alloc_mem_orig+gpu_peak_mem_orig=}MB")
+        print(f" {gpu_alloc_mem_bnb=}MB  {gpu_peak_mem_bnb=} MB  {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=}MB")
+        print(f"{gpu_alloc_mem_diff=}MB")
+        print(f"{gpu_peak_mem_diff=}MB")
+        print(f"{gpu_total_mem_orig=}MB, {gpu_total_mem_bnb=}MB")
+        print(f"{gpu_total_mem_diff=}MB, {gpu_total_mem_diff=}MB")
 
         self.assertGreater(
-            gpu_peak_mem_diff_percent,
-            10,  # basically a huge difference - got ~30x on my desktop
-            "should use very little peak gpu memory with BNB, compared to without it"
-            f"but got gpu_peak_mem_orig={gpu_peak_mem_orig} and gpu_peak_mem_bnb={gpu_peak_mem_bnb}",
+            gpu_alloc_mem_diff,
+            100,
+            "should use <200MB less alloc gpu memory with BNB, compared to without it for this modelbut got"
+            f" difference of {gpu_alloc_mem_diff}MB, with gpu_alloc_mem_orig={gpu_alloc_mem_orig}MB and"
+            f" gpu_alloc_mem_bnb={gpu_alloc_mem_bnb}MB",
         )
 
         self.assertGreater(
-            gpu_total_mem_diff_percent,
-            0.20,  # could easily be 0.50, but let's stay on the safe side
-            "Using BNB should use less total GPU memory than without it"
-            f"but got gpu_total_mem_orig={gpu_total_mem_orig} and gpu_total_mem_bnb={gpu_total_mem_bnb}",
+            gpu_total_mem_diff,
+            100,
+            "should use <200MB less alloc gpu memory with BNB, compared to without it for this modelbut got"
+            f" difference of {gpu_total_mem_diff}MB, with gpu_alloc_mem_orig={gpu_total_mem_orig}MB and"
+            f" gpu_alloc_mem_bnb={gpu_total_mem_bnb}MB",
         )
 
         self.assertEqual(
             loss_orig, loss_bnb, f"loss should be the same, but got loss_orig={loss_orig}, loss_bnb={loss_bnb}"
         )
 
-        # Additionally let's test that the absolute gpu memory difference is larger or about the
-        # same as the expected saving coming from BNB (6 bytes per param)
-        model = AutoModel.from_pretrained(MARIAN_MODEL)
-        total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        bnb_saved_bytes = total_numel * 6  # 324MB
-
-        self.assertGreater(
-            gpu_total_mem_diff_bytes,
-            bnb_saved_bytes * 0.8,  # add a safety margin, if it saved slightly less
-            f"BNB should have saved about {bnb_saved_bytes} bytes, but the saved bytes were"
-            f" {gpu_total_mem_diff_bytes}",
-        )
-
     def run_trainer(
         self,
-        eval_steps: int,
         max_len: int,
         model_name: str,
         num_train_epochs: int,
         learning_rate: float = 3e-3,
+        optim: str = "adafactor",
         distributed: bool = False,
         extra_args_str: str = None,
+        eval_steps: int = 0,
         predict_with_generate: bool = True,
         do_train: bool = True,
         do_eval: bool = True,
@@ -320,10 +311,9 @@ class TestTrainerExt(TestCasePlus):
             --save_steps {str(eval_steps)}
             --group_by_length
             --label_smoothing_factor 0.1
-            --adafactor
             --target_lang ro_RO
             --source_lang en_XX
-        """
+        """.split()
 
         args_eval = f"""
             --do_eval
@@ -332,13 +322,13 @@ class TestTrainerExt(TestCasePlus):
             --val_max_target_length {max_len}
             --evaluation_strategy steps
             --eval_steps {str(eval_steps)}
-        """
+        """.split()
 
         args_predict = """
             --do_predict
-        """
+        """.split()
 
-        args = ""
+        args = []
         if do_train:
             args += args_train
 
@@ -349,12 +339,16 @@ class TestTrainerExt(TestCasePlus):
             args += args_predict
 
         if predict_with_generate:
-            args += "--predict_with_generate"
+            args += "--predict_with_generate".split()
 
-        args = args.split()
+        if do_train:
+            if optim == "adafactor":
+                args += "--adafactor".split()
+            else:
+                args += f"--optim {optim}".split()
 
         if extra_args_str is not None:
-            args.extend(extra_args_str.split())
+            args += extra_args_str.split()
 
         if distributed:
             n_gpu = get_gpu_count()
