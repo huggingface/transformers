@@ -43,25 +43,25 @@ class GraphormerConfig(PretrainedConfig):
 
     Args:
         num_classes (`int`, *optional*, defaults to 2):
-            Number of target classes or labels.
+            Number of target classes or labels, set to 1 if the task is a regression task.
         num_atoms (`int`, *optional*, defaults to 512*9):
-            Number of nodes.
-        num_classes (`int`, *optional*, defaults to 512*3):
-            Number of edges.
+            Number of node types in the graphs.
+        num_edges (`int`, *optional*, defaults to 512*3):
+            Number of edges types in the graph.
         num_in_degree (`int`, *optional*, defaults to 512):
-            Number of in degrees.
+            Number of in degrees types in the input graphs.
         num_out_degree (`int`, *optional*, defaults to 512):
-            Number of out degrees.
+            Number of out degrees types in the input graphs.
         num_edge_dis (`int`, *optional*, defaults to 128):
-            Edge distance between nodes.
+            Number of edge dis in the input graphs.
         multi_hop_max_dist (`int`, *optional*, defaults to 20):
-            Maximum distance between two nodes (in hops).
+            Maximum distance of multi hop edges between two nodes.
         spatial_pos_max (`int`, *optional*, defaults to 1024):
-            TODO!!!
+            Maximum distance between nodes in the graph attention bias matrices, used during preprocessing and collation.
         edge_type (`str`, *optional*, defaults to multihop):
-            Type of edge relation.
+            Type of edge relation chosen.
         init_fn (`Callable`, *optional*, defaults to None):
-            Function to use for initialisation of layer TODO.
+            Custom function to use for initialisation of the GraphormerGraphEncoderLayer if needed.
         max_nodes (`int`, *optional*, defaults to 512):
             Maximum number of nodes which can be parsed for the input graphs.
         share_input_output_embed (`bool`, *optional*, defaults to `False`):
@@ -82,52 +82,51 @@ class GraphormerConfig(PretrainedConfig):
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
+            The dropout probability for the attention weights.
         activation_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for activations inside the fully connected layer.
+            The dropout probability after activation in the FFN.
         layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see
             https://arxiv.org/abs/1909.11556) for more details.
         bias (`bool`, *optional*, defaults to `True`):
-            Uses bias in the attention module - unsupported at the moment
+            Uses bias in the attention module - unsupported at the moment.
         embed_scale(`float`, *optional*, defaults to None):
-            TODO
+            Scaling factor for the node embeddings.
         num_trans_layers_to_freeze (`int`, *optional*, defaults to 0):
-            Number of transformer layers to freeze
+            Number of transformer layers to freeze.
         encoder_normalize_before (`bool`, *optional*, defaults to `False`):
             Normalize features before encoding the graph.
         pre_layernorm (`bool`, *optional*, defaults to `False`):
-            Normalize layer before. # todo
+            Apply layernorm before self attention and the feed forward network. Without this, post layernorm will be used.
         apply_graphormer_init (`bool`, *optional*, defaults to `False`):
-            Apply a graphormer initialisation to the model before training.
+            Apply a custom graphormer initialisation to the model before training.
         freeze_embeddings (`bool`, *optional*, defaults to `False`):
             Freeze the embedding layer, or train it along the model.
         encoder_normalize_before (`bool`, *optional*, defaults to `False`):
-            Normalize features before encoding the graph.
+            Apply the layer norm before each encoder block.
         q_noise (`float`, *optional*, defaults to 0.0):
-            Noise.
+            Amount of quantization noise (see "Training with Quantization Noise for Extreme Model Compression").
+            (For more detail, see fairseq's documentation on quant_noise).
         qn_block_size (`int`, *optional*, defaults to 8):
-            Block size.
+            Size of the blocks for subsequent quantization with iPQ (see q_noise).
         kdim (`int`, *optional*, defaults to None):
-            Dimension of the key in the attention, if different from the other values
+            Dimension of the key in the attention, if different from the other values.
         vdim (`int`, *optional*, defaults to None):
-            Dimension of the value in the attention, if different from the other values
+            Dimension of the value in the attention, if different from the other values.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        export (`bool`, *optional*, defaults to `False`):
-            TODO
         traceable (`bool`, *optional*, defaults to `False`):
-            TODO
+            Changes return value of the encoder's inner_state to stacked tensors. 
 
         Example:
             ```python
-            >>> from transformers import GraphormerModel, GraphormerConfig
+            >>> from transformers import GraphormerForGraphClassification, GraphormerConfig
 
-            >>> # Initializing a Graphormer graphormer-base-pcqm4mv1 style configuration
+            >>> # Initializing a Graphormer graphormer-base-pcqm4mv2 style configuration
             >>> configuration = GraphormerConfig()
 
             >>> # Initializing a model from the graphormer-base-pcqm4mv1 style configuration
-            >>> model = GraphormerModel(configuration)
+            >>> model = GraphormerForGraphClassification(configuration)
 
             >>> # Accessing the model configuration
             >>> configuration = model.config
@@ -166,7 +165,6 @@ class GraphormerConfig(PretrainedConfig):
         embed_scale: float = None,
         freeze_embeddings: bool = False,
         num_trans_layers_to_freeze: int = 0,
-        export: bool = False,
         traceable: bool = False,
         q_noise: float = 0.0,
         qn_block_size: int = 8,
@@ -205,7 +203,6 @@ class GraphormerConfig(PretrainedConfig):
         self.embed_scale = embed_scale
         self.freeze_embeddings = freeze_embeddings
         self.num_trans_layers_to_freeze = num_trans_layers_to_freeze
-        self.export = export
         self.share_input_output_embed = share_input_output_embed
         self.traceable = traceable
         self.q_noise = q_noise
