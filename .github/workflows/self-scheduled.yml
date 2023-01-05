@@ -94,7 +94,6 @@ jobs:
         working-directory: /transformers
 #          pip install -r examples/pytorch/_tests_requirements.txt
         run: |
-          mkdir mycache
           python3 -m pytest -v examples/pytorch/test_accelerate_examples.py::ExamplesTestsNoTrainer::test_run_image_classification_no_trainer
           ls -l mycache
 
