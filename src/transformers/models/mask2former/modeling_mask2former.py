@@ -24,7 +24,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from transformers import AutoBackbone
+from transformers import AutoBackbone, MaskFormerSwinConfig
 from transformers.utils import logging
 
 from ...activations import ACT2FN
@@ -1396,7 +1396,9 @@ class Mask2FormerPixelLevelModule(nn.Module):
         """
         super().__init__()
 
-        self.encoder = AutoBackbone.from_config(config.backbone_config)
+        backbone_config = MaskFormerSwinConfig.from_dict(config.backbone_config.to_dict())
+        self.encoder = AutoBackbone.from_config(backbone_config)
+
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:

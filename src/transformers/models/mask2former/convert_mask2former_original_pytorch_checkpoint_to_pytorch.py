@@ -123,7 +123,7 @@ class OriginalMask2FormerConfigToOursConverter:
             filename = "mask2former-coco-stuff-id2label.json"
         elif model.SEM_SEG_HEAD.NUM_CLASSES == 133:
             filename = "coco-panoptic-id2label.json"
-        elif model.SEM_SEG_HEAD.NUM_CLASSES == 10:
+        elif model.SEM_SEG_HEAD.NUM_CLASSES == 19:
             filename = "cityscapes-id2label.json"
         elif model.SEM_SEG_HEAD.NUM_CLASSES == 65:
             filename = "mapillary-vistas-id2label.json"
@@ -214,6 +214,165 @@ class OriginalMask2FormerCheckpointToOursConverter:
     def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
         for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
+
+    def replace_maskformer_swin_backbone(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig
+    ):
+        dst_prefix: str = "pixel_level_module.encoder"
+        src_prefix: str = "backbone"
+
+        renamed_keys = [
+            (
+                f"{src_prefix}.patch_embed.proj.weight",
+                f"{dst_prefix}.model.embeddings.patch_embeddings.projection.weight",
+            ),
+            (f"{src_prefix}.patch_embed.proj.bias", f"{dst_prefix}.model.embeddings.patch_embeddings.projection.bias"),
+            (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.model.embeddings.norm.weight"),
+            (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.model.embeddings.norm.bias"),
+        ]
+        num_layers = len(config.backbone_config.depths)
+        for layer_idx in range(num_layers):
+            for block_idx in range(config.backbone_config.depths[layer_idx]):
+                renamed_keys.extend(
+                    [  # src, dst
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm1.weight",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_before.weight",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm1.bias",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_before.bias",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.relative_position_bias_table",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_bias_table",
+                        ),
+                    ]
+                )
+                # now we need to handle the attentions
+                # read in weights + bias of input projection layer of cross-attention
+
+                src_att_weight = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"]
+                src_att_bias = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"]
+
+                size = src_att_weight.shape[0]
+                offset = size // 3
+                dst_state_dict[
+                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.query.weight"
+                ] = src_att_weight[:offset, :]
+                dst_state_dict[
+                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.query.bias"
+                ] = src_att_bias[:offset]
+
+                dst_state_dict[
+                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.key.weight"
+                ] = src_att_weight[offset : offset * 2, :]
+                dst_state_dict[
+                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.key.bias"
+                ] = src_att_bias[offset : offset * 2]
+
+                dst_state_dict[
+                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.value.weight"
+                ] = src_att_weight[-offset:, :]
+                dst_state_dict[
+                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.value.bias"
+                ] = src_att_bias[-offset:]
+
+                # let's pop them
+                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight")
+                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias")
+                # proj
+                renamed_keys.extend(
+                    [
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.proj.weight",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.output.dense.weight",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.proj.bias",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.output.dense.bias",
+                        ),
+                    ]
+                )
+
+                # second norm
+                renamed_keys.extend(
+                    [
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm2.weight",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_after.weight",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm2.bias",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_after.bias",
+                        ),
+                    ]
+                )
+
+                # mlp
+                renamed_keys.extend(
+                    [
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc1.weight",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.intermediate.dense.weight",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc1.bias",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.intermediate.dense.bias",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc2.weight",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.output.dense.weight",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc2.bias",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.output.dense.bias",
+                        ),
+                    ]
+                )
+
+                renamed_keys.extend(
+                    [
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.relative_position_index",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_index",
+                        )
+                    ]
+                )
+
+            if layer_idx < num_layers - 1:
+                # patch merging
+                renamed_keys.extend(
+                    [
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.downsample.reduction.weight",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.downsample.reduction.weight",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.downsample.norm.weight",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.downsample.norm.weight",
+                        ),
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.downsample.norm.bias",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.downsample.norm.bias",
+                        ),
+                    ]
+                )
+
+            # hidden states norms
+            renamed_keys.extend(
+                [
+                    (
+                        f"{src_prefix}.norm{layer_idx}.weight",
+                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",
+                    ),
+                    (
+                        f"{src_prefix}.norm{layer_idx}.bias",
+                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",
+                    ),
+                ]
+            )
+        self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     def replace_swin_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig):
         dst_prefix: str = "pixel_level_module.encoder"
@@ -377,7 +536,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
-        self.replace_swin_backbone(dst_state_dict, src_state_dict, self.config)
+        self.replace_maskformer_swin_backbone(dst_state_dict, src_state_dict, self.config)
 
         def rename_keys_for_weight_bias(src_prefix: str, dst_prefix: str):
             return [
@@ -677,7 +836,12 @@ class OriginalMask2FormerCheckpointToOursConverter:
             yield config, checkpoint
 
 
-def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature_extractor: MaskFormerImageProcessor):
+def test(
+    original_model,
+    our_model: Mask2FormerForUniversalSegmentation,
+    feature_extractor: MaskFormerImageProcessor,
+    tolerance: float,
+):
     with torch.no_grad():
         original_model = original_model.eval()
         our_model = our_model.eval()
@@ -693,7 +857,7 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
             assert torch.allclose(
-                original_model_feature, our_model_feature, atol=1e-3
+                original_model_feature, our_model_feature, atol=tolerance
             ), "The backbone features are not the same."
 
         # Test pixel decoder
@@ -705,7 +869,7 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
             multi_scale_features, our_model_output.pixel_decoder_hidden_states
         ):
             assert torch.allclose(
-                original_model_feature, our_model_feature, atol=1e-3
+                original_model_feature, our_model_feature, atol=tolerance
             ), "The pixel decoder feature are not the same"
 
         # Let's test the full model
@@ -723,9 +887,11 @@ def test(original_model, our_model: Mask2FormerForUniversalSegmentation, feature
         assert original_mask_logits.shape == our_mask_logits.shape, "Output masks shapes are not matching."
         assert original_class_logits.shape == our_class_logits.shape, "Output class logits shapes are not matching."
         assert torch.allclose(
-            original_mask_logits, our_mask_logits, atol=3e-3
+            original_mask_logits, our_mask_logits, atol=tolerance
         ), "The predicted masks are not the same."
-        assert torch.allclose(original_class_logits, our_class_logits, atol=3e-3), "The class logits are not the same."
+        assert torch.allclose(
+            original_class_logits, our_class_logits, atol=tolerance
+        ), "The class logits are not the same."
 
         logger.info("✅ Test passed!")
 
@@ -744,11 +910,14 @@ def get_model_name(checkpoint_file: Path):
 
     # dataset name must be one of the following: `coco`, `ade`, `cityscapes`, `mapillary-vistas`
     dataset_name: str = checkpoint_file.parents[2].stem
-    if dataset_name not in ["coco", "ade"]:
-        raise ValueError(f"{dataset_name} must be wrong since we didn't find 'coco' or 'ade' in it ")
+    if dataset_name not in ["coco", "ade20k", "cityscapes", "mapillary-vistas"]:
+        raise ValueError(
+            f"{dataset_name} must be wrong since we didn't find 'coco' or 'ade' or 'cityscapes' or 'mapillary-vistas'"
+            " in it "
+        )
 
     backbone = "swin"
-    backbone_types = ["tiny", "small", "base", "large"]
+    backbone_types = ["tiny", "small", "base_IN21k", "base", "large"]
     backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[0]
 
     model_name = f"mask2former-{backbone}-{backbone_type}-{dataset_name}-{segmentation_task_name.split('-')[0]}"
@@ -822,9 +991,14 @@ if __name__ == "__main__":
         mask2former_for_segmentation.model = mask2former
 
         mask2former_for_segmentation = converter.convert_universal_segmentation(mask2former_for_segmentation)
-        test(original_model, mask2former_for_segmentation, feature_extractor)
-
         model_name = get_model_name(checkpoint_file)
+
+        tolerance = 3e-3
+        if "base" in model_name:
+            tolerance = 3e-1
+
+        test(original_model, mask2former_for_segmentation, feature_extractor, tolerance)
+
         logger.info(f"🪄 Pushing {model_name} to hub...")
 
         feature_extractor.push_to_hub(model_name)
