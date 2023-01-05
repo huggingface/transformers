@@ -353,7 +353,7 @@ def sortish_sampler_indices(data: List, bs: int, shuffle=True) -> np.array:
     ck_idx = [sort_idx[i : i + sz] for i in range(0, len(sort_idx), sz)]
     max_ck = np.argmax([key_fn(ck[0]) for ck in ck_idx])  # find the chunk with the largest key,
     ck_idx[0], ck_idx[max_ck] = ck_idx[max_ck], ck_idx[0]  # then make sure it goes first.
-    sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
+    sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=int)
     sort_idx = np.concatenate((ck_idx[0], sort_idx))
     return sort_idx
 
