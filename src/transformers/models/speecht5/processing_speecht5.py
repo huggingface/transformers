@@ -147,8 +147,8 @@ class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SpeechT5Tokenizer's
-        [`~SpeechT5Tokenizer.__call__`] and returns its output.
+        This method forwards all its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.__call__`] and returns its
+        output.
 
         You can process your labels by using the argument `audio` (either in the same call as your text inputs, or in a
         separate call). This forwards its arguments to SpeechT5SpectrogramFeatureExtractor's
