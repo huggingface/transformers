@@ -1623,7 +1623,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         attention_mask = jnp.ones_like(input_ids)
         head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
-        # indices_prng_key = jnp.zeros(2, dtype=jnp.uint32)
         indices_prng_key = jax.random.PRNGKey(0)
 
         params_rng, dropout_rng = jax.random.split(rng)
@@ -1734,7 +1733,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
 
         if indices_prng_key is None:
             indices_prng_key = jax.random.PRNGKey(0)
-            # indices_prng_key = jnp.zeros(2, dtype=jnp.uint32)
 
         # Handle any PRNG if needed
         rngs = {}
@@ -1760,7 +1758,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 token_type_ids=jnp.array(token_type_ids, dtype="i4"),
                 position_ids=jnp.array(position_ids, dtype="i4"),
                 head_mask=jnp.array(head_mask, dtype="i4"),
-                # TOdO: change that
                 indices_prng_key=jnp.array(indices_prng_key, dtype="u4"),
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
@@ -1787,7 +1784,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 jnp.array(input_ids, dtype="i4"),
                 jnp.array(attention_mask, dtype="i4"),
                 token_type_ids=jnp.array(token_type_ids, dtype="i4"),
-                # TODO: change that
                 indices_prng_key=jnp.array(indices_prng_key, dtype="u4"),
                 position_ids=jnp.array(position_ids, dtype="i4"),
                 head_mask=jnp.array(head_mask, dtype="i4"),
@@ -2473,7 +2469,6 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             question_lengths = jnp.expand_dims(question_lengths, axis=1)
 
         if indices_prng_key is None:
-            # indices_prng_key = jnp.zeros(2, dtype=jnp.uint32)
             indices_prng_key = jax.random.PRNGKey(0)
 
         seqlen = input_ids.shape[1]
@@ -2502,7 +2497,6 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             token_type_ids,
             jnp.array(position_ids, dtype="i4"),
             jnp.array(head_mask, dtype="i4"),
-            # TODO: change
             jnp.array(indices_prng_key, dtype="u4"),
             logits_mask,
             not train,
