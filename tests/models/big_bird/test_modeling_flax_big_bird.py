@@ -177,7 +177,7 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_no_automatic_init(self):
         super().test_no_automatic_init()
 
-    # @slow
+    @slow
     # copied from `test_modeling_flax_common` because it takes much longer than other models
     def test_hidden_states_output(self):
         super().test_hidden_states_output()
