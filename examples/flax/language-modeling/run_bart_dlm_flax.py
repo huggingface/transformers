@@ -685,8 +685,7 @@ def main():
     state = train_state.TrainState.create(apply_fn=model.__call__, params=model.params, tx=optimizer)
 
     # Create parallel version of the train step
-    p_train_step = jax.pmap(
-        get_train_step_fn(linear_decay_lr_schedule_fn), "batch", donate_argnums=(0,))
+    p_train_step = jax.pmap(get_train_step_fn(linear_decay_lr_schedule_fn), "batch", donate_argnums=(0,))
 
     p_eval_step = jax.pmap(get_eval_step_fn(model), "batch", donate_argnums=(0,))
 
