@@ -127,8 +127,14 @@ class FlaxBigBirdModelTester(unittest.TestCase):
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
+        indices_prng_key = jax.random.PRNGKey(5)
         config, input_ids, token_type_ids, attention_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": attention_mask,
+            "indices_prng_key": indices_prng_key,
+        }
         return config, inputs_dict
 
 
@@ -171,7 +177,7 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_no_automatic_init(self):
         super().test_no_automatic_init()
 
-    @slow
+    # @slow
     # copied from `test_modeling_flax_common` because it takes much longer than other models
     def test_hidden_states_output(self):
         super().test_hidden_states_output()

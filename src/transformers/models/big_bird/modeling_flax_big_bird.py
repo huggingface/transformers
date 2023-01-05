@@ -240,7 +240,6 @@ class FlaxBigBirdEmbeddings(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfAttention with Bert->BigBird
 class FlaxBigBirdSelfAttention(nn.Module):
     config: BigBirdConfig
     causal: bool = False
@@ -447,6 +446,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
+        indices_prng_key,
         deterministic=True,
         output_attentions=False,
     ):
@@ -472,6 +472,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             blocked_encoder_mask,
             n_heads,
             head_size,
+            indices_prng_key=indices_prng_key,
             plan_from_length=None,
             plan_num_rand_blocks=None,
             output_attentions=output_attentions,
@@ -531,6 +532,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         to_blocked_mask,
         n_heads,
         head_size,
+        indices_prng_key,
         plan_from_length=None,
         plan_num_rand_blocks=None,
         output_attentions=None,
@@ -579,7 +581,13 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             max_seqlen = self.config.max_position_embeddings
             rand_attn = [
                 self._bigbird_block_rand_mask(
-                    max_seqlen, max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
+                    max_seqlen,
+                    max_seqlen,
+                    from_block_size,
+                    to_block_size,
+                    n_rand_blocks,
+                    indices_prng_key,
+                    last_idx=1024,
                 )[: (from_seq_len // from_block_size - 2)]
                 for _ in range(n_heads)
             ]
@@ -597,6 +605,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                 num_heads=n_heads,
                 plan_from_length=plan_from_length,
                 plan_num_rand_blocks=plan_num_rand_blocks,
+                indices_prng_key=indices_prng_key,
             )
 
         rand_attn = jnp.stack(rand_attn, axis=0)
@@ -945,7 +954,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
 
     @staticmethod
     def _bigbird_block_rand_mask(
-        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
+        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, indices_prng_key, last_idx=-1
     ):
         """
         Create adjacency list of random attention.
@@ -978,24 +987,24 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             start = i - 2
             end = i
             if i == 1:
-                rand_attn[i - 1, :] = np.random.permutation(middle_seq[2:last])[:r]
+                rand_attn[i - 1, :] = jax.random.permutation(middle_seq[2:last], key=indices_prng_key)[:r]
             elif i == 2:
-                rand_attn[i - 1, :] = np.random.permutation(middle_seq[3:last])[:r]
+                rand_attn[i - 1, :] = jax.random.permutation(middle_seq[3:last], key=indices_prng_key)[:r]
             elif i == from_seq_length // from_block_size - 3:
-                rand_attn[i - 1, :] = np.random.permutation(middle_seq[:last])[:r]
+                rand_attn[i - 1, :] = jax.random.permutation(middle_seq[:last], key=indices_prng_key)[:r]
             # Missing -3: should have been sliced till last-3
             elif i == from_seq_length // from_block_size - 2:
-                rand_attn[i - 1, :] = np.random.permutation(middle_seq[:last])[:r]
+                rand_attn[i - 1, :] = jax.random.permutation(middle_seq[:last], key=indices_prng_key)[:r]
             # Missing -4: should have been sliced till last-4
             else:
                 if start > last:
                     start = last
-                    rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
+                    rand_attn[i - 1, :] = jax.random.permutation(middle_seq[:start])[:r]
                 elif (end + 1) == last:
-                    rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
+                    rand_attn[i - 1, :] = jax.random.permutation(middle_seq[:start])[:r]
                 else:
-                    rand_attn[i - 1, :] = np.random.permutation(
-                        np.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
+                    rand_attn[i - 1, :] = jax.random.permutation(
+                        np.concatenate((middle_seq[:start], middle_seq[end + 1 : last])), key=indices_prng_key
                     )[:r]
         return rand_attn
 
@@ -1008,6 +1017,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         num_heads,
         plan_from_length,
         plan_num_rand_blocks,
+        indices_prng_key,
         window_block_left=1,
         window_block_right=1,
         global_block_top=1,
@@ -1080,6 +1090,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                                 window_block_right=window_block_right,
                                 global_block_left=global_block_left,
                                 global_block_right=global_block_right,
+                                indices_prng_key=indices_prng_key,
                             )
 
                 for pl_id in range(plan_idx):
@@ -1102,6 +1113,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                                 window_block_right=window_block_right,
                                 global_block_left=global_block_left,
                                 global_block_right=global_block_right,
+                                indices_prng_key=indices_prng_key,
                             )
 
             if plan_num_rand_blocks[plan_idx] == 0:
@@ -1125,6 +1137,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                         window_block_right=window_block_right,
                         global_block_left=global_block_left,
                         global_block_right=global_block_right,
+                        indices_prng_key=indices_prng_key,
                     )
 
         for nh in range(num_heads):
@@ -1138,6 +1151,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         to_start_block_id,
         to_end_block_id,
         num_rand_blocks,
+        indices_prng_key,
         window_block_left=1,
         window_block_right=1,
         global_block_left=1,
@@ -1162,7 +1176,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         # list of to_blocks from which to choose random attention
         to_block_list = np.arange(to_start_block_id, to_end_block_id, dtype=np.int32)
         # permute the blocks
-        perm_block = np.random.permutation(to_block_list)
+        perm_block = jax.random.permutation(key=indices_prng_key, x=to_block_list)
 
         # illegal blocks for the current block id, using window
         illegal_blocks = list(range(block_id - window_block_left, block_id + window_block_right + 1))
@@ -1179,14 +1193,14 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         if block_id == to_end_block_id - 2:
             illegal_blocks.append(1)
 
-        selected_random_blokcs = []
+        selected_random_blocks = []
 
         for i in range(to_end_block_id - to_start_block_id):
             if perm_block[i] not in illegal_blocks:
-                selected_random_blokcs.append(perm_block[i])
-            if len(selected_random_blokcs) == num_rand_blocks:
+                selected_random_blocks.append(perm_block[i])
+            if len(selected_random_blocks) == num_rand_blocks:
                 break
-        return np.array(selected_random_blokcs, dtype=np.int32)
+        return np.array(selected_random_blocks, dtype=np.int32)
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->BigBird
@@ -1233,6 +1247,7 @@ class FlaxBigBirdAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
+        indices_prng_key,
         layer_head_mask,
         key_value_states=None,
         init_cache=False,
@@ -1256,6 +1271,7 @@ class FlaxBigBirdAttention(nn.Module):
             attn_outputs = self.self(
                 hidden_states,
                 attention_mask,
+                indices_prng_key=indices_prng_key,
                 deterministic=deterministic,
                 output_attentions=output_attentions,
             )
@@ -1324,12 +1340,12 @@ class FlaxBigBirdLayer(nn.Module):
         if self.config.add_cross_attention:
             self.crossattention = FlaxBigBirdAttention(self.config, causal=False, dtype=self.dtype)
 
-    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer.__call__ with Bert->BigBird
     def __call__(
         self,
         hidden_states,
         attention_mask,
         layer_head_mask,
+        indices_prng_key,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -1340,6 +1356,7 @@ class FlaxBigBirdLayer(nn.Module):
         attention_outputs = self.attention(
             hidden_states,
             attention_mask,
+            indices_prng_key=indices_prng_key,
             layer_head_mask=layer_head_mask,
             init_cache=init_cache,
             deterministic=deterministic,
@@ -1389,12 +1406,12 @@ class FlaxBigBirdLayerCollection(nn.Module):
                 for i in range(self.config.num_hidden_layers)
             ]
 
-    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection.__call__ with Bert->BigBird
     def __call__(
         self,
         hidden_states,
         attention_mask,
         head_mask,
+        indices_prng_key,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -1423,6 +1440,7 @@ class FlaxBigBirdLayerCollection(nn.Module):
                 hidden_states,
                 attention_mask,
                 head_mask[i] if head_mask is not None else None,
+                indices_prng_key,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 init_cache,
@@ -1454,7 +1472,6 @@ class FlaxBigBirdLayerCollection(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->BigBird
 class FlaxBigBirdEncoder(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1472,6 +1489,7 @@ class FlaxBigBirdEncoder(nn.Module):
         hidden_states,
         attention_mask,
         head_mask,
+        indices_prng_key,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -1484,6 +1502,7 @@ class FlaxBigBirdEncoder(nn.Module):
             hidden_states,
             attention_mask,
             head_mask=head_mask,
+            indices_prng_key=indices_prng_key,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             init_cache=init_cache,
@@ -1597,7 +1616,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
             gradient_checkpointing=True,
         )
 
-    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.init_weights
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
@@ -1605,6 +1623,8 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         attention_mask = jnp.ones_like(input_ids)
         head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
+        # indices_prng_key = jnp.zeros(2, dtype=jnp.uint32)
+        indices_prng_key = jax.random.PRNGKey(0)
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
@@ -1619,13 +1639,21 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 token_type_ids,
                 position_ids,
                 head_mask,
+                indices_prng_key,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 return_dict=False,
             )
         else:
             module_init_outputs = self.module.init(
-                rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
+                rngs,
+                input_ids,
+                attention_mask,
+                token_type_ids,
+                position_ids,
+                head_mask,
+                indices_prng_key,
+                return_dict=False,
             )
 
         random_params = module_init_outputs["params"]
@@ -1640,7 +1668,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel.init_cache
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
@@ -1654,14 +1681,20 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         input_ids = jnp.ones((batch_size, max_length), dtype="i4")
         attention_mask = jnp.ones_like(input_ids, dtype="i4")
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+        indices_prng_key = jax.random.PRNGKey(0)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+            jax.random.PRNGKey(0),
+            input_ids,
+            attention_mask,
+            position_ids,
+            indices_prng_key,
+            return_dict=False,
+            init_cache=True,
         )
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.__call__ with Bert->BigBird
     def __call__(
         self,
         input_ids,
@@ -1669,6 +1702,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
+        indices_prng_key=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         params: dict = None,
@@ -1698,6 +1732,10 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         if head_mask is None:
             head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
+        if indices_prng_key is None:
+            indices_prng_key = jax.random.PRNGKey(0)
+            # indices_prng_key = jnp.zeros(2, dtype=jnp.uint32)
+
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:
@@ -1722,6 +1760,8 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 token_type_ids=jnp.array(token_type_ids, dtype="i4"),
                 position_ids=jnp.array(position_ids, dtype="i4"),
                 head_mask=jnp.array(head_mask, dtype="i4"),
+                # TOdO: change that
+                indices_prng_key=jnp.array(indices_prng_key, dtype="u4"),
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 deterministic=not train,
@@ -1747,6 +1787,8 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 jnp.array(input_ids, dtype="i4"),
                 jnp.array(attention_mask, dtype="i4"),
                 token_type_ids=jnp.array(token_type_ids, dtype="i4"),
+                # TODO: change that
+                indices_prng_key=jnp.array(indices_prng_key, dtype="u4"),
                 position_ids=jnp.array(position_ids, dtype="i4"),
                 head_mask=jnp.array(head_mask, dtype="i4"),
                 deterministic=not train,
@@ -1783,6 +1825,7 @@ class FlaxBigBirdModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
+        indices_prng_key,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -1798,6 +1841,7 @@ class FlaxBigBirdModule(nn.Module):
             hidden_states,
             attention_mask,
             head_mask=head_mask,
+            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -1839,7 +1883,6 @@ append_call_sample_docstring(
 )
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForPreTrainingModule with Bert->BigBird
 class FlaxBigBirdForPreTrainingModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1860,12 +1903,12 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
+        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         # Model
         outputs = self.bert(
             input_ids,
@@ -1873,6 +1916,7 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
+            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1942,7 +1986,6 @@ append_replace_return_docstrings(
 )
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMaskedLMModule with Bert->BigBird
 class FlaxBigBirdForMaskedLMModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -1964,6 +2007,7 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
+        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1976,6 +2020,7 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
+            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2056,6 +2101,7 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
+        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -2068,6 +2114,7 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
+            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2108,7 +2155,6 @@ append_call_sample_docstring(
 )
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMultipleChoiceModule with Bert->BigBird
 class FlaxBigBirdForMultipleChoiceModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -2130,6 +2176,7 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
+        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -2148,6 +2195,7 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
+            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2208,7 +2256,6 @@ append_call_sample_docstring(
 )
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForTokenClassificationModule with Bert->BigBird
 class FlaxBigBirdForTokenClassificationModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -2236,6 +2283,7 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
+        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -2248,6 +2296,7 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
+            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2330,6 +2379,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
+        indices_prng_key,
         logits_mask=None,
         deterministic: bool = True,
         output_attentions: bool = False,
@@ -2344,6 +2394,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
+            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2392,6 +2443,7 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
+        indices_prng_key=None,
         question_lengths=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
@@ -2420,6 +2472,10 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             question_lengths = jnp.argmax((input_ids == self.config.sep_token_id).astype("i4"), axis=-1) + 1
             question_lengths = jnp.expand_dims(question_lengths, axis=1)
 
+        if indices_prng_key is None:
+            # indices_prng_key = jnp.zeros(2, dtype=jnp.uint32)
+            indices_prng_key = jax.random.PRNGKey(0)
+
         seqlen = input_ids.shape[1]
 
         logits_mask = None
@@ -2439,7 +2495,6 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         rngs = {}
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
-
         return self.module.apply(
             {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
@@ -2447,6 +2502,8 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             token_type_ids,
             jnp.array(position_ids, dtype="i4"),
             jnp.array(head_mask, dtype="i4"),
+            # TODO: change
+            jnp.array(indices_prng_key, dtype="u4"),
             logits_mask,
             not train,
             output_attentions,
@@ -2472,7 +2529,6 @@ append_call_sample_docstring(
 )
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForCausalLMModule with Bert->BigBird
 class FlaxBigBirdForCausalLMModule(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
@@ -2494,6 +2550,7 @@ class FlaxBigBirdForCausalLMModule(nn.Module):
         position_ids,
         token_type_ids: Optional[jnp.ndarray] = None,
         head_mask: Optional[jnp.ndarray] = None,
+        indices_prng_key: Optional[jnp.ndarray] = None,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -2504,11 +2561,12 @@ class FlaxBigBirdForCausalLMModule(nn.Module):
     ):
         # Model
         outputs = self.bert(
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            position_ids,
-            head_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            indices_prng_key=indices_prng_key,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             init_cache=init_cache,
