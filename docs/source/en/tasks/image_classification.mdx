@@ -217,6 +217,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 </Tip>
+
 You're ready to start training your model now! Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels along with the number of expected labels, and the label mappings:
 
 ```py
@@ -279,7 +280,7 @@ Once training is completed, share your model to the Hub with the [`~transformers
 <tf>
 
 <Tip>
-If you are unfamiliar with fine-tuning a model with Keras, check out the [basic tutorial](https://huggingface.co/docs/transformers/main/en/tasks/../training#train-a-tensorflow-model-with-keras) first!
+If you are unfamiliar with fine-tuning a model with Keras, check out the <a href="https://huggingface.co/docs/transformers/main/en/training#train-a-tensorflow-model-with-keras">basic tutorial</a> first!
 </Tip>
 
 To fine-tune a model in TensorFlow, follow these steps:
@@ -510,5 +511,5 @@ Get the predicted label with the highest probability, and use the model's `id2la
 'beignets'
 ```
 
-</ptf>
+</tf>
 </frameworkcontent>
