@@ -150,7 +150,11 @@ Create a preprocessing function to resize the images and return the `pixel_value
 
 ```py
 >>> def process(examples):
-...     examples.update(image_processor(examples['image'], ))
+...     examples.update(
+...         image_processor(
+...             examples["image"],
+...         )
+...     )
 ...     return examples
 ```
 
@@ -188,6 +192,7 @@ Then create a function that passes your predictions and labels to [`~evaluate.Ev
 
 ```py
 >>> import numpy as np
+
 
 >>> def compute_metrics(eval_pred):
 ...     predictions, labels = eval_pred
@@ -281,7 +286,7 @@ To fine-tune a model in TensorFlow, start by setting up an optimizer function, l
 >>> num_epochs = 5
 >>> num_train_steps = len(food["train"]) * num_epochs
 >>> learning_rate = 3e-5
->>> weight_decay_rate=0.01
+>>> weight_decay_rate = 0.01
 
 >>> optimizer, lr_schedule = create_optimizer(
 ...     init_lr=learning_rate,
@@ -300,7 +305,7 @@ Then you can load ViT with `TFAutoModelForImageClassification` along with the la
 ...     checkpoint,
 ...     id2label=id2label,
 ...     label2id=label2id,
-...     )
+... )
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with `to_tf_dataset()`:
@@ -308,26 +313,20 @@ Convert your datasets to the `tf.data.Dataset` format with `to_tf_dataset()`:
 ```py
 >>> # converting our train dataset to tf.data.Dataset
 >>> tf_train_dataset = food["train"].to_tf_dataset(
-...    columns=['pixel_values'],
-...    label_cols=["label"],
-...    shuffle=True,
-...    batch_size=batch_size,
-...    collate_fn=data_collator)
+...     columns=["pixel_values"], label_cols=["label"], shuffle=True, batch_size=batch_size, collate_fn=data_collator
+... )
 
 >>> # converting our test dataset to tf.data.Dataset
 >>> tf_eval_dataset = food["test"].to_tf_dataset(
-...    columns=['pixel_values'],
-...    label_cols=["label"],
-...    shuffle=True,
-...    batch_size=batch_size,
-...    collate_fn=data_collator)
+...     columns=["pixel_values"], label_cols=["label"], shuffle=True, batch_size=batch_size, collate_fn=data_collator
+... )
 ```
 
 Configure the model for training with `compile()`:
 ```py
 >>> from tensorflow.keras.losses import SparseCategoricalCrossentropy
 
->>> loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+>>> loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 >>> model.compile(optimizer=optimizer, loss=loss)
 ```
 
@@ -345,12 +344,7 @@ Finally, you are ready to train your model! Call `fit()` with your training and 
 and your callbacks to fine-tune the model:
 
 ```py
->>> model.fit(
-...     tf_train_dataset,
-...     validation_data=tf_eval_dataset,
-...     epochs=num_epochs,
-...     callbacks=callbacks
-... )
+>>> model.fit(tf_train_dataset, validation_data=tf_eval_dataset, epochs=num_epochs, callbacks=callbacks)
 Epoch 1/5
 250/250 [==============================] - 313s 1s/step - loss: 2.5623 - val_loss: 1.4161 - accuracy: 0.9290
 Epoch 2/5
@@ -369,7 +363,7 @@ provide the model's input shape. In this case we can get it using image processo
 ```py
 >>> from huggingface_hub import push_to_hub_keras
 
->>> model.build((None, None, image_processor.size["height"], image_processor.size["width"]) )
+>>> model.build((None, None, image_processor.size["height"], image_processor.size["width"]))
 >>> output_dir = "food_classifier"
 >>> push_to_hub_keras(model, repo_id=f"MariaK/{output_dir}")
 ```
