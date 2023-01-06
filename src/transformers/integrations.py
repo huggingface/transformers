@@ -714,10 +714,9 @@ class WandbCallback(TrainerCallback):
                 self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
 
             # keep track of model topology and gradients, unsupported on TPU
-            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
-                self._wandb.watch(
-                    model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps)
-                )
+            _watch_model = os.getenv("WANDB_WATCH", "false")
+            if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
+                self._wandb.watch(model, log=_watch_model, log_freq=max(100, args.logging_steps))
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
