@@ -234,7 +234,6 @@ class TestTrainerExt(TestCasePlus):
         gpu_peak_mem_bnb, gpu_alloc_mem_bnb, loss_bnb = train_and_return_metrics(OptimizerNames.ADAMW_BNB.value)
 
         gpu_alloc_mem_diff = gpu_alloc_mem_orig - gpu_alloc_mem_bnb
-        # gpu_peak_mem_diff = gpu_peak_mem_orig - gpu_peak_mem_bnb
 
         gpu_total_mem_orig = gpu_peak_mem_orig + gpu_alloc_mem_orig
         gpu_total_mem_bnb = gpu_peak_mem_bnb + gpu_alloc_mem_bnb
@@ -255,7 +254,8 @@ class TestTrainerExt(TestCasePlus):
         # that we have at least 120MB in savings
         expected_savings = 120
 
-        # leave this for now if CI gets very different results - requires py38 for a new print feature
+        # uncomment the following if this test starts failing - requires py38 for a new print feature
+        # gpu_peak_mem_diff = gpu_peak_mem_orig - gpu_peak_mem_bnb
         # print(f"{gpu_alloc_mem_orig=}MB {gpu_peak_mem_orig=}MB {gpu_alloc_mem_orig+gpu_peak_mem_orig=}MB")
         # print(f" {gpu_alloc_mem_bnb=}MB  {gpu_peak_mem_bnb=}MB  {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=}MB")
         # print(f"{gpu_alloc_mem_diff=}MB")
