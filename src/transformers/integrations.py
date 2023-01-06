@@ -664,7 +664,7 @@ class WandbCallback(TrainerCallback):
         Setup the optional Weights & Biases (*wandb*) integration.
 
         One can subclass and override this method to customize the setup if needed. Find more information
-        [here](https://docs.wandb.ai/integrations/huggingface). You can also override the following environment
+        [here](https://docs.wandb.ai/guides/integrations/huggingface). You can also override the following environment
         variables:
 
         Environment:
