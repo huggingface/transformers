@@ -656,8 +656,16 @@ class WandbCallback(TrainerCallback):
 
             self._wandb = wandb
         self._initialized = False
-        # log outputs
-        self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
+        # log model
+        if os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"}):
+            DeprecationWarning(
+                f"Setting `WANDB_LOG_MODEL` as {os.getenv('WANDB_LOG_MODEL')} is deprecated and will be removed in "
+                "future versions. Use one of `end` or `checkpoint` instead."
+            )
+            logger.info(f"Setting `WANDB_LOG_MODEL` from {os.getenv('WANDB_LOG_MODEL')} to `end` instead")
+            self._log_model = "end"
+        else:
+            self._log_model = os.getenv("WANDB_LOG_MODEL", "false").lower()
 
     def setup(self, args, state, model, **kwargs):
         """
@@ -668,16 +676,20 @@ class WandbCallback(TrainerCallback):
         variables:
 
         Environment:
-        - **WANDB_LOG_MODEL** (`bool`, *optional*, defaults to `False`):
-            Whether or not to log model as artifact at the end of training. Use along with
-            [`~transformers.TrainingArguments.load_best_model_at_end`] to upload best model.
-        - **WANDB_WATCH** (`str`, *optional*, defaults to `gradients`):
-            Can be `gradients`, `all` or `false`. Set to `false` to disable gradient logging or `all` to log gradients
-            and parameters.
-        - **WANDB_PROJECT** (`str`, *optional*, defaults to `huggingface`):
-            Set this to a custom string to store results in a different project.
+        - **WANDB_LOG_MODEL** (`str`, *optional*, defaults to `"false"`):
+                    Whether to log model and checkpoints during training. Can be `"end"`, `"checkpoint"` or `"false"`.
+                    If set to `"end"`, the model will be uploaded at the end of training. If set to `"checkpoint"`, the
+                    checkpoint will be uploaded every `args.save_steps` . If set to `"false"`, the model will not be
+                    uploaded. Use along with *TrainingArguments.load_best_model_at_end* to upload best model.
+                    *Warning*: Setting `WANDB_LOG_MODEL` as `bool` is deprecated and will be removed in future
+                    versions.
+        - **WANDB_WATCH** (`str`, *optional* defaults to `"false"`):
+                    Can be `"gradients"`, `"all"`, `"parameters"`, or `"false"`. Set to `"all"` to log gradients and
+                    parameters.
+        - **WANDB_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
+                    Set this to a custom string to store results in a different project.
         - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
-            Whether or not to disable wandb entirely. Set `WANDB_DISABLED=True` to disable.
+                    Whether to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
         """
         if self._wandb is None:
             return
@@ -732,7 +744,7 @@ class WandbCallback(TrainerCallback):
     def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._wandb is None:
             return
-        if self._log_model and self._initialized and state.is_world_process_zero:
+        if self._log_model in ("end", "checkpoint") and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
             fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
@@ -765,6 +777,26 @@ class WandbCallback(TrainerCallback):
         if state.is_world_process_zero:
             logs = rewrite_logs(logs)
             self._wandb.log({**logs, "train/global_step": state.global_step})
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._log_model == "checkpoint" and self._initialized and state.is_world_process_zero:
+            checkpoint_metadata = {
+                k: v
+                for k, v in dict(self._wandb.summary).items()
+                if isinstance(v, numbers.Number) and not k.startswith("_")
+            }
+
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. ...")
+            checkpoint_name = (
+                f"checkpoint-{self._wandb.run.id}"
+                if (args.run_name is None or args.run_name == args.output_dir)
+                else f"checkpoint-{self._wandb.run.name}"
+            )
+            artifact = self._wandb.Artifact(name=checkpoint_name, type="model", metadata=checkpoint_metadata)
+            artifact.add_dir(artifact_path)
+            self._wandb.log_artifact(artifact, aliases=[f"checkpoint-{state.global_step}"])
 
 
 class CometCallback(TrainerCallback):
