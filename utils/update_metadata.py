@@ -91,6 +91,11 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "AutoModelForDocumentQuestionAnswering",
     ),
     (
+        "document-token-classification",
+        "MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING_NAMES",
+        "AutoModelForDocumentTokenClassification",
+    ),
+    (
         "visual-question-answering",
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
         "AutoModelForVisualQuestionAnswering",
