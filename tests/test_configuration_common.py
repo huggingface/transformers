@@ -61,7 +61,6 @@ config_common_kwargs = {
     "top_p": 0.7,
     "typical_p": 0.2,
     "repetition_penalty": 0.8,
-    "encoder_repetition_penalty": 0.8,
     "length_penalty": 0.8,
     "no_repeat_ngram_size": 5,
     "encoder_no_repeat_ngram_size": 5,
