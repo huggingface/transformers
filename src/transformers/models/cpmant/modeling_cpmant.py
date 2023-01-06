@@ -1140,7 +1140,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         else:
             if not isinstance(orig_items[0][key][0], torch.Tensor):
                 raise TypeError("The type of orig_items[0][key][0] should be tensor!")
-            
+            items = orig_items
 
         batch_size = len(items)
         shape = items[0][key].shape
