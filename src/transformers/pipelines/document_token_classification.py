@@ -69,8 +69,8 @@ class DocumentTokenClassificationPipeline(Pipeline):
     # TODO: Update task_summary docs to include an example with document token classification
     """
     Document Token Classification pipeline using any `AutoModelForDocumentTokenClassification`. The inputs/outputs are
-    similar to the Token Classification pipeline; however, the pipeline takes an image (and optional OCR'd
-    words/boxes) as input instead of text context.
+    similar to the Token Classification pipeline; however, the pipeline takes an image (and optional OCR'd words/boxes)
+    as input instead of text context.
 
     This Document Token Classification pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"document-token-classification"`.
@@ -120,10 +120,10 @@ class DocumentTokenClassificationPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classifies the list of tokens (word_boxes) given a document. A document is defined as an image and an
-        optional list of (word, box) tuples which represent the text in the document. If the *word_boxes* are not
-        provided, it will use the Tesseract OCR engine (if available) to extract the words and boxes automatically for
-        LayoutLM-like models which require them as input.
+        Classifies the list of tokens (word_boxes) given a document. A document is defined as an image and an optional
+        list of (word, box) tuples which represent the text in the document. If the *word_boxes* are not provided, it
+        will use the Tesseract OCR engine (if available) to extract the words and boxes automatically for LayoutLM-like
+        models which require them as input.
 
         You can invoke the pipeline several ways:
 
