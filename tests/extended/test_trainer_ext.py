@@ -240,15 +240,18 @@ class TestTrainerExt(TestCasePlus):
         gpu_total_mem_bnb = gpu_peak_mem_bnb + gpu_alloc_mem_bnb
         gpu_total_mem_diff = gpu_total_mem_orig - gpu_total_mem_bnb
 
-        # sshleifer/student_marian_en_ro_6_1 is 54M params, 29M of which is nn.Embedding which
-        # doesn't get quantized and remains in fp32. Therefore we only have 25M params quantized in 2 bytes
-        # therefore the diff in optim memory usage:
-        # - normal 25*8=~200MB (8 bytes per param)
-        # - bnb    25*2=~50MB (2 bytes per param)
-        # thus we should expect ~150MB total memory saved.
-        # peak memory should be the same - the total should be different by about that same margin
+        # sshleifer/student_marian_en_ro_6_1 has 54M parameter, 29M of which is `nn.Embedding` which
+        # doesn't get quantized and remains in fp32. Therefore we only have 25M parameters quantized
+        # in 2 bytes and the diff in optim memory usage is derived as so:
         #
-        # thus after leaving a small margin to accommodate for differences between gpus let's check
+        # - normal 25*8=~200MB (8 bytes per param)
+        # - bnb    25*2= ~50MB (2 bytes per param)
+        #
+        # Thus we should expect ~150MB total memory saved.
+        #
+        # Peak memory should be the same - the total should be different by about that same margin
+        #
+        # After leaving a small margin to accommodate for differences between gpus let's check
         # that we have at least 120MB in savings
         expected_savings = 120
 
@@ -264,7 +267,7 @@ class TestTrainerExt(TestCasePlus):
             gpu_alloc_mem_diff,
             expected_savings,
             "should use ~150MB less alloc gpu memory with BNB, compared to without it for this model but got"
-            f"a difference of {gpu_alloc_mem_diff}MB, with gpu_alloc_mem_orig={gpu_alloc_mem_orig}MB and"
+            f" a difference of {gpu_alloc_mem_diff}MB, with gpu_alloc_mem_orig={gpu_alloc_mem_orig}MB and"
             f" gpu_alloc_mem_bnb={gpu_alloc_mem_bnb}MB",
         )
 
@@ -272,7 +275,7 @@ class TestTrainerExt(TestCasePlus):
             gpu_alloc_mem_diff,
             expected_savings,
             "should use ~150MB less alloc gpu memory with BNB, compared to without it for this model but got"
-            f"a difference of {gpu_total_mem_diff}MB, with gpu_alloc_mem_orig={gpu_total_mem_orig}MB and"
+            f" a difference of {gpu_total_mem_diff}MB, with gpu_alloc_mem_orig={gpu_total_mem_orig}MB and"
             f" gpu_alloc_mem_bnb={gpu_total_mem_bnb}MB",
         )
 
