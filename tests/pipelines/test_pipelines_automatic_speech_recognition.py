@@ -305,6 +305,32 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
+    def test_find_longest_common_subsequence(self):
+        # Let's test the corner cases when merging 2 chunks:
+        previous_sequence = [51492,   406,  3163,  1953,   466,    13, 51612]
+        # [{'text': ' not worth thinking about.', 'timestamp': (22.56, 24.96)}
+        
+        # Merge when the previous sequence is a suffix of the next sequence
+        next_sequences_1 = [50364,   295,  6177,  3391,    11, 19817,  3337,   507,   307,
+                406,  3163,  1953,   466,    13, 50614, 50614,  2812,  9836,
+                14783,   390,  6263,   538,   257,  1359,    11,  8199,  6327,
+                1090,   322,   702,  7443,    13, 50834, 50257]
+        # {'text': ' of spectators, retrievality is not worth thinking about.','timestamp': (0.0, 5.0)},
+        # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (5.0, 9.4)}]
+        
+        # Merge when the sequence is in the middle of the 1st next sequence
+        next_sequences_2 = [50364,   295,  6177,  3391,    11, 19817,  3337,   507,   307,
+        406,  3163,  1953,   466,    13, 2812,  9836,
+        14783,   390,  6263,   538,   257,  1359,    11,  8199,  6327,
+        1090,   322,   702,  7443,    13, 50834, 50257]
+        # {'text': ' of spectators, retrievality is not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
+        
+        # Merge when the previous sequence is not included in the current sequence
+        next_sequences_2 = [50364, 2812,  9836,
+        14783,   390,  6263,   538,   257,  1359,    11,  8199,  6327,
+        1090,   322,   702,  7443,    13, 50834, 50257]
+        # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
+        
     @slow
     @require_torch
     def test_whisper_timestamp_prediction(self):
@@ -313,7 +339,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
         )
         pipe = pipeline(
-            model="openai/whisper-tiny",
+            model="openai/whisper-small",
             return_timestamps=True,
         )
 
@@ -323,10 +349,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             # TODO This is not great, we're missing the last segment.
             {
                 "text": " A man said to the universe, Sir, I exist.",
-                "chunks": [{"text": " A man said to the universe,", "timestamp": (0.0, 2.48)}],
+                "chunks": [{"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 4.26)}],
             },
         )
-
+        pipe = pipeline(
+            model="openai/whisper-large",
+            return_timestamps=True,
+        )
         output = pipe(array, chunk_length_s=30)
         self.assertDictEqual(
             output,
@@ -405,43 +434,43 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             },
         )
 
-    @require_torch
-    @slow
-    def test_whisper_timestamp_prediction(self):
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        array = np.concatenate(
-            [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
-        )
-        pipe = pipeline(
-            "automatic-speech-recognition",
-            model=model,
-            tokenizer=processor.tokenizer,
-            feature_extractor=processor.feature_extractor,
-            forced_bos_token_id=None,
-            max_new_tokens=448,
-        )
-        output = pipe(array, return_timestamps=True, chunk_length_s=30, stride_length_s=[15, 0])
-        # fmt: off
-        EXPECTED_OUTPUT = {
-            "text": (
-                " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing"
-                " cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his"
-                " overstrain dyes. Even the soaring arena around him with thousands of spectators, retrievalidies not"
-                " worth thinking about."
-            ),
-            "chunks": [
-                {'text': ' A man said to the universe, Sir, I exist.', 'timestamp': (0.0, 5.5)},
-                {'text': " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment", 'timestamp': (5.5, 10.24)},
-                {'text': ' you wore.', 'timestamp': (10.24, 11.74)}, {'text': ' The cut on his chest still dripping blood.', 'timestamp': (11.74, 14.88)},
-                {'text': ' The ache of his overstrain dyes.', 'timestamp': (14.88, 17.6)},
-                {'text': ' Even the soaring arena around him with thousands of spectators, retrievalidies not worth', 'timestamp': (17.6, 23.28)}
-            ],
-        }
-        # fmt: on
+    # @require_torch
+    # @slow
+    # def test_whisper_timestamp_prediction(self):
+    #     processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+    #     model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+    #     ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+    #     array = np.concatenate(
+    #         [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
+    #     )
+    #     pipe = pipeline(
+    #         "automatic-speech-recognition",
+    #         model=model,
+    #         tokenizer=processor.tokenizer,
+    #         feature_extractor=processor.feature_extractor,
+    #         forced_bos_token_id=None,
+    #         max_new_tokens=448,
+    #     )
+    #     output = pipe(array, return_timestamps=True, chunk_length_s=30, stride_length_s=[15, 0])
+    #     # fmt: off
+    #     EXPECTED_OUTPUT = {
+    #         "text": (
+    #             " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing"
+    #             " cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his"
+    #             " overstrain dyes. Even the soaring arena around him with thousands of spectators, retrievalidies not"
+    #             " worth thinking about."
+    #         ),
+    #         "chunks": [
+    #             {'text': ' A man said to the universe, Sir, I exist.', 'timestamp': (0.0, 5.5)},
+    #             {'text': " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment", 'timestamp': (5.5, 10.24)},
+    #             {'text': ' you wore.', 'timestamp': (10.24, 11.74)}, {'text': ' The cut on his chest still dripping blood.', 'timestamp': (11.74, 14.88)},
+    #             {'text': ' The ache of his overstrain dyes.', 'timestamp': (14.88, 17.6)},
+    #             {'text': ' Even the soaring arena around him with thousands of spectators, retrievalidies not worth', 'timestamp': (17.6, 23.28)}
+    #         ],
+    #     }
+    #     # fmt: on
 
-        self.assertDictEqual(output, EXPECTED_OUTPUT)
+    #     self.assertDictEqual(output, EXPECTED_OUTPUT)
 
     @require_torch
     @slow

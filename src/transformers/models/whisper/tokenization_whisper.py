@@ -500,13 +500,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
         timestamp_tokens = token_ids >= timestamp_begin
 
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
-        if consecutive.shape[0] == 0:
+        if consecutive.shape[0] == 0 and timestamp_tokens.sum() <= 1:
             # either there are no timestamps or there are no consecutive ones
-            if timestamp_tokens.sum() <= 1:
-                # no timestamps
-                return []
-            else:
-                consecutive = [np.where(timestamp_tokens)[0][-1] + 1]
+            return []
+        elif np.where(timestamp_tokens)[0][-1] + 1 not in consecutive:
+            # we add the final timestamp if it is not already in the list
+            consecutive = np.append(consecutive,np.where(timestamp_tokens)[0][-1] + 1)
 
         last_slice = np.where(timestamp_tokens)[0][0]
         for current_slice in consecutive:

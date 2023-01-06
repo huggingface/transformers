@@ -128,13 +128,14 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     processed. We need to make sure to offset the timestamps tokens by the `time` in order for the tokenizer to
     properly compute the final `offset`.
     """
+    # index of the first timestamp token
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
     begin = np.where(sequences[0][0] == timestamp_begin)[1]
     if len(begin.shape) == 0:
         raise ValueError("No timestamp detected")
     begin_idx = begin.item()
     items = []
-    # index of the first timestamp token
+    # approximation of the token to time ratio : ~0.2seconds
     time_precision = feature_extractor.chunk_length / max_source_positions
     time = 0
     for seq_idx, item in enumerate(sequences):
@@ -143,50 +144,60 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         sequence = sequence.squeeze(0)
         sequence = sequence[begin_idx:]
         if seq_idx != 0:
-            time += (chunk_len - stride_left) / 100
+            time -= stride_left / 100
+
             timestamp_tokens = np.where(sequence >= timestamp_begin)[0][0::2]
             previous_tokens = items[-1][1:-1]
 
             if len(timestamp_tokens) > 1 and len(previous_tokens) > 0:
-                current_slice = sequence[: timestamp_tokens[1]]
+                end_of_curr_sequence_idx = timestamp_tokens[1]
+                current_slice = sequence[: end_of_curr_sequence_idx]
 
                 trie = SuffixTrie(current_slice)
                 longest_common_sequence = trie.search(previous_tokens)
                 if len(longest_common_sequence) == len(previous_tokens):
+                    # the previous tokens are a suffix of the current slice
+                    # so we can discard the beginning of the current slice
                     idx = longest_common_sequence[0][0]
-                    sliced_sequence = sequence[idx : timestamp_tokens[1]]
+                    sliced_sequence = sequence[idx : end_of_curr_sequence_idx]
 
-                    actual_offset = int(time / time_precision) + timestamp_begin
+                    # update the `end_timestamp` of the sliced_sequence slice
+                    actual_offset = int(time / time_precision)
                     sliced_sequence[-1] += actual_offset
+                    # update the last item : merge the two slices
                     items[-1][1:] = sliced_sequence
-                    sequence = sequence[timestamp_tokens[1] :]
+                    sequence = sequence[end_of_curr_sequence_idx :]
+                else:
+                    raise ValueError("The previous tokens are not a suffix of the current slice")
 
         timestamp_tokens = sequence >= timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
         if len(consecutive) > 0:  # if the output contains two consecutive timestamp tokens
             last_slice = 0
             # take the last timestamp of the previous chunk
-            actual_offset = int(time / time_precision) + timestamp_begin
+            actual_offset = int(time / time_precision)
             for current_slice in consecutive:
                 sliced_tokens = sequence[last_slice:current_slice]
                 # set correct timestamps
-                sliced_tokens[0] += actual_offset - timestamp_begin
-                sliced_tokens[-1] += actual_offset - timestamp_begin
+                sliced_tokens[0] += actual_offset
+                sliced_tokens[-1] += actual_offset
                 items.append(sliced_tokens)  # correct final sequence
                 last_slice = current_slice
-            if np.where(timestamp_tokens)[0][-1] != current_slice:  # we probably have a timestamp at the end
+            # check if we have a non consecutive timestamp at the end
+            if np.where(timestamp_tokens)[0][-1] != current_slice:
                 # offset = items[-1][-1] if len(items) > 0 else timestamp_begin
                 sliced_tokens = sequence[current_slice : np.where(timestamp_tokens)[0][-1] + 1]
-                sliced_tokens[0] += actual_offset - timestamp_begin
-                sliced_tokens[-1] += actual_offset - timestamp_begin
-                items.append(sliced_tokens)  # correct final sequence
+                sliced_tokens[0] += actual_offset
+                sliced_tokens[-1] += actual_offset
+                items.append(sliced_tokens)
         else:
             timestamps = sequence[timestamp_tokens.nonzero()[0].flatten()]
             if len(timestamps) > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 # single timestamp at the end means no speech after the last timestamp.
                 items.append(sequence[np.where(timestamps[-1])])
-
+        # The beginning time of the next chunk
+        time += chunk_len / 100
     result = []
     for i in range(len(items)):
         result += items[i].tolist()
