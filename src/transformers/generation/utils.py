@@ -1234,7 +1234,7 @@ class GenerationMixin:
                 "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
             )
 
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length == 0
+        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
         if has_default_max_length and generation_config.min_new_tokens is not None:
             generation_config.min_length = generation_config.min_new_tokens + input_ids_seq_length
         elif not has_default_min_length and generation_config.min_new_tokens is not None:
