@@ -706,15 +706,16 @@ class WandbCallback(TrainerCallback):
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None:
-                run_name = trial_name
+                init_args["name"] = trial_name
                 init_args["group"] = args.run_name
             else:
-                run_name = args.run_name
+                if not (args.run_name is None or args.run_name == args.output_dir):
+                    init_args["name"] = args.run_name
 
             if self._wandb.run is None:
+
                 self._wandb.init(
                     project=os.getenv("WANDB_PROJECT", "huggingface"),
-                    name=run_name,
                     **init_args,
                 )
             # add config parameters (run may have been created manually)
@@ -762,7 +763,13 @@ class WandbCallback(TrainerCallback):
                         "train/total_floss": state.total_flos,
                     }
                 )
-                artifact = self._wandb.Artifact(name=f"model-{self._wandb.run.id}", type="model", metadata=metadata)
+                logger.info("Logging model artifacts. ...")
+                model_name = (
+                    f"model-{self._wandb.run.id}"
+                    if (args.run_name is None or args.run_name == args.output_dir)
+                    else f"model-{self._wandb.run.name}"
+                )
+                artifact = self._wandb.Artifact(name=model_name, type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
