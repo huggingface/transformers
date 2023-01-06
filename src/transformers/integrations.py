@@ -644,7 +644,7 @@ class TensorBoardCallback(TrainerCallback):
 
 class WandbCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that sends the logs to [Weight and Biases](https://www.wandb.com/).
+    A [`TrainerCallback`] that logs metrics, media, model checkpoints to [Weight and Biases](https://www.wandb.com/).
     """
 
     def __init__(self):
