@@ -138,13 +138,16 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     # approximation of the token to time ratio : ~0.2seconds
     time_precision = feature_extractor.chunk_length / max_source_positions
     time = 0
+    actual_offset = 0
     for seq_idx, item in enumerate(sequences):
         sequence, stride = item
         chunk_len, stride_left, stride_right = stride
         sequence = sequence.squeeze(0)
         sequence = sequence[begin_idx:]
+
         if seq_idx != 0:
             time -= stride_left / 100
+            actual_offset = int(time / time_precision)
 
             timestamp_tokens = np.where(sequence >= timestamp_begin)[0][0::2]
             previous_tokens = items[-1][1:-1]
@@ -155,27 +158,37 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
 
                 trie = SuffixTrie(current_slice)
                 longest_common_sequence = trie.search(previous_tokens)
-                if len(longest_common_sequence) == len(previous_tokens):
+                if len(longest_common_sequence) > 0:
                     # the previous tokens are a suffix of the current slice
                     # so we can discard the beginning of the current slice
                     idx = longest_common_sequence[0][0]
                     sliced_sequence = sequence[idx : end_of_curr_sequence_idx]
 
-                    # update the `end_timestamp` of the sliced_sequence slice
-                    actual_offset = int(time / time_precision)
-                    sliced_sequence[-1] += actual_offset
+                    # if we have a suffix, then the timestamp token is the last token of the previous slice
+                    if list(sequence[idx:longest_common_sequence[-1][0] + 1]) ==  list(sliced_sequence[:-1]):
+                        sliced_sequence[-1] = items[-1][-1]
+                    elif longest_common_sequence[0][-1] < end_of_curr_sequence_idx:
+                        # the matching sequence is included in the middle of the current slice
+                        # we need to offset the timestamp token by the actual time and properly merge the two slices
+                        actual_offset = int(time / time_precision)
+                        sliced_sequence[-1] += actual_offset
+
                     # update the last item : merge the two slices
                     items[-1][1:] = sliced_sequence
                     sequence = sequence[end_of_curr_sequence_idx :]
+
+                    # since we merged, we have the starting time for the next sequences
+                    actual_offset = items[-1][-1] - timestamp_begin
                 else:
-                    raise ValueError("The previous tokens are not a suffix of the current slice")
+                    # no match, the merge will be naturally handled
+                    actual_offset = items[-1][-1] - timestamp_begin
 
         timestamp_tokens = sequence >= timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+
         if len(consecutive) > 0:  # if the output contains two consecutive timestamp tokens
             last_slice = 0
             # take the last timestamp of the previous chunk
-            actual_offset = int(time / time_precision)
             for current_slice in consecutive:
                 sliced_tokens = sequence[last_slice:current_slice]
                 # set correct timestamps
@@ -195,7 +208,13 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
             if len(timestamps) > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 # single timestamp at the end means no speech after the last timestamp.
-                items.append(sequence[np.where(timestamps[-1])])
+                last_idx = np.argwhere(sequence == timestamps[-1])[0][0]
+                sliced_sequence = sequence[:last_idx+1]
+                duration = sliced_sequence[-1] - sliced_sequence[0]
+                # We need to discard the previous timing information
+                sliced_sequence[0]  = actual_offset + timestamp_begin
+                sliced_sequence[-1] = actual_offset + timestamp_begin + duration
+                items.append(sliced_sequence)
         # The beginning time of the next chunk
         time += chunk_len / 100
     result = []

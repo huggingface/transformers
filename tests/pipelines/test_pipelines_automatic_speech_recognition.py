@@ -353,7 +353,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             },
         )
         pipe = pipeline(
-            model="openai/whisper-large",
+            model="openai/whisper-small",
             return_timestamps=True,
         )
         output = pipe(array, chunk_length_s=30)
