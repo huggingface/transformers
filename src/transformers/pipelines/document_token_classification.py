@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -34,14 +33,11 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    import torch
-
     from ..models.auto.modeling_auto import MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING
 
 TESSERACT_LOADED = False
 if is_pytesseract_available():
     TESSERACT_LOADED = True
-    import pytesseract
 
 logger = logging.get_logger(__name__)
 
@@ -125,30 +121,30 @@ class DocumentTokenClassificationPipeline(Pipeline):
     ):
         """
         Classifies the list of tokens (word_boxes) given a document. A document is defined as an image and an
-        optional list of (word, box) tuples which represent the text in the document. If the `word_boxes` are not
+        optional list of (word, box) tuples which represent the text in the document. If the *word_boxes* are not
         provided, it will use the Tesseract OCR engine (if available) to extract the words and boxes automatically for
         LayoutLM-like models which require them as input.
 
         You can invoke the pipeline several ways:
 
-        - `pipeline(inputs=image)`
-        - `pipeline(inputs=[image])`
-        - `pipeline(inputs={"image": image})`
-        - `pipeline(inputs={"image": image, "word_boxes": word_boxes})`
-        - `pipeline(inputs={"image": image, "words": words, "boxes": boxes})`
-        - `pipeline(inputs=[{"image": image}])`
-        - `pipeline(inputs=[{"image": image, "word_boxes": word_boxes}])`
-        - `pipeline(inputs=[{"image": image, "words": words, "boxes": boxes}])`
+        - *pipeline(inputs=image)*
+        - *pipeline(inputs=[image])*
+        - *pipeline(inputs={"image": image})*
+        - *pipeline(inputs={"image": image, "word_boxes": word_boxes})*
+        - *pipeline(inputs={"image": image, "words": words, "boxes": boxes})*
+        - *pipeline(inputs=[{"image": image}])*
+        - *pipeline(inputs=[{"image": image, "word_boxes": word_boxes}])*
+        - *pipeline(inputs=[{"image": image, "words": words, "boxes": boxes}])*
 
         Args:
-            inputs (:obj:`str`, :obj:`List[str]`, :obj:`PIL.Image`, :obj:`List[PIL.Image]`, :obj:`Dict`, :obj:`List[Dict]`):
+            inputs (`str`, `List[str]`, `PIL.Image`, `List[PIL.Image]`, `Dict`, `List[Dict]`):
 
         Return:
-            A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
+            A *dict* or a list of *dict*: Each result comes as a dictionary with the following keys:
 
-            - **words** (:obj:`List[str]`) -- The words in the document.
-            - **boxes** (:obj:`List[List[int]]`) -- The boxes of the words in the document.
-            - **word_labels** (:obj:`List[str]`) -- The predicted labels for each word.
+            - **words** (`List[str]`) -- The words in the document.
+            - **boxes** (`List[List[int]]`) -- The boxes of the words in the document.
+            - **word_labels** (`List[str]`) -- The predicted labels for each word.
         """
         inputs = self._args_parser(inputs)
         output = super().__call__(inputs, **kwargs)
