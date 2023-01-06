@@ -75,11 +75,11 @@ class GraphNodeFeature(nn.Module):
         # initializes all embedding parameters
         self.apply(lambda module: init_params(module, num_layers=config.num_layers))
 
-    def forward(self, x, in_degree, out_degree):
-        n_graph, n_node = x.size()[:2]
+    def forward(self, input_nodes, in_degree, out_degree):
+        n_graph, n_node = input_nodes.size()[:2]
 
         node_feature = (  # node feature + graph token
-            self.atom_encoder(x).sum(dim=-2)  # [n_graph, n_node, n_hidden]
+            self.atom_encoder(input_nodes).sum(dim=-2)  # [n_graph, n_node, n_hidden]
             + self.in_degree_encoder(in_degree)
             + self.out_degree_encoder(out_degree)
         )
@@ -118,8 +118,8 @@ class GraphAttnBias(nn.Module):
 
         self.apply(lambda module: init_params(module, num_layers=config.num_layers))
 
-    def forward(self, x, attn_bias, spatial_pos, edge_input, attn_edge_type):
-        n_graph, n_node = x.size()[:2]
+    def forward(self, input_nodes, attn_bias, spatial_pos, input_edges, attn_edge_type):
+        n_graph, n_node = input_nodes.size()[:2]
         graph_attn_bias = attn_bias.clone()
         graph_attn_bias = graph_attn_bias.unsqueeze(1).repeat(
             1, self.num_heads, 1, 1
@@ -140,29 +140,29 @@ class GraphAttnBias(nn.Module):
             spatial_pos_ = spatial_pos.clone()
 
             spatial_pos_[spatial_pos_ == 0] = 1  # set pad to 1
-            # set 1 to 1, x > 1 to x - 1
+            # set 1 to 1, input_nodes > 1 to input_nodes - 1
             spatial_pos_ = torch.where(spatial_pos_ > 1, spatial_pos_ - 1, spatial_pos_)
             if self.multi_hop_max_dist > 0:
                 spatial_pos_ = spatial_pos_.clamp(0, self.multi_hop_max_dist)
-                edge_input = edge_input[:, :, :, : self.multi_hop_max_dist, :]
+                input_edges = input_edges[:, :, :, : self.multi_hop_max_dist, :]
             # [n_graph, n_node, n_node, max_dist, n_head]
 
-            edge_input = self.edge_encoder(edge_input).mean(-2)
-            max_dist = edge_input.size(-2)
-            edge_input_flat = edge_input.permute(3, 0, 1, 2, 4).reshape(max_dist, -1, self.num_heads)
+            input_edges = self.edge_encoder(input_edges).mean(-2)
+            max_dist = input_edges.size(-2)
+            edge_input_flat = input_edges.permute(3, 0, 1, 2, 4).reshape(max_dist, -1, self.num_heads)
             edge_input_flat = torch.bmm(
                 edge_input_flat,
                 self.edge_dis_encoder.weight.reshape(-1, self.num_heads, self.num_heads)[:max_dist, :, :],
             )
-            edge_input = edge_input_flat.reshape(max_dist, n_graph, n_node, n_node, self.num_heads).permute(
+            input_edges = edge_input_flat.reshape(max_dist, n_graph, n_node, n_node, self.num_heads).permute(
                 1, 2, 3, 0, 4
             )
-            edge_input = (edge_input.sum(-2) / (spatial_pos_.float().unsqueeze(-1))).permute(0, 3, 1, 2)
+            input_edges = (input_edges.sum(-2) / (spatial_pos_.float().unsqueeze(-1))).permute(0, 3, 1, 2)
         else:
             # [n_graph, n_node, n_node, n_head] -> [n_graph, n_head, n_node, n_node]
-            edge_input = self.edge_encoder(attn_edge_type).mean(-2).permute(0, 3, 1, 2)
+            input_edges = self.edge_encoder(attn_edge_type).mean(-2).permute(0, 3, 1, 2)
 
-        graph_attn_bias[:, :, 1:, 1:] = graph_attn_bias[:, :, 1:, 1:] + edge_input
+        graph_attn_bias[:, :, 1:, 1:] = graph_attn_bias[:, :, 1:, 1:] + input_edges
         graph_attn_bias = graph_attn_bias + attn_bias.unsqueeze(1)  # reset
 
         return graph_attn_bias
@@ -405,7 +405,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
+        input_nodes: torch.Tensor,
         self_attn_bias: Optional[torch.Tensor] = None,
         self_attn_mask: Optional[torch.Tensor] = None,
         self_attn_padding_mask: Optional[torch.Tensor] = None,
@@ -414,36 +414,36 @@ class GraphormerGraphEncoderLayer(nn.Module):
         nn.LayerNorm is applied either before or after the self-attention/ffn modules similar to the original
         Transformer implementation.
         """
-        residual = x
+        residual = input_nodes
         if self.pre_layernorm:
-            x = self.self_attn_layer_norm(x)
+            input_nodes = self.self_attn_layer_norm(input_nodes)
 
-        x, attn = self.self_attn(
-            query=x,
-            key=x,
-            value=x,
+        input_nodes, attn = self.self_attn(
+            query=input_nodes,
+            key=input_nodes,
+            value=input_nodes,
             attn_bias=self_attn_bias,
             key_padding_mask=self_attn_padding_mask,
             need_weights=False,
             attn_mask=self_attn_mask,
         )
-        x = self.dropout_module(x)
-        x = residual + x
+        input_nodes = self.dropout_module(input_nodes)
+        input_nodes = residual + input_nodes
         if not self.pre_layernorm:
-            x = self.self_attn_layer_norm(x)
+            input_nodes = self.self_attn_layer_norm(input_nodes)
 
-        residual = x
+        residual = input_nodes
         if self.pre_layernorm:
-            x = self.final_layer_norm(x)
-        x = self.activation_fn(self.fc1(x))
-        x = self.activation_dropout_module(x)
-        x = self.fc2(x)
-        x = self.dropout_module(x)
-        x = residual + x
+            input_nodes = self.final_layer_norm(input_nodes)
+        input_nodes = self.activation_fn(self.fc1(input_nodes))
+        input_nodes = self.activation_dropout_module(input_nodes)
+        input_nodes = self.fc2(input_nodes)
+        input_nodes = self.dropout_module(input_nodes)
+        input_nodes = residual + input_nodes
         if not self.pre_layernorm:
-            x = self.final_layer_norm(x)
+            input_nodes = self.final_layer_norm(input_nodes)
 
-        return x, attn
+        return input_nodes, attn
 
 
 class GraphormerGraphEncoder(nn.Module):
@@ -496,12 +496,12 @@ class GraphormerGraphEncoder(nn.Module):
 
     def forward(
         self,
-        x,
+        input_nodes,
         attn_bias,
         in_degree,
         out_degree,
         spatial_pos,
-        edge_input,
+        input_edges,
         attn_edge_type,
         perturb=None,
         last_state_only: bool = False,
@@ -509,53 +509,53 @@ class GraphormerGraphEncoder(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.torch.Tensor, torch.Tensor]:
         # compute padding mask. This is needed for multi-head attention
-        data_x = x
+        data_x = input_nodes
         n_graph, n_node = data_x.size()[:2]
         padding_mask = (data_x[:, :, 0]).eq(0)
         padding_mask_cls = torch.zeros(n_graph, 1, device=padding_mask.device, dtype=padding_mask.dtype)
         padding_mask = torch.cat((padding_mask_cls, padding_mask), dim=1)
 
-        attn_bias = self.graph_attn_bias(x, attn_bias, spatial_pos, edge_input, attn_edge_type)
+        attn_bias = self.graph_attn_bias(input_nodes, attn_bias, spatial_pos, input_edges, attn_edge_type)
 
         if token_embeddings is not None:
-            x = token_embeddings
+            input_nodes = token_embeddings
         else:
-            x = self.graph_node_feature(x, in_degree, out_degree)
+            input_nodes = self.graph_node_feature(input_nodes, in_degree, out_degree)
 
         if perturb is not None:
-            x[:, 1:, :] += perturb
+            input_nodes[:, 1:, :] += perturb
 
         if self.embed_scale is not None:
-            x = x * self.embed_scale
+            input_nodes = input_nodes * self.embed_scale
 
         if self.quant_noise is not None:
-            x = self.quant_noise(x)
+            input_nodes = self.quant_noise(input_nodes)
 
         if self.emb_layer_norm is not None:
-            x = self.emb_layer_norm(x)
+            input_nodes = self.emb_layer_norm(input_nodes)
 
-        x = self.dropout_module(x)
+        input_nodes = self.dropout_module(input_nodes)
 
-        x = x.transpose(0, 1)
+        input_nodes = input_nodes.transpose(0, 1)
 
         inner_states = []
         if not last_state_only:
-            inner_states.append(x)
+            inner_states.append(input_nodes)
 
         for layer in self.layers:
-            x, _ = layer(
-                x,
+            input_nodes, _ = layer(
+                input_nodes,
                 self_attn_padding_mask=padding_mask,
                 self_attn_mask=attn_mask,
                 self_attn_bias=attn_bias,
             )
             if not last_state_only:
-                inner_states.append(x)
+                inner_states.append(input_nodes)
 
-        graph_rep = x[0, :, :]
+        graph_rep = input_nodes[0, :, :]
 
         if last_state_only:
-            inner_states = [x]
+            inner_states = [input_nodes]
 
         if self.traceable:
             return torch.stack(inner_states), graph_rep
@@ -571,10 +571,10 @@ class GraphormerDecoderHead(nn.Module):
         self.classifier = nn.Linear(embedding_dim, num_classes, bias=False)
         self.num_classes = num_classes
 
-    def forward(self, x, **unused):
-        x = self.classifier(x)
-        x = x + self.lm_output_learned_bias
-        return x
+    def forward(self, input_nodes, **unused):
+        input_nodes = self.classifier(input_nodes)
+        input_nodes = input_nodes + self.lm_output_learned_bias
+        return input_nodes
 
 
 class GraphormerPreTrainedModel(PreTrainedModel):
@@ -672,35 +672,35 @@ class GraphormerModel(GraphormerPreTrainedModel):
 
     def forward(
         self,
-        x,
+        input_nodes,
         attn_bias,
         in_degree,
         out_degree,
         spatial_pos,
-        edge_input,
+        input_edges,
         attn_edge_type,
         perturb=None,
         masked_tokens=None,
         **unused
     ):
         inner_states, graph_rep = self.graph_encoder(
-            x, attn_bias, in_degree, out_degree, spatial_pos, edge_input, attn_edge_type, perturb=perturb
+            input_nodes, attn_bias, in_degree, out_degree, spatial_pos, input_edges, attn_edge_type, perturb=perturb
         )
 
         # last inner state, then revert Batch and Graph len
-        x = inner_states[-1].transpose(0, 1)
+        input_nodes = inner_states[-1].transpose(0, 1)
 
         # project masked tokens only
         if masked_tokens is not None:
             raise NotImplementedError
 
-        x = self.layer_norm(self.activation_fn(self.lm_head_transform_weight(x)))
+        input_nodes = self.layer_norm(self.activation_fn(self.lm_head_transform_weight(input_nodes)))
 
         # project back to size of vocabulary
         if self.share_input_output_embed and hasattr(self.graph_encoder.embed_tokens, "weight"):
-            x = torch.nn.functional.linear(x, self.graph_encoder.embed_tokens.weight)
+            input_nodes = torch.nn.functional.linear(input_nodes, self.graph_encoder.embed_tokens.weight)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=x, hidden_states=inner_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=input_nodes, hidden_states=inner_states)
 
     def max_nodes(self):
         """Maximum output length supported by the encoder."""
@@ -731,16 +731,18 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
 
     def forward(
         self,
-        x,
+        input_nodes,
         attn_bias,
         in_degree,
         out_degree,
         spatial_pos,
-        edge_input,
+        input_edges,
         attn_edge_type,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        outputs = self.encoder(x, attn_bias, in_degree, out_degree, spatial_pos, edge_input, attn_edge_type)[0]
+        outputs = self.encoder(
+            input_nodes, attn_bias, in_degree, out_degree, spatial_pos, input_edges, attn_edge_type
+        )[0]
 
         head_outputs = self.classifier(outputs)
         logits = head_outputs[:, 0, :].contiguous()

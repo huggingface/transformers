@@ -28,14 +28,14 @@ def preprocess_item(item, keep_features=True, task_list=None):
     else:
         edge_attr = np.ones((len(item["edge_index"][0]), 1), dtype=np.int64)  # same embedding for all
 
-    if keep_features and "node_feat" in item.keys():  # x
+    if keep_features and "node_feat" in item.keys():  # input_nodes
         node_feature = np.asarray(item["node_feat"], dtype=np.int64)
     else:
         node_feature = np.ones((item["num_nodes"], 1), dtype=np.int64)  # same embedding for all
 
     edge_index = np.asarray(item["edge_index"], dtype=np.int64)
 
-    x = convert_to_single_emb(node_feature) + 1
+    input_nodes = convert_to_single_emb(node_feature) + 1
     num_nodes = item["num_nodes"]
 
     if len(edge_attr.shape) == 1:
@@ -50,17 +50,17 @@ def preprocess_item(item, keep_features=True, task_list=None):
     shortest_path_result, path = algos_graphormer.floyd_warshall(adj)
     max_dist = np.amax(shortest_path_result)
 
-    edge_input = algos_graphormer.gen_edge_input(max_dist, path, attn_edge_type)
+    input_edges = algos_graphormer.gen_edge_input(max_dist, path, attn_edge_type)
     attn_bias = np.zeros([num_nodes + 1, num_nodes + 1], dtype=np.single)  # with graph token
 
     # combine
-    item["x"] = x + 1  # we shift all indices by one for padding
+    item["input_nodes"] = input_nodes + 1  # we shift all indices by one for padding
     item["attn_bias"] = attn_bias
     item["attn_edge_type"] = attn_edge_type
     item["spatial_pos"] = shortest_path_result.astype(np.int64) + 1  # we shift all indices by one for padding
     item["in_degree"] = np.sum(adj, axis=1).reshape(-1) + 1  # we shift all indices by one for padding
     item["out_degree"] = item["in_degree"]  # for undirected graph
-    item["edge_input"] = edge_input + 1  # we shift all indices by one for padding
+    item["input_edges"] = input_edges + 1  # we shift all indices by one for padding
     if "labels" not in item:
         item["labels"] = {}
         for task in task_list:
@@ -84,24 +84,24 @@ class GraphormerDataCollator:
             features = [vars(f) for f in features]
         batch = {}
 
-        max_node_num = max(len(i["x"]) for i in features)
-        node_feat_size = len(features[0]["x"][0])
+        max_node_num = max(len(i["input_nodes"]) for i in features)
+        node_feat_size = len(features[0]["input_nodes"][0])
         edge_feat_size = len(features[0]["attn_edge_type"][0][0])
-        max_dist = max(len(i["edge_input"][0][0]) for i in features)
-        edge_input_size = len(features[0]["edge_input"][0][0][0])
+        max_dist = max(len(i["input_edges"][0][0]) for i in features)
+        edge_input_size = len(features[0]["input_edges"][0][0][0])
         batch_size = len(features)
 
         batch["attn_bias"] = torch.zeros(batch_size, max_node_num + 1, max_node_num + 1, dtype=torch.float)
         batch["attn_edge_type"] = torch.zeros(batch_size, max_node_num, max_node_num, edge_feat_size, dtype=torch.long)
         batch["spatial_pos"] = torch.zeros(batch_size, max_node_num, max_node_num, dtype=torch.long)
         batch["in_degree"] = torch.zeros(batch_size, max_node_num, dtype=torch.long)
-        batch["x"] = torch.zeros(batch_size, max_node_num, node_feat_size, dtype=torch.long)
-        batch["edge_input"] = torch.zeros(
+        batch["input_nodes"] = torch.zeros(batch_size, max_node_num, node_feat_size, dtype=torch.long)
+        batch["input_edges"] = torch.zeros(
             batch_size, max_node_num, max_node_num, max_dist, edge_input_size, dtype=torch.long
         )
 
         for ix, f in enumerate(features):
-            for k in ["attn_bias", "attn_edge_type", "spatial_pos", "in_degree", "x", "edge_input"]:
+            for k in ["attn_bias", "attn_edge_type", "spatial_pos", "in_degree", "input_nodes", "input_edges"]:
                 f[k] = torch.tensor(f[k])
 
             if len(f["attn_bias"][1:, 1:][f["spatial_pos"] >= self.spatial_pos_max]) > 0:
@@ -113,10 +113,10 @@ class GraphormerDataCollator:
             ]
             batch["spatial_pos"][ix, : f["spatial_pos"].shape[0], : f["spatial_pos"].shape[1]] = f["spatial_pos"]
             batch["in_degree"][ix, : f["in_degree"].shape[0]] = f["in_degree"]
-            batch["x"][ix, : f["x"].shape[0], :] = f["x"]
-            batch["edge_input"][
-                ix, : f["edge_input"].shape[0], : f["edge_input"].shape[1], : f["edge_input"].shape[2], :
-            ] = f["edge_input"]
+            batch["input_nodes"][ix, : f["input_nodes"].shape[0], :] = f["input_nodes"]
+            batch["input_edges"][
+                ix, : f["input_edges"].shape[0], : f["input_edges"].shape[1], : f["input_edges"].shape[2], :
+            ] = f["input_edges"]
 
         batch["out_degree"] = batch["in_degree"]
 
