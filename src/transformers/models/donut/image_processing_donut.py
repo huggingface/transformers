@@ -430,7 +430,7 @@ class DonutImageProcessor(BaseImageProcessor):
             images = [self.thumbnail(image=image, size=size) for image in images]
 
         if do_pad:
-            images = [self.pad(image=image, size=size, random_padding=random_padding) for image in images]
+            images = [self.pad_image(image=image, size=size, random_padding=random_padding) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
