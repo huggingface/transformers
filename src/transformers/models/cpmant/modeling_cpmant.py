@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_cpmant import CPMAntConfig
@@ -106,9 +106,6 @@ def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            # assert (
-            #     pointer.shape == array.shape
-            # ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             if pointer.shape != array.shape:
                 raise AssertionError("Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
         except AssertionError as e:
@@ -207,7 +204,6 @@ class CPMAntLayerNorm(nn.Module):
     def __init__(
         self,
         dim_norm: int,
-        dtype: torch.dtype = torch.float,
         eps: float = 1e-6,
         init_var: float = 1.0,
     ):
@@ -215,14 +211,13 @@ class CPMAntLayerNorm(nn.Module):
 
         self.eps = eps
         self.dim_norm = dim_norm
-        self.weight = torch.nn.parameter.Parameter(torch.full((dim_norm,), init_var, dtype=dtype))
+        self.weight = torch.nn.parameter.Parameter(torch.full((dim_norm,), init_var))
 
     def forward(self, x: torch.Tensor):
         """
         Args:
             x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
         """  # noqa: E501
-        # assert x.size(-1) == self.dim_norm
         if x.size(-1) != self.dim_norm:
             raise AssertionError("x.size(-1) != self.dim_norm")
         return rms_layernorm(x, self.weight, self.eps)
@@ -234,7 +229,6 @@ class CPMAntAttention(nn.Module):
         dim_model: int,
         num_heads: int,
         dim_head: int,
-        dtype: torch.dtype = torch.float,
         dropout_p: Optional[float] = None,
     ) -> None:
         super().__init__()
@@ -243,11 +237,11 @@ class CPMAntAttention(nn.Module):
         self.num_heads = num_heads
         self.dim_head = dim_head
 
-        self.project_q = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False, dtype=dtype)
-        self.project_k = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False, dtype=dtype)
-        self.project_v = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False, dtype=dtype)
+        self.project_q = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False)
+        self.project_k = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False)
+        self.project_v = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False)
 
-        self.attention_out = nn.Linear(self.num_heads * self.dim_head, self.dim_model, bias=False, dtype=dtype)
+        self.attention_out = nn.Linear(self.num_heads * self.dim_head, self.dim_model, bias=False)
 
         self.softmax = torch.nn.Softmax(dim=-1)
 
@@ -338,7 +332,6 @@ class CPMAntSelfAttentionBlock(nn.Module):
             dim_model (int): Main dimension of modules in transformer blocks.
             num_heads (int): Number of attention heads in the Transformer encoder.
             dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
-            dtype (optional): Defaults to torch.float.
             eps (float, optional): The epsilon used by the layer normalization layers.
             dropout_p (float, optional): Defaults to 0.
     """  # noqa: E501
@@ -348,7 +341,6 @@ class CPMAntSelfAttentionBlock(nn.Module):
         dim_model: int,
         num_heads: int,
         dim_head: int,
-        dtype=torch.float,
         eps: float = 1e-6,
         dropout_p: Optional[float] = None,
     ):
@@ -356,14 +348,12 @@ class CPMAntSelfAttentionBlock(nn.Module):
 
         self.layernorm_before_attention = CPMAntLayerNorm(
             dim_norm=dim_model,
-            dtype=dtype,
             eps=eps,
         )
         self.self_attention = CPMAntAttention(
             dim_model=dim_model,
             num_heads=num_heads,
             dim_head=dim_head,
-            dtype=dtype,
             dropout_p=dropout_p,
         )
         if dropout_p:
@@ -410,12 +400,11 @@ class DenseGatedACT(nn.Module):
         self,
         dim_in: int,
         dim_ff: int,
-        dtype=torch.float,
     ):
         super().__init__()
 
-        self.w_0 = nn.Linear(dim_in, dim_ff, bias=False, dtype=dtype)
-        self.w_1 = nn.Linear(dim_in, dim_ff, bias=False, dtype=dtype)
+        self.w_0 = nn.Linear(dim_in, dim_ff, bias=False)
+        self.w_1 = nn.Linear(dim_in, dim_ff, bias=False)
         self.act = torch.nn.GELU()
 
     def forward(self, x: torch.Tensor):
@@ -438,13 +427,7 @@ class CPMAntFeedForward(nn.Module):
         dim_in (int): input dimension.
         dim_ff (int): middle dimension.
         dim_out (int, optional): output dimension. Defaults to None, which means dim_in = dim_out.
-        dtype (optional): Defaults to torch.float.
-        init_mean (float, optional):
-            mean of :math:`\mathbf{W}\sim\mathcal{N}(\text{mean}, \text{std}^2)` for fully-connected module used in
-            feed-forward layer. Defaults to 0.
-        init_std (float, optional):
-            std of :math:`\mathbf{W}\sim\mathcal{N}(\text{mean}, \text{std}^2)` for fully-connected module used in
-            feed-forward layer. Defaults to 0.02.
+
         bias (bool, optional):
             whether to use bias term in fully-connected layers used in feed-forward module. Defaults to False.
         activate_fn (str, optional): Defaults to `gated_gelu`.
@@ -455,7 +438,6 @@ class CPMAntFeedForward(nn.Module):
         self,
         dim_model: int,
         dim_ff: int,
-        dtype=torch.float,
         dropout_p: Optional[float] = None,
     ):
         super().__init__()
@@ -463,7 +445,6 @@ class CPMAntFeedForward(nn.Module):
         self.w_in = DenseGatedACT(
             dim_in=dim_model,
             dim_ff=dim_ff,
-            dtype=dtype,
         )
 
         if dropout_p is not None:
@@ -471,7 +452,7 @@ class CPMAntFeedForward(nn.Module):
         else:
             self.dropout = None
 
-        self.w_out = nn.Linear(dim_ff, dim_model, bias=False, dtype=dtype)
+        self.w_out = nn.Linear(dim_ff, dim_model, bias=False)
 
     def forward(self, x: torch.Tensor):
         """
@@ -494,7 +475,6 @@ class CPMAntFFNBlock(nn.Module):
     Args:
         dim_model (int): Main dimension of modules in transformer blocks.
         dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        dtype (optional): Defaults to torch.float.
         eps (float, optional): The epsilon used by the layer normalization layers.
         dropout_p (float, optional): Defaults to 0.
     """  # noqa: E501
@@ -503,7 +483,6 @@ class CPMAntFFNBlock(nn.Module):
         self,
         dim_model: int,
         dim_ff: int,
-        dtype=torch.float,
         eps: float = 1e-6,
         dropout_p: Optional[float] = 0,
     ):
@@ -511,14 +490,12 @@ class CPMAntFFNBlock(nn.Module):
 
         self.layernorm_before_ffn = CPMAntLayerNorm(
             dim_model,
-            dtype=dtype,
             eps=eps,
         )
 
         self.ffn = CPMAntFeedForward(
             dim_model,
             dim_ff,
-            dtype=dtype,
             dropout_p=dropout_p,
         )
 
@@ -553,7 +530,6 @@ class CPMAntTransformerBlock(nn.Module):
             dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
             num_heads (int): Number of attention heads in the Transformer encoder.
             dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
-            dtype (optional): Defaults to torch.float.
             eps (float, optional): The epsilon used by the layer normalization layers.
             dropout_p (float, optional): Defaults to 0.
     """  # noqa: E501
@@ -564,7 +540,6 @@ class CPMAntTransformerBlock(nn.Module):
         dim_ff: int,
         num_heads: int,
         dim_head: int,
-        dtype=torch.float,
         eps: float = 1e-6,
         dropout_p: Optional[float] = None,
         mask_att: bool = False,
@@ -579,7 +554,6 @@ class CPMAntTransformerBlock(nn.Module):
                 dim_model=dim_model,
                 num_heads=num_heads,
                 dim_head=dim_head,
-                dtype=dtype,
                 eps=eps,
                 dropout_p=dropout_p,
             )
@@ -588,7 +562,6 @@ class CPMAntTransformerBlock(nn.Module):
             self.ffn = CPMAntFFNBlock(
                 dim_model=dim_model,
                 dim_ff=dim_ff,
-                dtype=dtype,
                 eps=eps,
                 dropout_p=dropout_p,
             )
@@ -646,7 +619,6 @@ class CPMAntEncoder(nn.Module):
         dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_heads (int): Number of attention heads in the Transformer encoder.
         dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
-        dtype (optional): Defaults to torch.float.
         eps (float, optional): The epsilon used by the layer normalization layers.
         dropout_p (float, optional): Defaults to 0.
     """  # noqa: E501
@@ -658,7 +630,6 @@ class CPMAntEncoder(nn.Module):
         dim_ff: int = 10240,
         num_heads: int = 32,
         dim_head: int = 128,
-        dtype: torch.dtype = torch.float,
         eps: float = 1e-6,
         dropout_p: Optional[float] = 0.0,
         mask_modules: Optional[List[Tuple[bool, bool]]] = None,
@@ -667,11 +638,9 @@ class CPMAntEncoder(nn.Module):
         self.num_layers = num_layers
 
         if mask_modules is not None:
-            # assert len(mask_modules) == num_layers, "The total number of masks should equal to num_layers"
             if len(mask_modules) == num_layers:
                 raise ValueError("The total number of masks should equal to num_layers")
             for mask_module in mask_modules:
-                # assert len(mask_module) == 2, "For encoder, each mask should be (mask_att, mask_ffn)"
                 if len(mask_module) != 2:
                     raise ValueError("For encoder, each mask should be (mask_att, mask_ffn)")
         else:
@@ -684,7 +653,6 @@ class CPMAntEncoder(nn.Module):
                     dim_ff=dim_ff,
                     num_heads=num_heads,
                     dim_head=dim_head,
-                    dtype=dtype,
                     eps=eps,
                     dropout_p=dropout_p,
                     mask_att=mask_modules[ith][0],
@@ -694,7 +662,7 @@ class CPMAntEncoder(nn.Module):
             ]
         )
 
-        self.output_layernorm = CPMAntLayerNorm(dim_norm=dim_model, dtype=dtype, eps=eps)
+        self.output_layernorm = CPMAntLayerNorm(dim_norm=dim_model, eps=eps)
 
     def forward(
         self,
@@ -759,7 +727,6 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         num_buckets: int = 512,
         max_distance: int = 2048,
         bidirectional: bool = True,
-        dtype: torch.dtype = torch.float,
     ):
         super().__init__()
 
@@ -770,7 +737,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         self.num_segments = num_segments
 
         self.relative_attention_bias = torch.nn.parameter.Parameter(
-            torch.empty(num_segments * num_segments + num_buckets, num_heads, dtype=dtype)
+            torch.empty(num_segments * num_segments + num_buckets, num_heads)
         )
 
     def forward(
@@ -785,8 +752,6 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             keylen = key_pos.size(1)
             querylen = query_pos.size(1)
 
-            # assert key_pos.size(0) == query_pos.size(0)
-            # assert keylen == key_segment.size(1) and querylen == query_segment.size(1)
             if key_pos.size(0) != query_pos.size(0):
                 raise AssertionError("key_pos.size(0) != query_pos.size(0)")
             if keylen != key_segment.size(1) or querylen != query_segment.size(1):
@@ -994,7 +959,25 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.segment_embedding = embeddings["segment"]
         self.input_embedding = embeddings["input"]
         self.position_bias = embeddings["position"]
-
+        
+    def _prepare_attention_mask(self, input, span, context, length):
+        batch = input.size(0)
+        device = input.device
+        seqlen = input.size(1)
+        directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(
+            -1, 1
+        )
+        attention_mask = context[:, None, :] | (
+            context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
+        )
+        attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
+        # mask for left paddding
+        mask_1d = (
+            torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
+        )
+        attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
+        return attention_mask
+    
     @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1011,7 +994,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
         segment: torch.Tensor,
         span: torch.Tensor,
     ):
-        """
+        r"""
         Args:
             input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
             length (`torch.Tensor`): length of input, shape = `(batch)`
@@ -1020,28 +1003,15 @@ class CPMAntModel(CPMAntPreTrainedModel):
             segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
             span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
         """
-        batch = input.size(0)
-        seqlen = input.size(1)
-        input_prompt = input[:, : self.prompt_length].contiguous()
-        input_ids = input[:, self.prompt_length :].contiguous()
+        input_prompt = input_ids[:, : self.prompt_length].contiguous()
+        input_ids = input_ids[:, self.prompt_length :].contiguous()
 
         prompt_states = self.prompt_embedding(input_prompt)
         hidden_states = self.input_embedding(input_ids)
         segment_states = self.segment_embedding(segment)
         hidden_states = torch.cat([prompt_states, hidden_states], 1) + segment_states
-
-        with torch.no_grad():
-            device = input.device
-            directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(
-                -1, 1
-            )
-            attention_mask = context[:, None, :] | (
-                context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
-            )
-            attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
-            mask_1d = torch.arange(seqlen, device=device)[None, :].repeat(batch, 1) < length[:, None]
-            attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
-
+        
+        attention_mask = self._prepare_attention_mask(input_ids, span, context, length)
         position_bias = self.position_bias(position, position, segment, segment)
 
         hidden_states = self.encoder(hidden_states, attention_mask, position_bias)
@@ -1080,8 +1050,6 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
-        batch = input.size(0)
-
         if past_key_values is None:
             past_length = 0
             past_key_values = tuple([None] * self.encoder.num_layers)
@@ -1099,22 +1067,8 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             hidden_states = self.input_embedding(input) + segment_states[:, -1:, :]
 
         seqlen = past_length + input.size(1)
-
-        with torch.no_grad():
-            device = input.device
-            directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(
-                -1, 1
-            )
-            attention_mask = context[:, None, :] | (
-                context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
-            )
-            attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
-            # mask for left paddding
-            mask_1d = (
-                torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
-            )
-            attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
-
+            
+        attention_mask = self._prepare_attention_mask(input, span, context, length)
         position_bias = self.position_bias(position, position, segment, segment)
 
         attention_mask = attention_mask[:, past_length:, :]
@@ -1126,6 +1080,24 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         logits = self.lm_head(hidden_states)
         return logits, hidden_states, present_key_values
 
+    def _prepare_attention_mask(self, input, span, context, length):
+        batch = input.size(0)
+        seqlen = input.size(1)
+        device = input.device
+        directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(
+            -1, 1
+        )
+        attention_mask = context[:, None, :] | (
+            context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
+        )
+        attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
+        # mask for left paddding
+        mask_1d = (
+            torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
+        )
+        attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
+        return attention_mask
+    
     def get_input_embeddings(self):
         return self.lm_head
 
@@ -1168,7 +1140,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         else:
             if not isinstance(orig_items[0][key][0], torch.Tensor):
                 raise TypeError("The type of orig_items[0][key][0] should be tensor!")
-            items = orig_items
+            
 
         batch_size = len(items)
         shape = items[0][key].shape
@@ -1376,7 +1348,6 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                         break
 
                 # update next beam content
-                # assert len(next_sent_beam) == 0 if i == max_length else beam_size
                 if i == max_length and len(next_sent_beam) != 0:
                     raise AssertionError("i == max_length and len(next_sent_beam) != 0")
                 if i != max_length and len(next_sent_beam) != beam_size:
@@ -1384,7 +1355,6 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                 if len(next_sent_beam) == 0:
                     next_sent_beam = [(0, 0, 0)] * beam_size  # pad the batch
                 next_batch_beam.extend(next_sent_beam)
-                # assert len(next_batch_beam) == beam_size * (sent_id + 1)
                 if len(next_batch_beam) != beam_size * (sent_id + 1):
                     raise AssertionError("len(next_batch_beam) != beam_size * (sent_id + 1)")
 
@@ -1393,7 +1363,6 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                 break
 
             # sanity check / prepare next batch
-            # assert len(next_batch_beam) == batch_size * beam_size
             if len(next_batch_beam) != batch_size * beam_size:
                 raise AssertionError("len(next_batch_beam) != batch_size * beam_size")
             beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
@@ -1440,7 +1409,6 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         window_size=None,
     ):
         # only conduct repetition penalty for the output
-        # assert repetition_penalty >= 1, "repetition penalty coefficient should >= 1"
         if repetition_penalty < 1:
             raise ValueError("repetition penalty coefficient should >= 1")
         # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
