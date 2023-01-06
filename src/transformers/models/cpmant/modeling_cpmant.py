@@ -691,7 +691,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.segment_embedding = embeddings["segment"]
         self.input_embedding = embeddings["input_ids"]
         self.position_bias = embeddings["position"]
-        
+
     def _prepare_attention_mask(self, input, span, context, length):
         batch = input.size(0)
         device = input.device
