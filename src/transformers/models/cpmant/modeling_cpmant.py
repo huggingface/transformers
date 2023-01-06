@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_cpmant import CPMAntConfig
@@ -261,16 +261,17 @@ class CPMAntAttention(nn.Module):
     ):
         """
         Args:
-            hidden_q (`torch.Tensor` of shape `(batch, len_q, dim_model)`))
-                Indices of input sequence tokens. It will be embedded by model's internal embedding lookup matrix.
-            hidden_kv (`torch.Tensor` of shape `(batch, len_k, dim_model)`))
-                obj:*torch.Tensor* of shape `(batch, len_k, dim_model)`): Length of input sequence before padding.
-            attention_mask (`torch.Tensor` of shape `(batch, len_q, len_k)`))
-                Used to avoid performing attention on padding token indices.
-            position_bias (`torch.Tensor` of shape `(num_heads, len_q, len_k)`))
-                Provide positional information about tensor *key_value* and *query*.
+            hidden_q (`torch.Tensor`):
+                Indices of input sequence tokens of shape `(batch, len_q, dim_model)`. It will be embedded by model's
+                internal embedding lookup matrix.
+            hidden_kv (`torch.Tensor` of shape `(batch, len_k, dim_model)`)):
+                Tensor *key_value* and *query* of shape `(batch, len_k, dim_model)`
+            attention_mask (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
+                Avoid invalid areas to participate in the calculation of self-attention.
+            position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
+                Provide positional information to self-attention block.
             use_cache (`bool`): Whether use cache.
-            past_kv (`Tuple[torch.Tensor, torch.Tensor]`): The past key value.
+            past_kv (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
         """  # noqa: E501
 
         batch_size = hidden_q.size(0)
@@ -372,13 +373,13 @@ class CPMAntSelfAttentionBlock(nn.Module):
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`):
-                Input of self-attention block. It can be the embedding of a batch of sequences.
+                Input of transformer block(self-attention block). It can be the raw embedding of a batch of sequences.
             attention_mask (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
-                Avoid invalid areas to participate in the calculation.
+                Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
             use_cache (`bool`): Whether use cache.
-            past_key_value (`Tuple[torch.Tensor, torch.Tensor]`): The past key value.
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
         """  # noqa: E501
         x = self.layernorm_before_attention(hidden_states)
         x = self.self_attention(x, x, attention_mask, position_bias, use_cache, past_key_value)
@@ -427,7 +428,6 @@ class CPMAntFeedForward(nn.Module):
         dim_in (int): input dimension.
         dim_ff (int): middle dimension.
         dim_out (int, optional): output dimension. Defaults to None, which means dim_in = dim_out.
-
         bias (bool, optional):
             whether to use bias term in fully-connected layers used in feed-forward module. Defaults to False.
         activate_fn (str, optional): Defaults to `gated_gelu`.
@@ -576,15 +576,16 @@ class CPMAntTransformerBlock(nn.Module):
     ):
         """
         Args:
-            self_hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`):
-                Input of transformer block(self-attention block). It can be the raw embedding of a batch of sequences.
-            self_attention_mask (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
-                Avoid invalid areas to participate in the calculation of self-attention.
-            self_position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
-                Provide positional information to self-attention block.
-            use_cache (`bool`): Whether use cache.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
-        """  # noqa: E501
+            self_hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_enc, dim_model)`
+            self_attention_mask (`torch.Tensor`):
+                Avoid invalid areas to participate in the calculation of shape `(batch, seq_enc, seq_enc)`
+            self_position_bias (`torch.Tensor`):
+                Provides position information to attention mechanism of shape `(num_heads, seq_enc, seq_enc)`
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+        """ # noqa: E501
 
         current_key_value = None
         if not self.mask_att:
@@ -674,14 +675,15 @@ class CPMAntEncoder(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.Tensor` of `(batch, seq_enc, dim_model)`):
-                Input of encoder, might be the embedding of a batch of sequences.
-            attention_mask (`torch.Tensor` of `(batch, seq_enc, seq_enc)`):
-                Avoid invalid areas to participate in the calculation.
-            position_bias (`torch.Tensor` of shape `(num_heads, seq_enc, seq_enc)`):
-                Provides position information to attention mechanism.
-            use_cache (`bool`): Whether use cache.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_enc, dim_model)`
+            attention_mask (`torch.Tensor`):
+                Avoid invalid areas to participate in the calculation of shape `(batch, seq_enc, seq_enc)`
+            position_bias (`torch.Tensor`):
+                Provides position information to attention mechanism of shape `(num_heads, seq_enc, seq_enc)`
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """  # noqa: E501
         if not use_cache:
             for layer in self.layers:
@@ -842,11 +844,9 @@ class CPMAntPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            # module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            # module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -871,71 +871,37 @@ CPMANT_START_DOCSTRING = r"""
 
 CPMANT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
+        input (`torch.Tensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+        
+        length (`torch.Tensor` of shape `(batch)`, *optional*):
+            The length of input tokens.
+        context (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+            The Boolean value determines whether the model makes a prediction for that position
+        position (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+            Indices of position of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
+        segment (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+            A sequence of tokens that is processed together as a unit.
+        span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+            A contiguous sequence of tokens within the input text.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 @add_start_docstrings(
-    "The bare CPMAnt Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare CPMAnt Model outputting raw hidden-states without any specific head on top.",
     CPMANT_START_DOCSTRING,
 )
 class CPMAntModel(CPMAntPreTrainedModel):
-    """
-
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
-    """
-
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
         self.encoder = CPMAntEncoder()
@@ -959,30 +925,26 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.segment_embedding = embeddings["segment"]
         self.input_embedding = embeddings["input"]
         self.position_bias = embeddings["position"]
-        
+
     def _prepare_attention_mask(self, input, span, context, length):
         batch = input.size(0)
         device = input.device
         seqlen = input.size(1)
-        directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(
-            -1, 1
-        )
+        directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(-1, 1)
         attention_mask = context[:, None, :] | (
             context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
         )
         attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
         # mask for left paddding
-        mask_1d = (
-            torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
-        )
+        mask_1d = torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
         attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
         return attention_mask
-    
-    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+
+    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -993,32 +955,61 @@ class CPMAntModel(CPMAntPreTrainedModel):
         position: torch.Tensor,
         segment: torch.Tensor,
         span: torch.Tensor,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Args:
-            input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
-            length (`torch.Tensor`): length of input, shape = `(batch)`
-            context (`torch.Tensor`): context determines whether model predicts, shape = `(batch, seq_len)`
-            position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
-            segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
-            span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
+            input (`torch.Tensor` of shape `(batch_size, seq_len)`):
+                Indices of input sequence tokens in the vocabulary.
+
+                Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+
+            length (`torch.Tensor` of shape `(batch)`, *optional*):
+                The length of input tokens.
+            context (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                The Boolean value determines whether the model makes a prediction for that position
+            position (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                Indices of position of each input sequence tokens in the position embeddings. Selected in the range
+                `[0, config.max_position_embeddings - 1]`.
+
+                [What are position IDs?](../glossary#position-ids)
+            segment (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                A sequence of tokens that is processed together as a unit.
+            span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                A contiguous sequence of tokens within the input text.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        input_prompt = input_ids[:, : self.prompt_length].contiguous()
-        input_ids = input_ids[:, self.prompt_length :].contiguous()
+
+        input_prompt = input[:, : self.prompt_length].contiguous()
+        input_ids = input[:, self.prompt_length :].contiguous()
 
         prompt_states = self.prompt_embedding(input_prompt)
         hidden_states = self.input_embedding(input_ids)
         segment_states = self.segment_embedding(segment)
         hidden_states = torch.cat([prompt_states, hidden_states], 1) + segment_states
-        
-        attention_mask = self._prepare_attention_mask(input_ids, span, context, length)
+
+        attention_mask = self._prepare_attention_mask(input, span, context, length)
         position_bias = self.position_bias(position, position, segment, segment)
 
         hidden_states = self.encoder(hidden_states, attention_mask, position_bias)
         logits = F.linear(hidden_states, self.input_embedding.weight)
-        return logits, hidden_states
+
+        if not return_dict:
+            return (logits, hidden_states)
+
+        return BaseModelOutput(hidden_states=hidden_states)
 
 
+@add_start_docstrings(
+    """
+    The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    """,
+    CPMANT_START_DOCSTRING,
+)
 class CPMAntForCausalLM(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
@@ -1030,6 +1021,13 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         self.prompt_length = config.prompt_length
         self.lm_head = nn.Linear(config.dim_model, config.vocab_size, bias=False)
 
+    @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input: torch.Tensor,
@@ -1038,17 +1036,36 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         position: torch.Tensor,
         segment: torch.Tensor,
         span: torch.Tensor,
-        past_key_values=None,
+        past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
+        return_dict: Optional[bool] = None,
     ):
-        """
+        r"""
         Args:
-            input (`torch.Tensor`): tokenized ids, shape = `(batch, seq_len)`
-            length (`torch.Tensor`): length of input, shape = `(batch)`
-            context (`torch.Tensor`): context determines whether model predicts, shape = `(batch, seq_len)`
-            position (`torch.Tensor`): position of input, shape = `(batch, seq_len)`
-            segment (`torch.Tensor`): segment of input, shape = `(batch, seq_len)`
-            span (`torch.Tensor`): span the context of input, shape = `(batch, seq_len)`
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            input (`torch.Tensor` of shape `(batch_size, seq_len)`):
+                Indices of input sequence tokens in the vocabulary.
+
+                Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+
+            length (`torch.Tensor` of shape `(batch)`, *optional*):
+                The length of input tokens.
+            context (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                The Boolean value determines whether the model makes a prediction for that position
+            position (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                Indices of position of each input sequence tokens in the position embeddings. Selected in the range
+                `[0, config.max_position_embeddings - 1]`.
+
+                [What are position IDs?](../glossary#position-ids)
+            segment (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                A sequence of tokens that is processed together as a unit.
+            span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
+                A contiguous sequence of tokens within the input text.
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
+                Cached past key and value projection states.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         if past_key_values is None:
             past_length = 0
@@ -1066,9 +1083,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             segment_states = self.segment_embedding(segment)
             hidden_states = self.input_embedding(input) + segment_states[:, -1:, :]
 
-        seqlen = past_length + input.size(1)
-            
-        attention_mask = self._prepare_attention_mask(input, span, context, length)
+        attention_mask = self._prepare_attention_mask(input, span, context, length, past_length)
         position_bias = self.position_bias(position, position, segment, segment)
 
         attention_mask = attention_mask[:, past_length:, :]
@@ -1078,26 +1093,30 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             hidden_states, attention_mask, position_bias, True, past_key_values
         )
         logits = self.lm_head(hidden_states)
-        return logits, hidden_states, present_key_values
 
-    def _prepare_attention_mask(self, input, span, context, length):
-        batch = input.size(0)
-        seqlen = input.size(1)
-        device = input.device
-        directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(
-            -1, 1
+        if not return_dict:
+            return (logits, hidden_states, present_key_values)
+
+        return CausalLMOutputWithPast(
+            logits=logits,
+            hidden_states=hidden_states,
+            past_key_values=present_key_values,
         )
+
+    def _prepare_attention_mask(self, input, span, context, length, past_length):
+        batch = input.size(0)
+        seqlen = input.size(1) + past_length
+        device = input.device
+        directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(-1, 1)
         attention_mask = context[:, None, :] | (
             context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
         )
         attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
         # mask for left paddding
-        mask_1d = (
-            torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
-        )
+        mask_1d = torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
         attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
         return attention_mask
-    
+
     def get_input_embeddings(self):
         return self.lm_head
 
