@@ -116,7 +116,7 @@ class CPMAntModelTester:
         return (config, input_ids)
 
     def get_config(self):
-        return CPMAntConfig.from_pretrained("openbmb/cpm-ant-10b")
+        return CPMAntConfig.from_pretrained("/data3/private/wangpeng/code/ant-LM-5G")
 
     def create_and_check_cpmant_model(self, config, input_ids, *args):
         model = CPMAntModel(config=config)
@@ -203,13 +203,14 @@ class CPMAntModelTest(unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        # for model_name in CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in ["/data3/private/wangpeng/code/ant-LM-5G"]:
             model = CPMAntModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_simple_generation(self):
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "/data3/private/wangpeng/code/ant-LM-5G"
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
 <<<<<<< HEAD
@@ -259,7 +260,7 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 38, 31744))
 =======
         texts = ["今天天气真好！"]
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "/data3/private/wangpeng/code/ant-LM-5G"
         model = CPMAntModel.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
         input_ids = tokenizer.get_model_input(texts)
@@ -294,7 +295,7 @@ class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 38, 30720))
 =======
         texts = ["今天天气真好！"]
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "/data3/private/wangpeng/code/ant-LM-5G"
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
         input_ids = tokenizer.get_model_input(texts)
