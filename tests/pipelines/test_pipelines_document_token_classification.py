@@ -24,15 +24,7 @@ from transformers import (
 )
 from transformers.models.layoutlmv3.image_processing_layoutlmv3 import apply_tesseract as apply_ocr
 from transformers.pipelines import pipeline
-from transformers.testing_utils import (
-    nested_simplify,
-    require_detectron2,
-    require_pytesseract,
-    require_tf,
-    require_torch,
-    require_vision,
-    slow,
-)
+from transformers.testing_utils import require_pytesseract, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
