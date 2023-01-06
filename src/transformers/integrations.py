@@ -1313,6 +1313,8 @@ class ClearMLCallback(TrainerCallback):
         ClearML project name.
     - **CLEARML_TASK** (`str`, *optional*, defaults to `Trainer`):
         ClearML task name.
+    - **CLEARML_LOG_MODEL** (`bool`, *optional*, defaults to `False`):
+        Whether to log models as artifacts during training.
     """
 
     def __init__(self):
@@ -1325,6 +1327,8 @@ class ClearMLCallback(TrainerCallback):
 
         self._initialized = False
         self._clearml_task = None
+
+        self._log_model = os.getenv("CLEARML_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
     def setup(self, args, state, model, tokenizer, **kwargs):
         if self._clearml is None:
@@ -1403,7 +1407,7 @@ class ClearMLCallback(TrainerCallback):
                     )
 
     def on_save(self, args, state, control, **kwargs):
-        if self._clearml_task and state.is_world_process_zero:
+        if self._log_model and self._clearml_task and state.is_world_process_zero:
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
             logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
