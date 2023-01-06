@@ -906,6 +906,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
     def set_input_embeddings(self, embeddings, **kwargs):
         self.lm_head = embeddings
 
+<<<<<<< HEAD
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         batch, length = input_ids.shape
         cur_length = max(kwargs["length"].tolist())
@@ -934,6 +935,301 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             "use_cache": kwargs["use_cache"],
             "past_key_values": kwargs.get("past_key_values", None),
         }
+=======
+    def prepare_inputs_for_generation(self, input_ids):
+        input_tensors = list(map(self._convert_to_tensors, input_ids))
+        keys = set(input_tensors[0].keys())
+        padded = {}
+        for key in keys:
+            padded[key] = self.pad(input_tensors, key, padding_side="left")
+        return padded
+
+    def _convert_to_tensors(self, input_ids, task_id=2):
+        model_inputs = {}
+        input_ids = [6] + input_ids
+        input_ids = [j for j in input_ids if j != 1]
+
+        model_inputs["input"] = [x + self.prompt_length * task_id for x in range(self.prompt_length)] + input_ids
+        model_inputs["length"] = len(model_inputs["input"])
+        model_inputs["position"] = list(range(len(model_inputs["input"])))
+        model_inputs["span"] = [0] * len(model_inputs["input"])
+        model_inputs["context"] = [True] * len(model_inputs["input"])
+        model_inputs["segment"] = [0] * self.prompt_length + [2] * len(input_ids)
+
+        for key in model_inputs:
+            model_inputs[key] = torch.tensor(model_inputs[key]).int().unsqueeze(0)
+
+        return model_inputs
+
+    def pad(self, orig_items, key, padding_value=0, padding_side="left"):
+        items = []
+        if isinstance(orig_items[0][key], list):
+            if not isinstance(orig_items[0][key][0], torch.Tensor):
+                raise TypeError("The type of orig_items[0][key][0] should be tensor!")
+            for it in orig_items:
+                for tr in it[key]:
+                    items.append({key: tr})
+        else:
+            if not isinstance(orig_items[0][key][0], torch.Tensor):
+                raise TypeError("The type of orig_items[0][key][0] should be tensor!")
+            items = orig_items
+
+        batch_size = len(items)
+        shape = items[0][key].shape
+        dim = len(shape)
+        if dim > 3:
+            raise ValueError(f"input should have at most 3 dimensions, got {dim}")
+        max_length = max(item[key].shape[-1] for item in items)
+        min_length = min(item[key].shape[-1] for item in items)
+        dtype = items[0][key].dtype
+
+        if dim == 1:
+            return torch.cat([item[key] for item in items], dim=0)
+        elif dim == 2:
+            if max_length == min_length:
+                return torch.cat([item[key] for item in items], dim=0)
+            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+        else:
+            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
+
+        for i, item in enumerate(items):
+            if dim == 2:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0])] = item[key][0].clone()
+            elif dim == 3:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0]), :] = item[key][0].clone()
+
+        return tensor
+
+    def generate(self, input_ids, **kwargs):
+        if isinstance(input_ids, torch.Tensor):
+            input_ids = input_ids.detach().tolist()
+        if not isinstance(input_ids[0], list):
+            input_ids = [input_ids]
+        model_inputs = self.prepare_inputs_for_generation(input_ids)
+        with torch.inference_mode():
+            output_ids = self._decode(model_inputs, **kwargs)
+        result = [ii + oi for ii, oi in zip(input_ids, output_ids)]
+        return torch.tensor(result)
+
+    def _decode(
+        self, model_inputs, beam_size=3, max_length=50, repetition_penalty=1.2, repetition_window=None, **kwargs
+    ):
+        """
+        Args:
+            model_inputs (dict): {input, context, segment, length, span, position}.
+            beam_size (int, optional, defaults to 3): beam size of beam search.
+            max_length (int, optional, defaults to 50): maximum generation length.
+            repetition_penalty (float, optional, defaults to 1.2):
+                repetition penalty coefficient, 1.0 means no penalty.
+            repetition_window (int, optional, defaults to None):
+                window size of repetition penalty, None means that all output tokens are penalized.
+        """  # noqa: E501
+        # generate_length + 1 for EOS token
+        max_length += 1
+
+        # expand dimmension
+        batch_size = model_inputs["input"].size(0)
+        input = (
+            model_inputs["input"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+        length = (
+            model_inputs["length"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size)
+            .contiguous()
+            .view(
+                batch_size * beam_size,
+            )
+        )
+        context = (
+            model_inputs["context"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+        position = (
+            model_inputs["position"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+        segment = (
+            model_inputs["segment"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+        span = (
+            model_inputs["span"]
+            .unsqueeze(1)
+            .expand(batch_size, beam_size, -1)
+            .contiguous()
+            .view(batch_size * beam_size, -1)
+        )
+
+        done = [False for _ in range(batch_size)]
+
+        beam_scores = torch.zeros((batch_size, beam_size), dtype=torch.float, device=input.device)
+        beam_scores[:, 1:] = -1e9
+        beam_scores = beam_scores.view(-1)
+
+        # generated hypotheses
+        generated_hyps = [
+            BeamHypotheses(beam_size, max_length, length_penalty=1, early_stopping=False) for _ in range(batch_size)
+        ]
+
+        pred_start_index = input.size(-1)
+        past_key_values = None
+        for i in range(max_length + 1):
+            if i == 0:
+                logits, _, past_key_values = self(
+                    input=input,
+                    length=length,
+                    context=context,
+                    position=position,
+                    segment=segment,
+                    span=span,
+                    past_key_values=past_key_values,
+                )
+            else:
+                logits, _, past_key_values = self(
+                    input=input[:, -1:],
+                    length=length,
+                    context=context,
+                    position=position,
+                    segment=segment,
+                    span=span,
+                    past_key_values=past_key_values,
+                )
+
+            # skip all steps when we are done with each sentence
+            if all(done):
+                break
+
+            # (batch * beam, seqlen, model_dim)
+            logits = logits[:, -1, :]
+
+            if i == 0:
+                logits[:, 7] = -float("inf")
+                logits[:, 4] = -float("inf")
+
+            self.apply_repetition_penalty(
+                logits,
+                batch_size,
+                beam_size,
+                input,
+                repetition_penalty,
+                pred_start_index,
+                input.size(-1) - 1,
+                repetition_window,
+            )
+            scores = F.log_softmax(logits, dim=-1)
+
+            next_scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * beam_size, vocab_size)
+
+            # re-organize to group the beam together (we are keeping top hypothesis accross beams)
+            next_scores = next_scores.view(batch_size, -1)  # (batch_size, beam_size * vocab_size)
+            next_scores, next_words = torch.topk(next_scores, 2 * beam_size, dim=1, largest=True, sorted=True)
+
+            if not (next_scores.size() == next_words.size() == (batch_size, 2 * beam_size)):
+                raise AssertionError(
+                    "next_scores.size(), next_words.size(), (batch_size, 2 * beam_size) are not equal. "
+                )
+            next_batch_beam = []
+
+            for sent_id in range(batch_size):
+                # if we are done with this sentence
+                done[sent_id] = done[sent_id] or generated_hyps[sent_id].is_done(next_scores[sent_id].max().item(), i)
+                if done[sent_id]:
+                    next_batch_beam.extend([(0, 0, 0)] * beam_size)  # pad the batch
+                    continue
+
+                # next sentence beam content
+                next_sent_beam = []
+
+                # next words for this sentence
+                for idx, value in zip(next_words[sent_id], next_scores[sent_id]):
+
+                    # get beam and word IDs
+                    beam_id = torch.div(idx, scores.size(-1), rounding_mode="floor")
+                    word_id = idx % scores.size(-1)
+
+                    # end of sentence, or next word
+                    if word_id == 7 or i == max_length:
+                        generated_hyps[sent_id].add(
+                            input[sent_id * beam_size + beam_id, pred_start_index:].clone().cpu().tolist(),
+                            value.item(),
+                        )
+                    else:
+                        next_sent_beam.append((value, word_id, sent_id * beam_size + beam_id))
+
+                    # the beam for next step is full
+                    if len(next_sent_beam) == beam_size:
+                        break
+
+                # update next beam content
+                if i == max_length and len(next_sent_beam) != 0:
+                    raise AssertionError("i == max_length and len(next_sent_beam) != 0")
+                if i != max_length and len(next_sent_beam) != beam_size:
+                    raise AssertionError("i != beam_size and len(next_sent_beam) != beam_size")
+                if len(next_sent_beam) == 0:
+                    next_sent_beam = [(0, 0, 0)] * beam_size  # pad the batch
+                next_batch_beam.extend(next_sent_beam)
+                if len(next_batch_beam) != beam_size * (sent_id + 1):
+                    raise AssertionError("len(next_batch_beam) != beam_size * (sent_id + 1)")
+
+            # we have reached the last step
+            if i == max_length:
+                break
+
+            # sanity check / prepare next batch
+            if len(next_batch_beam) != batch_size * beam_size:
+                raise AssertionError("len(next_batch_beam) != batch_size * beam_size")
+            beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
+            beam_words = input.new([x[1] for x in next_batch_beam])
+            beam_idx = length.new([x[2] for x in next_batch_beam]).long()
+
+            # re-order batch and internal states
+            input = input[beam_idx, :]
+
+            past_key_values = [list(each) if each is not None else each for each in past_key_values]  # type: ignore # noqa: E501
+            for key_value_layer in past_key_values:
+                if key_value_layer is not None:
+                    key_value_layer[0] = key_value_layer[0][beam_idx]
+                    key_value_layer[1] = key_value_layer[1][beam_idx]
+
+            # update input ids
+            input = torch.cat([input, beam_words.unsqueeze(1)], dim=-1)
+            length += 1
+            context = torch.cat(
+                [context, torch.ones((context.size(0), 1), dtype=torch.int, device=context.device)],
+                dim=-1,
+            )
+            position = torch.cat([position, position[:, -1:] + 1], dim=-1)
+            segment = torch.cat([segment, segment[:, -1:]], dim=-1)  # segment id always the same as the previous token
+            span = torch.cat([span, span[:, -1:]], dim=-1)
+
+        # select the best hypotheses
+        results = []
+        for i, hypotheses in enumerate(generated_hyps):
+            best_hyp = max(hypotheses.hyp, key=lambda x: x[0])[1]
+            results.append(best_hyp)
+
+        return results
+>>>>>>> 7bc2197e0 (test)
 
     def _expand_inputs_for_generation(self, input_ids, expand_size, **kwargs):
         input_ids = input_ids.repeat_interleave(expand_size, dim=0)
