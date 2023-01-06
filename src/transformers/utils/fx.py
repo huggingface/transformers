@@ -777,7 +777,7 @@ class HFTracer(Tracer):
                     image_size = model.config.vision_config.image_size
                 elif hasattr(model.config, "encoder"):
                     image_size = model.config.encoder.image_size
-                elif getattr(model.config, "model_type")=="layoutlmv3":
+                elif getattr(model.config, "model_type") == "layoutlmv3":
                     image_size = getattr(model.config, "input_size")
                     image_size = (image_size, image_size)
                 else:

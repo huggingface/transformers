@@ -532,6 +532,7 @@ class AutoModelForDocumentQuestionAnswering(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+
 class AutoModelForDocumentTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 

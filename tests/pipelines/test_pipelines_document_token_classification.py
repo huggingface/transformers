@@ -14,16 +14,23 @@
 
 import unittest
 
-from transformers import MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING, AutoTokenizer, AutoFeatureExtractor, is_vision_available, AutoConfig, AutoModelForDocumentTokenClassification
-from transformers.pipelines import pipeline
+from transformers import (
+    MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING,
+    AutoConfig,
+    AutoFeatureExtractor,
+    AutoModelForDocumentTokenClassification,
+    AutoTokenizer,
+    is_vision_available,
+)
 from transformers.models.layoutlmv3.image_processing_layoutlmv3 import apply_tesseract as apply_ocr
+from transformers.pipelines import pipeline
 from transformers.testing_utils import (
     nested_simplify,
+    require_detectron2,
     require_pytesseract,
     require_tf,
     require_torch,
     require_vision,
-    require_detectron2,
     slow,
 )
 
@@ -57,7 +64,6 @@ INVOICE_URL = (
 class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING
 
-
     @require_pytesseract
     @require_vision
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
@@ -84,26 +90,22 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     def run_pipeline_test(self, dtc_pipeline, examples):
         outputs = dtc_pipeline(examples)
         self.assertEqual(
-            outputs,
-            [
-                    {"words": ANY(list), "word_labels": ANY(list), "boxes": ANY(list)} for _ in examples
-            ]
+            outputs, [{"words": ANY(list), "word_labels": ANY(list), "boxes": ANY(list)} for _ in examples]
         )
-    
+
     @require_torch
     @require_pytesseract
     def test_small_model_pt(self):
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LayoutLMv3ForTokenClassification")
-        config_ms= AutoConfig.from_pretrained("microsoft/layoutlmv3-base")
+        config_ms = AutoConfig.from_pretrained("microsoft/layoutlmv3-base")
         config.update(config_ms.to_dict())
         model = AutoModelForDocumentTokenClassification.from_config(config)
         tokenizer = AutoTokenizer.from_pretrained(
             "microsoft/layoutlmv3-base", revision="07c9b08", add_prefix_space=True
         )
-        feature_extractor = AutoFeatureExtractor.from_pretrained(
-            "microsoft/layoutlmv3-base", revision="07c9b08"
-        )
-        dtc_pipeline = pipeline("document-token-classification", 
+        feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/layoutlmv3-base", revision="07c9b08")
+        dtc_pipeline = pipeline(
+            "document-token-classification",
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
@@ -113,13 +115,13 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         self.assertEqual(len(outputs["words"]), 95)
         self.assertEqual(len(outputs["word_labels"]), 95)
         self.assertEqual(len(outputs["boxes"]), 95)
-        self.assertEqual(set(outputs["word_labels"]), set(['LABEL_0', 'LABEL_1']))
+        self.assertEqual(set(outputs["word_labels"]), set(["LABEL_0", "LABEL_1"]))
 
         outputs = dtc_pipeline({"image": image})
         self.assertEqual(len(outputs["words"]), 95)
         self.assertEqual(len(outputs["word_labels"]), 95)
         self.assertEqual(len(outputs["boxes"]), 95)
-        self.assertEqual(set(outputs["word_labels"]), set(['LABEL_0', 'LABEL_1']))
+        self.assertEqual(set(outputs["word_labels"]), set(["LABEL_0", "LABEL_1"]))
 
         # No text detected -> empty list
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
@@ -132,11 +134,10 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         words = []
         boxes = []
-        outputs = dtc_pipeline({"image":image, "words":words, "boxes":boxes})
+        outputs = dtc_pipeline({"image": image, "words": words, "boxes": boxes})
         self.assertEqual(outputs["words"], [])
         self.assertEqual(outputs["boxes"], [])
         self.assertEqual(outputs["word_labels"], [])
-
 
     @slow
     @require_torch
@@ -153,32 +154,29 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         self.assertEqual(len(outputs["words"]), 95)
         self.assertEqual(len(outputs["word_labels"]), 95)
         self.assertEqual(len(outputs["boxes"]), 95)
-        self.assertEqual(set(outputs["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
+        self.assertEqual(set(outputs["word_labels"]), {"B-BILLER_POST_CODE", "B-BILLER", "B-GST", "O", "B-TOTAL"})
         self.assertEqual(outputs["word_labels"].count("B-BILLER_POST_CODE"), 2)
         self.assertEqual(outputs["word_labels"].count("B-BILLER"), 2)
         self.assertEqual(outputs["word_labels"].count("B-GST"), 7)
         self.assertEqual(outputs["word_labels"].count("O"), 80)
         self.assertEqual(outputs["word_labels"].count("B-TOTAL"), 4)
-
 
         outputs = dtc_pipeline({"image": image})
         self.assertEqual(len(outputs["words"]), 95)
         self.assertEqual(len(outputs["word_labels"]), 95)
         self.assertEqual(len(outputs["boxes"]), 95)
-        self.assertEqual(set(outputs["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
+        self.assertEqual(set(outputs["word_labels"]), {"B-BILLER_POST_CODE", "B-BILLER", "B-GST", "O", "B-TOTAL"})
         self.assertEqual(outputs["word_labels"].count("B-BILLER_POST_CODE"), 2)
         self.assertEqual(outputs["word_labels"].count("B-BILLER"), 2)
         self.assertEqual(outputs["word_labels"].count("B-GST"), 7)
         self.assertEqual(outputs["word_labels"].count("O"), 80)
         self.assertEqual(outputs["word_labels"].count("B-TOTAL"), 4)
 
-        outputs = dtc_pipeline(
-            [{"image": image}, {"image": image}]
-        )
+        outputs = dtc_pipeline([{"image": image}, {"image": image}])
         self.assertEqual(len(outputs[0]["words"]), 95)
         self.assertEqual(len(outputs[0]["word_labels"]), 95)
         self.assertEqual(len(outputs[0]["boxes"]), 95)
-        self.assertEqual(set(outputs[0]["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
+        self.assertEqual(set(outputs[0]["word_labels"]), {"B-BILLER_POST_CODE", "B-BILLER", "B-GST", "O", "B-TOTAL"})
         self.assertEqual(outputs[0]["word_labels"].count("B-BILLER_POST_CODE"), 2)
         self.assertEqual(outputs[0]["word_labels"].count("B-BILLER"), 2)
         self.assertEqual(outputs[0]["word_labels"].count("B-GST"), 7)
@@ -188,7 +186,7 @@ class DocumentTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         self.assertEqual(len(outputs[1]["words"]), 95)
         self.assertEqual(len(outputs[1]["word_labels"]), 95)
         self.assertEqual(len(outputs[1]["boxes"]), 95)
-        self.assertEqual(set(outputs[1]["word_labels"]), {'B-BILLER_POST_CODE', 'B-BILLER', 'B-GST', 'O', 'B-TOTAL'})
+        self.assertEqual(set(outputs[1]["word_labels"]), {"B-BILLER_POST_CODE", "B-BILLER", "B-GST", "O", "B-TOTAL"})
         self.assertEqual(outputs[1]["word_labels"].count("B-BILLER_POST_CODE"), 2)
         self.assertEqual(outputs[1]["word_labels"].count("B-BILLER"), 2)
         self.assertEqual(outputs[1]["word_labels"].count("B-GST"), 7)

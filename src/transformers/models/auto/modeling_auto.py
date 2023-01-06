@@ -1069,8 +1069,10 @@ AutoModelForDocumentQuestionAnswering = auto_class_update(
     checkpoint_for_example='impira/layoutlm-document-qa", revision="52e01b3',
 )
 
+
 class AutoModelForDocumentTokenClassification(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_DOCUMENT_TOKEN_CLASSIFICATION_MAPPING
+
 
 AutoModelForDocumentTokenClassification = auto_class_update(
     AutoModelForDocumentTokenClassification,

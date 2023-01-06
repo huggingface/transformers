@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import List, Optional, Tuple, Union, Dict
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -25,7 +25,8 @@ from ..utils import (
     is_vision_available,
     logging,
 )
-from .base import PIPELINE_INIT_ARGS, Pipeline, ArgumentHandler, Dataset, types
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline, types
+
 
 if is_vision_available():
     from PIL import Image
@@ -172,9 +173,7 @@ class DocumentTokenClassificationPipeline(Pipeline):
             words = [x[0] for x in input["word_boxes"]]
             boxes = [x[1] for x in input["word_boxes"]]
         elif image is not None and not TESSERACT_LOADED:
-            raise ValueError(
-                "`word_boxes` not supplied and pytesseract not available to run OCR"
-            )
+            raise ValueError("`word_boxes` not supplied and pytesseract not available to run OCR")
         else:
             self.image_processor.apply_ocr = True
 

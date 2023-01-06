@@ -346,6 +346,7 @@ class TFAutoModelForDocumentQuestionAnswering(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+
 class TFAutoModelForDocumentTokenClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
