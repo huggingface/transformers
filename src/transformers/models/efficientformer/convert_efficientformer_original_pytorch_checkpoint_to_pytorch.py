@@ -28,7 +28,7 @@ from transformers import (
 )
 
 
-def rename_key(old_name):
+def rename_key(old_name, num_meta4D_last_stage):
     new_name = old_name
 
     if "patch_embed" in old_name:
@@ -44,17 +44,21 @@ def rename_key(old_name):
             new_name = old_name.replace("4", "batchnorm_after")
 
     if "network" in old_name and re.search("\d\.\d", old_name):
-        match = re.search("\d\.\d.", old_name).group()
+        two_digit_num = r"\b\d{2}\b"
+        if bool(re.search(two_digit_num, old_name)):
+            match = re.search("\d\.\d\d.", old_name).group()
+        else:
+            match = re.search("\d\.\d.", old_name).group()
         if int(match[0]) < 6:
             trimmed_name = old_name.replace(match, "")
-            trimmed_name = trimmed_name.replace("network", match[0] + ".meta4D_layers.blocks." + match[2])
+            trimmed_name = trimmed_name.replace("network", match[0] + ".meta4D_layers.blocks." + match[2:-1])
             new_name = "intermediate_stages." + trimmed_name
         else:
             trimmed_name = old_name.replace(match, "")
-            if int(match[2]) < 4:
+            if int(match[2]) < num_meta4D_last_stage:
                 trimmed_name = trimmed_name.replace("network", "meta4D_layers.blocks." + match[2])
             else:
-                layer_index = str(int(match[2]) - 4)
+                layer_index = str(int(match[2]) - num_meta4D_last_stage)
                 trimmed_name = trimmed_name.replace("network", "meta3D_layers.blocks." + layer_index)
                 if "norm1" in old_name:
                     trimmed_name = trimmed_name.replace("norm1", "layernorm")
@@ -93,10 +97,10 @@ def rename_key(old_name):
     return new_name
 
 
-def convert_torch_checkpoint(checkpoint):
+def convert_torch_checkpoint(checkpoint, num_meta4D_last_stage):
     for key in checkpoint.copy().keys():
         val = checkpoint.pop(key)
-        checkpoint[rename_key(key)] = val
+        checkpoint[rename_key(key, num_meta4D_last_stage)] = val
 
     return checkpoint
 
@@ -108,7 +112,8 @@ def convert_efficientformer_checkpoint(
     config = EfficientFormerConfig.from_json_file(efficientformer_config_file)
     model = EfficientFormerForImageClassificationWithTeacher(config)
 
-    new_state_dict = convert_torch_checkpoint(orig_state_dict)
+    num_meta4D_last_stage = config.layers[-1] - config.vit_num + 1
+    new_state_dict = convert_torch_checkpoint(orig_state_dict, num_meta4D_last_stage)
 
     model.load_state_dict(new_state_dict)
     model.eval()
