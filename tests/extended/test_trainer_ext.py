@@ -274,9 +274,9 @@ class TestTrainerExt(TestCasePlus):
         self.assertGreater(
             gpu_total_mem_diff,
             expected_savings,
-            "should use ~150MB less alloc gpu memory with BNB, compared to without it for this model but got"
-            f" a difference of {gpu_total_mem_diff}MB, with gpu_alloc_mem_orig={gpu_total_mem_orig}MB and"
-            f" gpu_alloc_mem_bnb={gpu_total_mem_bnb}MB",
+            "should use ~150MB less total gpu memory with BNB, compared to without it for this model but got"
+            f" a difference of {gpu_total_mem_diff}MB, with gpu_total_mem_orig={gpu_total_mem_orig}MB and"
+            f" gpu_total_mem_bnb={gpu_total_mem_bnb}MB",
         )
 
         self.assertEqual(
