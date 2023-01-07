@@ -48,6 +48,7 @@ from .logits_process import (
     LogitNormalization,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
+    MinNewTokensLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
@@ -822,6 +823,16 @@ class GenerationMixin:
             and generation_config.min_length > 0
         ):
             processors.append(MinLengthLogitsProcessor(generation_config.min_length, generation_config.eos_token_id))
+        if (
+            generation_config.min_new_tokens is not None
+            and generation_config.eos_token_id is not None
+            and generation_config.min_new_tokens > 0
+        ):
+            processors.append(
+                MinNewTokensLengthLogitsProcessor(
+                    input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id
+                )
+            )
         if prefix_allowed_tokens_fn is not None:
             processors.append(
                 PrefixConstrainedLogitsProcessor(
