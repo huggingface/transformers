@@ -63,7 +63,7 @@ XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
 ]
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -666,7 +666,7 @@ class FlaxXLMRobertaPooler(nn.Module):
         cls_hidden_state = self.dense(cls_hidden_state)
         return nn.tanh(cls_hidden_state)
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaLMHead with Roberta->XLMRoberta
 class FlaxXLMRobertaLMHead(nn.Module):
     config: XLMRobertaConfig
     dtype: jnp.dtype = jnp.float32
@@ -701,7 +701,7 @@ class FlaxXLMRobertaLMHead(nn.Module):
         hidden_states += bias
         return hidden_states
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaClassificationHead with Roberta->XLMRoberta
 class FlaxXLMRobertaClassificationHead(nn.Module):
     config: XLMRobertaConfig
     dtype: jnp.dtype = jnp.float32
@@ -733,7 +733,7 @@ class FlaxXLMRobertaClassificationHead(nn.Module):
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaPreTrainedModel with Roberta->XLMRoberta
 class FlaxXLMRobertaPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -997,7 +997,7 @@ class FlaxXLMRobertaModule(nn.Module):
             cross_attentions=outputs.cross_attentions,
         )
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaModel with Roberta->XLMRoberta
 @add_start_docstrings(
     "The bare XLM RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_START_DOCSTRING,
@@ -1010,7 +1010,7 @@ append_call_sample_docstring(
     FlaxXLMRobertaModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
 )
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForMaskedLMModule with Roberta->XLMRoberta
 class FlaxXLMRobertaForMaskedLMModule(nn.Module):
     config: XLMRobertaConfig
     dtype: jnp.dtype = jnp.float32
@@ -1083,7 +1083,7 @@ append_call_sample_docstring(
     mask="<mask>",
 )
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForSequenceClassificationModule with Roberta->XLMRoberta
 class FlaxXLMRobertaForSequenceClassificationModule(nn.Module):
     config: XLMRobertaConfig
     dtype: jnp.dtype = jnp.float32
@@ -1135,7 +1135,7 @@ class FlaxXLMRobertaForSequenceClassificationModule(nn.Module):
             attentions=outputs.attentions,
         )
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForSequenceClassification with Roberta->XLMRoberta
 @add_start_docstrings(
     """
     XLM Roberta Model transformer with a sequence classification/regression head on top (a linear layer on top of the
@@ -1398,7 +1398,7 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForCausalLMModule with Roberta->XLMRoberta
 class FlaxXLMRobertaForCausalLMModule(nn.Module):
     config: XLMRobertaConfig
     dtype: jnp.dtype = jnp.float32
@@ -1463,7 +1463,7 @@ class FlaxXLMRobertaForCausalLMModule(nn.Module):
             cross_attentions=outputs.cross_attentions,
         )
 
-
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForCausalLM with Roberta->XLMRoberta
 @add_start_docstrings(
     """
     XLM Roberta Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for

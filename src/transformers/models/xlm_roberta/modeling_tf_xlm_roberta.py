@@ -625,7 +625,7 @@ class TFXLMRobertaEncoder(tf.keras.layers.Layer):
             cross_attentions=all_cross_attentions,
         )
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaMainLayer with Roberta->XLMRoberta
 @keras_serializable
 class TFXLMRobertaMainLayer(tf.keras.layers.Layer):
     config_class = XLMRobertaConfig
@@ -823,7 +823,7 @@ class TFXLMRobertaMainLayer(tf.keras.layers.Layer):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaPreTrainedModel with Roberta->XLMRoberta
 class TFXLMRobertaPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -963,7 +963,7 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
             behaviors between training and evaluation).
 """
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaModel with Roberta->XLMRoberta
 @add_start_docstrings(
     "The bare XLM RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_START_DOCSTRING,
@@ -1058,7 +1058,7 @@ class TFXLMRobertaModel(TFXLMRobertaPreTrainedModel):
             cross_attentions=cross_attns,
         )
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaLMHead with Roberta->XLMRoberta
 class TFXLMRobertaLMHead(tf.keras.layers.Layer):
     """XLM Roberta Head for masked language modeling."""
 
@@ -1110,7 +1110,7 @@ class TFXLMRobertaLMHead(tf.keras.layers.Layer):
 
         return hidden_states
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM with Roberta->XLMRoberta
 @add_start_docstrings("""XLM RoBERTa Model with a `language modeling` head on top.""", XLM_ROBERTA_START_DOCSTRING)
 class TFXLMRobertaForMaskedLM(TFXLMRobertaPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
@@ -1196,7 +1196,7 @@ class TFXLMRobertaForMaskedLM(TFXLMRobertaPreTrainedModel, TFMaskedLanguageModel
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForCausalLM with Roberta->XLMRoberta
 class TFXLMRobertaForCausalLM(TFXLMRobertaPreTrainedModel, TFCausalLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
@@ -1333,7 +1333,7 @@ class TFXLMRobertaForCausalLM(TFXLMRobertaPreTrainedModel, TFCausalLanguageModel
             logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
         )
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaClassificationHead with Roberta->XLMRoberta
 class TFXLMRobertaClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
@@ -1361,7 +1361,7 @@ class TFXLMRobertaClassificationHead(tf.keras.layers.Layer):
         x = self.out_proj(x)
         return x
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForSequenceClassification with Roberta->XLMRoberta
 @add_start_docstrings(
     """
     XLM RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
@@ -1445,7 +1445,7 @@ class TFXLMRobertaForSequenceClassification(TFXLMRobertaPreTrainedModel, TFSeque
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMultipleChoice with Roberta->XLMRoberta
 @add_start_docstrings(
     """
     XLM Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
@@ -1566,7 +1566,7 @@ class TFXLMRobertaForMultipleChoice(TFXLMRobertaPreTrainedModel, TFMultipleChoic
 
         return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForTokenClassification with Roberta->XLMRoberta
 @add_start_docstrings(
     """
     XLM RoBERTa Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
@@ -1657,7 +1657,7 @@ class TFXLMRobertaForTokenClassification(TFXLMRobertaPreTrainedModel, TFTokenCla
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
-
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForQuestionAnswering with Roberta->XLMRoberta
 @add_start_docstrings(
     """
     XLM RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
