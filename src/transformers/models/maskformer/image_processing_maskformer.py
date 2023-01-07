@@ -400,7 +400,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         if "size_divisibility" in kwargs:
             warnings.warn(
                 "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
-                "`size_divisibility` instead.",
+                "`size_divisor` instead.",
                 FutureWarning,
             )
             size_divisor = kwargs.pop("size_divisibility")
@@ -431,6 +431,19 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
         self.reduce_labels = reduce_labels
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
+        created using from_dict and kwargs e.g. `MaskFormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "max_size" in kwargs:
+            image_processor_dict["max_size"] = kwargs.pop("max_size")
+        if "size_divisibility" in kwargs:
+            image_processor_dict["size_divisibility"] = kwargs.pop("size_divisibility")
+        return super().from_dict(image_processor_dict, **kwargs)
 
     @property
     def size_divisibility(self):
@@ -1037,12 +1050,13 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None
             segmentation, segments = compute_segments(
-                mask_probs_item,
-                pred_scores_item,
-                pred_labels_item,
-                mask_threshold,
-                overlap_mask_area_threshold,
-                target_size,
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=[],
+                target_size=target_size,
             )
 
             # Return segmentation map in run-length encoding (RLE) format
@@ -1130,13 +1144,13 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None
             segmentation, segments = compute_segments(
-                mask_probs_item,
-                pred_scores_item,
-                pred_labels_item,
-                mask_threshold,
-                overlap_mask_area_threshold,
-                label_ids_to_fuse,
-                target_size,
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=label_ids_to_fuse,
+                target_size=target_size,
             )
 
             results.append({"segmentation": segmentation, "segments_info": segments})

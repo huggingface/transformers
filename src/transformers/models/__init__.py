@@ -18,6 +18,7 @@
 
 from . import (
     albert,
+    altclip,
     audio_spectrogram_transformer,
     auto,
     bart,
@@ -74,6 +75,7 @@ from . import (
     fnet,
     fsmt,
     funnel,
+    git,
     glpn,
     gpt2,
     gpt_neo,
