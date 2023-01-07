@@ -173,12 +173,11 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         for model_output in model_outputs:
             label = model_output["candidate_label"]
             model_output = BaseModelOutput(model_output)
-            outputs = self.feature_extractor.post_process(
-                outputs=model_output, target_sizes=model_output["target_size"]
+            outputs = self.feature_extractor.post_process_object_detection(
+                outputs=model_output, threshold=threshold, target_sizes=model_output["target_size"]
             )[0]
-            keep = outputs["scores"] >= threshold
 
-            for index in keep.nonzero():
+            for index in outputs["scores"].nonzero():
                 score = outputs["scores"][index].item()
                 box = self._get_bounding_box(outputs["boxes"][index][0])
 
