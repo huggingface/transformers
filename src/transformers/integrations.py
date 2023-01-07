@@ -677,19 +677,19 @@ class WandbCallback(TrainerCallback):
 
         Environment:
         - **WANDB_LOG_MODEL** (`str`, *optional*, defaults to `"false"`):
-                    Whether to log model and checkpoints during training. Can be `"end"`, `"checkpoint"` or `"false"`.
-                    If set to `"end"`, the model will be uploaded at the end of training. If set to `"checkpoint"`, the
-                    checkpoint will be uploaded every `args.save_steps` . If set to `"false"`, the model will not be
-                    uploaded. Use along with *TrainingArguments.load_best_model_at_end* to upload best model.
-                    *Warning*: Setting `WANDB_LOG_MODEL` as `bool` is deprecated and will be removed in future
-                    versions.
+            Whether to log model and checkpoints during training. Can be `"end"`, `"checkpoint"` or `"false"`.
+            If set to `"end"`, the model will be uploaded at the end of training. If set to `"checkpoint"`, the
+            checkpoint will be uploaded every `args.save_steps` . If set to `"false"`, the model will not be
+            uploaded. Use along with *TrainingArguments.load_best_model_at_end* to upload best model.
+            *Warning*: Setting `WANDB_LOG_MODEL` as `bool` is deprecated and will be removed in future
+            versions.
         - **WANDB_WATCH** (`str`, *optional* defaults to `"false"`):
-                    Can be `"gradients"`, `"all"`, `"parameters"`, or `"false"`. Set to `"all"` to log gradients and
-                    parameters.
+            Can be `"gradients"`, `"all"`, `"parameters"`, or `"false"`. Set to `"all"` to log gradients and
+            parameters.
         - **WANDB_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
-                    Set this to a custom string to store results in a different project.
+            Set this to a custom string to store results in a different project.
         - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
-                    Whether to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
+            Whether to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
         """
         if self._wandb is None:
             return
