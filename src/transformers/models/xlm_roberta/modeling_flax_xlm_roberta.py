@@ -40,10 +40,10 @@ from ...modeling_flax_outputs import (
     FlaxSequenceClassifierOutput,
     FlaxTokenClassifierOutput,
 )
-
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_xlm_roberta import XLMRobertaConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -62,6 +62,7 @@ XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-large-finetuned-conll03-german",
     # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
 ]
+
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx):
@@ -666,6 +667,7 @@ class FlaxXLMRobertaPooler(nn.Module):
         cls_hidden_state = self.dense(cls_hidden_state)
         return nn.tanh(cls_hidden_state)
 
+
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaLMHead with Roberta->XLMRoberta
 class FlaxXLMRobertaLMHead(nn.Module):
     config: XLMRobertaConfig
@@ -701,6 +703,7 @@ class FlaxXLMRobertaLMHead(nn.Module):
         hidden_states += bias
         return hidden_states
 
+
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaClassificationHead with Roberta->XLMRoberta
 class FlaxXLMRobertaClassificationHead(nn.Module):
     config: XLMRobertaConfig
@@ -732,6 +735,7 @@ class FlaxXLMRobertaClassificationHead(nn.Module):
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
+
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaPreTrainedModel with Roberta->XLMRoberta
 class FlaxXLMRobertaPreTrainedModel(FlaxPreTrainedModel):
@@ -997,6 +1001,7 @@ class FlaxXLMRobertaModule(nn.Module):
             cross_attentions=outputs.cross_attentions,
         )
 
+
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaModel with Roberta->XLMRoberta
 @add_start_docstrings(
     "The bare XLM RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
@@ -1009,6 +1014,7 @@ class FlaxXLMRobertaModel(FlaxXLMRobertaPreTrainedModel):
 append_call_sample_docstring(
     FlaxXLMRobertaModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
 )
+
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForMaskedLMModule with Roberta->XLMRoberta
 class FlaxXLMRobertaForMaskedLMModule(nn.Module):
@@ -1083,6 +1089,7 @@ append_call_sample_docstring(
     mask="<mask>",
 )
 
+
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForSequenceClassificationModule with Roberta->XLMRoberta
 class FlaxXLMRobertaForSequenceClassificationModule(nn.Module):
     config: XLMRobertaConfig
@@ -1134,6 +1141,7 @@ class FlaxXLMRobertaForSequenceClassificationModule(nn.Module):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForSequenceClassification with Roberta->XLMRoberta
 @add_start_docstrings(
@@ -1220,8 +1228,8 @@ class FlaxXLMRobertaForMultipleChoiceModule(nn.Module):
 
 @add_start_docstrings(
     """
-    XLM Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    XLM Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for RocStories/SWAG tasks.
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
@@ -1303,8 +1311,8 @@ class FlaxXLMRobertaForTokenClassificationModule(nn.Module):
 
 @add_start_docstrings(
     """
-    XLM Roberta Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    XLM Roberta Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
@@ -1381,8 +1389,8 @@ class FlaxXLMRobertaForQuestionAnsweringModule(nn.Module):
 
 @add_start_docstrings(
     """
-    XLM Roberta Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    XLM Roberta Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
@@ -1397,6 +1405,7 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForCausalLMModule with Roberta->XLMRoberta
 class FlaxXLMRobertaForCausalLMModule(nn.Module):
@@ -1462,6 +1471,7 @@ class FlaxXLMRobertaForCausalLMModule(nn.Module):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
+
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForCausalLM with Roberta->XLMRoberta
 @add_start_docstrings(

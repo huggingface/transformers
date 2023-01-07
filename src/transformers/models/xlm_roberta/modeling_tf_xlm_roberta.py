@@ -119,7 +119,6 @@ XLM_ROBERTA_START_DOCSTRING = r"""
 """
 
 
-
 class TFXLMRobertaEmbeddings(tf.keras.layers.Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -625,6 +624,7 @@ class TFXLMRobertaEncoder(tf.keras.layers.Layer):
             cross_attentions=all_cross_attentions,
         )
 
+
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaMainLayer with Roberta->XLMRoberta
 @keras_serializable
 class TFXLMRobertaMainLayer(tf.keras.layers.Layer):
@@ -823,6 +823,7 @@ class TFXLMRobertaMainLayer(tf.keras.layers.Layer):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaPreTrainedModel with Roberta->XLMRoberta
 class TFXLMRobertaPreTrainedModel(TFPreTrainedModel):
     """
@@ -963,11 +964,12 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
             behaviors between training and evaluation).
 """
 
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaModel with Roberta->XLMRoberta
+
 @add_start_docstrings(
     "The bare XLM RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_START_DOCSTRING,
 )
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaModel with Roberta->XLMRoberta
 class TFXLMRobertaModel(TFXLMRobertaPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1058,6 +1060,7 @@ class TFXLMRobertaModel(TFXLMRobertaPreTrainedModel):
             cross_attentions=cross_attns,
         )
 
+
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaLMHead with Roberta->XLMRoberta
 class TFXLMRobertaLMHead(tf.keras.layers.Layer):
     """XLM Roberta Head for masked language modeling."""
@@ -1109,6 +1112,7 @@ class TFXLMRobertaLMHead(tf.keras.layers.Layer):
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
+
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM with Roberta->XLMRoberta
 @add_start_docstrings("""XLM RoBERTa Model with a `language modeling` head on top.""", XLM_ROBERTA_START_DOCSTRING)
@@ -1195,6 +1199,7 @@ class TFXLMRobertaForMaskedLM(TFXLMRobertaPreTrainedModel, TFMaskedLanguageModel
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForCausalLM with Roberta->XLMRoberta
 class TFXLMRobertaForCausalLM(TFXLMRobertaPreTrainedModel, TFCausalLanguageModelingLoss):
@@ -1333,6 +1338,7 @@ class TFXLMRobertaForCausalLM(TFXLMRobertaPreTrainedModel, TFCausalLanguageModel
             logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
         )
 
+
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaClassificationHead with Roberta->XLMRoberta
 class TFXLMRobertaClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
@@ -1360,6 +1366,7 @@ class TFXLMRobertaClassificationHead(tf.keras.layers.Layer):
         x = self.dropout(x, training=training)
         x = self.out_proj(x)
         return x
+
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForSequenceClassification with Roberta->XLMRoberta
 @add_start_docstrings(
@@ -1445,11 +1452,12 @@ class TFXLMRobertaForSequenceClassification(TFXLMRobertaPreTrainedModel, TFSeque
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
+
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMultipleChoice with Roberta->XLMRoberta
 @add_start_docstrings(
     """
-    XLM Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    XLM Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for RocStories/SWAG tasks.
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
@@ -1478,7 +1486,9 @@ class TFXLMRobertaForMultipleChoice(TFXLMRobertaPreTrainedModel, TFMultipleChoic
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)}
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1566,11 +1576,12 @@ class TFXLMRobertaForMultipleChoice(TFXLMRobertaPreTrainedModel, TFMultipleChoic
 
         return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
+
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForTokenClassification with Roberta->XLMRoberta
 @add_start_docstrings(
     """
-    XLM RoBERTa Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    XLM RoBERTa Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
@@ -1657,11 +1668,12 @@ class TFXLMRobertaForTokenClassification(TFXLMRobertaPreTrainedModel, TFTokenCla
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
+
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForQuestionAnswering with Roberta->XLMRoberta
 @add_start_docstrings(
     """
-    XLM RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    XLM RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
