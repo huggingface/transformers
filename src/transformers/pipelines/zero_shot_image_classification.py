@@ -89,7 +89,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
                 logits_per_image
 
         Return:
-            A list of dictionaries containing result, one dictionnary per proposed label. The dictionaries contain the
+            A list of dictionaries containing result, one dictionary per proposed label. The dictionaries contain the
             following keys:
 
             - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.

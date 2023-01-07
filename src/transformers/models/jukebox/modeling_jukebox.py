@@ -1972,7 +1972,7 @@ class JukeboxPrior(PreTrainedModel):
 
     def prior_preprocess(self, tokens, conds):
         """
-        Shifts the input tokens to account for the dictionnary merge. The embed_dim_shift give by how much the music
+        Shifts the input tokens to account for the dictionary merge. The embed_dim_shift give by how much the music
         tokens should be shifted by. It is equal to `lyric_vocab_size`.
         """
         batch_size = tokens[0].shape[0]
