@@ -1130,7 +1130,7 @@ class TFXLMRobertaForMaskedLM(TFXLMRobertaPreTrainedModel, TFMaskedLanguageModel
         return self.name + "/" + self.lm_head.name
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1364,7 +1364,7 @@ class TFXLMRobertaClassificationHead(tf.keras.layers.Layer):
 
 @add_start_docstrings(
     """
-    RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    XLM RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
     XLM_ROBERTA_START_DOCSTRING,
