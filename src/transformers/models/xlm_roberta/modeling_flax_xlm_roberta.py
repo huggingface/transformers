@@ -741,7 +741,7 @@ class FlaxXLMRobertaPreTrainedModel(FlaxPreTrainedModel):
     """
 
     config_class = XLMRobertaConfig
-    base_model_prefix = "xlm_roberta"
+    base_model_prefix = "xlm-roberta"
 
     module_class: nn.Module = None
 
