@@ -211,7 +211,7 @@ def update_pipeline_and_auto_class_table(table):
 
 def update_metadata(token, commit_sha):
     """
-    Update the metada for the Transformers repo.
+    Update the metadata for the Transformers repo.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         repo = Repository(
