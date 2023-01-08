@@ -236,7 +236,7 @@ class DataTrainingArguments:
 
         # accepting both json and jsonl file extensions, as
         # many jsonlines files actually have a .json extension
-        valid_extensions = ["json", "jsonl"]
+        valid_extensions = ["json", "jsonl", "csv"]
 
         if self.train_file is not None:
             extension = self.train_file.split(".")[-1]
