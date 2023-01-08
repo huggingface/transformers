@@ -13,7 +13,6 @@ docs/source/en/model_doc/tapex.mdx
 docs/source/en/model_doc/donut.mdx
 docs/source/en/model_doc/encoder-decoder.mdx
 src/transformers/generation/configuration_utils.py
-src/transformers/generation/flax_utils.py
 src/transformers/generation/tf_utils.py
 src/transformers/generation/utils.py
 src/transformers/models/albert/configuration_albert.py
