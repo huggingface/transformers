@@ -1145,7 +1145,7 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: Optional[torch.LongTensor],
-        past=None,
+        past_key_values=None,
         attention_mask: Optional[torch.Tensor] = None,
         **model_kwargs
     ):
@@ -1155,10 +1155,10 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()

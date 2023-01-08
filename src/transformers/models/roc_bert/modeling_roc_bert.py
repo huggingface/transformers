@@ -1551,7 +1551,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
         input_ids,
         input_shape_ids=None,
         input_pronunciation_ids=None,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         **model_kwargs
     ):
@@ -1562,7 +1562,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
             if input_shape_ids is not None:
                 input_shape_ids = input_shape_ids[:, -1:]
@@ -1574,7 +1574,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
             "input_shape_ids": input_shape_ids,
             "input_pronunciation_ids": input_pronunciation_ids,
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
         }
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel._reorder_cache

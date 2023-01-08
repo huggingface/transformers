@@ -1358,7 +1358,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
@@ -1366,13 +1366,13 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         **kwargs
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
-        elif past is not None:  # no xla + past
-            decoder_position_ids = past[0][0].shape[2]
+        elif past_key_values is not None:  # no xla + past
+            decoder_position_ids = past_key_values[0][0].shape[2]
         else:  # no xla + no past
             decoder_position_ids = tf.range(decoder_input_ids.shape[1])
         decoder_position_ids = tf.broadcast_to(decoder_position_ids, decoder_input_ids.shape)
@@ -1380,7 +1380,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         return {
             "input_features": None,  # Needs to be passed to make Keras.layer.__call__ happy
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
             "decoder_attention_mask": decoder_attention_mask,
