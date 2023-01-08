@@ -1002,11 +1002,11 @@ class FlaxXLMRobertaModule(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaModel with Roberta->XLMRoberta
 @add_start_docstrings(
     "The bare XLM RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_START_DOCSTRING,
 )
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaModel with Roberta->XLMRoberta
 class FlaxXLMRobertaModel(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaModule
 
@@ -1143,7 +1143,6 @@ class FlaxXLMRobertaForSequenceClassificationModule(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForSequenceClassification with Roberta->XLMRoberta
 @add_start_docstrings(
     """
     XLM Roberta Model transformer with a sequence classification/regression head on top (a linear layer on top of the
@@ -1151,6 +1150,7 @@ class FlaxXLMRobertaForSequenceClassificationModule(nn.Module):
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForSequenceClassification with Roberta->XLMRoberta
 class FlaxXLMRobertaForSequenceClassification(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaForSequenceClassificationModule
 
@@ -1473,7 +1473,6 @@ class FlaxXLMRobertaForCausalLMModule(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForCausalLM with Roberta->XLMRoberta
 @add_start_docstrings(
     """
     XLM Roberta Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for
@@ -1481,6 +1480,7 @@ class FlaxXLMRobertaForCausalLMModule(nn.Module):
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
+# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForCausalLM with Roberta->XLMRoberta
 class FlaxXLMRobertaForCausalLM(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaForCausalLMModule
 
