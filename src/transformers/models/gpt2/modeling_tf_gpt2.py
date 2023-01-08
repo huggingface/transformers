@@ -828,10 +828,10 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             inputs = tf.expand_dims(inputs[:, -1], -1)
             if token_type_ids is not None:
                 token_type_ids = tf.expand_dims(token_type_ids[:, -1], -1)
@@ -841,14 +841,14 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
         if attention_mask is not None and position_ids is None:
             position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
-            if past:
+            if past_key_values:
                 position_ids = tf.expand_dims(position_ids[:, -1], -1)
 
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
             "token_type_ids": token_type_ids,
         }
