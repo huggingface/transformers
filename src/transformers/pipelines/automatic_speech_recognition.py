@@ -168,6 +168,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
                     if list(sequence[idx:longest_common_sequence[-1][0] + 1]) ==  list(sliced_sequence[:-1]):
                         sliced_sequence[-1] = items[-1][-1]
                     elif longest_common_sequence[0][-1] < end_of_curr_sequence_idx:
+                        print("TO DO, we have to rely on the actual timing here, but it is approximate")
                         # the matching sequence is included in the middle of the current slice
                         # we need to offset the timestamp token by the actual time and properly merge the two slices
                         actual_offset = int(time / time_precision)
