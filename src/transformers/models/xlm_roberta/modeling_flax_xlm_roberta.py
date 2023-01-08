@@ -1006,7 +1006,6 @@ class FlaxXLMRobertaModule(nn.Module):
     "The bare XLM RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaModel with Roberta->XLMRoberta
 class FlaxXLMRobertaModel(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaModule
 
@@ -1150,7 +1149,6 @@ class FlaxXLMRobertaForSequenceClassificationModule(nn.Module):
     """,
     XLM_ROBERTA_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForSequenceClassification with Roberta->XLMRoberta
 class FlaxXLMRobertaForSequenceClassification(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaForSequenceClassificationModule
 
