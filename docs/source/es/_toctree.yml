@@ -34,6 +34,8 @@
       title: Convertir checkpoints de TensorFlow
     - local: serialization
       title: Exportar a ONNX
+    - local: community
+      title: Comunidad
     title: Uso general
   - sections:
     - local: fast_tokenizers
@@ -62,7 +64,7 @@
   - sections:
     - local: debugging
       title: Debugging
-    title: Rendimiento y escalabilidad  
+    title: Rendimiento y escalabilidad
   - sections:
     - local: add_new_pipeline
       title: ¿Cómo puedo añadir un pipeline a 🤗 Transformers?
