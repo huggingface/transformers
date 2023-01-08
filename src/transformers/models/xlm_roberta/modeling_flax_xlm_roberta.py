@@ -53,7 +53,7 @@ _TOKENIZER_FOR_DOC = "XLMRobertaTokenizer"
 
 remat = nn_partitioning.remat
 
-XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-base",
     "xlm-roberta-large",
     "xlm-roberta-large-finetuned-conll02-dutch",
