@@ -1138,7 +1138,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead with Roberta->XLMRoberta
+# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
 class XLMRobertaLMHead(nn.Module):
     """Roberta Head for masked language modeling."""
 
