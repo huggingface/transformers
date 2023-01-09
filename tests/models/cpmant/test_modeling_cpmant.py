@@ -121,35 +121,19 @@ class CPMAntModelTester:
         logits, hidden_states = model(**input_ids)
 
         self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
-<<<<<<< HEAD
         self.parent.assertEqual(
             logits.shape,
             (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length),
         )
-=======
-        self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
->>>>>>> 45de35b4a (add models and tests)
 
     def create_and_check_lm_head_model(self, config, input_ids, *args):
         model = CPMAntForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
-<<<<<<< HEAD
-<<<<<<< HEAD
         outputs = model(**input_ids)
         self.parent.assertEqual(outputs.hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
         self.parent.assertEqual(outputs.logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
-=======
-        logits, hidden_states, _ = model(**input_ids)
-        self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
-        self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
->>>>>>> 45de35b4a (add models and tests)
-=======
-        outputs = model(**input_ids)
-        self.parent.assertEqual(outputs.hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
-        self.parent.assertEqual(outputs.logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
->>>>>>> df287068d (test)
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids = self.prepare_config_and_inputs()
@@ -159,10 +143,6 @@ class CPMAntModelTester:
 
 @require_torch
 class CPMAntModelTest(unittest.TestCase):
-<<<<<<< HEAD
-=======
-
->>>>>>> 45de35b4a (add models and tests)
     all_model_classes = (
         (
             CPMAntModel,
@@ -187,18 +167,12 @@ class CPMAntModelTest(unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-<<<<<<< HEAD
     @slow
-=======
->>>>>>> 45de35b4a (add models and tests)
     def test_cpmant_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_cpmant_model(config, inputs)
-
-<<<<<<< HEAD
+        
     @slow
-=======
->>>>>>> 45de35b4a (add models and tests)
     def test_cpmant_lm_head_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(config, inputs)
@@ -214,7 +188,6 @@ class CPMAntModelTest(unittest.TestCase):
         model_path = "openbmb/cpm-ant-10b"
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
-<<<<<<< HEAD
         texts = "今天天气不错，"
         expected_output = "今天天气不错，阳光明媚，我和妈妈一起去超市买东西。在结账的时候，我看到了一个熟悉的身影，那是我的好朋友——小宇。他正和妈妈在一起挑选东西。我走过去"
         model_inputs = tokenizer(texts, return_tensors="pt")
@@ -237,21 +210,11 @@ class CPMAntModelTest(unittest.TestCase):
         output_texts = tokenizer.batch_decode(token_ids)
         self.assertEqual(expected_output, output_texts)
 
-=======
-        texts = "昨天多云转阴，"
-        expected_output = "昨天多云转阴，今天雨夹雪，气温骤降至零下5°C。在这冰天雪地的日子里，我们迎来了祖国母亲的生日。在这普天同庆的日子里，我们迎来了祖国母亲的生日。\n"
-        model_inputs = tokenizer(texts, return_tensors="pt")
-        token_ids = model.generate(**model_inputs)
-        output_texts = tokenizer.decode(token_ids)
-        self.assertEqual(expected_output, output_texts)
-
->>>>>>> 45de35b4a (add models and tests)
 
 @require_torch
 class CPMAntModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-<<<<<<< HEAD
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
         model = CPMAntModel.from_pretrained(model_path)
@@ -259,25 +222,11 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
         inputs = tokenizer(texts, return_tensors="pt")
         logits = model(**inputs)[0]
         expected_shape = torch.Size((1, 38, 31744))
-=======
-        texts = ["今天天气真好！"]
-        model_path = "openbmb/cpm-ant-10b"
-        model = CPMAntModel.from_pretrained(model_path)
-        tokenizer = CPMAntTokenizer.from_pretrained(model_path)
-        input_ids = tokenizer.get_model_input(texts)
-        logits = model(**input_ids)[0]
-        vocab_size = 30720
-        expected_shape = torch.Size((1, 38, vocab_size))
->>>>>>> 45de35b4a (add models and tests)
 
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-<<<<<<< HEAD
             [[[0.4078, 0.3699, 0.3349], [0.8038, 0.7638, 0.7443], [2.3982, 2.3758, 2.3742]]],
-=======
-            [[[0.4556, 0.5342, 0.5063], [1.0547, 1.0283, 0.9883], [1.5820, 1.5537, 1.5273]]],
->>>>>>> 45de35b4a (add models and tests)
         )
         self.assertTrue(torch.allclose(logits[:, :3, :3], expected_slice, atol=1e-2))
 
@@ -286,7 +235,6 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
 class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_casual(self):
-<<<<<<< HEAD
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
         model = CPMAntForCausalLM.from_pretrained(model_path)
@@ -294,24 +242,10 @@ class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
         inputs = tokenizer(texts, return_tensors="pt")
         logits = model(**inputs).logits
         expected_shape = torch.Size((1, 38, 30720))
-=======
-        texts = ["今天天气真好！"]
-        model_path = "openbmb/cpm-ant-10b"
-        model = CPMAntForCausalLM.from_pretrained(model_path)
-        tokenizer = CPMAntTokenizer.from_pretrained(model_path)
-        input_ids = tokenizer.get_model_input(texts)
-        logits = model(**input_ids).logits
-        vocab_size = 30720
-        expected_shape = torch.Size((1, 38, vocab_size))
->>>>>>> 45de35b4a (add models and tests)
 
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-<<<<<<< HEAD
             [[[0.4078, 0.3699, 0.3349], [0.8038, 0.7638, 0.7443], [2.3982, 2.3758, 2.3742]]],
-=======
-            [[[0.4556, 0.5342, 0.5063], [1.0547, 1.0283, 0.9883], [1.5820, 1.5537, 1.5273]]],
->>>>>>> 45de35b4a (add models and tests)
         )
         self.assertTrue(torch.allclose(logits[:, :3, :3], expected_slice, atol=1e-2))
