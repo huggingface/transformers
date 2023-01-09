@@ -68,7 +68,6 @@ class GPTSANJapaneseNorm(nn.Module):
         return x * self.weight + self.bias
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseDenseActDense(nn.Module):
     def __init__(self, config: GPTSANJapaneseConfig, ext_layer=False):
         super().__init__()
@@ -86,7 +85,6 @@ class GPTSANJapaneseDenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
@@ -234,7 +232,6 @@ class GPTSANJapaneseSparseMLP(nn.Module):
         return hidden_states, (router_logits, expert_index)
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersLayerFF with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseLayerFF(nn.Module):
     r"""
     Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts module.
@@ -370,7 +367,6 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
         return outputs, present
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersBlock with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseBlock(nn.Module):
     def __init__(self, config, ext_layer=False):
         super().__init__()
@@ -383,7 +379,6 @@ class GPTSANJapaneseBlock(nn.Module):
         return outputs, present
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersPreTrainedModel with SwitchTransformers->GPTSANJapanese,switch_transformers->gptsan_japanese
 class GPTSANJapanesePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
