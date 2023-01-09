@@ -39,7 +39,7 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
-from .generation import GenerationMixin
+from .generation import GenerationConfig, GenerationMixin
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -382,7 +382,7 @@ def load_sharded_checkpoint(model, folder, strict=True):
         raise RuntimeError(error_message)
 
     for shard_file in shard_files:
-        state_dict = torch.load(os.path.join(folder, shard_file))
+        state_dict = torch.load(os.path.join(folder, shard_file), map_location="cpu")
         model.load_state_dict(state_dict, strict=False)
 
         # Make sure memory is fred before we load the next state dict.
@@ -562,6 +562,7 @@ def _load_state_dict_into_meta_model(
     dtype=None,
     load_in_8bit=False,
     is_safetensors=False,
+    keep_in_fp32_modules=None,
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -608,11 +609,24 @@ def _load_state_dict_into_meta_model(
             param_name = param_name[len(start_prefix) :]
 
         module_name = param_name
+        set_module_kwargs = {}
 
         # We convert floating dtypes to the `dtype` passed. We want to keep the buffers/params
         # in int/uint/bool and not cast them.
         if dtype is not None and torch.is_floating_point(param):
-            param = param.to(dtype)
+            if (
+                keep_in_fp32_modules is not None
+                and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                and dtype == torch.float16
+            ):
+                param = param.to(torch.float32)
+
+                # For backward compatibility with older versions of `accelerate`
+                # TODO: @sgugger replace this check with version check at the next `accelerate` release
+                if "dtype" in list(inspect.signature(set_module_tensor_to_device).parameters):
+                    set_module_kwargs["dtype"] = torch.float32
+            else:
+                param = param.to(dtype)
 
         # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
         if dtype is None:
@@ -625,6 +639,8 @@ def _load_state_dict_into_meta_model(
 
             if old_param is not None:
                 param = param.to(old_param.dtype)
+
+        set_module_kwargs["value"] = param
 
         if device_map is None:
             param_device = "cpu"
@@ -643,7 +659,8 @@ def _load_state_dict_into_meta_model(
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif not load_in_8bit:
-            set_module_tensor_to_device(model, param_name, param_device, value=param)
+            # For backward compatibility with older versions of `accelerate`
+            set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
             set_module_8bit_tensor_to_device(model, param_name, param_device, value=param)
 
@@ -974,6 +991,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     main_input_name = "input_ids"
     _auto_class = None
     _no_split_modules = None
+    _keep_in_fp32_modules = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1015,6 +1033,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.config = config
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
+        self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
 
     def post_init(self):
         """
@@ -1096,6 +1115,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         `torch.nn.Module`: The main body of the model.
         """
         return getattr(self, self.base_model_prefix, self)
+
+    def can_generate(self) -> bool:
+        """
+        Returns whether this model can generate sequences with `.generate()`.
+
+        Returns:
+            `bool`: Whether this model can generate sequences with `.generate()`.
+        """
+        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
+        if "GenerationMixin" in str(self.prepare_inputs_for_generation):
+            return False
+        return True
 
     def get_input_embeddings(self) -> nn.Module:
         """
@@ -2071,6 +2102,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Load model
         loading_info = None
 
+        # Keep in fp32 modules
+        keep_in_fp32_modules = None
+        use_keep_in_fp32_modules = False
+
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
@@ -2269,6 +2304,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             #    weights entry that is of a floating type - we assume all floating dtype weights are of the same dtype
             # we also may have config.torch_dtype available, but we won't rely on it till v5
             dtype_orig = None
+
             if torch_dtype is not None:
                 if isinstance(torch_dtype, str):
                     if torch_dtype == "auto":
@@ -2286,11 +2322,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
+            # Check if `_keep_in_fp32_modules` is not None
+            use_keep_in_fp32_modules = (
+                (cls._keep_in_fp32_modules is not None) and is_accelerate_available() and torch_dtype == torch.float16
+            )
+            if (
+                (cls._keep_in_fp32_modules is not None)
+                and not is_accelerate_available()
+                and torch_dtype == torch.float16
+            ):
+                logger.warning(
+                    "For stability purposes, it is recommended to have accelerate installed when using this model in"
+                    " torch.float16, please install it with `pip install accelerate`"
+                )
+
             if is_sharded:
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = [k for k in state_dict.keys()]
-            if low_cpu_mem_usage:
+            if low_cpu_mem_usage or use_keep_in_fp32_modules:
                 state_dict = None
 
         config.name_or_path = pretrained_model_name_or_path
@@ -2309,6 +2359,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
 
+        # Check first if we are `from_pt`
+        if use_keep_in_fp32_modules:
+            low_cpu_mem_usage = True
+            keep_in_fp32_modules = model._keep_in_fp32_modules
+        else:
+            keep_in_fp32_modules = []
+
         if load_in_8bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
 
@@ -2319,6 +2376,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 modules_to_not_convert = get_keys_to_not_convert(model)
             else:
                 modules_to_not_convert = load_in_8bit_skip_modules
+
+            if not isinstance(modules_to_not_convert, list):
+                modules_to_not_convert = [modules_to_not_convert]
+
+            modules_to_not_convert.extend(keep_in_fp32_modules)
+
             model = replace_8bit_linear(
                 model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
             )
@@ -2425,6 +2488,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
                 load_in_8bit=load_in_8bit,
+                keep_in_fp32_modules=keep_in_fp32_modules,
             )
 
         model.is_loaded_in_8bit = load_in_8bit
@@ -2434,6 +2498,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
+
+        # If it is a model with generation capabilities, attempt to load the generation config
+        if model.can_generate():
+            try:
+                model.generation_config = GenerationConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _from_auto=from_auto_class,
+                    _from_pipeline=from_pipeline,
+                    **kwargs,
+                )
+            except OSError:
+                logger.info(
+                    "Generation config file not found, using a generation config created from the model config."
+                )
+                pass
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
@@ -2468,6 +2555,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict=None,
         dtype=None,
         load_in_8bit=False,
+        keep_in_fp32_modules=None,
     ):
         is_safetensors = False
         if load_in_8bit:
@@ -2544,11 +2632,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if key.startswith(prefix):
                     key = ".".join(key.split(".")[1:])
                 param = model_state_dict[key]
+
+                # upcast in fp32 if any
+                target_dtype = dtype
+                if (
+                    keep_in_fp32_modules is not None
+                    and dtype == torch.float16
+                    and any(module_to_keep_in_fp32 in key for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                ):
+                    target_dtype = torch.float32
+
                 if param.device == torch.device("meta"):
                     if not load_in_8bit:
-                        set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=dtype))
+                        set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype))
                     else:
-                        set_module_8bit_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=dtype))
+                        set_module_8bit_tensor_to_device(
+                            model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype)
+                        )
 
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
@@ -2557,6 +2657,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             for module in uninitialized_modules:
                 model._init_weights(module)
+
+        # Set some modules to fp32 if any
+        if keep_in_fp32_modules is not None:
+            for name, param in model.named_parameters():
+                if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                    param = param.to(torch.float32)
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
@@ -2659,6 +2765,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 disk_only_shard_files = []
 
+            if len(resolved_archive_file) > 1:
+                resolved_archive_file = logging.tqdm(resolved_archive_file, desc="Loading checkpoint shards")
             for shard_file in resolved_archive_file:
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
@@ -2691,6 +2799,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         dtype=dtype,
                         load_in_8bit=load_in_8bit,
                         is_safetensors=is_safetensors,
+                        keep_in_fp32_modules=keep_in_fp32_modules,
                     )
                     error_msgs += new_error_msgs
                 else:

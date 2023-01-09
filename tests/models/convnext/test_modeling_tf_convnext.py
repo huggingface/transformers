@@ -129,6 +129,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
     test_onnx = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = TFConvNextModelTester(self)
@@ -169,10 +170,6 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="Model doesn't have attention layers")
-    def test_attention_outputs(self):
-        pass
 
     @unittest.skipIf(
         not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,

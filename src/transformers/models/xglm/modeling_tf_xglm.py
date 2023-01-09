@@ -888,9 +888,9 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
         attention_mask = kwargs.get("attention_mask", None)
@@ -898,7 +898,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
@@ -992,10 +992,3 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             attentions=attns,
             cross_attentions=cross_attns,
         )
-
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
-        return reordered_past

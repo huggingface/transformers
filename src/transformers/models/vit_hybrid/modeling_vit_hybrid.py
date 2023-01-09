@@ -59,24 +59,15 @@ class ViTHybridEmbeddings(nn.Module):
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
     """
 
+    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.__init__ with ViT->ViTHybrid
     def __init__(self, config: ViTHybridConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
-        self.cls_token = nn.Parameter(
-            nn.init.trunc_normal_(
-                torch.zeros(1, 1, config.hidden_size, dtype=torch.float32), mean=0.0, std=config.initializer_range
-            )
-        )
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = ViTHybridPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(
-            nn.init.trunc_normal_(
-                torch.zeros(1, num_patches + 1, config.hidden_size, dtype=torch.float32),
-                mean=0.0,
-                std=config.initializer_range,
-            )
-        )
+        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
@@ -485,6 +476,18 @@ class ViTHybridPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ViTHybridEmbeddings):
+            nn.init.trunc_normal_(
+                module.position_embeddings,
+                mean=0.0,
+                std=self.config.initializer_range,
+            )
+
+            nn.init.trunc_normal_(
+                module.cls_token,
+                mean=0.0,
+                std=self.config.initializer_range,
+            )
 
     def _set_gradient_checkpointing(self, module: ViTHybridEncoder, value: bool = False) -> None:
         if isinstance(module, ViTHybridEncoder):

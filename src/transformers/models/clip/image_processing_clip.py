@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for CLIP."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -23,6 +23,7 @@ from transformers.utils.generic import TensorType
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
+    convert_to_rgb,
     get_resize_output_image_size,
     normalize,
     rescale,
@@ -39,20 +40,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
-
-
-def convert_to_rgb(image: Union[Any, PIL.Image.Image]) -> Union[Any, PIL.Image.Image]:
-    """
-    Converts `PIL.Image.Image` to RGB format. Images in other formats are returned as is.
-
-    Args:
-        image (`PIL.Image.Image`):
-            The image to convert.
-    """
-    if not isinstance(image, PIL.Image.Image):
-        return image
-
-    return image.convert("RGB")
 
 
 class CLIPImageProcessor(BaseImageProcessor):
@@ -83,10 +70,10 @@ class CLIPImageProcessor(BaseImageProcessor):
             method.
         do_normalize:
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             Image standard deviation.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the

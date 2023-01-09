@@ -150,10 +150,6 @@ class TFResNetModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ResNet does not output attentions")
-    def test_attention_outputs(self):
-        pass
-
     @unittest.skip(reason="ResNet does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
