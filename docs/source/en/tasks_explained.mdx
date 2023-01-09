@@ -71,7 +71,7 @@ logits = self.lm_head(hidden_states)
 
 loss = None
 if labels is not None:
-    
+
     ...
 
     with torch.backends.cudnn.flags(enabled=False):
@@ -85,7 +85,5 @@ if labels is not None:
             zero_infinity=self.config.ctc_zero_infinity,
         )
 
-return CausalLMOutput(
-    loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-)
+return CausalLMOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 ```
