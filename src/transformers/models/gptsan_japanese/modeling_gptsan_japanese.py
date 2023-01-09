@@ -187,7 +187,6 @@ class GPTSANJapaneseTop1Router(nn.Module):
         return expert_index, router_probs, router_logits
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.
@@ -770,10 +769,8 @@ class GPTSANSentenceGenerator:
             except StopIteration as e:
                 return logits
             for d in range(0, len(inp["x"]), batch_size):
-                e = min(d + batch_size, len(inp["x"]))
-                assert e >= d
-                x_inp = [i for i in inp["x"][d:e]]
-                n_inp = [i for i in inp["num_precontext"][d:e]]
+                x_inp = [i for i in inp["x"][d : min(d + batch_size, len(inp["x"]))]]
+                n_inp = [i for i in inp["num_precontext"][d : min(d + batch_size, len(inp["x"]))]]
                 with torch.no_grad():
                     x_inp = torch.tensor(x_inp).to(device)
                     n_inp = torch.tensor(n_inp).to(device)
