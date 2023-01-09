@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_cpmant import CPMAntConfig
@@ -116,80 +116,6 @@ def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
     return model
 
 
-def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float("inf")):
-    # This function has been mostly taken from huggingface conversational ai code at
-    # https://medium.com/huggingface/how-to-build-a-state-of-the-art-conversational-ai-with-transfer-learning-2d818ac26313
-
-    if top_k > 0:
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
-        logits[indices_to_remove] = filter_value
-
-    batch_size = logits.size()[0]
-    if top_p > 0.0:
-        logits = logits.view(batch_size, -1).contiguous()
-        for index in range(len(logits)):
-            sorted_logits, sorted_indices = torch.sort(logits[index].view(-1), descending=True)
-            cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-            # Remove tokens with cumulative probability above the threshold
-            sorted_indices_to_remove = cumulative_probs > top_p
-            # Shift the indices to the right to keep also the first token above the threshold
-            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-            sorted_indices_to_remove[..., 0] = 0
-            indices_to_remove = sorted_indices[sorted_indices_to_remove]
-            logits[index][indices_to_remove] = filter_value
-
-        logits = logits.view(batch_size, -1).contiguous()
-
-    return logits
-
-
-class BeamHypotheses:
-    def __init__(self, n_hyp, max_len, length_penalty, early_stopping):
-        """
-        Initialize n-best list of hypotheses.
-        """
-        self.max_len = max_len
-        self.length_penalty = length_penalty
-        self.early_stopping = early_stopping
-        self.n_hyp = n_hyp
-        self.hyp = []
-        self.worst_score = 1e9
-
-    def __len__(self):
-        """
-        Number of hypotheses in the list.
-        """
-        return len(self.hyp)
-
-    def add(self, hyp, sum_logprobs):
-        """
-        Add a new hypothesis to the list.
-        """
-        score = sum_logprobs / len(hyp) ** self.length_penalty
-
-        if len(self) < self.n_hyp or score > self.worst_score:
-            self.hyp.append((score, hyp))
-            if len(self) > self.n_hyp:
-                sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.hyp)])
-                del self.hyp[sorted_scores[0][1]]
-                self.worst_score = sorted_scores[1][0]
-            else:
-                self.worst_score = min(score, self.worst_score)
-
-    def is_done(self, best_sum_logprobs, cur_len):
-        """
-        If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
-        one in the heap, then we are done with this sentence.
-        """
-        if len(self) < self.n_hyp:
-            return False
-        elif self.early_stopping:
-            return True
-        else:
-            return self.worst_score >= best_sum_logprobs / cur_len**self.length_penalty
-
-
 @torch.jit.script  # type: ignore
 def rms_layernorm(hidden: torch.Tensor, weight: torch.Tensor, eps: float):
     old_dtype = hidden.dtype
@@ -230,9 +156,10 @@ class CPMAntAttention(nn.Module):
         num_heads: int,
         dim_head: int,
         dropout_p: Optional[float] = None,
+        use_cache: Optional[bool] = False,
     ) -> None:
         super().__init__()
-
+        self.use_cache = use_cache
         self.dim_model = dim_model
         self.num_heads = num_heads
         self.dim_head = dim_head
@@ -256,7 +183,6 @@ class CPMAntAttention(nn.Module):
         hidden_kv: torch.Tensor,
         attention_mask: torch.BoolTensor,
         position_bias: torch.Tensor,
-        use_cache: bool = False,
         past_kv: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         """
@@ -270,7 +196,6 @@ class CPMAntAttention(nn.Module):
                 Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
-            use_cache (`bool`): Whether use cache.
             past_kv (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
         """  # noqa: E501
 
@@ -319,7 +244,7 @@ class CPMAntAttention(nn.Module):
 
         score = self.attention_out(score)
 
-        if use_cache:
+        if self.use_cache:
             return score, (key, value)
 
         return score
@@ -335,6 +260,7 @@ class CPMAntSelfAttentionBlock(nn.Module):
             dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
             eps (float, optional): The epsilon used by the layer normalization layers.
             dropout_p (float, optional): Defaults to 0.
+            use_cache (bool, optional): Whether to use cache.
     """  # noqa: E501
 
     def __init__(
@@ -344,9 +270,10 @@ class CPMAntSelfAttentionBlock(nn.Module):
         dim_head: int,
         eps: float = 1e-6,
         dropout_p: Optional[float] = None,
+        use_cache: Optional[bool] = False,
     ):
         super().__init__()
-
+        self.use_cache = use_cache
         self.layernorm_before_attention = CPMAntLayerNorm(
             dim_norm=dim_model,
             eps=eps,
@@ -356,6 +283,7 @@ class CPMAntSelfAttentionBlock(nn.Module):
             num_heads=num_heads,
             dim_head=dim_head,
             dropout_p=dropout_p,
+            use_cache=self.use_cache,
         )
         if dropout_p:
             self.dropout = torch.nn.Dropout(dropout_p)
@@ -367,7 +295,6 @@ class CPMAntSelfAttentionBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: Optional[torch.Tensor] = None,
-        use_cache: bool = False,
         past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         """
@@ -378,20 +305,19 @@ class CPMAntSelfAttentionBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
-            use_cache (`bool`): Whether use cache.
             past_key_values (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
         """  # noqa: E501
         x = self.layernorm_before_attention(hidden_states)
-        x = self.self_attention(x, x, attention_mask, position_bias, use_cache, past_key_value)
-        if use_cache:
+        x = self.self_attention(x, x, attention_mask, position_bias, past_key_value)
+        if self.use_cache:
             x, current_key_value = x
 
         if self.dropout is not None:
             x = self.dropout(x)
         hidden_states = hidden_states + x
 
-        if use_cache:
-            return hidden_states, current_key_value
+        if self.use_cache:
+            return (hidden_states, current_key_value)
 
         return hidden_states
 
@@ -532,6 +458,7 @@ class CPMAntTransformerBlock(nn.Module):
             dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
             eps (float, optional): The epsilon used by the layer normalization layers.
             dropout_p (float, optional): Defaults to 0.
+            use_cache (bool, optional): Whether to use cache.
     """  # noqa: E501
 
     def __init__(
@@ -542,13 +469,14 @@ class CPMAntTransformerBlock(nn.Module):
         dim_head: int,
         eps: float = 1e-6,
         dropout_p: Optional[float] = None,
+        use_cache: Optional[bool] = False,
         mask_att: bool = False,
         mask_ffn: bool = False,
     ):
         super().__init__()
         self.mask_att = mask_att
         self.mask_ffn = mask_ffn
-
+        self.use_cache = use_cache
         if not self.mask_att:
             self.self_att = CPMAntSelfAttentionBlock(
                 dim_model=dim_model,
@@ -556,6 +484,7 @@ class CPMAntTransformerBlock(nn.Module):
                 dim_head=dim_head,
                 eps=eps,
                 dropout_p=dropout_p,
+                use_cache=self.use_cache,
             )
 
         if not self.mask_ffn:
@@ -571,7 +500,6 @@ class CPMAntTransformerBlock(nn.Module):
         self_hidden_states: torch.Tensor,
         self_attention_mask: torch.Tensor,
         self_position_bias: Optional[torch.Tensor] = None,
-        use_cache: bool = False,
         past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         """
@@ -581,11 +509,8 @@ class CPMAntTransformerBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation of shape `(batch, seq_enc, seq_enc)`
             self_position_bias (`torch.Tensor`):
                 Provides position information to attention mechanism of shape `(num_heads, seq_enc, seq_enc)`
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-        """ # noqa: E501
+        """  # noqa: E501
 
         current_key_value = None
         if not self.mask_att:
@@ -593,10 +518,9 @@ class CPMAntTransformerBlock(nn.Module):
                 self_hidden_states,
                 attention_mask=self_attention_mask,
                 position_bias=self_position_bias,
-                use_cache=use_cache,
                 past_key_value=past_key_value,
             )
-            if use_cache:
+            if self.use_cache:
                 hidden_states, current_key_value = hidden_states
         else:
             hidden_states = self_hidden_states
@@ -605,8 +529,8 @@ class CPMAntTransformerBlock(nn.Module):
         if not self.mask_ffn:
             hidden_states = self.ffn(hidden_states)
 
-        if use_cache:
-            return hidden_states, current_key_value
+        if self.use_cache:
+            return (hidden_states, current_key_value)
 
         return hidden_states
 
@@ -622,6 +546,7 @@ class CPMAntEncoder(nn.Module):
         dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
         eps (float, optional): The epsilon used by the layer normalization layers.
         dropout_p (float, optional): Defaults to 0.
+        use_cache (bool, optional): Whether to use cache.
     """  # noqa: E501
 
     def __init__(
@@ -632,12 +557,13 @@ class CPMAntEncoder(nn.Module):
         num_heads: int = 32,
         dim_head: int = 128,
         eps: float = 1e-6,
+        use_cache: Optional[bool] = False,
         dropout_p: Optional[float] = 0.0,
         mask_modules: Optional[List[Tuple[bool, bool]]] = None,
     ):
         super().__init__()
         self.num_layers = num_layers
-
+        self.use_cache = use_cache
         if mask_modules is not None:
             if len(mask_modules) == num_layers:
                 raise ValueError("The total number of masks should equal to num_layers")
@@ -658,6 +584,7 @@ class CPMAntEncoder(nn.Module):
                     dropout_p=dropout_p,
                     mask_att=mask_modules[ith][0],
                     mask_ffn=mask_modules[ith][1],
+                    use_cache=self.use_cache,
                 )
                 for ith in range(num_layers)
             ]
@@ -670,7 +597,6 @@ class CPMAntEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor,
-        use_cache: bool = False,
         past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
     ):
         """
@@ -680,30 +606,26 @@ class CPMAntEncoder(nn.Module):
                 Avoid invalid areas to participate in the calculation of shape `(batch, seq_enc, seq_enc)`
             position_bias (`torch.Tensor`):
                 Provides position information to attention mechanism of shape `(num_heads, seq_enc, seq_enc)`
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """  # noqa: E501
-        if not use_cache:
+        if not self.use_cache:
             for layer in self.layers:
                 hidden_states = layer(hidden_states, attention_mask, position_bias)
             hidden_states = self.output_layernorm(hidden_states)
             return hidden_states
-        with torch.no_grad():
-            current_key_values = []
-            for i, module in enumerate(self.layers):
-                hidden_states = module(
-                    hidden_states,
-                    attention_mask,
-                    position_bias,
-                    past_key_value=past_key_values[i] if past_key_values else None,
-                    use_cache=use_cache,
-                )
-                current_key_values.append(hidden_states[1])
-                hidden_states = hidden_states[0]
-            hidden_states = self.output_layernorm(hidden_states)
-            return hidden_states, current_key_values
+
+        current_key_values = []
+        for i, module in enumerate(self.layers):
+            hidden_states = module(
+                hidden_states,
+                attention_mask,
+                position_bias,
+                past_key_value=past_key_values[i] if past_key_values else None,
+            )
+            current_key_values.append(hidden_states[1])
+            hidden_states = hidden_states[0]
+        hidden_states = self.output_layernorm(hidden_states)
+        return hidden_states, current_key_values
 
 
 class CPMAntIntermediate(nn.Module):
@@ -878,7 +800,6 @@ CPMANT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        
         length (`torch.Tensor` of shape `(batch)`, *optional*):
             The length of input tokens.
         context (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
@@ -949,13 +870,14 @@ class CPMAntModel(CPMAntPreTrainedModel):
     )
     def forward(
         self,
-        input: torch.Tensor,
-        length: torch.Tensor,
-        context: torch.Tensor,
-        position: torch.Tensor,
-        segment: torch.Tensor,
-        span: torch.Tensor,
-        return_dict: Optional[bool] = None,
+        input: Optional[torch.Tensor] = None,
+        length: Optional[torch.Tensor] = None,
+        context: Optional[torch.Tensor] = None,
+        position: Optional[torch.Tensor] = None,
+        segment: Optional[torch.Tensor] = None,
+        span: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = False,
+        **kwargs,
     ):
         r"""
         Args:
@@ -983,7 +905,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         input_prompt = input[:, : self.prompt_length].contiguous()
         input_ids = input[:, self.prompt_length :].contiguous()
 
@@ -999,7 +921,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
         logits = F.linear(hidden_states, self.input_embedding.weight)
 
         if not return_dict:
-            return (logits, hidden_states)
+            return tuple(v for v in [logits, hidden_states] if v is not None)
 
         return BaseModelOutput(hidden_states=hidden_states)
 
@@ -1013,7 +935,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
 class CPMAntForCausalLM(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
-        self.encoder = CPMAntEncoder()
+        self.encoder = CPMAntEncoder(use_cache=config.use_cache)
         self.prompt_embedding = nn.Embedding(config.prompt_types * config.prompt_length, config.dim_model)
         self.segment_embedding = nn.Embedding(config.segment_types, config.dim_model)
         self.input_embedding = nn.Embedding(config.vocab_size, config.dim_model)
@@ -1025,19 +947,21 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithPast,
+        output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
-        input: torch.Tensor,
-        length: torch.Tensor,
-        context: torch.Tensor,
-        position: torch.Tensor,
-        segment: torch.Tensor,
-        span: torch.Tensor,
+        input: Optional[torch.Tensor] = None,
+        length: Optional[torch.Tensor] = None,
+        context: Optional[torch.Tensor] = None,
+        position: Optional[torch.Tensor] = None,
+        segment: Optional[torch.Tensor] = None,
+        span: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
+        use_cache: Optional[bool] = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1062,6 +986,8 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                 A sequence of tokens that is processed together as a unit.
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding.
             past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
                 Cached past key and value projection states.
             return_dict (`bool`, *optional*):
@@ -1089,18 +1015,17 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         attention_mask = attention_mask[:, past_length:, :]
         position_bias = position_bias[:, :, past_length:, :]
 
-        hidden_states, present_key_values = self.encoder(
-            hidden_states, attention_mask, position_bias, True, past_key_values
-        )
+        self.encoder.use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        hidden_states, present_key_values = self.encoder(hidden_states, attention_mask, position_bias, past_key_values)
         logits = self.lm_head(hidden_states)
 
         if not return_dict:
-            return (logits, hidden_states, present_key_values)
+            return tuple(v for v in [logits, hidden_states, present_key_values] if v is not None)
 
-        return CausalLMOutputWithPast(
+        return CausalLMOutput(
             logits=logits,
             hidden_states=hidden_states,
-            past_key_values=present_key_values,
         )
 
     def _prepare_attention_mask(self, input, span, context, length, past_length):
@@ -1123,7 +1048,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
     def set_input_embeddings(self, embeddings, **kwargs):
         self.lm_head = embeddings
 
-    def prepare_inputs_for_generation(self, input_ids):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **kwargs):
         input_tensors = list(map(self._convert_to_tensors, input_ids))
         keys = set(input_tensors[0].keys())
         padded = {}
@@ -1133,8 +1058,8 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
 
     def _convert_to_tensors(self, input_ids, task_id=2):
         model_inputs = {}
-        input_ids = [6] + input_ids
-        input_ids = [j for j in input_ids if j != 1]
+        input_ids = torch.cat((torch.tensor([6]), input_ids), axis=0)
+        input_ids = [j for j in input_ids if j != torch.tensor(1)]
 
         model_inputs["input"] = [x + self.prompt_length * task_id for x in range(self.prompt_length)] + input_ids
         model_inputs["length"] = len(model_inputs["input"])
@@ -1147,6 +1072,14 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             model_inputs[key] = torch.tensor(model_inputs[key]).int().unsqueeze(0)
 
         return model_inputs
+
+    def _reorder_cache(past_key_values, beam_idx):
+        past_key_values = [list(each) if each is not None else each for each in past_key_values]  # type: ignore # noqa: E501
+        for key_value_layer in past_key_values:
+            if key_value_layer is not None:
+                key_value_layer[0] = key_value_layer[0][beam_idx]
+                key_value_layer[1] = key_value_layer[1][beam_idx]
+        return past_key_values
 
     def pad(self, orig_items, key, padding_value=0, padding_side="left"):
         items = []
@@ -1192,262 +1125,3 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                     tensor[i, : len(item[key][0]), :] = item[key][0].clone()
 
         return tensor
-
-    def generate(self, input_ids, **kwargs):
-        if isinstance(input_ids, torch.Tensor):
-            input_ids = input_ids.detach().tolist()
-        if not isinstance(input_ids[0], list):
-            input_ids = [input_ids]
-        model_inputs = self.prepare_inputs_for_generation(input_ids)
-        with torch.inference_mode():
-            output_ids = self._decode(model_inputs, **kwargs)
-        result = [ii + oi for ii, oi in zip(input_ids, output_ids)]
-        return torch.tensor(result)
-
-    def _decode(
-        self, model_inputs, beam_size=3, max_length=50, repetition_penalty=1.2, repetition_window=None, **kwargs
-    ):
-        """
-        Args:
-            model_inputs (dict): {input, context, segment, length, span, position}.
-            beam_size (int, optional, defaults to 3): beam size of beam search.
-            max_length (int, optional, defaults to 50): maximum generation length.
-            repetition_penalty (float, optional, defaults to 1.2):
-                repetition penalty coefficient, 1.0 means no penalty.
-            repetition_window (int, optional, defaults to None):
-                window size of repetition penalty, None means that all output tokens are penalized.
-        """  # noqa: E501
-        # generate_length + 1 for EOS token
-        max_length += 1
-
-        # expand dimmension
-        batch_size = model_inputs["input"].size(0)
-        input = (
-            model_inputs["input"]
-            .unsqueeze(1)
-            .expand(batch_size, beam_size, -1)
-            .contiguous()
-            .view(batch_size * beam_size, -1)
-        )
-        length = (
-            model_inputs["length"]
-            .unsqueeze(1)
-            .expand(batch_size, beam_size)
-            .contiguous()
-            .view(
-                batch_size * beam_size,
-            )
-        )
-        context = (
-            model_inputs["context"]
-            .unsqueeze(1)
-            .expand(batch_size, beam_size, -1)
-            .contiguous()
-            .view(batch_size * beam_size, -1)
-        )
-        position = (
-            model_inputs["position"]
-            .unsqueeze(1)
-            .expand(batch_size, beam_size, -1)
-            .contiguous()
-            .view(batch_size * beam_size, -1)
-        )
-        segment = (
-            model_inputs["segment"]
-            .unsqueeze(1)
-            .expand(batch_size, beam_size, -1)
-            .contiguous()
-            .view(batch_size * beam_size, -1)
-        )
-        span = (
-            model_inputs["span"]
-            .unsqueeze(1)
-            .expand(batch_size, beam_size, -1)
-            .contiguous()
-            .view(batch_size * beam_size, -1)
-        )
-
-        done = [False for _ in range(batch_size)]
-
-        beam_scores = torch.zeros((batch_size, beam_size), dtype=torch.float, device=input.device)
-        beam_scores[:, 1:] = -1e9
-        beam_scores = beam_scores.view(-1)
-
-        # generated hypotheses
-        generated_hyps = [
-            BeamHypotheses(beam_size, max_length, length_penalty=1, early_stopping=False) for _ in range(batch_size)
-        ]
-
-        pred_start_index = input.size(-1)
-        past_key_values = None
-        for i in range(max_length + 1):
-            if i == 0:
-                logits, _, past_key_values = self(
-                    input=input,
-                    length=length,
-                    context=context,
-                    position=position,
-                    segment=segment,
-                    span=span,
-                    past_key_values=past_key_values,
-                )
-            else:
-                logits, _, past_key_values = self(
-                    input=input[:, -1:],
-                    length=length,
-                    context=context,
-                    position=position,
-                    segment=segment,
-                    span=span,
-                    past_key_values=past_key_values,
-                )
-
-            # skip all steps when we are done with each sentence
-            if all(done):
-                break
-
-            # (batch * beam, seqlen, model_dim)
-            logits = logits[:, -1, :]
-
-            if i == 0:
-                logits[:, 7] = -float("inf")
-                logits[:, 4] = -float("inf")
-
-            self.apply_repetition_penalty(
-                logits,
-                batch_size,
-                beam_size,
-                input,
-                repetition_penalty,
-                pred_start_index,
-                input.size(-1) - 1,
-                repetition_window,
-            )
-            scores = F.log_softmax(logits, dim=-1)
-
-            next_scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * beam_size, vocab_size)
-
-            # re-organize to group the beam together (we are keeping top hypothesis accross beams)
-            next_scores = next_scores.view(batch_size, -1)  # (batch_size, beam_size * vocab_size)
-            next_scores, next_words = torch.topk(next_scores, 2 * beam_size, dim=1, largest=True, sorted=True)
-
-            if not (next_scores.size() == next_words.size() == (batch_size, 2 * beam_size)):
-                raise AssertionError(
-                    "next_scores.size(), next_words.size(), (batch_size, 2 * beam_size) are not equal. "
-                )
-            next_batch_beam = []
-
-            for sent_id in range(batch_size):
-                # if we are done with this sentence
-                done[sent_id] = done[sent_id] or generated_hyps[sent_id].is_done(next_scores[sent_id].max().item(), i)
-                if done[sent_id]:
-                    next_batch_beam.extend([(0, 0, 0)] * beam_size)  # pad the batch
-                    continue
-
-                # next sentence beam content
-                next_sent_beam = []
-
-                # next words for this sentence
-                for idx, value in zip(next_words[sent_id], next_scores[sent_id]):
-                    # get beam and word IDs
-                    beam_id = torch.div(idx, scores.size(-1), rounding_mode="floor")
-                    word_id = idx % scores.size(-1)
-
-                    # end of sentence, or next word
-                    if word_id == 7 or i == max_length:
-                        generated_hyps[sent_id].add(
-                            input[sent_id * beam_size + beam_id, pred_start_index:].clone().cpu().tolist(),
-                            value.item(),
-                        )
-                    else:
-                        next_sent_beam.append((value, word_id, sent_id * beam_size + beam_id))
-
-                    # the beam for next step is full
-                    if len(next_sent_beam) == beam_size:
-                        break
-
-                # update next beam content
-                if i == max_length and len(next_sent_beam) != 0:
-                    raise AssertionError("i == max_length and len(next_sent_beam) != 0")
-                if i != max_length and len(next_sent_beam) != beam_size:
-                    raise AssertionError("i != beam_size and len(next_sent_beam) != beam_size")
-                if len(next_sent_beam) == 0:
-                    next_sent_beam = [(0, 0, 0)] * beam_size  # pad the batch
-                next_batch_beam.extend(next_sent_beam)
-                if len(next_batch_beam) != beam_size * (sent_id + 1):
-                    raise AssertionError("len(next_batch_beam) != beam_size * (sent_id + 1)")
-
-            # we have reached the last step
-            if i == max_length:
-                break
-
-            # sanity check / prepare next batch
-            if len(next_batch_beam) != batch_size * beam_size:
-                raise AssertionError("len(next_batch_beam) != batch_size * beam_size")
-            beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
-            beam_words = input.new([x[1] for x in next_batch_beam])
-            beam_idx = length.new([x[2] for x in next_batch_beam]).long()
-
-            # re-order batch and internal states
-            input = input[beam_idx, :]
-
-            past_key_values = [list(each) if each is not None else each for each in past_key_values]  # type: ignore # noqa: E501
-            for key_value_layer in past_key_values:
-                if key_value_layer is not None:
-                    key_value_layer[0] = key_value_layer[0][beam_idx]
-                    key_value_layer[1] = key_value_layer[1][beam_idx]
-
-            # update input ids
-            input = torch.cat([input, beam_words.unsqueeze(1)], dim=-1)
-            length += 1
-            context = torch.cat(
-                [context, torch.ones((context.size(0), 1), dtype=torch.int, device=context.device)],
-                dim=-1,
-            )
-            position = torch.cat([position, position[:, -1:] + 1], dim=-1)
-            segment = torch.cat([segment, segment[:, -1:]], dim=-1)  # segment id always the same as the previous token
-            span = torch.cat([span, span[:, -1:]], dim=-1)
-
-        # select the best hypotheses
-        results = []
-        for i, hypotheses in enumerate(generated_hyps):
-            best_hyp = max(hypotheses.hyp, key=lambda x: x[0])[1]
-            results.append(best_hyp)
-
-        return results
-
-    def apply_repetition_penalty(
-        self,
-        logits,
-        batch_size,
-        num_beams,
-        prev_output_tokens,
-        repetition_penalty,
-        start_idx=None,
-        end_idx=None,
-        window_size=None,
-    ):
-        # only conduct repetition penalty for the output
-        if repetition_penalty < 1:
-            raise ValueError("repetition penalty coefficient should >= 1")
-        # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
-        for i in range(batch_size * num_beams):
-            if start_idx is None or end_idx is None:
-                output_tokens = prev_output_tokens[i].tolist()
-            else:
-                if end_idx >= start_idx:
-                    if window_size:
-                        output_tokens = prev_output_tokens[i][
-                            max(start_idx, end_idx + 1 - window_size) : end_idx + 1
-                        ].tolist()
-                    else:
-                        output_tokens = prev_output_tokens[i][start_idx : end_idx + 1].tolist()
-                else:
-                    output_tokens = []
-            for previous_token in set(output_tokens):
-                # if score < 0 then repetition penalty has to
-                # multiplied to reduce the previous token probability
-                if logits[i, previous_token] < 0:
-                    logits[i, previous_token] *= repetition_penalty
-                else:
-                    logits[i, previous_token] /= repetition_penalty

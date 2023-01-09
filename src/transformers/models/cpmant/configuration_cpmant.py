@@ -69,6 +69,8 @@ class CPMAntConfig(PretrainedConfig):
             The length of prompt.
         segment_types (`int`, *optional*, defaults to 32):
             The type of segment.
+        use_cache (`bool`, *optional*, defaults to 32):
+            Whether to use cache.
         mask_modules (`List[Tuple[bool, bool]]`, *optional*, defaults to None):
             Determine whether the module should be masked.
 
@@ -103,6 +105,7 @@ class CPMAntConfig(PretrainedConfig):
         prompt_types: int = 32,
         prompt_length: int = 32,
         segment_types: int = 32,
+        use_cache: bool = True,
         mask_modules: Optional[List[Tuple[bool, bool]]] = None,
         **kwargs,
     ):
@@ -119,5 +122,6 @@ class CPMAntConfig(PretrainedConfig):
         self.position_bias_max_distance = position_bias_max_distance
         self.dropout_p = dropout_p
         self.eps = eps
+        self.use_cache = use_cache
         self.vocab_size = vocab_size
         self.mask_modules = mask_modules

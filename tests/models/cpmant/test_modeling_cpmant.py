@@ -112,7 +112,7 @@ class CPMAntModelTester:
         return (config, input_ids)
 
     def get_config(self):
-        return CPMAntConfig.from_pretrained("/data3/private/wangpeng/code/ant-LM-5G")
+        return CPMAntConfig.from_pretrained("openbmb/cpm-ant-10b")
 
     def create_and_check_cpmant_model(self, config, input_ids, *args):
         model = CPMAntModel(config=config)
@@ -128,9 +128,9 @@ class CPMAntModelTester:
         model.to(torch_device)
         model.eval()
 
-        logits, hidden_states, _ = model(**input_ids)
-        self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
-        self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
+        outputs = model(**input_ids)
+        self.parent.assertEqual(outputs.hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
+        self.parent.assertEqual(outputs.logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids = self.prepare_config_and_inputs()
@@ -174,20 +174,19 @@ class CPMAntModelTest(unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        # for model_name in CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-        for model_name in ["/data3/private/wangpeng/code/ant-LM-5G"]:
+        for model_name in CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CPMAntModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_simple_generation(self):
-        model_path = "/data3/private/wangpeng/code/ant-LM-5G"
+        model_path = "openbmb/cpm-ant-10b"
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
         texts = "昨天多云转阴，"
-        expected_output = "昨天多云转阴，今天又是艳阳高照的好天气。\n上午，我和同事们一起来到了位于北京西郊昌平区南口镇的中国农业机械化科学研究院(以下简称“农机院”)进行参观学习。在这里，"
-        model_inputs = tokenizer.encode(texts)
-        token_ids = model.generate(model_inputs)
+        expected_output = "昨天多云转阴，今天雨夹雪，气温骤降至零下5°C。在这冰天雪地的日子里，我们迎来了祖国母亲的生日。在这普天同庆的日子里，我们迎来了祖国母亲的生日。\n"
+        model_inputs = tokenizer(texts, return_tensors="pt")
+        token_ids = model.generate(**model_inputs)
         output_texts = tokenizer.decode(token_ids)
         self.assertEqual(expected_output, output_texts)
 
@@ -197,11 +196,11 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         texts = ["今天天气真好！"]
-        model_path = "/data3/private/wangpeng/code/ant-LM-5G"
+        model_path = "openbmb/cpm-ant-10b"
         model = CPMAntModel.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
         input_ids = tokenizer.get_model_input(texts)
-        logits, hidden = model(**input_ids)
+        logits = model(**input_ids)[0]
         vocab_size = 30720
         expected_shape = torch.Size((1, 38, vocab_size))
 
@@ -218,11 +217,11 @@ class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_casual(self):
         texts = ["今天天气真好！"]
-        model_path = "/data3/private/wangpeng/code/ant-LM-5G"
+        model_path = "openbmb/cpm-ant-10b"
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
         input_ids = tokenizer.get_model_input(texts)
-        logits, hidden, _ = model(**input_ids)
+        logits = model(**input_ids).logits
         vocab_size = 30720
         expected_shape = torch.Size((1, 38, vocab_size))
 
