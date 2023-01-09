@@ -104,7 +104,9 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         router_dtype="float32",
         router_ignore_padding_tokens=False,
         output_hidden_states=False,
+        output_attentions=False,
         use_cache=False,
+        initializer_factor=0.002,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -126,7 +128,9 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         self.router_dtype = router_dtype
         self.router_ignore_padding_tokens = router_ignore_padding_tokens
         self.output_hidden_states = output_hidden_states
+        self.output_attentions = output_attentions
         self.use_cache = use_cache
+        self.initializer_factor = initializer_factor
 
         kwargs["pad_token_id"] = vocab_size-4
         kwargs["eos_token_id"] = vocab_size-1

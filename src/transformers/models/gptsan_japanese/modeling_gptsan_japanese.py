@@ -20,6 +20,7 @@ import math
 import numpy as np
 import warnings
 from typing import Optional, Tuple, Union
+from collections import namedtuple
 
 import torch
 import torch.nn as nn
@@ -33,6 +34,7 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indi
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
@@ -322,7 +324,8 @@ class GPTSANJapaneseAttention(nn.Module):
         self,
         hidden_states,
         mask,
-        past=None
+        past=None,
+        out_attentions=None
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -346,6 +349,8 @@ class GPTSANJapaneseAttention(nn.Module):
         scores *= umask
         scores -= (1-umask) * 10000.0
         probs = torch.exp(nn.functional.log_softmax(scores, dim=-1)) # same as mesh-tensorflow
+        if out_attentions is not None:
+            out_attentions.append(probs)
         output = torch.einsum("bhsm,bhmk->bhsk",probs,v) # [batch, heads, sequence, kernel]
         output = output.transpose(1,2) # [batch, sequence, heads, kernel]
         output = torch.einsum("bshk,hkc->bsc",output,self.o) # [batch, sequence, hidden]
@@ -363,12 +368,14 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        past=None
+        past=None,
+        out_attentions=None
     ):
         attention_output, present = self.SelfAttention(
             hidden_states,
             mask=attention_mask,
-            past=past
+            past=past,
+            out_attentions=out_attentions,
         )
         outputs = hidden_states + self.norm(attention_output)
         return outputs, present
@@ -379,15 +386,16 @@ class GPTSANJapaneseBlock(nn.Module):
     def __init__(self, config, ext_layer=False):
         super().__init__()
         self.att = GPTSANJapaneseLayerSelfAttention(config)
-        self.ff = GPTSANJapaneseLayerEFF(config, True) if ext_layer else GPTSANJapaneseLayerFF(config)
+        self.ff = GPTSANJapaneseLayerEFF(config) if ext_layer else GPTSANJapaneseLayerFF(config)
 
     def forward(
         self,
         hidden_states,
         attention_mask,
-        past=None
+        past=None,
+        out_attentions=None
     ):
-        attention_status, present = self.att(hidden_states, attention_mask, past=past)
+        attention_status, present = self.att(hidden_states, attention_mask, past=past, out_attentions=out_attentions)
         outputs = self.ff(attention_status)
         return outputs, present
 
@@ -400,7 +408,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
 
     config_class = GPTSANJapaneseConfig
     base_model_prefix = "gptsan_japanese"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _no_split_modules = ["GPTSANJapaneseBlock"]
 
     @property
@@ -417,17 +425,22 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, GPTSANJapaneseLayerNorm):
+        if isinstance(module, GPTSANJapaneseNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(
-            module,
-            (GPTSANJapaneseModel, ),
-        ):
+            module.bias.data.zero_()
+        elif isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, GPTSANJapaneseModel):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            module.wob.data.normal_(mean=0.0, std=factor * 1.0)
+            module.logits.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.logits, "bias") and module.logits.bias is not None:
+                module.logits.bias.data.zero_()
         elif isinstance(module, GPTSANJapaneseDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -442,19 +455,15 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
-            key_value_proj_dim = self.config.d_kv
+            key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+            module.qkv.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.o.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
         elif isinstance(module, GPTSANJapaneseSparseMLP):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
-            key_value_proj_dim = self.config.d_kv
+            key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
             module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
@@ -462,7 +471,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
                 module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (GPTSANJapaneseAttention, GPTSANJapaneseStack)):
+        if isinstance(module, (GPTSANJapaneseAttention, )):
             module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
@@ -664,7 +673,7 @@ class GPTSANSentenceGenerator():
         >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> x_tok = tokenizer.encode("武田信玄は、")
         >>> model = model.cuda()
-        >>> res = model.generator.generate_lm(x_tok, tokenizer, connected_inputs=0)
+        >>> res = model.generator.generate_hybrid(x_tok, tokenizer, connected_inputs=0)
         >>> res[0]
         '勝頼の父であり、天正四年(1576)に死去するまで甲府14万石の大名として甲府を治めた戦国大名ですが...'
         ```
@@ -853,7 +862,7 @@ def make_attention_mask_torch(total_seq, output_seq, input_len):
 )
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersModel with T5Tokenizer->T5Tokenizer,SwitchTransformers->GPTSANJapanese,SWITCH_TRANSFORMERS->GPTSAN_JAPANESE,google/switch-base-8->tanreinama/GPTSAN-2.8B-spout_is_uniform
 class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight", r"decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_missing = [r"wte.weight", ]
 
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__(config)
@@ -882,12 +891,14 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             spouts.append(nn.Linear(config.d_spout, config.num_layers*2*config.d_model, bias=False))
             self.spout = nn.Sequential(*spouts)
 
+        self.post_init()
+
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.wte
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
+        self.wte = new_embeddings
 
     def get_encoder(self):
         return self.encoder
@@ -903,8 +914,35 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         num_precontext: Optional[torch.LongTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         pasts: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = False,
     ) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithPast]:
         """
+        Args:
+            head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+                Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+                is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+                model's internal embedding lookup matrix.
+            decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+                representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+                input (see `past_key_values`). This is useful if you want more control over how to convert
+                `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+                tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+                more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         Returns:
 
         Example:
@@ -915,8 +953,10 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         device = self.wpe.weight.device
-        num_batch = input_ids.shape[0]
+        if input_ids is None:
+            input_ids = torch.zeros([1,1]).int().to(device)
         num_pasts_contexts = 0
+        num_batch = input_ids.shape[0]
         if pasts is not None:
             num_pasts_contexts = pasts.shape[4]
         elif self.config.d_spout and spout is not None:
@@ -967,32 +1007,51 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         del ppos
 
         out_past_key_values = [] if self.config.use_cache else None
-        out_hidden_states = [hidden] if self.config.output_hidden_states else None
+        out_hidden_states = [hidden] if self.config.output_hidden_states or output_hidden_states else None
+        out_attentions = [] if self.config.output_attentions or output_attentions else None
 
         for layer, past in enumerate(pasts):
             if layer == self.config.num_switch_layers:
                 hidden = hidden + ete
 
-            hidden, present = self.blocks[layer](hidden, atten_mask, past=past)
+            hidden, present = self.blocks[layer](hidden, atten_mask, past=past, out_attentions=out_attentions)
             if self.config.use_cache:
                 out_past_key_values.append(present)
-            if self.config.output_hidden_states:
+            if self.config.output_hidden_states or output_hidden_states:
                 out_hidden_states.append(hidden)
 
         if self.config.use_cache:
             out_past_key_values = tuple(out_past_key_values)
 
-        if self.config.output_hidden_states:
+        if self.config.output_hidden_states or output_hidden_states:
             out_hidden_states = tuple(out_hidden_states)
+
+        if self.config.output_attentions or output_attentions:
+            out_attentions = tuple(out_attentions)
 
         hidden = self.logits(hidden)
         hidden = self.logact(hidden)
 
         logits = torch.einsum("bsc,vc->bsv",hidden, self.wte.weight)
-        logits = logits + self.wob
+        if logits.shape[-1] == self.wob.shape[-1]:
+            logits = logits + self.wob
 
-        return CausalLMOutputWithPast(
-            logits=logits,
-            past_key_values=out_past_key_values,
-            hidden_states=out_hidden_states
-        )
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
+            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
+
+        ret = ModelOutput()
+        ret["logits"] = logits
+        ret["past_key_values"] = out_past_key_values
+        if self.config.output_hidden_states or output_hidden_states:
+            ret["hidden_states"] = out_hidden_states
+        if self.config.output_attentions or output_attentions:
+            ret["attentions"] = out_attentions
+        ret["loss"] = loss
+
+        if return_dict:
+            return ret
+
+        outp = namedtuple("GPTSANOutputs", " ".join(ret.keys()))
+        return outp(**ret)
