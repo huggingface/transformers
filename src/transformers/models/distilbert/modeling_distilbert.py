@@ -158,7 +158,9 @@ class MultiHeadSelfAttention(nn.Module):
     def prune_heads(self, heads: List[int]):
         if len(heads) == 0:
             return
-        heads, index = find_pruneable_heads_and_indices(heads, self.n_heads, self.attention_head_size, self.pruned_heads)
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_heads, self.attention_head_size, self.pruned_heads
+        )
         # Prune linear layers
         self.q_lin = prune_linear_layer(self.q_lin, index)
         self.k_lin = prune_linear_layer(self.k_lin, index)
