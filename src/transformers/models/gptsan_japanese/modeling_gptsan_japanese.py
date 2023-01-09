@@ -15,11 +15,11 @@
 """ PyTorch GPTSANJapanese model."""
 
 
-import copy
-import numpy as np
-from typing import Optional, Tuple, Union
 import collections
+import copy
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 

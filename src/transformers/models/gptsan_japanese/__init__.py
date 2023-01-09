@@ -49,10 +49,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_gptsan_japanese import (
-        GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        GPTSANJapaneseConfig,
-    )
+    from .configuration_gptsan_japanese import GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSANJapaneseConfig
 
     try:
         if not is_torch_available():
@@ -62,11 +59,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_gptsan_japanese import (
             GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTSANJapaneseDenseActDense,
             GPTSANJapaneseModel,
             GPTSANJapanesePreTrainedModel,
-            GPTSANJapaneseTop1Router,
             GPTSANJapaneseSparseMLP,
-            GPTSANJapaneseDenseActDense,
+            GPTSANJapaneseTop1Router,
         )
 
 

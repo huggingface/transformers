@@ -15,13 +15,15 @@
 
 """Convert GPTSANJapanese checkpoints from the original repository to pytorch model."""
 
-import tensorflow as tf
-import torch
-import numpy as np
 import argparse
 import json
 import os
 from collections import OrderedDict
+
+import numpy as np
+import tensorflow as tf
+import torch
+
 
 parser = argparse.ArgumentParser(
     description="model converter.", formatter_class=argparse.ArgumentDefaultsHelpFormatter

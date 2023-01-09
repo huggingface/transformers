@@ -3648,6 +3648,7 @@ if TYPE_CHECKING:
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.gptsan_japanese import GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSANJapaneseConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -3762,7 +3763,6 @@ if TYPE_CHECKING:
     from .models.swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
     from .models.switch_transformers import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig
-    from .models.gptsan_japanese import GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSANJapaneseConfig
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.table_transformer import TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TableTransformerConfig
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
@@ -4718,6 +4718,15 @@ if TYPE_CHECKING:
             GPTJModel,
             GPTJPreTrainedModel,
         )
+        from .models.gptsan_japanese import (
+            GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTSANJapaneseDenseActDense,
+            GPTSANJapaneseModel,
+            GPTSANJapanesePreTrainedModel,
+            GPTSANJapaneseSparseMLP,
+            GPTSANJapaneseTop1Router,
+            GPTSANSentenceGenerator,
+        )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             GroupViTModel,
@@ -5242,15 +5251,6 @@ if TYPE_CHECKING:
             SwitchTransformersPreTrainedModel,
             SwitchTransformersSparseMLP,
             SwitchTransformersTop1Router,
-        )
-        from .models.gptsan_japanese import (
-            GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTSANJapaneseModel,
-            GPTSANSentenceGenerator,
-            GPTSANJapanesePreTrainedModel,
-            GPTSANJapaneseTop1Router,
-            GPTSANJapaneseSparseMLP,
-            GPTSANJapaneseDenseActDense,
         )
         from .models.t5 import (
             T5_PRETRAINED_MODEL_ARCHIVE_LIST,
