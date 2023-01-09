@@ -20,12 +20,10 @@ import math
 import numpy as np
 import warnings
 from typing import Optional, Tuple, Union
-from collections import namedtuple
+import collections
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
@@ -47,14 +45,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTSANJapaneseConfig"
 _TOKENIZER_FOR_DOC = "GPTNeoXJapaneseTokenizer"
-_CHECKPOINT_FOR_DOC = "tanreinama/GPTSAN-2.8B-spout_is_uniform"
+_CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
 
 ####################################################
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
 GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tanreinama/GPTSAN-2.8B-spout_is_uniform",
+    "Tanrei/GPTSAN-japanese",
     # See all GPTSAN-japanese models at https://huggingface.co/models?filter=gptsan-japanese
 ]
 
@@ -283,7 +281,6 @@ class GPTSANJapaneseLayerEFF(nn.Module):
         return output
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Attention with T5->GPTSANJapanese
 class GPTSANJapaneseAttention(nn.Module):
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__()
@@ -356,7 +353,6 @@ class GPTSANJapaneseAttention(nn.Module):
         return output, present
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->GPTSANJapanese
 class GPTSANJapaneseLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
@@ -557,6 +553,10 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
 
 
 class GPTSANSentenceGenerator():
+    """
+    An text generator class to find token sequence from Model outputs
+    """
+
     def __init__(self, model:GPTSANJapanesePreTrainedModel, config: GPTSANJapaneseConfig):
         self.model = model
         self.config = config
@@ -718,7 +718,7 @@ class GPTSANSentenceGenerator():
         assert beam_width>=batch_size and beam_width%batch_size == 0
         NUM_TOKENS = self.config.vocab_size
         SOT_TOKEN = NUM_TOKENS-7
-        MSK_TOKEN = NUM_TOKENS-6
+        #MSK_TOKEN = NUM_TOKENS-6
         SEP_TOKEN = NUM_TOKENS-5
         NOT_TOKEN = NUM_TOKENS-4
         BAG_TOKEN = NUM_TOKENS-3
@@ -874,7 +874,6 @@ def make_attention_mask_torch(total_seq, output_seq, input_len):
     "The bare GPTSAN_JAPANESE Model transformer outputting logits.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersModel with T5Tokenizer->T5Tokenizer,SwitchTransformers->GPTSANJapanese,SWITCH_TRANSFORMERS->GPTSAN_JAPANESE,google/switch-base-8->tanreinama/GPTSAN-2.8B-spout_is_uniform
 class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"wte.weight", ]
 
@@ -1040,7 +1039,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss(ignore_index=-100)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
 
         ret = ModelOutput()
@@ -1055,5 +1054,5 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         if return_dict:
             return ret
 
-        outp = namedtuple("GPTSANOutputs", " ".join(ret.keys()))
+        outp = collections.namedtuple("GPTSANOutputs", " ".join(ret.keys()))
         return outp(**ret)

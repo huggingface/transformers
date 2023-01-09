@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import GPTSANJapaneseConfig, is_torch_available
+from transformers import GPTSANJapaneseModel, GPTSANJapaneseConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
