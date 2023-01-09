@@ -1,0 +1,91 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# How 🤗 Transformers solve tasks
+
+In [What 🤗 Transformers can do](task_summary), you learned how natural language processing (NLP), speech and audio, and computer vision problems used to be solved before the Transformer was introduced and some important applications of these problems. 
+
+This page will dig deeper into how Transformer models solve these tasks, and explain what's happening under the hood for each of them. Each Transformer model is a bit different - some may implement certain tricks or techniques - but the general idea is the same. So to keep things relatively brief, for each modality, we'll discuss how a specific Transformer model works. Then, to use the pretrained model for a specific downstream task, you only need to add a task-specific head on top and finetune it on your data.
+
+The Transformer models we'll look at are among the most common ones in their field, and they'll provide you with a good understanding of how they work:
+
+- [wav2vec2](model_doc/wav2vec2) for audio and speech processing tasks like automatic speech recognition
+- [Vision Transformer (ViT)](model_doc/vit) for computer vision tasks like image classification
+- [BERT](model_doc/bert) for NLP tasks like text classification that use an encoder, [GPTJ](model_doc/gptj) for NLP tasks like text generation that use a decoder, and [T5](model_doc/t5) for NLP tasks like summarization that use both an encoder and a decoder
+
+## Speech and audio
+
+wav2vec2 is a self-supervised model pretrained on unlabeled speech data and finetuned on labeled data for downstream tasks. This is powerful because it demonstrates you can learn meaningful representations from speech alone and you don't need large amounts of labeled training data. wav2vec2 has four main components:
+
+1. A **feature encoder** (a multilayer convolutional neural network) takes the raw waveform and converts it into a sequence of feature vectors that are each 20ms long. The total receptive field of the feature encoder is 25ms of audio. The feature encoder also normalizes the waveform to zero mean and unit variance.
+
+2. The feature vectors from the encoder are passed to a **quantization module**. The purpose of the quantizer is to learn discrete speech units. Audio waveforms are continuous by nature which means they can't be broken up into separate units the way a sequence of text can be split into words. So what are speech units? Each speech unit is a speech representation sampled from a group of *codebooks*, and each codebook contains a set vocabulary. wav2vec2 has two codebooks with 320 codewords in each codebook. This gives wav2vec2 a total of 102,400 speech units.
+
+    In practice, the feature vectors are multiplied by a quantization matrix with a score for each potential codeword in each codebook. Then the Gumbel softmax chooses the codeword with the highest probability. Finally, the codewords are concatenated to form the final speech unit.
+
+3. About half of the feature vectors from the encoder are randomly masked, and the masked positions are replaced by the same trained feature vector. These are now fed to a **context network**. The context network is a Transformer encoder, but unlike the original Transformer, wav2vec2 adds a relative positional embedding with another convolutional layer.
+
+4. The objective of the context network is to learn the speech representation of the masked positions by solving a **contrastive task**. This basically means the model has to predict the true quantized speech representation from a set of false ones. The contrastive loss encourages the model to maximize the similarity between the context vector and the quantized speech unit (this is the target label). 
+
+Now that wav2vec2 is pretrained, you can finetune it for downstream tasks like automatic speech recognition and audio classification!
+
+### Audio classification
+
+To use the pretrained model for audio classification, you add a sequence classification head on top of the base wav2vec2 model. The sequence classification head is just a linear layer that accepts the hidden states output by wav2vec2 and does a linear transformation to convert them into logits. The cross-entropy loss is then calculated between the logits and target to find the most likely label.
+
+You can see this in [`Wav2Vec2ForSequenceClassification.forward`]:
+
+```py
+logits = self.classifier(pooled_output)
+
+loss = None
+if labels is not None:
+    loss_fct = CrossEntropyLoss()
+    loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+
+return SequenceClassifierOutput(
+    loss=loss,
+    logits=logits,
+    hidden_states=outputs.hidden_states,
+    attentions=outputs.attentions,
+)
+```
+
+### Automatic speech recognition
+
+To use the pretrained model for automatic speech recognition, you add a language modeling head on top of the base wav2vec2 model for [connectionist temporal classification (CTC)](glossary#connectionist-temporal-classification-ctc). The language modeling head is just a linear layer that accepts the hidden states output by wav2vec2 and does a linear transformation to convert them into logits which represent a token class (the number of tokens comes from the vocabulary of the task). The CTC loss is then calculated between the logits and target to find the most likely token.
+
+You can see this in [`Wav2Vec2ForCTC.forward`]:
+
+```py
+logits = self.lm_head(hidden_states)
+
+loss = None
+if labels is not None:
+    
+    ...
+
+    with torch.backends.cudnn.flags(enabled=False):
+        loss = nn.functional.ctc_loss(
+            log_probs,
+            flattened_targets,
+            input_lengths,
+            target_lengths,
+            blank=self.config.pad_token_id,
+            reduction=self.config.ctc_loss_reduction,
+            zero_infinity=self.config.ctc_zero_infinity,
+        )
+
+return CausalLMOutput(
+    loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+)
+```
