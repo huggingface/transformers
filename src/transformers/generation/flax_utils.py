@@ -19,7 +19,7 @@ import copy
 import inspect
 import warnings
 from functools import partial
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 
