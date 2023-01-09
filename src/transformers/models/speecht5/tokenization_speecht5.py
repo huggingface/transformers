@@ -224,6 +224,10 @@ class SpeechT5CTCTokenizer(SpeechT5Tokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            word_delimiter_token=word_delimiter_token,
+            replace_word_delimiter_char=replace_word_delimiter_char,
+            blank_token=blank_token,
+            do_lower_case=do_lower_case,
             sp_model_kwargs=sp_model_kwargs,
             **kwargs,
         )

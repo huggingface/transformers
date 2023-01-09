@@ -17,8 +17,9 @@
 import unittest
 
 from transformers import SPIECE_UNDERLINE
-from transformers.models.speecht5 import SpeechT5Tokenizer
+from transformers.models.speecht5 import SpeechT5Tokenizer, SpeechT5CTCTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.tokenization_utils import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -182,5 +183,89 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             expected_encoding=expected_encoding,
             model_name="Matthijs/speecht5_asr",
             revision="63f2ee29f0d4653c691069ed190536fba977678b",
+            sequences=sequences,
+        )
+
+
+@require_sentencepiece
+@require_tokenizers
+class SpeechT5CTCTokenizerTest(SpeechT5TokenizerTest):
+    tokenizer_class = SpeechT5CTCTokenizer
+
+    def setUp(self):
+        super().setUp()
+
+        # We have a SentencePiece fixture for testing
+        tokenizer = SpeechT5CTCTokenizer(SAMPLE_VOCAB)
+
+        mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
+        tokenizer.mask_token = mask_token
+        tokenizer.add_special_tokens({"mask_token": mask_token})
+        tokenizer.add_tokens(["<ctc_blank>"])
+
+        tokenizer.save_pretrained(self.tmpdirname)
+
+    def test_get_vocab(self):
+        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+
+        self.assertEqual(vocab_keys[0], "<s>")
+        self.assertEqual(vocab_keys[1], "<pad>")
+        self.assertEqual(vocab_keys[-4], "œ")
+        self.assertEqual(vocab_keys[-2], "<mask>")
+        self.assertEqual(vocab_keys[-1], "<ctc_blank>")
+        self.assertEqual(len(vocab_keys), 81)
+
+    # def test_full_tokenizer(self):
+    #     tokenizer = SpeechT5CTCTokenizer.from_pretrained(self.tmpdirname)
+
+    #     tokens = tokenizer.tokenize("This is a test")
+    #     # fmt: off
+    #     self.assertListEqual(tokens, [SPIECE_UNDERLINE, 'T', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'a', SPIECE_UNDERLINE, 't', 'e', 's', 't'])
+    #     # fmt: on
+
+    #     self.assertListEqual(
+    #         tokenizer.convert_tokens_to_ids(tokens),
+    #         [4, 32, 11, 10, 12, 4, 10, 12, 4, 7, 4, 6, 5, 12, 6],
+    #     )
+
+    #     tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
+    #     self.assertListEqual(
+    #         tokens,
+    #         # fmt: off
+    #         [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, '92000', ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
+    #         # fmt: on
+    #     )
+
+    #     ids = tokenizer.convert_tokens_to_ids(tokens)
+    #     # fmt: off
+    #     self.assertListEqual(ids, [4, 30, 4, 20, 7, 12, 4, 25, 8, 13, 9, 4, 10, 9, 4, 3, 23, 4, 7, 9, 14, 4, 6, 11, 10, 12, 4, 10, 12, 4, 19, 7, 15, 12, 73, 26])
+    #     # fmt: on
+
+    #     back_tokens = tokenizer.convert_ids_to_tokens(ids)
+    #     self.assertListEqual(
+    #         back_tokens,
+    #         # fmt: off
+    #         [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, '<unk>', ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
+    #         # fmt: on
+    #     )
+
+    @slow
+    def test_tokenizer_integration(self):
+        # Use custom sequence because this tokenizer eats up repeating characters
+        # unless separated by a CTC blank character.
+        sequences = [
+            "BERT is designed to pre-train bidirectional representations from unlabeled text by jointly "
+            "conditioning on both left and right context in the layers.",
+            "The quick brown fox jumps over the lazy dog.",
+        ]
+
+        # fmt: off
+        expected_encoding = {'input_ids': [[4, 40, 47, 54, 32, 4, 10, 12, 4, 14, 5, 12, 10, 21, 9, 5, 14, 4, 6, 8, 4, 24, 13, 5, 39, 6, 13, 7, 10, 9, 4, 25, 10, 14, 10, 13, 5, 17, 6, 10, 8, 9, 7, 15, 4, 13, 5, 24, 13, 5, 12, 5, 9, 6, 7, 6, 10, 8, 9, 12, 4, 19, 13, 8, 18, 4, 16, 9, 15, 7, 25, 5, 15, 5, 14, 4, 6, 5, 37, 6, 4, 25, 22, 4, 46, 8, 10, 9, 6, 15, 22, 4, 17, 8, 9, 14, 10, 6, 10, 8, 9, 10, 9, 21, 4, 8, 9, 4, 25, 8, 6, 11, 4, 15, 5, 19, 6, 4, 7, 9, 14, 4, 13, 10, 21, 11, 6, 4, 17, 8, 9, 6, 5, 37, 6, 4, 10, 9, 4, 6, 11, 5, 4, 15, 7, 22, 5, 13, 12, 26], [4, 32, 11, 5, 4, 45, 16, 10, 17, 28, 4, 25, 13, 8, 20, 9, 4, 19, 8, 37, 4, 46, 16, 18, 24, 12, 4, 8, 27, 5, 13, 4, 6, 11, 5, 4, 15, 7, 57, 22, 4, 14, 8, 21, 26, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}
+        # fmt: on
+
+        self.tokenizer_integration_test_util(
+            expected_encoding=expected_encoding,
+            model_name="Matthijs/speecht5_ctc",
+            revision="009f21ef7f29ccaebc24bbd9bbfc8ada9259d2ba",
             sequences=sequences,
         )
