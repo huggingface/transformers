@@ -842,21 +842,21 @@ class BloomForCausalLM(BloomPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past: Optional[torch.Tensor] = None,
+        past_key_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs
     ) -> dict:
         # only last token for input_ids if past is not None
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
             # the cache may be in the stardard format (e.g. in contrastive search), convert to bloom's format if needed
-            if past[0][0].shape[0] == input_ids.shape[0]:
-                past = self._convert_to_bloom_cache(past)
+            if past_key_values[0][0].shape[0] == input_ids.shape[0]:
+                past_key_values = self._convert_to_bloom_cache(past_key_values)
 
         return {
             "input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "attention_mask": attention_mask,
         }
