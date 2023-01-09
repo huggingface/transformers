@@ -34,8 +34,6 @@
       title: Convertir checkpoints de TensorFlow
     - local: serialization
       title: Exportar a ONNX
-    - local: community
-      title: Comunidad
     title: Uso general
   - sections:
     - local: fast_tokenizers
@@ -71,6 +69,8 @@
     - local: pr_checks
       title: Verificaciones en un Pull Request
     title: Contribuir
+  - local: community
+    title: Los recursos de la comunidad
   title: Guías prácticas
 - sections:
   - local: philosophy
