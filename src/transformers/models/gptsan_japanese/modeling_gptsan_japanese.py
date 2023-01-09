@@ -16,9 +16,7 @@
 
 
 import copy
-import math
 import numpy as np
-import warnings
 from typing import Optional, Tuple, Union
 import collections
 
@@ -27,7 +25,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -36,7 +34,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_gptsan_japanese import GPTSANJapaneseConfig
 
@@ -553,6 +550,12 @@ class GPTSANSentenceGenerator:
         self.model = model
         self.config = config
 
+    def forward(self, x):
+        """
+        dummy function
+        """
+        pass
+
     def _convert_token(self, tokens):
         return [t if t != 35782 else 35593 for t in tokens]  # tokenizer bug for "," token
 
@@ -773,6 +776,7 @@ class GPTSANSentenceGenerator:
                 return logits
             for d in range(0, len(inp["x"]), batch_size):
                 e = min(d + batch_size, len(inp["x"]))
+                assert e >= d
                 x_inp = [i for i in inp["x"][d:e]]
                 n_inp = [i for i in inp["num_precontext"][d:e]]
                 with torch.no_grad():
@@ -932,7 +936,6 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1027,7 +1030,6 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
 
         if pasts is None:
             pasts = [None] * self.config.num_layers
-            start = 0
             pos = torch.arange(num_input_contexts).to(device)
             pos = torch.clip(pos, 0, self.config.num_contexts - 1)
         else:
