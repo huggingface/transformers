@@ -297,7 +297,7 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. So this test is not applicable.""")
+    @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. Thus this test is not applicable.""")
     def test_inputs_embeds(self):
         pass
 
