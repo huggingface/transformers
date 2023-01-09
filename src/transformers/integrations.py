@@ -659,6 +659,27 @@ class WandbCallback(TrainerCallback):
         # log outputs
         self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
+    def get_env_vars(self):
+
+        tags = os.getenv("WANDB_TAGS", None)
+
+        return {
+            "anonymous": os.getenv("WANDB_ANONYMOUS", None),
+            "config_dir": os.getenv("WANDB_CONFIG_DIR", None),
+            "dir": os.getenv("WANDB_DIR", None),
+            "save_code": os.getenv("WANDB_DISABLED_CODE", None),
+            "entity": os.getenv("WANDB_ENTITY", None),
+            "job_type": os.getenv("WANDB_JOB_TYPE", None),
+            "mode": os.getenv("WANDB_MODE", None),
+            "name": os.getenv("WANDB_NAME", None),
+            "notes": os.getenv("WANDB_NOTES", None),
+            "project": os.getenv("WANDB_PROJECT", "huggingface"),
+            "resume": os.getenv("WANDB_RESUME", None),
+            "group": os.getenv("WANDB_RUN_GROUP", None),
+            "id": os.getenv("WANDB_RUN_ID", None),
+            "tags": tags if tags is None else tags.split(",")
+        }
+
     def setup(self, args, state, model, **kwargs):
         """
         Setup the optional Weights & Biases (*wandb*) integration.
@@ -668,16 +689,56 @@ class WandbCallback(TrainerCallback):
         variables:
 
         Environment:
+        - **WANDB_ANONYMOUS** (`str`, *optional*, defaults to `None`):
+            Set this to `"allow"`, `"never"`, or `"must"` to let users create anonymous runs with secret urls.
+        - **WANDB_CONFIG_DIR** (`str`, *optional*, defaults to `None`):
+            Set this to a custom string to store config in a different directory. 
+            If not set, defaults to `"~/.config/wandb"`.
+        - **wWANDB_DIR** (`str`, *optional*, defaults to `None`):
+            Set this to an absolute path to store all generated files here instead of the wandb directory 
+            relative to your training script. be sure this directory exists and the user your process runs as can write to it
+        - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
+            Whether or not to disable wandb entirely. Set `WANDB_DISABLED=True` to disable.
+        - **WANDB_DISABLE_CODE** (`bool`, *optional*, defaults to `False`):
+            Whether or not to disable code saving. Set `WANDB_DISABLE_CODE=True` to disable.
+        - **WANDB_ENTITY** (`str`, *optional*, defaults to `None`):
+            The entity associated with your run. If you have run wandb init in the directory of your training script, 
+            it will create a directory named wandb and will save a default entity which can be checked into source control. 
+            If you don't want to create that file or want to override the file you can use the environmental variable.
+        - **WANDB_JOB_TYPE** (`str`, *optional*, defaults to `None`):
+            Specify the job type, like `"training"` or `"evaluation"` to indicate different types of runs. 
         - **WANDB_LOG_MODEL** (`bool`, *optional*, defaults to `False`):
             Whether or not to log model as artifact at the end of training. Use along with
             [`~transformers.TrainingArguments.load_best_model_at_end`] to upload best model.
+        - **WANDB_MODE** (`str`, *optional*, defaults to `None`):
+            If you set this to `"offline"` wandb will save your run metadata locally and not sync to the server. 
+            If you set this to `"disabled"` wandb will turn off completely.
+            Defaults to `"online"`. 
+        - **WANDB_NAME** (`str`, *optional*, defaults to `None`):
+            The human-readable name of your run. If not set it will be randomly generated for you.
+        - **WANDB_NOTES** (`str`, *optional*, defaults to `Training`):
+            Longer notes about your run. Markdown is allowed and you can edit this later in the UI.
+        - **WANDB_PROJECT** (`str`, *optional*, defaults to `huggingface`):
+            The project associated with your run. This can also be set with wandb init, 
+            but the environmental variable will override the value.
+        - **WANDB_RESUME** (`bool`, *optional*, defaults to `never`):
+            By default this is set to `never`. If set to `auto` wandb will automatically resume failed runs. 
+            If set to `must` forces the run to exist on startup. 
+            If you want to always generate your own unique ids, set this to `allow` and always set WANDB_RUN_ID.
+        - **WANDB_RUN_GROUP** (`str`, *optional*, defaults to `None`):
+            Specify the experiment name to automatically group runs together. 
+            For example, you might be doing cross validation, or you might 
+            have multiple jobs that train and evaluate a model against different test sets. 
+        - **WANDB_RUN_ID** (`str`, *optional*, defaults to `None`):
+            Set this to a globally unique string (per project) corresponding to a single run of your script. 
+            It must be no longer than 64 characters. All non-word characters will be converted to dashes. 
+            This can be used to resume an existing run in cases of failure.
+        - **WANDB_TAGS** (`str`, *optional*, defaults to `None`):
+            A comma separated list of tags to be applied to the run. Tags are useful for organizing runs together, 
+            or applying temporary labels like "baseline" or "production". 
         - **WANDB_WATCH** (`str`, *optional*, defaults to `gradients`):
             Can be `gradients`, `all` or `false`. Set to `false` to disable gradient logging or `all` to log gradients
             and parameters.
-        - **WANDB_PROJECT** (`str`, *optional*, defaults to `huggingface`):
-            Set this to a custom string to store results in a different project.
-        - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
-            Whether or not to disable wandb entirely. Set `WANDB_DISABLED=True` to disable.
         """
         if self._wandb is None:
             return
@@ -692,17 +753,15 @@ class WandbCallback(TrainerCallback):
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
             trial_name = state.trial_name
-            init_args = {}
+            init_args = self.get_env_vars()
             if trial_name is not None:
-                run_name = trial_name
+                init_args["name"] = trial_name
                 init_args["group"] = args.run_name
             else:
-                run_name = args.run_name
+                init_args["name"] = args.run_name
 
             if self._wandb.run is None:
                 self._wandb.init(
-                    project=os.getenv("WANDB_PROJECT", "huggingface"),
-                    name=run_name,
                     **init_args,
                 )
             # add config parameters (run may have been created manually)
