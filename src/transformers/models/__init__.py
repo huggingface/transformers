@@ -155,6 +155,7 @@ from . import (
     swin2sr,
     swinv2,
     switch_transformers,
+    gptsan_japanese,
     t5,
     table_transformer,
     tapas,
