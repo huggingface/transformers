@@ -521,22 +521,38 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. GPTSAN_JAPANESE is a model that
             generates sentence continuations or predicts tokens at mask positions. Special tokens
             required for inputs to the model are automatically appended.
-
         num_precontext (`torch.LongTensor` of shape `(batch_size,1)`):
             length of `hybrid` input tokens in the input.
             Tokens up to this length refer to both front and back like BERT, tokens after that refer only to front like GPT.
             see also:
             https://github.com/tanreinama/GPTSAN/blob/main/report/model.md
-
         squad (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
                 This vector is transformed through an 8-layer FFN and can be used instead of `pasts`.
-
         pasts (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -905,7 +921,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Union[Tuple[torch.FloatTensor], ModelOutput], config_class=_CONFIG_FOR_DOC)
+    #@replace_return_docstrings(output_type=ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -920,33 +936,21 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = False,
     ) -> Union[Tuple[torch.FloatTensor], ModelOutput]:
-        """
-        Args:
-            head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-                Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-                is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-                model's internal embedding lookup matrix.
-            decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-                representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-                input (see `past_key_values`). This is useful if you want more control over how to convert
-                `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-                tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-                more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        r"""
         Returns:
 
         Example:
+
         ```python
-        ```
-        """
+        >>> from transformers import AutoModel, AutoTokenizer
+        >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        >>> x_tok = tokenizer.encode("武田信玄は、")
+        >>> model = model.cuda()
+        >>> res = model.generator.generate_lm(x_tok, tokenizer)
+        res[0]
+        '勝頼の父であり、天正四年(1576)に死去するまで甲府14万石の大名として甲府を治めた戦国大名ですが...'
+        ```"""
         # PyTorchの内部を決定論的に設定する
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
