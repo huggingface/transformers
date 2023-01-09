@@ -167,7 +167,8 @@ class CPMAntModelTest(unittest.TestCase):
     def test_cpmant_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_cpmant_model(config, inputs)
-
+        
+    @slow
     def test_cpmant_lm_head_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(config, inputs)
