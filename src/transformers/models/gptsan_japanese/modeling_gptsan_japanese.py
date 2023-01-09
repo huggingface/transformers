@@ -28,9 +28,8 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
-from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -780,7 +779,6 @@ class GPTSANSentenceGenerator():
                     exp = np.exp(log)
                     log = exp / np.sum(exp) # softmax
                     k = np.sort(log)[-top_k]
-                    p = copy.copy(log)
                     log[np.where(log < k)] = 1e-10
                     out = np.random.choice(ind, 1, p=log/np.sum(log))[0]
                     rank = np.sum(log > log[out])
@@ -907,7 +905,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Union[Tuple[torch.FloatTensor], ModelOutput], config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -921,7 +919,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = False,
-    ) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithPast]:
+    ) -> Union[Tuple[torch.FloatTensor], ModelOutput]:
         """
         Args:
             head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):

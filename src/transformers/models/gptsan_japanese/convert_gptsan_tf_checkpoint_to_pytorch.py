@@ -22,7 +22,6 @@ import argparse
 import json
 import os
 from collections import OrderedDict
-import shutil
 
 parser = argparse.ArgumentParser(
     description='model converter.',
@@ -34,6 +33,7 @@ parser.add_argument('--output', metavar='PATH', type=str, required=True, help='o
 def main():
     args = parser.parse_args()
     params = json.loads(open(os.path.join(args.tf_model_dir,"parameters.json")).read())
+    assert params
     if not args.output.endswith(".pt"):
         args.output = args.output+".pt"
 
@@ -42,7 +42,6 @@ def main():
     with tf.device("/CPU:0"):
         reader = tf.train.load_checkpoint(args.tf_model_dir)
         shapes = reader.get_variable_to_shape_map()
-        dtypes = reader.get_variable_to_dtype_map()
 
         for k,s in shapes.items():
             vnp = reader.get_tensor(k).astype(np.float16)
@@ -75,19 +74,19 @@ def main():
             elif k.startswith("model/mlp"):
                 player = int(k[9:].split("/")[0])
                 if k.endswith("/p1/kernel"):
-                    name = 'blocks.%d.ff.mlp.wi.weight'%(player,i,nlayer)
+                    name = 'blocks.%d.ff.mlp.wi.weight'%player
                     state = vnp.transpose([1,0]).copy() # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/p1/bias"):
-                    name = 'blocks.%d.ff.mlp.wi.bias'%(player,i,nlayer)
+                    name = 'blocks.%d.ff.mlp.wi.bias'%player
                     state = vnp.copy() # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/p2/kernel"):
-                    name = 'blocks.%d.ff.mlp.wo.weight'%(player,i,nlayer)
+                    name = 'blocks.%d.ff.mlp.wo.weight'%player
                     state = vnp.transpose([1,0]).copy() # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/p2/bias"):
-                    name = 'blocks.%d.ff.mlp.wo.bias'%(player,i,nlayer)
+                    name = 'blocks.%d.ff.mlp.wo.bias'%player
                     state = vnp.copy() # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
             elif k.startswith("model/ln"):
