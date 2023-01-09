@@ -102,6 +102,10 @@ class CPMAntConfig(PretrainedConfig):
         prompt_length: int = 32,
         segment_types: int = 32,
         use_cache: bool = True,
+<<<<<<< HEAD
+=======
+        mask_modules: Optional[List[Tuple[bool, bool]]] = None,
+>>>>>>> df287068d (test)
         **kwargs,
     ):
         super().__init__(**kwargs)
