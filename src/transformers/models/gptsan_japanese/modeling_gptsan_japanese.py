@@ -25,7 +25,6 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -766,11 +765,12 @@ class GPTSANSentenceGenerator:
             logits = []
             try:
                 inp = input_gen().__next__()
-            except StopIteration as e:
+            except StopIteration:
                 return logits
             for d in range(0, len(inp["x"]), batch_size):
-                x_inp = [i for i in inp["x"][d : min(d + batch_size, len(inp["x"]))]]
-                n_inp = [i for i in inp["num_precontext"][d : min(d + batch_size, len(inp["x"]))]]
+                e = min(d + batch_size, len(inp["x"]))
+                x_inp = [i for i in inp["x"][d:e]]
+                n_inp = [i for i in inp["num_precontext"][d:e]]
                 with torch.no_grad():
                     x_inp = torch.tensor(x_inp).to(device)
                     n_inp = torch.tensor(n_inp).to(device)
