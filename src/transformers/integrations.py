@@ -665,7 +665,7 @@ class WandbCallback(TrainerCallback):
 
         return {
             "anonymous": os.getenv("WANDB_ANONYMOUS", None),
-            "config_dir": os.getenv("WANDB_CONFIG_DIR", None),
+            "config": os.getenv("WANDB_CONFIG_DIR", None),
             "dir": os.getenv("WANDB_DIR", None),
             "save_code": os.getenv("WANDB_DISABLED_CODE", None),
             "entity": os.getenv("WANDB_ENTITY", None),
