@@ -20,9 +20,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tanreinama/GPTSAN-2.8B-spout_is_uniform": "https://huggingface.co/tanreinama/GPTSAN-2.8B-spout_is_uniform/resolve/main/config.json",
+    "tanreinama/GPTSAN-2.8B-spout_is_uniform": (
+        "https://huggingface.co/tanreinama/GPTSAN-2.8B-spout_is_uniform/resolve/main/config.json"
+    ),
 }
-
 
 
 class GPTSANJapaneseConfig(PretrainedConfig):
@@ -81,8 +82,14 @@ class GPTSANJapaneseConfig(PretrainedConfig):
             (see `past_key_values`).
     """
     model_type = "gptsan-japanese"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    keys_to_ignore_at_inference = [
+        "past_key_values",
+    ]
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+    }
 
     def __init__(
         self,
@@ -132,8 +139,8 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_factor = initializer_factor
 
-        kwargs["pad_token_id"] = vocab_size-4
-        kwargs["eos_token_id"] = vocab_size-1
+        kwargs["pad_token_id"] = vocab_size - 4
+        kwargs["eos_token_id"] = vocab_size - 1
         kwargs["is_encoder_decoder"] = False
         super().__init__(
             **kwargs,

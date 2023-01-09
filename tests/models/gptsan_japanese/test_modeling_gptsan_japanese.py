@@ -23,7 +23,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
-
 class GPTSANJapaneseModelTester:
     def __init__(
         self,
@@ -77,20 +76,14 @@ class GPTSANJapaneseModelTester:
 
         config = self.get_config()
 
-        return (
-            config,
-            input_ids
-        )
+        return (config, input_ids)
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = self.get_config()
 
-        return (
-            config,
-            {"input_ids":input_ids}
-        )
+        return (config, {"input_ids": input_ids})
 
     def get_config(self):
         return GPTSANJapaneseConfig(
@@ -100,7 +93,7 @@ class GPTSANJapaneseModelTester:
             d_ff=self.d_ff,
             d_ext=self.d_ext,
             d_spout=self.d_spout,
-            num_switch_layers=self.num_hidden_layers-self.num_ext_layers,
+            num_switch_layers=self.num_hidden_layers - self.num_ext_layers,
             num_ext_layers=self.num_ext_layers,
             num_heads=self.num_attention_heads,
             num_experts=self.num_experts,
@@ -127,9 +120,7 @@ class GPTSANJapaneseModelTester:
 @require_torch
 class GPTSANJapaneseModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (GPTSANJapaneseModel, ) if is_torch_available() else ()
-    )
+    all_model_classes = (GPTSANJapaneseModel,) if is_torch_available() else ()
     fx_compatible = False
     is_encoder_decoder = False
     test_pruning = False

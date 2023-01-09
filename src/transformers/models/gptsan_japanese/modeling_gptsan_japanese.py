@@ -56,6 +56,7 @@ GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPTSAN-japanese models at https://huggingface.co/models?filter=gptsan-japanese
 ]
 
+
 class GPTSANJapaneseNorm(nn.Module):
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__()
@@ -67,7 +68,8 @@ class GPTSANJapaneseNorm(nn.Module):
         x -= torch.mean(x, dim=-1, keepdims=True)
         s = torch.mean(x**2, dim=-1, keepdims=True)
         x *= torch.rsqrt(s + self.epsilon)
-        return x*self.weight + self.bias
+        return x * self.weight + self.bias
+
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseDenseActDense(nn.Module):
@@ -85,6 +87,7 @@ class GPTSANJapaneseDenseActDense(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.wo(hidden_states)
         return hidden_states
+
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseTop1Router(nn.Module):
@@ -284,55 +287,55 @@ class GPTSANJapaneseLayerEFF(nn.Module):
 class GPTSANJapaneseAttention(nn.Module):
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__()
-        self.d_kernel = config.d_model//config.num_heads
+        self.d_kernel = config.d_model // config.num_heads
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.qkv = nn.Parameter(torch.zeros([config.d_model,3,config.num_heads,self.d_kernel]))
-        self.o = nn.Parameter(torch.zeros([config.num_heads,self.d_kernel,config.d_model]))
+        self.qkv = nn.Parameter(torch.zeros([config.d_model, 3, config.num_heads, self.d_kernel]))
+        self.o = nn.Parameter(torch.zeros([config.num_heads, self.d_kernel, config.d_model]))
 
     def _split(self, hidden_states):
-        qh,kh,vh = torch.split(self.qkv,[1,1,1],dim=1)
-        qh,kh,vh = qh.squeeze(dim=1),kh.squeeze(dim=1),vh.squeeze(dim=1) # [input_ch, heads, kernel]
-        qh,kh,vh = torch.reshape(qh, (vh.shape[0], -1)), torch.reshape(kh, (vh.shape[0], -1)), torch.reshape(vh, (vh.shape[0], -1)) # [input_ch, heads×kernel]
-        hidden_states_2d = torch.reshape(hidden_states, (-1, hidden_states.shape[-1])) # [batch×sequence, input_ch]
+        qh, kh, vh = torch.split(self.qkv, [1, 1, 1], dim=1)
+        qh, kh, vh = qh.squeeze(dim=1), kh.squeeze(dim=1), vh.squeeze(dim=1)  # [input_ch, heads, kernel]
+        qh, kh, vh = (
+            torch.reshape(qh, (vh.shape[0], -1)),
+            torch.reshape(kh, (vh.shape[0], -1)),
+            torch.reshape(vh, (vh.shape[0], -1)),
+        )  # [input_ch, heads×kernel]
+        hidden_states_2d = torch.reshape(hidden_states, (-1, hidden_states.shape[-1]))  # [batch×sequence, input_ch]
         q = torch.mm(hidden_states_2d, qh)
         k = torch.mm(hidden_states_2d, kh)
-        v = torch.mm(hidden_states_2d, vh) # [batch×sequence, heads×kernel]
+        v = torch.mm(hidden_states_2d, vh)  # [batch×sequence, heads×kernel]
         q = torch.reshape(q, (-1, self.qkv.shape[-2], self.qkv.shape[-1]))
         k = torch.reshape(k, (-1, self.qkv.shape[-2], self.qkv.shape[-1]))
-        v = torch.reshape(v, (-1, self.qkv.shape[-2], self.qkv.shape[-1])) # [batch×sequence, heads, kernel]
+        v = torch.reshape(v, (-1, self.qkv.shape[-2], self.qkv.shape[-1]))  # [batch×sequence, heads, kernel]
         q = torch.reshape(q, (-1, hidden_states.shape[1], self.qkv.shape[-2], self.qkv.shape[-1]))
         k = torch.reshape(k, (-1, hidden_states.shape[1], self.qkv.shape[-2], self.qkv.shape[-1]))
-        v = torch.reshape(v, (-1, hidden_states.shape[1], self.qkv.shape[-2], self.qkv.shape[-1])) # [batch, sequence, heads, kernel]
-        q = q.transpose(1,2)
-        k = k.transpose(1,2)
-        v = v.transpose(1,2) # [batch, heads, sequence, kernel]
-        return q,k,v
+        v = torch.reshape(
+            v, (-1, hidden_states.shape[1], self.qkv.shape[-2], self.qkv.shape[-1])
+        )  # [batch, sequence, heads, kernel]
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)  # [batch, heads, sequence, kernel]
+        return q, k, v
 
     def _split2(self, hidden_states):
-        qkv = torch.einsum("bsc,cqhk->bsqhk",hidden_states,self.qkv) # [batch, sequence, 3, heads, kernel]
-        q,k,v = torch.split(qkv,[1,1,1],dim=2) # [batch, sequence, 1, heads, kernel]
-        q = q.squeeze(dim=2).transpose(1,2)
-        k = k.squeeze(dim=2).transpose(1,2)
-        v = v.squeeze(dim=2).transpose(1,2) # [batch, heads, sequence, kernel]
-        return q,k,v
+        qkv = torch.einsum("bsc,cqhk->bsqhk", hidden_states, self.qkv)  # [batch, sequence, 3, heads, kernel]
+        q, k, v = torch.split(qkv, [1, 1, 1], dim=2)  # [batch, sequence, 1, heads, kernel]
+        q = q.squeeze(dim=2).transpose(1, 2)
+        k = k.squeeze(dim=2).transpose(1, 2)
+        v = v.squeeze(dim=2).transpose(1, 2)  # [batch, heads, sequence, kernel]
+        return q, k, v
 
-    def forward(
-        self,
-        hidden_states,
-        mask,
-        past=None,
-        out_attentions=None
-    ):
+    def forward(self, hidden_states, mask, past=None, out_attentions=None):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
         """
-        q,k,v = self._split2(hidden_states) # [batch, sequence, 1, heads, kernel]
+        q, k, v = self._split2(hidden_states)  # [batch, sequence, 1, heads, kernel]
 
         present = (k, v)
         # present shuld be ([batch, heads, sequence, hidden], [batch, heads, sequence, hidden])
 
         if past is not None:
-            pk, pv = torch.split(past, [1,1], dim=1)
+            pk, pv = torch.split(past, [1, 1], dim=1)
             pk = pk.squeeze(dim=1)
             pv = pv.squeeze(dim=1)
             # pk, pv shuld be [batch, heads, sequence, hidden]
@@ -340,16 +343,16 @@ class GPTSANJapaneseAttention(nn.Module):
             v = torch.cat([pv, v], dim=2)
 
         umask = mask.unsqueeze(1)
-        scores = torch.einsum("bhsk,bhmk->bhsm",q,k)
-        scores *= self.d_kernel ** -0.5
+        scores = torch.einsum("bhsk,bhmk->bhsm", q, k)
+        scores *= self.d_kernel**-0.5
         scores *= umask
-        scores -= (1-umask) * 10000.0
-        probs = torch.exp(nn.functional.log_softmax(scores, dim=-1)) # same as mesh-tensorflow
+        scores -= (1 - umask) * 10000.0
+        probs = torch.exp(nn.functional.log_softmax(scores, dim=-1))  # same as mesh-tensorflow
         if out_attentions is not None:
             out_attentions.append(probs)
-        output = torch.einsum("bhsm,bhmk->bhsk",probs,v) # [batch, heads, sequence, kernel]
-        output = output.transpose(1,2) # [batch, sequence, heads, kernel]
-        output = torch.einsum("bshk,hkc->bsc",output,self.o) # [batch, sequence, hidden]
+        output = torch.einsum("bhsm,bhmk->bhsk", probs, v)  # [batch, heads, sequence, kernel]
+        output = output.transpose(1, 2)  # [batch, sequence, heads, kernel]
+        output = torch.einsum("bshk,hkc->bsc", output, self.o)  # [batch, sequence, hidden]
         return output, present
 
 
@@ -359,13 +362,7 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
         self.SelfAttention = GPTSANJapaneseAttention(config)
         self.norm = GPTSANJapaneseNorm(config)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        past=None,
-        out_attentions=None
-    ):
+    def forward(self, hidden_states, attention_mask, past=None, out_attentions=None):
         attention_output, present = self.SelfAttention(
             hidden_states,
             mask=attention_mask,
@@ -383,16 +380,11 @@ class GPTSANJapaneseBlock(nn.Module):
         self.att = GPTSANJapaneseLayerSelfAttention(config)
         self.ff = GPTSANJapaneseLayerEFF(config) if ext_layer else GPTSANJapaneseLayerFF(config)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        past=None,
-        out_attentions=None
-    ):
+    def forward(self, hidden_states, attention_mask, past=None, out_attentions=None):
         attention_status, present = self.att(hidden_states, attention_mask, past=past, out_attentions=out_attentions)
         outputs = self.ff(attention_status)
         return outputs, present
+
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersPreTrainedModel with SwitchTransformers->GPTSANJapanese,switch_transformers->gptsan_japanese
 class GPTSANJapanesePreTrainedModel(PreTrainedModel):
@@ -466,7 +458,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
                 module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (GPTSANJapaneseAttention, )):
+        if isinstance(module, (GPTSANJapaneseAttention,)):
             module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
@@ -552,17 +544,17 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
 """
 
 
-class GPTSANSentenceGenerator():
+class GPTSANSentenceGenerator:
     """
     An text generator class to find token sequence from Model outputs
     """
 
-    def __init__(self, model:GPTSANJapanesePreTrainedModel, config: GPTSANJapaneseConfig):
+    def __init__(self, model: GPTSANJapanesePreTrainedModel, config: GPTSANJapaneseConfig):
         self.model = model
         self.config = config
 
     def _convert_token(self, tokens):
-        return [t if t!=35782 else 35593 for t in tokens] # tokenizer bug for "," token
+        return [t if t != 35782 else 35593 for t in tokens]  # tokenizer bug for "," token
 
     def _encode_bytearray(self, tokens, tokenizer):
         if tokenizer is None:
@@ -572,26 +564,25 @@ class GPTSANSentenceGenerator():
         chunk_chunks = []
         byte_tokens = []
         for i in tokens:
-            if i>=byte_token_start and i<byte_token_start+255:
+            if i >= byte_token_start and i < byte_token_start + 255:
                 if len(chunk_chunks) > 0:
                     words.append(tokenizer.decode(chunk_chunks))
                     chunk_chunks = []
-                byte_tokens.append(i-byte_token_start)
+                byte_tokens.append(i - byte_token_start)
             else:
                 if len(byte_tokens) > 0:
-                    words.append(bytearray(byte_tokens).decode('utf-8', errors='replace'))
+                    words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
                     byte_tokens = []
-                if i==35593:
+                if i == 35593:
                     chunk_chunks.append(35782)
                 else:
                     chunk_chunks.append(i)
         if len(chunk_chunks) > 0:
             words.append(tokenizer.decode(chunk_chunks))
         if len(byte_tokens) > 0:
-            words.append(bytearray(byte_tokens).decode('utf-8', errors='replace'))
-        text = ''.join(words)
+            words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
+        text = "".join(words)
         return text
-
 
     def predict_mlm(self, input_tokens, tokenizer):
         r"""
@@ -620,10 +611,10 @@ class GPTSANSentenceGenerator():
         """
         input_tokens = self._convert_token(input_tokens)
         NUM_TOKENS = self.config.vocab_size
-        SOT_TOKEN = NUM_TOKENS-7
-        MSK_TOKEN = NUM_TOKENS-6
+        SOT_TOKEN = NUM_TOKENS - 7
+        MSK_TOKEN = NUM_TOKENS - 6
         pre_input = [SOT_TOKEN] + list(input_tokens)
-        connected_inputs = len(input_tokens)+1
+        connected_inputs = len(input_tokens) + 1
         device = next(self.model.parameters()).device
         self.model.eval()
         with torch.no_grad():
@@ -632,9 +623,9 @@ class GPTSANSentenceGenerator():
             log = self.model(input_ids=x_inp, num_precontext=n_inp).logits
             logits = log.detach().cpu().numpy()[0]
         pred_token, pred_score = [], []
-        for i in range(len(pre_input)-1):
-            p = int(logits[i].argmax()) if pre_input[i+1]==MSK_TOKEN else pre_input[i+1]
-            s = float(logits[i][pre_input[i+1]])
+        for i in range(len(pre_input) - 1):
+            p = int(logits[i].argmax()) if pre_input[i + 1] == MSK_TOKEN else pre_input[i + 1]
+            s = float(logits[i][pre_input[i + 1]])
             pred_token.append(p)
             pred_score.append(s)
         return self._encode_bytearray(pred_token, tokenizer), pred_score
@@ -676,7 +667,17 @@ class GPTSANSentenceGenerator():
         """
         return self.generate_hybrid(input_tokens, tokenizer, 0, seed, top_k, max_generate, beam_width, batch_size)
 
-    def generate_hybrid(self, input_tokens, tokenizer, connected_inputs, seed=None, top_k=120, max_generate=200, beam_width=4, batch_size=4):
+    def generate_hybrid(
+        self,
+        input_tokens,
+        tokenizer,
+        connected_inputs,
+        seed=None,
+        top_k=120,
+        max_generate=200,
+        beam_width=4,
+        batch_size=4,
+    ):
         r"""
         Run the model in sentence generation mode
         You can specify the number of `hybrid` inputs.
@@ -715,22 +716,24 @@ class GPTSANSentenceGenerator():
             List[str] or List[List[int]]
         """
         input_tokens = self._convert_token(input_tokens)
-        assert beam_width>=batch_size and beam_width%batch_size == 0
+        assert beam_width >= batch_size and beam_width % batch_size == 0
         NUM_TOKENS = self.config.vocab_size
-        SOT_TOKEN = NUM_TOKENS-7
-        #MSK_TOKEN = NUM_TOKENS-6
-        SEP_TOKEN = NUM_TOKENS-5
-        NOT_TOKEN = NUM_TOKENS-4
-        BAG_TOKEN = NUM_TOKENS-3
-        SEG_TOKEN = NUM_TOKENS-2
-        EOT_TOKEN = NUM_TOKENS-1
-        LAST_TOKEN = 35738 #<|byte0|>
-        pre_input = [SOT_TOKEN] + list(input_tokens)[:connected_inputs] + [SEG_TOKEN] + list(input_tokens)[connected_inputs:]
-        connected_inputs = connected_inputs+1
+        SOT_TOKEN = NUM_TOKENS - 7
+        # MSK_TOKEN = NUM_TOKENS-6
+        SEP_TOKEN = NUM_TOKENS - 5
+        NOT_TOKEN = NUM_TOKENS - 4
+        BAG_TOKEN = NUM_TOKENS - 3
+        SEG_TOKEN = NUM_TOKENS - 2
+        EOT_TOKEN = NUM_TOKENS - 1
+        LAST_TOKEN = 35738  # <|byte0|>
+        pre_input = (
+            [SOT_TOKEN] + list(input_tokens)[:connected_inputs] + [SEG_TOKEN] + list(input_tokens)[connected_inputs:]
+        )
+        connected_inputs = connected_inputs + 1
         NUM_CTX = self.config.num_contexts
         device = next(self.model.parameters()).device
         self.model.eval()
-        input_size = min(max_generate+len(pre_input), NUM_CTX) # Transformerへ入力する長さ
+        input_size = min(max_generate + len(pre_input), NUM_CTX)  # Transformerへ入力する長さ
         generated_all = [[] for _ in range(beam_width)]
         generated_scores = [[] for _ in range(beam_width)]
         generated_ranks = [[] for _ in range(beam_width)]
@@ -740,33 +743,36 @@ class GPTSANSentenceGenerator():
             torch.cuda.manual_seed(seed)
             torch.backends.cudnn.deterministic = True
             torch.use_deterministic_algorithms = True
-        def input_gen(): # モデルへの入力を1ビーム分ずつ返す
+
+        def input_gen():  # モデルへの入力を1ビーム分ずつ返す
             while True:
-                endednum = 0 # 全ビームで終了かチェック
+                endednum = 0  # 全ビームで終了かチェック
                 for generated in generated_all[:beam_width]:
                     if len(generated) > 0 and (generated[-1] == EOT_TOKEN or len(generated) >= max_generate):
-                        endednum += 1 # EOTなら終了
+                        endednum += 1  # EOTなら終了
                 if endednum == beam_width:
-                    return # 全ビームで終了なら生成終わり
+                    return  # 全ビームで終了なら生成終わり
                 gen_x, gen_num = [], []
                 for generated in generated_all[:beam_width]:
-                    input_tokens = pre_input+generated # 一つ前までの生成文を入力し、次のトークンを得る
-                    input_tokens = input_tokens[-input_size:] # モデルの最大入力数まで
+                    input_tokens = pre_input + generated  # 一つ前までの生成文を入力し、次のトークンを得る
+                    input_tokens = input_tokens[-input_size:]  # モデルの最大入力数まで
                     nocon_length = (len(pre_input) - connected_inputs) + len(generated)
-                    con_length = connected_inputs - max(nocon_length - (input_size-connected_inputs), 0) # hybridで入力するトークン列数
-                    gen_x.append(input_tokens) # PyTorch版は可変長の入力に対応しているので後ろは無しで良い
+                    con_length = connected_inputs - max(
+                        nocon_length - (input_size - connected_inputs), 0
+                    )  # hybridで入力するトークン列数
+                    gen_x.append(input_tokens)  # PyTorch版は可変長の入力に対応しているので後ろは無しで良い
                     gen_num.append([con_length])
                 # モデルへの次の入力＝一つ前までの生成文、マルチモーダル用ベクトル入力、Hybridの部分の長さ
-                yield {"x":gen_x,
-                       "num_precontext":gen_num}
+                yield {"x": gen_x, "num_precontext": gen_num}
+
         def predict_one():
             logits = []
             try:
                 inp = input_gen().__next__()
             except StopIteration as e:
                 return logits
-            for d in range(0,len(inp["x"]),batch_size):
-                e = min(d+batch_size, len(inp["x"]))
+            for d in range(0, len(inp["x"]), batch_size):
+                e = min(d + batch_size, len(inp["x"]))
                 x_inp = [i for i in inp["x"][d:e]]
                 n_inp = [i for i in inp["num_precontext"][d:e]]
                 with torch.no_grad():
@@ -776,48 +782,52 @@ class GPTSANSentenceGenerator():
                     for l in log.detach().cpu().numpy():
                         logits.append(l)
             return logits
+
         for pos in range(max_generate):
-            for batch_dim,result in zip(range(beam_width), predict_one()):
+            for batch_dim, result in zip(range(beam_width), predict_one()):
                 # select_fn
-                input_size = min(max_generate+len(pre_input), NUM_CTX) # Transformerへ入力する長さ
+                input_size = min(max_generate + len(pre_input), NUM_CTX)  # Transformerへ入力する長さ
                 # 一つ前までの生成文を入れて、1つ多いトークンが出てくるので、出てきた場所を計算
-                output_pos = min(len(pre_input)+len(generated_all[batch_dim])-1, input_size-1)
-                logits = result[output_pos] # 新しく出てきたトークン1つ分
+                output_pos = min(len(pre_input) + len(generated_all[batch_dim]) - 1, input_size - 1)
+                logits = result[output_pos]  # 新しく出てきたトークン1つ分
                 out = np.argmax(logits)
-                #if out == SEP_TOKEN: # SEP_TOKENは文章の区切り文字に変換
+                # if out == SEP_TOKEN: # SEP_TOKENは文章の区切り文字に変換
                 #    logits = [(logits[l] if TOKEN_IS_DOT_NL[l] else -1e10) for l in range(NUM_TOKENS)]
-                if out != EOT_TOKEN: # TOP_Kロジックで選択
+                if out != EOT_TOKEN:  # TOP_Kロジックで選択
                     ind = np.arange(NUM_TOKENS)
                     log = np.array(logits)
-                    #log = (log - np.max(log)) / (np.max(log)-np.min(log))
+                    # log = (log - np.max(log)) / (np.max(log)-np.min(log))
                     log[NOT_TOKEN] = -1e10
                     log[SEP_TOKEN] = -1e10
                     exp = np.exp(log)
-                    log = exp / np.sum(exp) # softmax
+                    log = exp / np.sum(exp)  # softmax
                     k = np.sort(log)[-top_k]
                     log[np.where(log < k)] = 1e-10
-                    out = np.random.choice(ind, 1, p=log/np.sum(log))[0]
+                    out = np.random.choice(ind, 1, p=log / np.sum(log))[0]
                     rank = np.sum(log > log[out])
-                else: # NOT_TOKENは無視するトークン
+                else:  # NOT_TOKENは無視するトークン
                     rank = 0
                 generated_all[batch_dim].append(int(out))
-                generated_scores[batch_dim].append(logits[int(out)]) # 生成文のスコア
-                generated_ranks[batch_dim].append(rank) # 生成文のスコア
-             # バッチ終了時にビームを評価
-            beam_scores = [(np.mean(generated_scores[s]) if EOT_TOKEN != generated_all[s][-1] else -1e10) for s in range(beam_width)]
-            best_beam = np.argmax(beam_scores) # この時点で終了しておらず最も良かった生成文
+                generated_scores[batch_dim].append(logits[int(out)])  # 生成文のスコア
+                generated_ranks[batch_dim].append(rank)  # 生成文のスコア
+            # バッチ終了時にビームを評価
+            beam_scores = [
+                (np.mean(generated_scores[s]) if EOT_TOKEN != generated_all[s][-1] else -1e10)
+                for s in range(beam_width)
+            ]
+            best_beam = np.argmax(beam_scores)  # この時点で終了しておらず最も良かった生成文
             if beam_scores[best_beam] != -1e10:
-                for batch_dim in range(beam_width): # 1バッチ生成時のビームの内容
-                    if EOT_TOKEN == generated_all[batch_dim][-1]: # 終了したらFixして保存しておく
+                for batch_dim in range(beam_width):  # 1バッチ生成時のビームの内容
+                    if EOT_TOKEN == generated_all[batch_dim][-1]:  # 終了したらFixして保存しておく
                         fixed_beam = copy.copy(generated_all[batch_dim])
-                        fixed_score= copy.copy(generated_scores[batch_dim])
-                        fixed_rank= copy.copy(generated_ranks[batch_dim])
-                        generated_all.append(fixed_beam) # beam_width以上の次元にあるデータはFixした生成文
-                        generated_scores.append(fixed_score) # beam_width以上の次元にあるデータはFixした生成文
-                        generated_ranks.append(fixed_rank) # beam_width以上の次元にあるデータはFixした生成文
-                        generated_all[batch_dim] = copy.copy(generated_all[best_beam]) # 空いたバッチで終了していないのの続きを試す
-                        generated_scores[batch_dim] = copy.copy(generated_scores[best_beam]) # 空いたバッチで終了していないのの続きを試す
-                        generated_ranks[batch_dim] = copy.copy(generated_ranks[best_beam]) # 空いたバッチで終了していないのの続きを試す
+                        fixed_score = copy.copy(generated_scores[batch_dim])
+                        fixed_rank = copy.copy(generated_ranks[batch_dim])
+                        generated_all.append(fixed_beam)  # beam_width以上の次元にあるデータはFixした生成文
+                        generated_scores.append(fixed_score)  # beam_width以上の次元にあるデータはFixした生成文
+                        generated_ranks.append(fixed_rank)  # beam_width以上の次元にあるデータはFixした生成文
+                        generated_all[batch_dim] = copy.copy(generated_all[best_beam])  # 空いたバッチで終了していないのの続きを試す
+                        generated_scores[batch_dim] = copy.copy(generated_scores[best_beam])  # 空いたバッチで終了していないのの続きを試す
+                        generated_ranks[batch_dim] = copy.copy(generated_ranks[best_beam])  # 空いたバッチで終了していないのの続きを試す
         # 最も良かったビーム内のトークン列を取得
         last_scores = []
         for scores, generated, rank in zip(generated_scores, generated_all, generated_ranks):
@@ -827,10 +837,10 @@ class GPTSANSentenceGenerator():
                 generated = generated[:endpos]
                 rank = rank[:endpos]
             # 最も良かった場所から取得したトークンのスコアから外れ生成を判定
-            cs = [s for s,g,r in zip(scores,generated,rank) if g<LAST_TOKEN and r==0]
-            cs = cs if len(cs)> 0 else [-1e10]
-            ss = scores if len(scores)> 0 else [-1e10]
-            last_scores.append(-1e10 if np.mean(cs)>0 else np.median(ss))
+            cs = [s for s, g, r in zip(scores, generated, rank) if g < LAST_TOKEN and r == 0]
+            cs = cs if len(cs) > 0 else [-1e10]
+            ss = scores if len(scores) > 0 else [-1e10]
+            last_scores.append(-1e10 if np.mean(cs) > 0 else np.median(ss))
 
         # 生成文を選択
         result_tokens = []
@@ -838,12 +848,12 @@ class GPTSANSentenceGenerator():
             # 特殊トークンの処理
             generated_nobag = []
             for token in generated:
-                if token == BAG_TOKEN: # BAG_TOKENは直前のトークンの繰り返し
-                    if len(generated_nobag) > 0: # 個数の指定は無いのでとりあえず3個
+                if token == BAG_TOKEN:  # BAG_TOKENは直前のトークンの繰り返し
+                    if len(generated_nobag) > 0:  # 個数の指定は無いのでとりあえず3個
                         bagged = generated_nobag[-1]
                         generated_nobag.append(bagged)
                         generated_nobag.append(bagged)
-                elif token < LAST_TOKEN: # 元NOT_TOKEN等無視するトークンは入れない
+                elif token < LAST_TOKEN:  # 元NOT_TOKEN等無視するトークンは入れない
                     generated_nobag.append(token)
             # 結果を保存
             result_tokens.append(generated_nobag)
@@ -852,14 +862,14 @@ class GPTSANSentenceGenerator():
 
 def make_attention_mask_torch(total_seq, output_seq, input_len):
     device = input_len.device
-    i = torch.arange(total_seq)[:,None].to(device)
+    i = torch.arange(total_seq)[:, None].to(device)
     j = torch.arange(output_seq).to(device)
     m = i >= j - output_seq + total_seq
-    lm_mask = m.float() # language model mask
+    lm_mask = m.float()  # language model mask
     lm_mask = torch.reshape(lm_mask, [total_seq, output_seq])
     # lm_mask shuld be [sequence, sequence]
-    weight = torch.transpose(torch.arange(output_seq)[:,None].to(device) < input_len, 1, 0)
-    weight = weight.float() # Masked language model mask
+    weight = torch.transpose(torch.arange(output_seq)[:, None].to(device) < input_len, 1, 0)
+    weight = weight.float()  # Masked language model mask
     # weight shuld be [batch, sequence]
     mlm_mask = torch.reshape(weight, [1, -1, output_seq]).float()
     mlm_ones = torch.ones(size=[total_seq, 1, 1], dtype=torch.float32).to(device)
@@ -870,12 +880,15 @@ def make_attention_mask_torch(total_seq, output_seq, input_len):
     # mask shuld be [batch, sequence, sequence]
     return mask
 
+
 @add_start_docstrings(
     "The bare GPTSAN_JAPANESE Model transformer outputting logits.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
 class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"wte.weight", ]
+    _keys_to_ignore_on_load_missing = [
+        r"wte.weight",
+    ]
 
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__(config)
@@ -901,11 +914,10 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             for _ in range(8):
                 spouts.append(nn.Linear(config.d_spout, config.d_spout, bias=False))
                 spouts.append(nn.Tanh())
-            spouts.append(nn.Linear(config.d_spout, config.num_layers*2*config.d_model, bias=False))
+            spouts.append(nn.Linear(config.d_spout, config.num_layers * 2 * config.d_model, bias=False))
             self.spout = nn.Sequential(*spouts)
 
         self.post_init()
-
 
     def get_input_embeddings(self):
         return self.wte
@@ -920,7 +932,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=ModelOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -955,7 +967,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         torch.backends.cudnn.benchmark = False
         device = self.wpe.weight.device
         if input_ids is None:
-            input_ids = torch.zeros([1,1]).int().to(device)
+            input_ids = torch.zeros([1, 1]).int().to(device)
         num_pasts_contexts = 0
         num_batch = input_ids.shape[0]
         if pasts is not None:
@@ -964,7 +976,9 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             num_pasts_contexts = 1
 
         if num_precontext is not None:
-            assert len(num_precontext.shape) == 2 and num_precontext.shape[1]==1  # num_precontext Should be [batch,1]
+            assert (
+                len(num_precontext.shape) == 2 and num_precontext.shape[1] == 1
+            )  # num_precontext Should be [batch,1]
             num_precontext = torch.reshape(num_precontext, [-1])
         else:
             num_precontext = torch.zeros([num_batch]).int().to(device)
@@ -977,14 +991,37 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
                 op = []
                 for p in pasts:
                     if type(p) is tuple:
-                        p = torch.stack(p, dim=1) # p Shuold be [batch, 2, heads, sequence, kernel]
-                    assert p.shape==(num_batch, 2, self.config.num_heads, num_pasts_contexts, self.config.d_model//self.config.num_heads) # pasts Should be [batch, layer, 2, heads, sqquence, kernel]
+                        p = torch.stack(p, dim=1)  # p Shuold be [batch, 2, heads, sequence, kernel]
+                    assert p.shape == (
+                        num_batch,
+                        2,
+                        self.config.num_heads,
+                        num_pasts_contexts,
+                        self.config.d_model // self.config.num_heads,
+                    )  # pasts Should be [batch, layer, 2, heads, sqquence, kernel]
                     op.append(p)
-                pasts = torch.stack(op, dim=1) # pasts Shuold be [batch, layer, 2, heads, sequence, kernel]
-            assert pasts.shape==(num_batch, self.config.num_layers, 2, self.config.num_heads, num_pasts_contexts, self.config.d_model//self.config.num_heads) # pasts Should be [batch, layer, 2, heads, sqquence, kernel]
+                pasts = torch.stack(op, dim=1)  # pasts Shuold be [batch, layer, 2, heads, sequence, kernel]
+            assert pasts.shape == (
+                num_batch,
+                self.config.num_layers,
+                2,
+                self.config.num_heads,
+                num_pasts_contexts,
+                self.config.d_model // self.config.num_heads,
+            )  # pasts Should be [batch, layer, 2, heads, sqquence, kernel]
         elif self.config.d_spout and spout is not None:
             pasts = self.spout(spout)
-            pasts = torch.reshape(pasts, [num_batch, self.config.num_layers, 2, self.config.num_heads, num_pasts_contexts, self.config.d_model//self.config.num_heads])
+            pasts = torch.reshape(
+                pasts,
+                [
+                    num_batch,
+                    self.config.num_layers,
+                    2,
+                    self.config.num_heads,
+                    num_pasts_contexts,
+                    self.config.d_model // self.config.num_heads,
+                ],
+            )
 
         hidden = self.wte(input_ids)
 
@@ -992,13 +1029,13 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             pasts = [None] * self.config.num_layers
             start = 0
             pos = torch.arange(num_input_contexts).to(device)
-            pos = torch.clip(pos, 0, self.config.num_contexts-1)
+            pos = torch.clip(pos, 0, self.config.num_contexts - 1)
         else:
-            pasts = [p.squeeze(1) for p in torch.split(pasts, [1]*self.config.num_layers, 1)]
+            pasts = [p.squeeze(1) for p in torch.split(pasts, [1] * self.config.num_layers, 1)]
             pos = torch.arange(num_input_contexts).to(device) + num_pasts_contexts
-            pos = torch.clip(pos, num_pasts_contexts, self.config.num_contexts-1)
+            pos = torch.clip(pos, num_pasts_contexts, self.config.num_contexts - 1)
 
-        ppos = (torch.zeros((self.config.d_model,num_input_contexts)).to(device)+pos).transpose(0,1).long()
+        ppos = (torch.zeros((self.config.d_model, num_input_contexts)).to(device) + pos).transpose(0, 1).long()
         hidden += torch.gather(self.wpe.weight, dim=0, index=ppos)
 
         atten_mask = make_attention_mask_torch(num_input_contexts, num_output_contexts, num_precontext)
@@ -1033,7 +1070,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         hidden = self.logits(hidden)
         hidden = self.logact(hidden)
 
-        logits = torch.einsum("bsc,vc->bsv",hidden, self.wte.weight)
+        logits = torch.einsum("bsc,vc->bsv", hidden, self.wte.weight)
         if logits.shape[-1] == self.wob.shape[-1]:
             logits = logits + self.wob
 

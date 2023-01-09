@@ -28,10 +28,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_gptsan_japanese": [
-        "GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "GPTSANJapaneseConfig"
-    ]
+    "configuration_gptsan_japanese": ["GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSANJapaneseConfig"]
 }
 
 try:

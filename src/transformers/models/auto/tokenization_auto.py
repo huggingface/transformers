@@ -277,7 +277,8 @@ else:
             (
                 "gptsan-japanese",
                 (
-                    "GPTNeoXJapaneseTokenizer", None,
+                    "GPTNeoXJapaneseTokenizer",
+                    None,
                 ),
             ),
             (
