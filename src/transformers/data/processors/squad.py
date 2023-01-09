@@ -162,6 +162,11 @@ def squad_convert_example_to_features(
         if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
         else tokenizer.model_max_length - tokenizer.max_len_single_sentence
     )
+    
+    # Add 2 for Splinter because of the [QUESTION] token and period token.
+    if type(tokenizer).__name__ == "SplinterTokenizer":
+        sequence_added_tokens = tokenizer.model_max_length - tokenizer.max_len_single_sentence + 2
+        
     sequence_pair_added_tokens = tokenizer.model_max_length - tokenizer.max_len_sentences_pair
 
     span_doc_tokens = all_doc_tokens
