@@ -1000,7 +1000,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
                 raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
 
             if decoder_attention_mask is not None:
-                decoder_position_ids = decoder_attention_mask.cumsum(-1) - 1
+                decoder_position_ids = (decoder_attention_mask.cumsum(-1) * decoder_attention_mask) - 1
             else:
                 decoder_position_ids = jnp.broadcast_to(
                     jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
@@ -1085,7 +1085,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         # prepare decoder inputs
         if decoder_position_ids is None:
             if decoder_attention_mask is not None:
-                decoder_position_ids = decoder_attention_mask.cumsum(-1) - 1
+                decoder_position_ids = (decoder_attention_mask.cumsum(-1) * decoder_attention_mask) - 1
             else:
                 batch_size, sequence_length = decoder_input_ids.shape
                 decoder_position_ids = jnp.broadcast_to(
@@ -1250,7 +1250,7 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
                 raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
 
             if decoder_attention_mask is not None:
-                decoder_position_ids = decoder_attention_mask.cumsum(-1) - 1
+                decoder_position_ids = (decoder_attention_mask.cumsum(-1) * decoder_attention_mask) - 1
             else:
                 decoder_position_ids = jnp.broadcast_to(
                     jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
@@ -1349,7 +1349,7 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if decoder_attention_mask is not None:
-            position_ids = decoder_attention_mask.cumsum(axis=-1) - 1
+            position_ids = jnp.maximum(0, decoder_attention_mask.cumsum(-1) - 1)
             extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, decoder_attention_mask, (0, 0))
         else:
             position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
