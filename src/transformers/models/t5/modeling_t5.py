@@ -308,6 +308,12 @@ class T5DenseGatedActDense(nn.Module):
         hidden_linear = self.wi_1(hidden_states)
         hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states)
+
+        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
+        # See https://github.com/huggingface/transformers/issues/20287
+        if hidden_states.dtype != self.wo.weight.dtype:
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
+
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -757,6 +763,7 @@ class T5PreTrainedModel(PreTrainedModel):
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5Block"]
+    _keep_in_fp32_modules = ["wo"]
 
     @property
     def dummy_inputs(self):
@@ -884,7 +891,7 @@ class T5Stack(T5PreTrainedModel):
         # Set final layer norm to last device
         self.final_layer_norm = self.final_layer_norm.to(self.last_device)
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
         self.model_parallel = False
         self.device_map = None
@@ -1706,7 +1713,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -1717,12 +1724,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     ):
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
             "decoder_input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "head_mask": head_mask,

@@ -158,7 +158,8 @@ class ProcessorMixin(PushToHubMixin):
         <Tip>
 
         This class method is simply calling the feature extractor
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and the tokenizer
+        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], image processor
+        [`~image_processing_utils.ImageProcessingMixin`] and the tokenizer
         [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`] methods. Please refer to the docstrings of the
         methods above for more information.
 

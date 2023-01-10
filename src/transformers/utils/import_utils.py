@@ -22,7 +22,7 @@ import shutil
 import sys
 import warnings
 from collections import OrderedDict
-from functools import lru_cache, wraps
+from functools import lru_cache
 from itertools import chain
 from types import ModuleType
 from typing import Any
@@ -268,6 +268,13 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _is_ccl_available = False
 
+_decord_availale = importlib.util.find_spec("decord") is not None
+try:
+    _decord_version = importlib_metadata.version("decord")
+    logger.debug(f"Successfully imported decord version {_decord_version}")
+except importlib_metadata.PackageNotFoundError:
+    _decord_availale = False
+
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
@@ -455,6 +462,15 @@ def is_torchdynamo_available():
         return False
 
 
+def is_torch_compile_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    return hasattr(torch, "compile")
+
+
 def is_torch_tensorrt_fx_available():
     if importlib.util.find_spec("torch_tensorrt") is None:
         return False
@@ -553,6 +569,10 @@ def is_protobuf_available():
 
 def is_accelerate_available():
     return importlib.util.find_spec("accelerate") is not None
+
+
+def is_optimum_available():
+    return importlib.util.find_spec("optimum") is not None
 
 
 def is_safetensors_available():
@@ -697,12 +717,16 @@ def is_ccl_available():
     return _is_ccl_available
 
 
+def is_decord_available():
+    return _decord_availale
+
+
 def is_sudachi_available():
     return importlib.util.find_spec("sudachipy") is not None
 
 
 def is_jumanpp_available():
-    return (importlib.util.find_spec("pyknp") is not None) and (shutil.which("jumanpp") is not None)
+    return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
 
 
 # docstyle-ignore
@@ -944,6 +968,11 @@ CCL_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
+DECORD_IMPORT_ERROR = """
+{0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
+decord`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
@@ -973,6 +1002,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
+        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
     ]
 )
 
@@ -1004,33 +1034,9 @@ class DummyObject(type):
     """
 
     def __getattribute__(cls, key):
-        if key.startswith("_"):
+        if key.startswith("_") and key != "_from_config":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
-
-
-def torch_required(func):
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_torch_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires PyTorch.")
-
-    return wrapper
-
-
-def tf_required(func):
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_tf_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires TF.")
-
-    return wrapper
 
 
 def is_torch_fx_proxy(x):

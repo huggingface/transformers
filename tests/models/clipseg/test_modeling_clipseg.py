@@ -730,12 +730,12 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
             torch.Size((3, 352, 352)),
         )
         expected_masks_slice = torch.tensor(
-            [[-7.4577, -7.4952, -7.4072], [-7.3115, -7.0969, -7.1624], [-6.9472, -6.7641, -6.8911]]
+            [[-7.4613, -7.4785, -7.3628], [-7.3268, -7.0899, -7.1333], [-6.9838, -6.7900, -6.8913]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_masks_slice, atol=1e-3))
 
         # verify conditional and pooled output
         expected_conditional = torch.tensor([0.5601, -0.0314, 0.1980]).to(torch_device)
-        expected_pooled_output = torch.tensor([0.2692, -0.7197, -0.1328]).to(torch_device)
+        expected_pooled_output = torch.tensor([0.5036, -0.2681, -0.2644]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.conditional_embeddings[0, :3], expected_conditional, atol=1e-3))
         self.assertTrue(torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3))

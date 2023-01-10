@@ -41,10 +41,13 @@ logger = logging.get_logger(__name__)
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("altclip", "AltCLIPProcessor"),
+        ("blip", "BLIPProcessor"),
         ("chinese_clip", "ChineseCLIPProcessor"),
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("flava", "FlavaProcessor"),
+        ("git", "GITProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
@@ -253,6 +256,7 @@ class AutoProcessor:
                 processor_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
+                processor_class.register_for_auto_class()
             else:
                 processor_class = processor_class_from_name(processor_class)
 
@@ -287,8 +291,8 @@ class AutoProcessor:
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
-            "tokenizer or a feature extractor for this model. Make sure the repository contains the files of at least "
-            "one of those processing classes."
+            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains"
+            "the files of at least one of those processing classes."
         )
 
     @staticmethod

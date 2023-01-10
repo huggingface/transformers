@@ -641,12 +641,12 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.lm_head.name
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_cache=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             input_ids = tf.expand_dims(input_ids[:, -1], -1)
 
-        return {"input_ids": input_ids, "past_key_values": past, "use_cache": use_cache}
+        return {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
@@ -721,12 +721,6 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFCausalLMOutputWithPast(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns)
-
-    @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[tf.Tensor]], beam_idx: tf.Tensor) -> Tuple[Tuple[tf.Tensor]]:
-        return tuple(
-            tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past) for layer_past in past
-        )
 
 
 @add_start_docstrings(
