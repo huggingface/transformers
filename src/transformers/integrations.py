@@ -667,7 +667,7 @@ class WandbCallback(TrainerCallback):
             "anonymous": os.getenv("WANDB_ANONYMOUS", None),
             "config": os.getenv("WANDB_CONFIG_DIR", None),
             "dir": os.getenv("WANDB_DIR", None),
-            "save_code": os.getenv("WANDB_DISABLED_CODE", None),
+            "save_code": os.getenv("WANDB_DISABLED_CODE", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"}),
             "entity": os.getenv("WANDB_ENTITY", None),
             "job_type": os.getenv("WANDB_JOB_TYPE", None),
             "mode": os.getenv("WANDB_MODE", None),
