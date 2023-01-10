@@ -2487,14 +2487,6 @@ else:
             "WhisperPreTrainedModel",
         ]
     )
-    _import_structure["models.whisper"].extend(
-        [
-            "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "WhisperForConditionalGeneration",
-            "WhisperModel",
-            "WhisperPreTrainedModel",
-        ]
-    )
     _import_structure["models.x_clip"].extend(
         [
             "XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",

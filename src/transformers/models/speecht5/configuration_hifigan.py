@@ -18,11 +18,20 @@ from transformers import PretrainedConfig
 
 
 SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
-    "TODO": "https://huggingface.co/TODO/resolve/main/config.json",
+    "Matthijs/speecht5_hifigan": "https://huggingface.co/Matthijs/speecht5_hifigan/resolve/main/config.json",
 }
 
 
 class SpeechT5HiFiGANConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`SpeechT5HiFiGANModel`]. It is used to instantiate
+    a SpeechT5 Hi-Fi GAN vocoder model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the SpeechT5
+    [Matthijs/speecht5_hifigan](https://huggingface.co/Matthijs/speecht5_hifigan) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+    """
     model_type = "hifigan"
 
     def __init__(
