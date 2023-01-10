@@ -680,8 +680,13 @@ class WandbCallback(TrainerCallback):
             Whether to log model and checkpoints during training. Can be `"end"`, `"checkpoint"` or `"false"`. If set
             to `"end"`, the model will be uploaded at the end of training. If set to `"checkpoint"`, the checkpoint
             will be uploaded every `args.save_steps` . If set to `"false"`, the model will not be uploaded. Use along
-            with *TrainingArguments.load_best_model_at_end* to upload best model. *Warning*: Setting `WANDB_LOG_MODEL`
-            as `bool` is deprecated and will be removed in future versions.
+            with [`~transformers.TrainingArguments.load_best_model_at_end`] to upload best model.
+            
+            <Deprecated version="5.0">
+            
+            Setting `WANDB_LOG_MODEL` as `bool` will be deprecated in version 5 of 🤗 Transformers.
+            
+            </Deprecated>
         - **WANDB_WATCH** (`str`, *optional* defaults to `"false"`):
             Can be `"gradients"`, `"all"`, `"parameters"`, or `"false"`. Set to `"all"` to log gradients and
             parameters.
