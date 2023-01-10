@@ -54,6 +54,11 @@ GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class GPTSANJapaneseNorm(nn.Module):
+    """
+    Layer Normalyzation for GPTSAN
+
+    """
+
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__()
         self.weight = nn.Parameter(torch.zeros(config.d_model))
@@ -68,6 +73,16 @@ class GPTSANJapaneseNorm(nn.Module):
 
 
 class GPTSANJapaneseDenseActDense(nn.Module):
+    """
+    FFN Layer for Switch Transformer and Extra layers
+
+    GPTSAN can mix Switch Transformer layers and normal Transformer layers
+    This class is used as Expert in Switch Transformer layers and as FFN in regular Transformer layers.
+    RELU is used in the Switch Transformer layer, and Swish is used in the normal Transformer layer,
+    so there is a choice of which is used in the argument.
+
+    """
+
     def __init__(self, config: GPTSANJapaneseConfig, ext_layer=False):
         super().__init__()
         d_inter = config.d_ext if ext_layer else config.d_ff
@@ -77,6 +92,14 @@ class GPTSANJapaneseDenseActDense(nn.Module):
         self.act = ACT2FN["swish" if ext_layer else "relu"]
 
     def forward(self, hidden_states):
+        r"""
+        Args:
+            hidden_states (`torch.Tensor`) :
+                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+        Returns:
+            torch.Tensor[num_groups, tokens_per_group, hidden_dim]
+
+        """
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -944,6 +967,8 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
     ) -> Union[Tuple[torch.FloatTensor], ModelOutput]:
         r"""
         Returns:
+            `ModelOutput` or `namedtuple`
+            if `return_dict` returns ModelOutput insted of namedtuple
 
         Example:
 

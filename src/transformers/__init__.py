@@ -271,6 +271,7 @@ _import_structure = {
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.gptsan_japanese": ["GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSANJapaneseConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -392,7 +393,6 @@ _import_structure = {
     "models.swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
     "models.switch_transformers": ["SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
-    "models.gptsan_japanese": ["GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSANJapaneseConfig"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.table_transformer": ["TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TableTransformerConfig"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
@@ -1531,6 +1531,17 @@ else:
             "GPTJPreTrainedModel",
         ]
     )
+    _import_structure["models.gptsan_japanese"].extend(
+        [
+            "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTSANJapaneseDenseActDense",
+            "GPTSANJapaneseModel",
+            "GPTSANJapanesePreTrainedModel",
+            "GPTSANJapaneseSparseMLP",
+            "GPTSANJapaneseTop1Router",
+            "GPTSANSentenceGenerator",
+        ]
+    )
     _import_structure["models.groupvit"].extend(
         [
             "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2178,17 +2189,6 @@ else:
             "SwitchTransformersPreTrainedModel",
             "SwitchTransformersSparseMLP",
             "SwitchTransformersTop1Router",
-        ]
-    )
-    _import_structure["models.gptsan_japanese"].extend(
-        [
-            "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTSANJapaneseModel",
-            "GPTSANSentenceGenerator",
-            "GPTSANJapanesePreTrainedModel",
-            "GPTSANJapaneseTop1Router",
-            "GPTSANJapaneseSparseMLP",
-            "GPTSANJapaneseDenseActDense",
         ]
     )
     _import_structure["models.t5"].extend(
