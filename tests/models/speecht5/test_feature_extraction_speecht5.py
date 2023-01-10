@@ -28,7 +28,7 @@ from ...test_sequence_feature_extraction_common import SequenceFeatureExtraction
 
 
 if is_speech_available():
-    from transformers import SpeechT5WaveformFeatureExtractor
+    from transformers import SpeechT5SpectrogramFeatureExtractor, SpeechT5WaveformFeatureExtractor
 
 global_rng = random.Random()
 
@@ -213,3 +213,105 @@ class SpeechT5WaveformFeatureExtractionTest(SequenceFeatureExtractionTestMixin, 
             self.assertTrue(np_processed.input_values.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_values.dtype == torch.float32)
+
+
+class SpeechT5SpectrogramFeatureExtractionTester(unittest.TestCase):
+    def __init__(
+        self,
+        parent,
+        batch_size=7,
+        min_seq_length=400,
+        max_seq_length=2000,
+        feature_size=80,
+        padding_value=0.0,
+        sampling_rate=16000,
+        hop_length=16,
+        win_length=64,
+        win_function="hann_window",
+        frame_signal_scale=1.0,
+        fmin=80,
+        fmax=7600,
+        mel_floor=1e-10,
+        reduction_factor=2,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.min_seq_length = min_seq_length
+        self.max_seq_length = max_seq_length
+        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
+        self.feature_size = feature_size
+        self.padding_value = padding_value
+        self.sampling_rate = sampling_rate
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.win_function = win_function
+        self.frame_signal_scale = frame_signal_scale
+        self.fmin = fmin
+        self.fmax = fmax
+        self.mel_floor = mel_floor
+        self.reduction_factor = reduction_factor
+        self.return_attention_mask = True
+
+    def prepare_feat_extract_dict(self):
+        return {
+            "feature_size": self.feature_size,
+            "padding_value": self.padding_value,
+            "sampling_rate": self.sampling_rate,
+            "hop_length": self.hop_length,
+            "win_length": self.win_length,
+            "win_function": self.win_function,
+            "frame_signal_scale": self.frame_signal_scale,
+            "fmin": self.fmin,
+            "fmax": self.fmax,
+            "mel_floor": self.mel_floor,
+            "reduction_factor": self.reduction_factor,
+            "return_attention_mask": self.return_attention_mask,
+        }
+
+    def prepare_inputs_for_common(self, equal_length=False, numpify=False):
+        if equal_length:
+            speech_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
+        else:
+            # make sure that inputs increase in size
+            speech_inputs = [
+                floats_list((x, self.feature_size))
+                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+            ]
+
+        if numpify:
+            speech_inputs = [np.asarray(x) for x in speech_inputs]
+
+        return speech_inputs
+
+
+@require_torch
+@require_torchaudio
+class SpeechT5SpectrogramFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+
+    feature_extraction_class = SpeechT5SpectrogramFeatureExtractor
+
+    def setUp(self):
+        self.feat_extract_tester = SpeechT5SpectrogramFeatureExtractionTester(self)
+
+    def test_call(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 12000
+        speech_inputs = [floats_list((1, x))[0] for x in range(8000, 14000, 2000)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test feature size
+        input_values = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_values
+        self.assertTrue(input_values.ndim == 3)
+        self.assertTrue(input_values.shape[-1] == feature_extractor.feature_size)
+
+        # Test not batched input
+        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_values
+        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_values
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+        # Test batched
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_values
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))

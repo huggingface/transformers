@@ -368,7 +368,10 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, fbanks)))
 
     def _reduce(self, inputs):
-        return inputs[:, self.reduction_factor - 1 :: self.reduction_factor]
+        reduced = []
+        for i in range(len(inputs)):
+            reduced.append(inputs[i][self.reduction_factor - 1 :: self.reduction_factor])
+        return reduced
 
     def __call__(
         self,
@@ -488,18 +491,20 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
         # make labels for stop prediction
-        labels = np.zeros((padded_inputs["input_values"].shape[0], padded_inputs["input_values"].shape[1]))
+        stop_labels = []
         for i, l in enumerate(fbank_sizes):
-            labels[i, l - 1 :] = 1.0
-        padded_inputs["stop_labels"] = labels
-
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+            labels = np.zeros(len(padded_inputs["input_values"][i]))
+            labels[l - 1 :] = 1.0
+            stop_labels.append(labels)
+        padded_inputs["stop_labels"] = stop_labels
 
         # thin out frames for reduction factor
         if self.reduction_factor > 1:
             padded_inputs["input_values"] = self._reduce(padded_inputs["input_values"])
             if attention_mask is not None:
                 padded_inputs["attention_mask"] = self._reduce(padded_inputs["attention_mask"])
+
+        if return_tensors is not None:
+            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
