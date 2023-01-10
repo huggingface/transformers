@@ -63,6 +63,14 @@ _CTC_EXPECTED_OUTPUT = "'mister quilter is the appossel of the middle classes an
 _CTC_EXPECTED_LOSS = 3791.12
 
 
+SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "Matthijs/speecht5_asr",
+    "Matthijs/speecht5_ctc",
+    "Matthijs/speecht5_tts",
+    # See all SpeechT5 models at https://huggingface.co/models?filter=speecht5
+]
+
+
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
