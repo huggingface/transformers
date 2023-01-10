@@ -20,11 +20,11 @@ import tempfile
 import unittest
 
 from transformers.models.speecht5 import (
+    SpeechT5CTCTokenizer,
     SpeechT5ProcessorForCTC,
     SpeechT5ProcessorForSpeechToText,
     SpeechT5ProcessorForTextToSpeech,
     SpeechT5SpectrogramFeatureExtractor,
-    SpeechT5CTCTokenizer,
     SpeechT5Tokenizer,
     SpeechT5WaveformFeatureExtractor,
 )

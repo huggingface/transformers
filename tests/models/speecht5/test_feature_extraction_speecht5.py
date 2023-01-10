@@ -20,9 +20,8 @@ import unittest
 
 import numpy as np
 
-from transformers import SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST, SpeechT5Config
 from transformers import is_speech_available
-from transformers.testing_utils import require_torch, require_torchaudio, slow
+from transformers.testing_utils import require_torch, require_torchaudio
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 

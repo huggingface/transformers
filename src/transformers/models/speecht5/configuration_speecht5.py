@@ -35,8 +35,8 @@ class SpeechT5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SpeechT5Model`]. It is used to instantiate an
     SpeechT5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the SpeechT5 [Matthijs/speecht5_asr](https://huggingface.co/Matthijs/speecht5_asr)
-    architecture.
+    with the defaults will yield a similar configuration to that of the SpeechT5
+    [Matthijs/speecht5_asr](https://huggingface.co/Matthijs/speecht5_asr) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

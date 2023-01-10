@@ -21,8 +21,7 @@ from ...processing_utils import ProcessorMixin
 
 class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
     r"""
-    Constructs a SpeechT5 processor which wraps a waveform feature extractor and a tokenizer into a single
-    processor.
+    Constructs a SpeechT5 processor which wraps a waveform feature extractor and a tokenizer into a single processor.
 
     [`SpeechT5ProcessorForSpeechToText`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and
     [`SpeechT5Tokenizer`]. See the docstring of [`~SpeechT5ProcessorForSpeechToText.__call__`] and
