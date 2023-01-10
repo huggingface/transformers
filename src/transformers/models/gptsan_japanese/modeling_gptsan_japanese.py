@@ -155,7 +155,7 @@ class GPTSANJapaneseTop1Router(nn.Module):
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
 
-        if self.training and self.jitter_noise > 0:
+        if self.training and self.jitter_noise > 0:  # add self.training to fix result in predict
             # Get the lower and upper bound of the uniform distribution
             # Adapted from: https://stackoverflow.com/questions/44328530/how-to-get-a-uniform-distribution-in-a-range-r1-r2-in-pytorch
             distrib_lower_bound = 1.0 - self.jitter_noise
@@ -216,6 +216,7 @@ class GPTSANJapaneseTop1Router(nn.Module):
         return expert_index, router_probs, router_logits
 
 
+# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.
