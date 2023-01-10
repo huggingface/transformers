@@ -644,7 +644,7 @@ class TensorBoardCallback(TrainerCallback):
 
 class WandbCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that sends the logs to [Weight and Biases](https://www.wandb.com/).
+    A [`TrainerCallback`] that logs metrics, media, model checkpoints to [Weight and Biases](https://www.wandb.com/).
     """
 
     def __init__(self):
@@ -685,7 +685,7 @@ class WandbCallback(TrainerCallback):
         Setup the optional Weights & Biases (*wandb*) integration.
 
         One can subclass and override this method to customize the setup if needed. Find more information
-        [here](https://docs.wandb.ai/integrations/huggingface). You can also override the following environment
+        [here](https://docs.wandb.ai/guides/integrations/huggingface). You can also override the following environment
         variables:
 
         Environment:
@@ -756,11 +756,13 @@ class WandbCallback(TrainerCallback):
             init_args = self.get_env_vars()
             if trial_name is not None:
                 init_args["name"] = trial_name
+                init_args["name"] = trial_name
                 init_args["group"] = args.run_name
             else:
                 init_args["name"] = args.run_name
 
             if self._wandb.run is None:
+
                 self._wandb.init(
                     **init_args,
                 )
@@ -773,10 +775,9 @@ class WandbCallback(TrainerCallback):
                 self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
 
             # keep track of model topology and gradients, unsupported on TPU
-            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
-                self._wandb.watch(
-                    model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps)
-                )
+            _watch_model = os.getenv("WANDB_WATCH", "false")
+            if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
+                self._wandb.watch(model, log=_watch_model, log_freq=max(100, args.logging_steps))
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
@@ -792,7 +793,7 @@ class WandbCallback(TrainerCallback):
     def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._wandb is None:
             return
-        if self._log_model and self._initialized and state.is_world_process_zero:
+        if self._log_model in ("end", "checkpoint") and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
             fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
@@ -810,7 +811,13 @@ class WandbCallback(TrainerCallback):
                         "train/total_floss": state.total_flos,
                     }
                 )
-                artifact = self._wandb.Artifact(name=f"model-{self._wandb.run.id}", type="model", metadata=metadata)
+                logger.info("Logging model artifacts. ...")
+                model_name = (
+                    f"model-{self._wandb.run.id}"
+                    if (args.run_name is None or args.run_name == args.output_dir)
+                    else f"model-{self._wandb.run.name}"
+                )
+                artifact = self._wandb.Artifact(name=model_name, type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
@@ -825,6 +832,26 @@ class WandbCallback(TrainerCallback):
         if state.is_world_process_zero:
             logs = rewrite_logs(logs)
             self._wandb.log({**logs, "train/global_step": state.global_step})
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._log_model == "checkpoint" and self._initialized and state.is_world_process_zero:
+            checkpoint_metadata = {
+                k: v
+                for k, v in dict(self._wandb.summary).items()
+                if isinstance(v, numbers.Number) and not k.startswith("_")
+            }
+
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. ...")
+            checkpoint_name = (
+                f"checkpoint-{self._wandb.run.id}"
+                if (args.run_name is None or args.run_name == args.output_dir)
+                else f"checkpoint-{self._wandb.run.name}"
+            )
+            artifact = self._wandb.Artifact(name=checkpoint_name, type="model", metadata=checkpoint_metadata)
+            artifact.add_dir(artifact_path)
+            self._wandb.log_artifact(artifact, aliases=[f"checkpoint-{state.global_step}"])
 
 
 class CometCallback(TrainerCallback):
