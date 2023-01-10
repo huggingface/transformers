@@ -657,7 +657,7 @@ class WandbCallback(TrainerCallback):
             self._wandb = wandb
         self._initialized = False
         # log outputs
-        self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
+        self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES
 
     def get_env_vars(self):
 
@@ -667,7 +667,7 @@ class WandbCallback(TrainerCallback):
             "anonymous": os.getenv("WANDB_ANONYMOUS", None),
             "config": os.getenv("WANDB_CONFIG_DIR", None),
             "dir": os.getenv("WANDB_DIR", None),
-            "save_code": os.getenv("WANDB_DISABLED_CODE", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"}),
+            "save_code": os.getenv("WANDB_DISABLED_CODE", "FALSE").upper() in ENV_VARS_TRUE_VALUES,
             "entity": os.getenv("WANDB_ENTITY", None),
             "job_type": os.getenv("WANDB_JOB_TYPE", None),
             "mode": os.getenv("WANDB_MODE", None),
