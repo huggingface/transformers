@@ -28,18 +28,19 @@ GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GPTSANJapaneseConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTSANJapaneseModel`]. It is used to
-    instantiate a GPTSANJapanese model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    GPTSANJapanese [tanreinama/GPTSAN-2.8B-spout_is_uniform](https://huggingface.co/tanreinama/GPTSAN-2.8B-spout_is_uniform) architecture.
+    This is the configuration class to store the configuration of a [`GPTSANJapaneseModel`]. It is used to instantiate
+    a GPTSANJapanese model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the GPTSANJapanese
+    [tanreinama/GPTSAN-2.8B-spout_is_uniform](https://huggingface.co/tanreinama/GPTSAN-2.8B-spout_is_uniform)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 36000):
-            Vocabulary size of the GPTSANJapanese model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`GPTSANJapaneseModel`].
+            Vocabulary size of the GPTSANJapanese model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`GPTSANJapaneseModel`].
         num_contexts (`int`, *optional*, defaults to 1280):
             Size of the maximum tokens.
         d_model (`int`, *optional*, defaults to 1024):
@@ -78,8 +79,8 @@ class GPTSANJapaneseConfig(PretrainedConfig):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         use_cache (`bool`, *optional*, default to `False`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-            (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
     """
     model_type = "gptsan-japanese"
     keys_to_ignore_at_inference = [

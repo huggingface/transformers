@@ -66,6 +66,14 @@ class GPTSANJapaneseNorm(nn.Module):
         self.epsilon = config.layer_norm_epsilon
 
     def forward(self, x):
+        r"""
+        Args:
+            hidden_states (`torch.Tensor`) :
+                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+        Returns:
+            torch.Tensor[num_groups, tokens_per_group, hidden_dim]
+
+        """
         x -= torch.mean(x, dim=-1, keepdims=True)
         s = torch.mean(x**2, dim=-1, keepdims=True)
         x *= torch.rsqrt(s + self.epsilon)
@@ -76,10 +84,9 @@ class GPTSANJapaneseDenseActDense(nn.Module):
     """
     FFN Layer for Switch Transformer and Extra layers
 
-    GPTSAN can mix Switch Transformer layers and normal Transformer layers
-    This class is used as Expert in Switch Transformer layers and as FFN in regular Transformer layers.
-    RELU is used in the Switch Transformer layer, and Swish is used in the normal Transformer layer,
-    so there is a choice of which is used in the argument.
+    GPTSAN can mix Switch Transformer layers and normal Transformer layers This class is used as Expert in Switch
+    Transformer layers and as FFN in regular Transformer layers. RELU is used in the Switch Transformer layer, and
+    Swish is used in the normal Transformer layer, so there is a choice of which is used in the argument.
 
     """
 
@@ -271,6 +278,14 @@ class GPTSANJapaneseLayerFF(nn.Module):
         self.norm = GPTSANJapaneseNorm(config)
 
     def forward(self, hidden_states):
+        r"""
+        Args:
+            hidden_states (`torch.Tensor`) :
+                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+        Returns:
+            torch.Tensor[num_groups, tokens_per_group, hidden_dim]
+
+        """
         forwarded_states, _ = self.mlp(hidden_states)
         forwarded_states += torch.tanh(self.smlp(hidden_states))
         output = hidden_states + self.norm(forwarded_states)
@@ -294,12 +309,29 @@ class GPTSANJapaneseLayerEFF(nn.Module):
         self.norm = GPTSANJapaneseNorm(config)
 
     def forward(self, hidden_states):
+        r"""
+        Args:
+            hidden_states (`torch.Tensor`) :
+                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+        Returns:
+            torch.Tensor[num_groups, tokens_per_group, hidden_dim]
+
+        """
         forwarded_states = self.mlp(hidden_states)
         output = hidden_states + self.norm(forwarded_states)
         return output
 
 
 class GPTSANJapaneseAttention(nn.Module):
+    r"""
+    Multihead Self Attention for GPTSAN
+
+    Parameters:
+        config : ([`GPTSANJapaneseConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    """
+
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__()
         self.d_kernel = config.d_model // config.num_heads
@@ -341,8 +373,14 @@ class GPTSANJapaneseAttention(nn.Module):
         return q, k, v
 
     def forward(self, hidden_states, mask, past=None, out_attentions=None):
-        """
+        r"""
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+
+        Args:
+            hidden_states (`torch.Tensor`) :
+                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+        Returns:
+            torch.Tensor[num_groups, tokens_per_group, hidden_dim]
         """
         q, k, v = self._split2(hidden_states)  # [batch, sequence, 1, heads, kernel]
 
@@ -372,12 +410,24 @@ class GPTSANJapaneseAttention(nn.Module):
 
 
 class GPTSANJapaneseLayerSelfAttention(nn.Module):
+    """
+    Self Attention and Normalization Unit
+    """
+
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.SelfAttention = GPTSANJapaneseAttention(config)
         self.norm = GPTSANJapaneseNorm(config)
 
     def forward(self, hidden_states, attention_mask, past=None, out_attentions=None):
+        r"""
+        Args:
+            hidden_states (`torch.Tensor`) :
+                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]
+
+        """
         attention_output, present = self.SelfAttention(
             hidden_states,
             mask=attention_mask,
@@ -389,12 +439,24 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
 
 
 class GPTSANJapaneseBlock(nn.Module):
+    """
+    Self Attention and FFN Unit
+    """
+
     def __init__(self, config, ext_layer=False):
         super().__init__()
         self.att = GPTSANJapaneseLayerSelfAttention(config)
         self.ff = GPTSANJapaneseLayerEFF(config) if ext_layer else GPTSANJapaneseLayerFF(config)
 
     def forward(self, hidden_states, attention_mask, past=None, out_attentions=None):
+        r"""
+        Args:
+            hidden_states (`torch.Tensor`) :
+                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]
+
+        """
         attention_status, present = self.att(hidden_states, attention_mask, past=past, out_attentions=out_attentions)
         outputs = self.ff(attention_status)
         return outputs, present
@@ -519,13 +581,12 @@ GPTSAN_JAPANESE_START_DOCSTRING = r"""
 GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. GPTSAN_JAPANESE is a model that
-            generates sentence continuations or predicts tokens at mask positions. Special tokens
-            required for inputs to the model are automatically appended.
+            Indices of input sequence tokens in the vocabulary. GPTSAN_JAPANESE is a model that generates sentence
+            continuations or predicts tokens at mask positions. Special tokens required for inputs to the model are
+            automatically appended.
         num_precontext (`torch.LongTensor` of shape `(batch_size,1)`):
-            length of `hybrid` input tokens in the input.
-            Tokens up to this length refer to both front and back like BERT, tokens after that refer only to front like GPT.
-            see also:
+            length of `hybrid` input tokens in the input. Tokens up to this length refer to both front and back like
+            BERT, tokens after that refer only to front like GPT. see also:
             https://github.com/tanreinama/GPTSAN/blob/main/report/model.md
         squad (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
                 This vector is transformed through an 8-layer FFN and can be used instead of `pasts`.
@@ -566,12 +627,6 @@ class GPTSANSentenceGenerator:
         self.model = model
         self.config = config
 
-    def forward(self, x):
-        """
-        dummy function
-        """
-        pass
-
     def _convert_token(self, tokens):
         return [t if t != 35782 else 35593 for t in tokens]  # tokenizer bug for "," token
 
@@ -610,6 +665,7 @@ class GPTSANSentenceGenerator:
         Example:
         ```python
         >>> from transformers import AutoModel, AutoTokenizer
+
         >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> x_tok = tokenizer.encode("武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。")
@@ -623,8 +679,7 @@ class GPTSANSentenceGenerator:
             input_tokens (`List[int]`) :
               tokens to input.
             tokenizer (`PreTrainedTokenizer`) :
-              tokens to decode
-              if passed None, token lists returned instead of string.
+              tokens to decode if passed None, token lists returned instead of string.
         Returns:
             List[str] or List[List[int]]
         """
@@ -656,6 +711,7 @@ class GPTSANSentenceGenerator:
         Example:
         ```python
         >>> from transformers import AutoModel, AutoTokenizer
+
         >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> x_tok = tokenizer.encode("武田信玄は、")
@@ -669,8 +725,7 @@ class GPTSANSentenceGenerator:
             input_tokens (`List[int]`) :
               tokens to input.
             tokenizer (`PreTrainedTokenizer`) :
-              tokens to decode
-              if passed None, token lists returned instead of string.
+              tokens to decode if passed None, token lists returned instead of string.
             seed (`int`, defaults to `None`) :
               random seed.
             top_k (`int`, defaults to `120`) :
@@ -698,12 +753,12 @@ class GPTSANSentenceGenerator:
         batch_size=4,
     ):
         r"""
-        Run the model in sentence generation mode
-        You can specify the number of `hybrid` inputs.
+        Run the model in sentence generation mode You can specify the number of `hybrid` inputs.
 
         Example:
         ```python
         >>> from transformers import AutoModel, AutoTokenizer
+
         >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> x_tok = tokenizer.encode("武田信玄は、")
@@ -717,8 +772,7 @@ class GPTSANSentenceGenerator:
             input_tokens (`List[int]`) :
               tokens to input.
             tokenizer (`PreTrainedTokenizer`) :
-              tokens to decode
-              if passed None, token lists returned instead of string.
+              tokens to decode if passed None, token lists returned instead of string.
             connected_inputs (`int`) :
               the number of `hybrid` inputs.
             seed (`int`, defaults to `None`) :
@@ -967,13 +1021,13 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
     ) -> Union[Tuple[torch.FloatTensor], ModelOutput]:
         r"""
         Returns:
-            `ModelOutput` or `namedtuple`
-            if `return_dict` returns ModelOutput insted of namedtuple
+            `ModelOutput` or `namedtuple` if `return_dict` returns ModelOutput insted of namedtuple
 
         Example:
 
         ```python
         >>> from transformers import AutoModel, AutoTokenizer
+
         >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> x_tok = tokenizer.encode("武田信玄は、")
