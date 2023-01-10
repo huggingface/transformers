@@ -39,12 +39,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_gptsan_japanese"] = [
         "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GPTSANJapaneseModel",
-        "GPTSANSentenceGenerator",
-        "GPTSANJapanesePreTrainedModel",
-        "GPTSANJapaneseTop1Router",
-        "GPTSANJapaneseSparseMLP",
         "GPTSANJapaneseDenseActDense",
+        "GPTSANJapaneseModel",
+        "GPTSANJapanesePreTrainedModel",
+        "GPTSANJapaneseSparseMLP",
+        "GPTSANJapaneseTop1Router",
+        "GPTSANSentenceGenerator",
     ]
 
 
@@ -64,6 +64,7 @@ if TYPE_CHECKING:
             GPTSANJapanesePreTrainedModel,
             GPTSANJapaneseSparseMLP,
             GPTSANJapaneseTop1Router,
+            GPTSANSentenceGenerator,
         )
 
 
