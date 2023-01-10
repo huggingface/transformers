@@ -265,6 +265,15 @@ class SpeechT5CTCTokenizer(SpeechT5Tokenizer):
     def word_delimiter_token_id(self, value):
         self._word_delimiter_token = self.convert_tokens_to_ids(value)
 
+    @property
+    def blank_token_id(self) -> Optional[int]:
+        """
+        `Optional[int]`: Id of the CTC blank token in the vocabulary. Returns `None` if the token has not been set.
+        """
+        if self.blank_token is None:
+            return None
+        return self._convert_token_to_id_with_added_voc(self.blank_token)
+
     def convert_tokens_to_string(
         self,
         tokens: List[str],

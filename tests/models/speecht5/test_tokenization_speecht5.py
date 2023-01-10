@@ -129,7 +129,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     def test_full_tokenizer(self):
-        tokenizer = SpeechT5Tokenizer.from_pretrained(self.tmpdirname)
+        tokenizer = self.get_tokenizer()
 
         tokens = tokenizer.tokenize("This is a test")
         # fmt: off
@@ -215,39 +215,36 @@ class SpeechT5CTCTokenizerTest(SpeechT5TokenizerTest):
         self.assertEqual(vocab_keys[-1], "<ctc_blank>")
         self.assertEqual(len(vocab_keys), 81)
 
-    # def test_full_tokenizer(self):
-    #     tokenizer = SpeechT5CTCTokenizer.from_pretrained(self.tmpdirname)
+    def test_tokenizer_decode(self):
+        tokenizer = self.get_tokenizer()
 
-    #     tokens = tokenizer.tokenize("This is a test")
-    #     # fmt: off
-    #     self.assertListEqual(tokens, [SPIECE_UNDERLINE, 'T', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'a', SPIECE_UNDERLINE, 't', 'e', 's', 't'])
-    #     # fmt: on
+        sample_ids = [
+            [11, 5, 15, tokenizer.blank_token_id, 15, 8],
+            [4, 25, 22, 5, tokenizer.word_delimiter_token_id, 25, 22, 5],
+        ]
+        tokens = tokenizer.decode(sample_ids[0])
+        batch_tokens = tokenizer.batch_decode(sample_ids)
+        self.assertEqual(tokens, batch_tokens[0])
+        self.assertEqual(batch_tokens, ["hello", "bye bye"])
 
-    #     self.assertListEqual(
-    #         tokenizer.convert_tokens_to_ids(tokens),
-    #         [4, 32, 11, 10, 12, 4, 10, 12, 4, 7, 4, 6, 5, 12, 6],
-    #     )
+    def test_tokenizer_decode_special(self):
+        tokenizer = self.get_tokenizer()
 
-    #     tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-    #     self.assertListEqual(
-    #         tokens,
-    #         # fmt: off
-    #         [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, '92000', ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
-    #         # fmt: on
-    #     )
+        # fmt: off
+        sample_ids = [
+            [11, 5, 15, tokenizer.blank_token_id, 15, 8],
+            [4, 25, 22, 5, tokenizer.word_delimiter_token_id, 25, 22, 5],
+        ]
+        sample_ids_2 = [
+            [11, 5, 5, 5, 5, 5, 15, 15, 15, tokenizer.blank_token_id, 15, 8, 8, 8],
+            [4, 25, 22, 5, tokenizer.blank_token_id, tokenizer.blank_token_id, tokenizer.blank_token_id, tokenizer.word_delimiter_token_id, 25, 22, 5, tokenizer.word_delimiter_token_id],
+        ]
+        # fmt: on
 
-    #     ids = tokenizer.convert_tokens_to_ids(tokens)
-    #     # fmt: off
-    #     self.assertListEqual(ids, [4, 30, 4, 20, 7, 12, 4, 25, 8, 13, 9, 4, 10, 9, 4, 3, 23, 4, 7, 9, 14, 4, 6, 11, 10, 12, 4, 10, 12, 4, 19, 7, 15, 12, 73, 26])
-    #     # fmt: on
-
-    #     back_tokens = tokenizer.convert_ids_to_tokens(ids)
-    #     self.assertListEqual(
-    #         back_tokens,
-    #         # fmt: off
-    #         [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, '<unk>', ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
-    #         # fmt: on
-    #     )
+        batch_tokens = tokenizer.batch_decode(sample_ids)
+        batch_tokens_2 = tokenizer.batch_decode(sample_ids_2)
+        self.assertEqual(batch_tokens, batch_tokens_2)
+        self.assertEqual(batch_tokens, ["hello", "bye bye"])
 
     @slow
     def test_tokenizer_integration(self):
