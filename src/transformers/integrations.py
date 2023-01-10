@@ -693,7 +693,7 @@ class WandbCallback(TrainerCallback):
         - **WANDB_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
             Set this to a custom string to store results in a different project.
         - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
-            Whether to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
+            Whether to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
         """
         if self._wandb is None:
             return
