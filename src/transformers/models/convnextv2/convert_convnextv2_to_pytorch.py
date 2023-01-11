@@ -242,7 +242,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://dl.fbaipublicfiles.com/convnextv2/convnextv2_tiny_1k_224_ema.pth",
+        default="https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_atto_1k_224_ema.pt",
         type=str,
         help="URL of the original ConvNeXtV2 checkpoint you'd like to convert.",
     )
