@@ -37,11 +37,20 @@ logger = logging.get_logger(__name__)
 def get_convnextv2_config(checkpoint_url):
     config = ConvNeXtV2Config()
 
+    if "atto" in checkpoint_url:
+        depths = [2, 2, 6, 2]
+        hidden_sizes = [40, 80, 160, 320]
+    if "femto" in checkpoint_url:
+        depths = [2, 2, 6, 2]
+        hidden_sizes = [48, 96, 192, 384]
+    if "pico" in checkpoint_url:
+        depths = [2, 2, 6, 2]
+        hidden_sizes = [64, 128, 256, 512]
+    if "nano" in checkpoint_url:
+        depths = [2, 2, 8, 2]
+        hidden_sizes = [80, 160, 320, 640]
     if "tiny" in checkpoint_url:
         depths = [3, 3, 9, 3]
-        hidden_sizes = [96, 192, 384, 768]
-    if "small" in checkpoint_url:
-        depths = [3, 3, 27, 3]
         hidden_sizes = [96, 192, 384, 768]
     if "base" in checkpoint_url:
         depths = [3, 3, 27, 3]
@@ -49,9 +58,9 @@ def get_convnextv2_config(checkpoint_url):
     if "large" in checkpoint_url:
         depths = [3, 3, 27, 3]
         hidden_sizes = [192, 384, 768, 1536]
-    if "xlarge" in checkpoint_url:
+    if "huge" in checkpoint_url:
         depths = [3, 3, 27, 3]
-        hidden_sizes = [256, 512, 1024, 2048]
+        hidden_sizes = [352, 704, 1408, 2816]
 
     if "1k" in checkpoint_url:
         num_labels = 1000
