@@ -183,11 +183,6 @@ class ConvNeXtV2Layer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
         self.grn = GRN(4 * dim)
         self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.layer_scale_parameter = (
-            nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            if config.layer_scale_init_value > 0
-            else None
-        )
         self.drop_path = ConvNeXtV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
