@@ -275,8 +275,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         )
 
     def moses_detokenize(self, tokens, lang):
-        if lang not in self.cache_moses_tokenizer:
-            moses_detokenizer = self.sm.MosesDetokenizer(lang=self.tgt_lang)
+        if lang not in self.cache_moses_detokenizer:
+            moses_detokenizer = self.sm.MosesDetokenizer(lang=lang)
             self.cache_moses_detokenizer[lang] = moses_detokenizer
         return self.cache_moses_detokenizer[lang].detokenize(tokens)
 
@@ -354,7 +354,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
             - Install with `pip install sacremoses`
 
         Args:
-
             - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported
               languages. However, we don't enforce it.
             - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)

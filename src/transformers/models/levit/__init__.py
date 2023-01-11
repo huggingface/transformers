@@ -29,6 +29,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_levit"] = ["LevitFeatureExtractor"]
+    _import_structure["image_processing_levit"] = ["LevitImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_levit import LevitFeatureExtractor
+        from .image_processing_levit import LevitImageProcessor
 
     try:
         if not is_torch_available():

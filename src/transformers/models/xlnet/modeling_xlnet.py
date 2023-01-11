@@ -1296,6 +1296,8 @@ class XLNetModel(XLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class XLNetLMHeadModel(XLNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"lm_loss.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.attn_type = config.attn_type
@@ -1313,7 +1315,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_loss = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, use_mems=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -1324,7 +1326,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         # offset = 1; offset = 2 seems to have slightly better computation.
         offset = 2
 
-        if past:
+        if past_key_values:
             input_ids = torch.cat([input_ids[:, -offset:], dummy_token], dim=1)
         else:
             input_ids = torch.cat([input_ids, dummy_token], dim=1)
@@ -1350,8 +1352,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         }
 
         # if past is defined in model kwargs then use it for faster decoding
-        if past:
-            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past)
+        if past_key_values:
+            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past_key_values)
 
         return inputs
 

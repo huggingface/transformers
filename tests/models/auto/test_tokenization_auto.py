@@ -48,6 +48,7 @@ from transformers.testing_utils import (
     DUMMY_DIFF_TOKENIZER_IDENTIFIER,
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
+    RequestCounter,
     require_tokenizers,
     slow,
 )
@@ -213,6 +214,7 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_get_tokenizer_config(self):
         # Check we can load the tokenizer config of an online model.
         config = get_tokenizer_config("bert-base-cased")
+        _ = config.pop("_commit_hash", None)
         # If we ever update bert-base-cased tokenizer config, this dict here will need to be updated.
         self.assertEqual(config, {"do_lower_case": False})
 
@@ -300,8 +302,15 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_from_pretrained_dynamic_tokenizer(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True)
         self.assertTrue(tokenizer.special_attribute_present)
+        # Test tokenizer can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True)
+        self.assertTrue(reloaded_tokenizer.special_attribute_present)
+
         if is_tokenizers_available():
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
+            self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizerFast")
 
             # Test we can also load the slow version
             tokenizer = AutoTokenizer.from_pretrained(
@@ -309,8 +318,15 @@ class AutoTokenizerTest(unittest.TestCase):
             )
             self.assertTrue(tokenizer.special_attribute_present)
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+            # Test tokenizer can be reloaded.
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tokenizer.save_pretrained(tmp_dir)
+                reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True, use_fast=False)
+            self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
+            self.assertTrue(reloaded_tokenizer.special_attribute_present)
         else:
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+            self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
 
     def test_from_pretrained_dynamic_tokenizer_legacy_format(self):
         tokenizer = AutoTokenizer.from_pretrained(
@@ -340,3 +356,12 @@ class AutoTokenizerTest(unittest.TestCase):
             EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
         ):
             _ = AutoTokenizer.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
+
+    def test_cached_tokenizer_has_minimum_calls_to_head(self):
+        # Make sure we have cached the tokenizer.
+        _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)

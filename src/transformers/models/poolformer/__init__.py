@@ -21,7 +21,13 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"]}
+_import_structure = {
+    "configuration_poolformer": [
+        "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PoolFormerConfig",
+        "PoolFormerOnnxConfig",
+    ]
+}
 
 try:
     if not is_vision_available():
@@ -30,6 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_poolformer"] = ["PoolFormerFeatureExtractor"]
+    _import_structure["image_processing_poolformer"] = ["PoolFormerImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -46,7 +53,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
+    from .configuration_poolformer import (
+        POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PoolFormerConfig,
+        PoolFormerOnnxConfig,
+    )
 
     try:
         if not is_vision_available():
@@ -55,6 +66,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_poolformer import PoolFormerFeatureExtractor
+        from .image_processing_poolformer import PoolFormerImageProcessor
 
     try:
         if not is_torch_available():

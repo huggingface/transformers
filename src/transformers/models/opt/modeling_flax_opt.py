@@ -436,12 +436,14 @@ class FlaxOPTDecoder(nn.Module):
             self.config.vocab_size,
             self.config.word_embed_proj_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         self.embed_positions = FlaxOPTLearnedPositionalEmbedding(
             self.config.max_position_embeddings,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         if self.config.word_embed_proj_dim != self.config.hidden_size:
@@ -483,8 +485,6 @@ class FlaxOPTDecoder(nn.Module):
         positions = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + positions
-
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
         hidden_state, all_hidden_states, attentions = self.layers(
             hidden_states,

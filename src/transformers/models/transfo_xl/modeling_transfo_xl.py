@@ -523,7 +523,6 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
         weights embeddings afterwards if the model class has a *tie_weights()* method.
 
         Arguments:
-
             new_num_tokens: (*optional*) int:
                 New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at
                 the end. Reducing the size will remove vectors from the end. If not provided or None: does nothing and
@@ -1007,6 +1006,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"crit\.out_projs\.\d+", r"crit\.out_layers\.\d+\.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = TransfoXLModel(config)
@@ -1149,12 +1150,12 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         else:
             return self.crit.out_layers[-1]
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **model_kwargs):
         inputs = {}
 
         # if past is defined in model kwargs then use it for faster decoding
-        if past:
-            inputs["mems"] = past
+        if past_key_values:
+            inputs["mems"] = past_key_values
             inputs["input_ids"] = input_ids[:, -1].unsqueeze(-1)
         else:
             inputs["input_ids"] = input_ids

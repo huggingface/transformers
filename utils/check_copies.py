@@ -66,8 +66,32 @@ LOCALIZED_READMES = {
         "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
         "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
         "format_model_list": (
+            "**[{title}]({model_link})** ({paper_affiliations} 에서 제공)은 {paper_authors}.{supplements}의"
+            " {paper_title_link}논문과 함께 발표했습니다."
+        ),
+    },
+    "README_es.md": {
+        "start_prompt": "🤗 Transformers actualmente proporciona las siguientes arquitecturas",
+        "end_prompt": "1. ¿Quieres aportar un nuevo modelo?",
+        "format_model_list": (
             "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
             " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_ja.md": {
+        "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
+        "end_prompt": "1. 新しいモデルを投稿したいですか？",
+        "format_model_list": (
+            "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"
+            " {paper_title_link}"
+        ),
+    },
+    "README_hd.md": {
+        "start_prompt": "🤗 ट्रांसफॉर्मर वर्तमान में निम्नलिखित आर्किटेक्चर का समर्थन करते हैं",
+        "end_prompt": "1. एक नए मॉडल में योगदान देना चाहते हैं?",
+        "format_model_list": (
+            "**[{title}]({model_link})** ({paper_affiliations} से) {paper_authors}.{supplements} द्वारा"
+            "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
 }
@@ -220,7 +244,12 @@ def is_copy_consistent(filename, overwrite=False):
 
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
-            diffs.append([object_name, start_index])
+            diff_index = start_index + 1
+            for observed_line, theoretical_line in zip(observed_code.split("\n"), theoretical_code.split("\n")):
+                if observed_line != theoretical_line:
+                    break
+                diff_index += 1
+            diffs.append([object_name, diff_index])
             if overwrite:
                 lines = lines[:start_index] + [theoretical_code] + lines[line_index:]
                 line_index = start_index + 1
@@ -471,7 +500,9 @@ SPECIAL_MODEL_NAMES = {
     "Data2VecAudio": "Data2Vec",
     "Data2VecText": "Data2Vec",
     "Data2VecVision": "Data2Vec",
+    "DonutSwin": "Swin Transformer",
     "Marian": "MarianMT",
+    "MaskFormerSwin": "Swin Transformer",
     "OpenAI GPT-2": "GPT-2",
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",

@@ -98,7 +98,9 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 
 class Message:
-    def __init__(self, title: str, ci_title: str, model_results: Dict, additional_results: Dict):
+    def __init__(
+        self, title: str, ci_title: str, model_results: Dict, additional_results: Dict, selected_warnings: List = None
+    ):
         self.title = title
         self.ci_title = ci_title
 
@@ -135,6 +137,10 @@ class Message:
         self.additional_results = additional_results
 
         self.thread_ts = None
+
+        if selected_warnings is None:
+            selected_warnings = []
+        self.selected_warnings = selected_warnings
 
     @property
     def time(self) -> str:
@@ -195,6 +201,22 @@ class Message:
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
                 "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
+
+    @property
+    def warnings(self) -> Dict:
+        return {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": f"There were {len(self.selected_warnings)} warnings being selected.",
+                "emoji": True,
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check warnings", "emoji": True},
+                "url": f"{github_actions_job_links['Extract warnings in CI artifacts']}",
             },
         }
 
@@ -384,31 +406,71 @@ class Message:
         if self.n_model_failures == 0 and self.n_additional_failures == 0:
             blocks.append(self.no_failures)
 
+        if len(self.selected_warnings) > 0:
+            blocks.append(self.warnings)
+
         return json.dumps(blocks)
 
     @staticmethod
-    def error_out():
-        payload = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "plain_text",
-                    "text": "There was an issue running the tests.",
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
-                    "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
-                },
-            }
-        ]
+    def error_out(title, ci_title="", runner_not_available=False, runner_failed=False, setup_failed=False):
+
+        blocks = []
+        title_block = {"type": "header", "text": {"type": "plain_text", "text": title}}
+        blocks.append(title_block)
+
+        if ci_title:
+            ci_title_block = {"type": "section", "text": {"type": "mrkdwn", "text": ci_title}}
+            blocks.append(ci_title_block)
+
+        offline_runners = []
+        if runner_not_available:
+            text = "💔 CI runners are not available! Tests are not run. 😭"
+            result = os.environ.get("OFFLINE_RUNNERS")
+            if result is not None:
+                offline_runners = json.loads(result)
+        elif runner_failed:
+            text = "💔 CI runners have problems! Tests are not run. 😭"
+        elif setup_failed:
+            text = "💔 Setup job failed. Tests are not run. 😭"
+        else:
+            text = "💔 There was an issue running the tests. 😭"
+
+        error_block_1 = {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": text,
+            },
+        }
+
+        text = ""
+        if len(offline_runners) > 0:
+            text = "\n  • " + "\n  • ".join(offline_runners)
+            text = f"The following runners are offline:\n{text}\n\n"
+        text += "🙏 Let's fix it ASAP! 🙏"
+
+        error_block_2 = {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": text,
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
+        blocks.extend([error_block_1, error_block_2])
+
+        payload = json.dumps(blocks)
 
         print("Sending the following payload")
-        print(json.dumps({"blocks": json.loads(payload)}))
+        print(json.dumps({"blocks": blocks}))
 
         client.chat_postMessage(
             channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-            text="There was an issue running the tests.",
+            text=text,
             blocks=payload,
         )
 
@@ -630,6 +692,14 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 if __name__ == "__main__":
 
+    runner_status = os.environ.get("RUNNER_STATUS")
+    runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
+    setup_status = os.environ.get("SETUP_STATUS")
+
+    runner_not_available = True if runner_status is not None and runner_status != "success" else False
+    runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
+    setup_failed = True if setup_status is not None and setup_status != "success" else False
+
     org = "huggingface"
     repo = "transformers"
     repository_full_name = f"{org}/{repo}"
@@ -689,13 +759,17 @@ if __name__ == "__main__":
     else:
         ci_title = ""
 
+    if runner_not_available or runner_failed or setup_failed:
+        Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
+        exit(0)
+
     arguments = sys.argv[1:][0]
     try:
         models = ast.literal_eval(arguments)
         # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
         models = [x.replace("models/", "models_") for x in models]
     except SyntaxError:
-        Message.error_out()
+        Message.error_out(title, ci_title)
         raise ValueError("Errored out.")
 
     github_actions_job_links = get_job_links()
@@ -861,7 +935,13 @@ if __name__ == "__main__":
                             {"line": line, "trace": stacktraces.pop(0)}
                         )
 
-    message = Message(title, ci_title, model_results, additional_results)
+    selected_warnings = []
+    if "warnings_in_ci" in available_artifacts:
+        directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
+        with open(os.path.join(directory, "selected_warnings.json")) as fp:
+            selected_warnings = json.load(fp)
+
+    message = Message(title, ci_title, model_results, additional_results, selected_warnings=selected_warnings)
 
     # send report only if there is any failure (for push CI)
     if message.n_failures or ci_event != "push":

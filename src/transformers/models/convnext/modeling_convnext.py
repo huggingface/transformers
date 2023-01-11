@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ConvNextConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "ConvNextImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-224"
@@ -82,8 +82,8 @@ class ConvNextDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -109,9 +109,12 @@ class ConvNextLayerNorm(nn.Module):
         if self.data_format == "channels_last":
             x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
+            input_dtype = x.dtype
+            x = x.float()
             u = x.mean(1, keepdim=True)
             s = (x - u).pow(2).mean(1, keepdim=True)
             x = (x - u) / torch.sqrt(s + self.eps)
+            x = x.to(dtype=input_dtype)
             x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
 
@@ -305,8 +308,8 @@ CONVNEXT_START_DOCSTRING = r"""
 CONVNEXT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for

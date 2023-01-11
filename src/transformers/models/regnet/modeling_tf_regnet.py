@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "RegNetConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/regnet-y-040"
@@ -74,7 +74,7 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
             use_bias=False,
             name="convolution",
         )
-        self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="normalization")
+        self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.activation = ACT2FN[activation] if activation is not None else tf.identity
 
     def call(self, hidden_state):
@@ -126,7 +126,7 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
         self.convolution = tf.keras.layers.Conv2D(
             filters=out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution"
         )
-        self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="normalization")
+        self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.normalization(self.convolution(inputs), training=training)
@@ -389,8 +389,8 @@ REGNET_START_DOCSTRING = r"""
 REGNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.

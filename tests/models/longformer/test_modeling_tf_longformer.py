@@ -115,7 +115,7 @@ class TFLongformerModelTester:
     ):
         model = TFLongformerModel(config=config)
 
-        attention_mask = tf.ones(input_ids.shape, dtype=tf.dtypes.int32)
+        attention_mask = tf.ones(input_ids.shape, dtype=tf.int64)
         output_with_mask = model(input_ids, attention_mask=attention_mask)[0]
         output_without_mask = model(input_ids)[0]
         tf.debugging.assert_near(output_with_mask[0, 0, :5], output_without_mask[0, 0, :5], rtol=1e-4)
@@ -403,26 +403,24 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         # first row => [0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000]
         tf.debugging.assert_near(padded_hidden_states[0, 0, 0, :4], chunked_hidden_states[0, 0, 0], rtol=1e-3)
-        tf.debugging.assert_near(padded_hidden_states[0, 0, 0, 4:], tf.zeros((3,), dtype=tf.dtypes.float32), rtol=1e-3)
+        tf.debugging.assert_near(padded_hidden_states[0, 0, 0, 4:], tf.zeros((3,), dtype=tf.float32), rtol=1e-3)
 
         # last row => [0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629]
         tf.debugging.assert_near(padded_hidden_states[0, 0, -1, 3:], chunked_hidden_states[0, 0, -1], rtol=1e-3)
-        tf.debugging.assert_near(
-            padded_hidden_states[0, 0, -1, :3], tf.zeros((3,), dtype=tf.dtypes.float32), rtol=1e-3
-        )
+        tf.debugging.assert_near(padded_hidden_states[0, 0, -1, :3], tf.zeros((3,), dtype=tf.float32), rtol=1e-3)
 
     def test_pad_and_transpose_last_two_dims(self):
         hidden_states = self._get_hidden_states()
         self.assertEqual(shape_list(hidden_states), [1, 4, 8])
 
         # pad along seq length dim
-        paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
+        paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.int64)
 
         hidden_states = TFLongformerSelfAttention._chunk(hidden_states, window_overlap=2)
         padded_hidden_states = TFLongformerSelfAttention._pad_and_transpose_last_two_dims(hidden_states, paddings)
         self.assertTrue(shape_list(padded_hidden_states) == [1, 1, 8, 5])
 
-        expected_added_dim = tf.zeros((5,), dtype=tf.dtypes.float32)
+        expected_added_dim = tf.zeros((5,), dtype=tf.float32)
         tf.debugging.assert_near(expected_added_dim, padded_hidden_states[0, 0, -1, :], rtol=1e-6)
         tf.debugging.assert_near(
             hidden_states[0, 0, -1, :], tf.reshape(padded_hidden_states, (1, -1))[0, 24:32], rtol=1e-6
@@ -441,10 +439,10 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         hid_states_3 = TFLongformerSelfAttention._mask_invalid_locations(hidden_states[:, :, :, :3], 2)
         hid_states_4 = TFLongformerSelfAttention._mask_invalid_locations(hidden_states[:, :, 2:, :], 2)
 
-        self.assertTrue(tf.math.reduce_sum(tf.cast(tf.math.is_inf(hid_states_1), tf.dtypes.int32)) == 8)
-        self.assertTrue(tf.math.reduce_sum(tf.cast(tf.math.is_inf(hid_states_2), tf.dtypes.int32)) == 24)
-        self.assertTrue(tf.math.reduce_sum(tf.cast(tf.math.is_inf(hid_states_3), tf.dtypes.int32)) == 24)
-        self.assertTrue(tf.math.reduce_sum(tf.cast(tf.math.is_inf(hid_states_4), tf.dtypes.int32)) == 12)
+        self.assertTrue(tf.math.reduce_sum(tf.cast(tf.math.is_inf(hid_states_1), tf.int64)) == 8)
+        self.assertTrue(tf.math.reduce_sum(tf.cast(tf.math.is_inf(hid_states_2), tf.int64)) == 24)
+        self.assertTrue(tf.math.reduce_sum(tf.cast(tf.math.is_inf(hid_states_3), tf.int64)) == 24)
+        self.assertTrue(tf.math.reduce_sum(tf.cast(tf.math.is_inf(hid_states_4), tf.int64)) == 12)
 
     def test_chunk(self):
         hidden_states = self._get_hidden_states()
@@ -456,12 +454,14 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         chunked_hidden_states = TFLongformerSelfAttention._chunk(hidden_states, window_overlap=2)
 
         # expected slices across chunk and seq length dim
-        expected_slice_along_seq_length = tf.convert_to_tensor([0.4983, -0.7584, -1.6944], dtype=tf.dtypes.float32)
-        expected_slice_along_chunk = tf.convert_to_tensor([0.4983, -1.8348, -0.7584, 2.0514], dtype=tf.dtypes.float32)
+        expected_slice_along_seq_length = tf.convert_to_tensor([0.4983, -0.7584, -1.6944], dtype=tf.float32)
+        expected_slice_along_chunk = tf.convert_to_tensor([0.4983, -1.8348, -0.7584, 2.0514], dtype=tf.float32)
 
         self.assertTrue(shape_list(chunked_hidden_states) == [1, 3, 4, 4])
-        tf.debugging.assert_near(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3)
-        tf.debugging.assert_near(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3)
+        tf.debugging.assert_near(
+            chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3, atol=1e-4
+        )
+        tf.debugging.assert_near(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3, atol=1e-4)
 
     def test_layer_local_attn(self):
         model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
@@ -469,7 +469,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         hidden_states = self._get_hidden_states()
         batch_size, seq_length, hidden_size = hidden_states.shape
 
-        attention_mask = tf.zeros((batch_size, seq_length), dtype=tf.dtypes.float32)
+        attention_mask = tf.zeros((batch_size, seq_length), dtype=tf.float32)
         is_index_global_attn = tf.math.greater(attention_mask, 1)
         is_global_attn = tf.math.reduce_any(is_index_global_attn)
 
@@ -483,11 +483,11 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         )[0]
 
         expected_slice = tf.convert_to_tensor(
-            [0.00188, 0.012196, -0.017051, -0.025571, -0.02996, 0.017297, -0.011521, 0.004848], dtype=tf.dtypes.float32
+            [0.00188, 0.012196, -0.017051, -0.025571, -0.02996, 0.017297, -0.011521, 0.004848], dtype=tf.float32
         )
 
         self.assertEqual(output_hidden_states.shape, (1, 4, 8))
-        tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3)
+        tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3, atol=1e-4)
 
     def test_layer_global_attn(self):
         model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
@@ -498,8 +498,8 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         batch_size, seq_length, hidden_size = hidden_states.shape
 
         # create attn mask
-        attention_mask_1 = tf.zeros((1, 1, 1, seq_length), dtype=tf.dtypes.float32)
-        attention_mask_2 = tf.zeros((1, 1, 1, seq_length), dtype=tf.dtypes.float32)
+        attention_mask_1 = tf.zeros((1, 1, 1, seq_length), dtype=tf.float32)
+        attention_mask_2 = tf.zeros((1, 1, 1, seq_length), dtype=tf.float32)
 
         attention_mask_1 = tf.where(tf.range(4)[None, :, None, None] > 1, 10000.0, attention_mask_1)
         attention_mask_1 = tf.where(tf.range(4)[None, :, None, None] > 2, -10000.0, attention_mask_1)
@@ -525,15 +525,15 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_hidden_states.shape, (2, 4, 8))
         expected_slice_0 = tf.convert_to_tensor(
-            [-0.06508, -0.039306, 0.030934, -0.03417, -0.00656, -0.01553, -0.02088, -0.04938], dtype=tf.dtypes.float32
+            [-0.06508, -0.039306, 0.030934, -0.03417, -0.00656, -0.01553, -0.02088, -0.04938], dtype=tf.float32
         )
 
         expected_slice_1 = tf.convert_to_tensor(
-            [-0.04055, -0.038399, 0.0396, -0.03735, -0.03415, 0.01357, 0.00145, -0.05709], dtype=tf.dtypes.float32
+            [-0.04055, -0.038399, 0.0396, -0.03735, -0.03415, 0.01357, 0.00145, -0.05709], dtype=tf.float32
         )
 
-        tf.debugging.assert_near(output_hidden_states[0, 2], expected_slice_0, rtol=1e-3)
-        tf.debugging.assert_near(output_hidden_states[1, -2], expected_slice_1, rtol=1e-3)
+        tf.debugging.assert_near(output_hidden_states[0, 2], expected_slice_0, rtol=1e-3, atol=1e-4)
+        tf.debugging.assert_near(output_hidden_states[1, -2], expected_slice_1, rtol=1e-3, atol=1e-4)
 
     def test_layer_attn_probs(self):
         model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
@@ -542,8 +542,8 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         batch_size, seq_length, hidden_size = hidden_states.shape
 
         # create attn mask
-        attention_mask_1 = tf.zeros((1, 1, 1, seq_length), dtype=tf.dtypes.float32)
-        attention_mask_2 = tf.zeros((1, 1, 1, seq_length), dtype=tf.dtypes.float32)
+        attention_mask_1 = tf.zeros((1, 1, 1, seq_length), dtype=tf.float32)
+        attention_mask_2 = tf.zeros((1, 1, 1, seq_length), dtype=tf.float32)
 
         attention_mask_1 = tf.where(tf.range(4)[None, :, None, None] > 1, 10000.0, attention_mask_1)
         attention_mask_1 = tf.where(tf.range(4)[None, :, None, None] > 2, -10000.0, attention_mask_1)
@@ -584,18 +584,16 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         tf.debugging.assert_near(
             local_attentions[0, 0, 0, :],
-            tf.convert_to_tensor(
-                [0.3328, 0.0000, 0.0000, 0.0000, 0.0000, 0.3355, 0.3318, 0.0000], dtype=tf.dtypes.float32
-            ),
+            tf.convert_to_tensor([0.3328, 0.0000, 0.0000, 0.0000, 0.0000, 0.3355, 0.3318, 0.0000], dtype=tf.float32),
             rtol=1e-3,
+            atol=1e-4,
         )
 
         tf.debugging.assert_near(
             local_attentions[1, 0, 0, :],
-            tf.convert_to_tensor(
-                [0.2492, 0.2502, 0.2502, 0.0000, 0.0000, 0.2505, 0.0000, 0.0000], dtype=tf.dtypes.float32
-            ),
+            tf.convert_to_tensor([0.2492, 0.2502, 0.2502, 0.0000, 0.0000, 0.2505, 0.0000, 0.0000], dtype=tf.float32),
             rtol=1e-3,
+            atol=1e-4,
         )
 
         # All the global attention weights must sum to 1.
@@ -603,13 +601,15 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         tf.debugging.assert_near(
             global_attentions[0, 0, 1, :],
-            tf.convert_to_tensor([0.2500, 0.2500, 0.2500, 0.2500], dtype=tf.dtypes.float32),
+            tf.convert_to_tensor([0.2500, 0.2500, 0.2500, 0.2500], dtype=tf.float32),
             rtol=1e-3,
+            atol=1e-4,
         )
         tf.debugging.assert_near(
             global_attentions[1, 0, 0, :],
-            tf.convert_to_tensor([0.2497, 0.2500, 0.2499, 0.2504], dtype=tf.dtypes.float32),
+            tf.convert_to_tensor([0.2497, 0.2500, 0.2499, 0.2504], dtype=tf.float32),
             rtol=1e-3,
+            atol=1e-4,
         )
 
     @slow
@@ -617,31 +617,31 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         model = TFLongformerModel.from_pretrained("allenai/longformer-base-4096")
 
         # 'Hello world!'
-        input_ids = tf.convert_to_tensor([[0, 20920, 232, 328, 1437, 2]], dtype=tf.dtypes.int32)
-        attention_mask = tf.ones(shape_list(input_ids), dtype=tf.dtypes.int32)
+        input_ids = tf.convert_to_tensor([[0, 20920, 232, 328, 1437, 2]], dtype=tf.int64)
+        attention_mask = tf.ones(shape_list(input_ids), dtype=tf.int64)
 
         output = model(input_ids, attention_mask=attention_mask)[0]
         output_without_mask = model(input_ids)[0]
 
-        expected_output_slice = tf.convert_to_tensor(
-            [0.0549, 0.1087, -0.1119, -0.0368, 0.0250], dtype=tf.dtypes.float32
-        )
+        expected_output_slice = tf.convert_to_tensor([0.0549, 0.1087, -0.1119, -0.0368, 0.0250], dtype=tf.float32)
 
-        tf.debugging.assert_near(output[0, 0, -5:], expected_output_slice, rtol=1e-3)
-        tf.debugging.assert_near(output_without_mask[0, 0, -5:], expected_output_slice, rtol=1e-3)
+        tf.debugging.assert_near(output[0, 0, -5:], expected_output_slice, rtol=1e-3, atol=1e-4)
+        tf.debugging.assert_near(output_without_mask[0, 0, -5:], expected_output_slice, rtol=1e-3, atol=1e-4)
 
     @slow
     def test_inference_no_head_long(self):
         model = TFLongformerModel.from_pretrained("allenai/longformer-base-4096")
 
         # 'Hello world! ' repeated 1000 times
-        input_ids = tf.convert_to_tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=tf.dtypes.int32)
+        input_ids = tf.convert_to_tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=tf.int64)
 
-        attention_mask = tf.ones(shape_list(input_ids), dtype=tf.dtypes.int32)
-        global_attention_mask = tf.zeros(shape_list(input_ids), dtype=tf.dtypes.int32)
+        attention_mask = tf.ones(shape_list(input_ids), dtype=tf.int64)
+        global_attention_mask = tf.zeros(shape_list(input_ids), dtype=tf.int64)
         # Set global attention on a few random positions
         global_attention_mask = tf.tensor_scatter_nd_update(
-            global_attention_mask, tf.constant([[0, 1], [0, 4], [0, 21]]), tf.constant([1, 1, 1])
+            global_attention_mask,
+            tf.constant([[0, 1], [0, 4], [0, 21]], dtype=tf.int64),
+            tf.constant([1, 1, 1], dtype=tf.int64),
         )
 
         output = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)[0]
@@ -650,15 +650,15 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         expected_output_mean = tf.constant(0.024267)
 
         # assert close
-        tf.debugging.assert_near(tf.reduce_sum(output), expected_output_sum, rtol=1e-4)
-        tf.debugging.assert_near(tf.reduce_mean(output), expected_output_mean, rtol=1e-4)
+        tf.debugging.assert_near(tf.reduce_sum(output), expected_output_sum, rtol=1e-4, atol=1e-4)
+        tf.debugging.assert_near(tf.reduce_mean(output), expected_output_mean, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_masked_lm_long(self):
         model = TFLongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
 
         # 'Hello world! ' repeated 1000 times
-        input_ids = tf.convert_to_tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=tf.dtypes.int32)
+        input_ids = tf.convert_to_tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=tf.int64)
 
         output = model(input_ids, labels=input_ids)
         loss = output.loss
@@ -669,9 +669,13 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         expected_prediction_scores_mean = tf.constant(-3.03477)
 
         # assert close
-        tf.debugging.assert_near(tf.reduce_mean(loss), expected_loss, rtol=1e-4)
-        tf.debugging.assert_near(tf.reduce_sum(prediction_scores), expected_prediction_scores_sum, rtol=1e-4)
-        tf.debugging.assert_near(tf.reduce_mean(prediction_scores), expected_prediction_scores_mean, rtol=1e-4)
+        tf.debugging.assert_near(tf.reduce_mean(loss), expected_loss, rtol=1e-4, atol=1e-4)
+        tf.debugging.assert_near(
+            tf.reduce_sum(prediction_scores), expected_prediction_scores_sum, rtol=1e-4, atol=1e-4
+        )
+        tf.debugging.assert_near(
+            tf.reduce_mean(prediction_scores), expected_prediction_scores_mean, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_inference_masked_lm(self):

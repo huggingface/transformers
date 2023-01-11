@@ -568,14 +568,15 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
 
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
+        with torch.no_grad():
+            output = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                visual_embeds=visual_embeds,
+                visual_attention_mask=visual_attention_mask,
+                visual_token_type_ids=visual_token_type_ids,
+            )
 
         vocab_size = 30522
 
@@ -606,14 +607,15 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
 
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
+        with torch.no_grad():
+            output = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                visual_embeds=visual_embeds,
+                visual_attention_mask=visual_attention_mask,
+                visual_token_type_ids=visual_token_type_ids,
+            )
 
         # vocab_size = 30522
 
@@ -637,14 +639,15 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
         visual_attention_mask = torch.tensor([1] * 10).reshape(1, -1)
 
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
+        with torch.no_grad():
+            output = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                visual_embeds=visual_embeds,
+                visual_attention_mask=visual_attention_mask,
+                visual_token_type_ids=visual_token_type_ids,
+            )
 
         # vocab_size = 30522
 
@@ -667,14 +670,15 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
         visual_token_type_ids = torch.ones(size=(1, 4, 10), dtype=torch.long)
         visual_attention_mask = torch.ones_like(visual_token_type_ids)
 
-        output = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            visual_embeds=visual_embeds,
-            visual_attention_mask=visual_attention_mask,
-            visual_token_type_ids=visual_token_type_ids,
-        )
+        with torch.no_grad():
+            output = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                visual_embeds=visual_embeds,
+                visual_attention_mask=visual_attention_mask,
+                visual_token_type_ids=visual_token_type_ids,
+            )
 
         # vocab_size = 30522
 

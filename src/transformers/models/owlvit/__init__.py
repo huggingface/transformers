@@ -32,6 +32,7 @@ _import_structure = {
     "configuration_owlvit": [
         "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OwlViTConfig",
+        "OwlViTOnnxConfig",
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
@@ -46,6 +47,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_owlvit"] = ["OwlViTFeatureExtractor"]
+    _import_structure["image_processing_owlvit"] = ["OwlViTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -66,6 +68,7 @@ if TYPE_CHECKING:
     from .configuration_owlvit import (
         OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OwlViTConfig,
+        OwlViTOnnxConfig,
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
@@ -78,6 +81,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_owlvit import OwlViTFeatureExtractor
+        from .image_processing_owlvit import OwlViTImageProcessor
 
     try:
         if not is_torch_available():

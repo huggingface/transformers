@@ -77,12 +77,12 @@ class ViTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ViTModel, ViTConfig
+    >>> from transformers import ViTConfig, ViTModel
 
     >>> # Initializing a ViT vit-base-patch16-224 style configuration
     >>> configuration = ViTConfig()
 
-    >>> # Initializing a model from the vit-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the vit-base-patch16-224 style configuration
     >>> model = ViTModel(configuration)
 
     >>> # Accessing the model configuration
@@ -101,7 +101,6 @@ class ViTConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=224,
         patch_size=16,
         num_channels=3,
@@ -135,7 +134,7 @@ class ViTOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
             ]
         )
 

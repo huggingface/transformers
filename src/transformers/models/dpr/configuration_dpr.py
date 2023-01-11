@@ -92,7 +92,21 @@ class DPRConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 0):
             Dimension of the projection for the context and question encoders. If it is set to zero (default), then no
             projection is done.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import DPRConfig, DPRContextEncoder
+
+    >>> # Initializing a DPR facebook/dpr-ctx_encoder-single-nq-base style configuration
+    >>> configuration = DPRConfig()
+
+    >>> # Initializing a model (with random weights) from the facebook/dpr-ctx_encoder-single-nq-base style configuration
+    >>> model = DPRContextEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "dpr"
 
     def __init__(

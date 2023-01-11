@@ -17,7 +17,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -31,6 +37,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_mobilevit"] = ["MobileViTFeatureExtractor"]
+    _import_structure["image_processing_mobilevit"] = ["MobileViTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -46,6 +53,19 @@ else:
         "MobileViTPreTrainedModel",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_mobilevit"] = [
+        "TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFMobileViTForImageClassification",
+        "TFMobileViTForSemanticSegmentation",
+        "TFMobileViTModel",
+        "TFMobileViTPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig, MobileViTOnnxConfig
@@ -57,6 +77,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_mobilevit import MobileViTFeatureExtractor
+        from .image_processing_mobilevit import MobileViTImageProcessor
 
     try:
         if not is_torch_available():
@@ -70,6 +91,20 @@ if TYPE_CHECKING:
             MobileViTForSemanticSegmentation,
             MobileViTModel,
             MobileViTPreTrainedModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_mobilevit import (
+            TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFMobileViTForImageClassification,
+            TFMobileViTForSemanticSegmentation,
+            TFMobileViTModel,
+            TFMobileViTPreTrainedModel,
         )
 
 

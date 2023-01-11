@@ -15,6 +15,8 @@
 """
 Image/Text processor class for OWL-ViT
 """
+
+import warnings
 from typing import List
 
 import numpy as np
@@ -27,29 +29,44 @@ from ...tokenization_utils_base import BatchEncoding
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
-    into a single processor that interits both the feature extractor and tokenizer functionalities. See the
+    Constructs an OWL-ViT processor which wraps [`OwlViTImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
+    into a single processor that interits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`OwlViTFeatureExtractor`]):
-            The feature extractor is a required input.
+        image_processor ([`OwlViTImageProcessor`]):
+            The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "OwlViTFeatureExtractor"
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "OwlViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
 
-    def __call__(self, text=None, images=None, padding="max_length", return_tensors="np", **kwargs):
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        super().__init__(image_processor, tokenizer)
+
+    def __call__(self, text=None, images=None, query_images=None, padding="max_length", return_tensors="np", **kwargs):
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -61,6 +78,10 @@ class OwlViTProcessor(ProcessorMixin):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
+            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The query image to be prepared, one query image is expected per target image to be queried. Each image
+                can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
+                should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -76,8 +97,10 @@ class OwlViTProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        if text is None and images is None:
-            raise ValueError("You have to specify at least one text or image. Both cannot be none.")
+        if text is None and query_images is None and images is None:
+            raise ValueError(
+                "You have to specify at least one text or query image or image. All three cannot be none."
+            )
 
         if text is not None:
             if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
@@ -128,23 +151,47 @@ class OwlViTProcessor(ProcessorMixin):
             encoding["input_ids"] = input_ids
             encoding["attention_mask"] = attention_mask
 
+        if query_images is not None:
+            encoding = BatchEncoding()
+            query_pixel_values = self.image_processor(
+                query_images, return_tensors=return_tensors, **kwargs
+            ).pixel_values
+            encoding["query_pixel_values"] = query_pixel_values
+
         if images is not None:
-            image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
             return encoding
-        elif text is not None:
+        elif query_images is not None and images is not None:
+            encoding["pixel_values"] = image_features.pixel_values
+            return encoding
+        elif text is not None or query_images is not None:
             return encoding
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 
     def post_process(self, *args, **kwargs):
         """
-        This method forwards all its arguments to [`OwlViTFeatureExtractor.post_process`]. Please refer to the
-        docstring of this method for more information.
+        This method forwards all its arguments to [`OwlViTImageProcessor.post_process`]. Please refer to the docstring
+        of this method for more information.
         """
-        return self.feature_extractor.post_process(*args, **kwargs)
+        return self.image_processor.post_process(*args, **kwargs)
+
+    def post_process_object_detection(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to [`OwlViTImageProcessor.post_process_object_detection`]. Please refer
+        to the docstring of this method for more information.
+        """
+        return self.image_processor.post_process_object_detection(*args, **kwargs)
+
+    def post_process_image_guided_detection(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to [`OwlViTImageProcessor.post_process_one_shot_object_detection`].
+        Please refer to the docstring of this method for more information.
+        """
+        return self.image_processor.post_process_image_guided_detection(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -159,3 +206,19 @@ class OwlViTProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor

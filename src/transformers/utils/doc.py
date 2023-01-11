@@ -201,7 +201,7 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> answer_end_index = outputs.end_logits.argmax()
 
     >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-    >>> tokenizer.decode(predict_answer_tokens)
+    >>> tokenizer.decode(predict_answer_tokens, skip_special_tokens=True)
     {expected_output}
     ```
 
@@ -242,7 +242,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> num_labels = len(model.config.id2label)
     >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
 
-    >>> labels = torch.tensor(1)
+    >>> labels = torch.tensor([1])
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
     {expected_loss}
@@ -1087,7 +1087,7 @@ def add_code_sample_docstrings(
             expected_loss=expected_loss,
         )
 
-        if "SequenceClassification" in model_class and modality == "audio":
+        if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]
         elif "SequenceClassification" in model_class:
             code_sample = sample_docstrings["SequenceClassification"]

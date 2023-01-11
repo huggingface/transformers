@@ -307,7 +307,7 @@ class FlaxEncoderDecoderMixin:
         eos_token_id = enc_dec_model.config.decoder.eos_token_id
         decoder_start_token_id = enc_dec_model.config.decoder.decoder_start_token_id
 
-        # Copied from generation_utils (GPT2 doesn't have `pad_token_id`)
+        # Copied from generation.utils (GPT2 doesn't have `pad_token_id`)
         if pad_token_id is None and eos_token_id is not None:
             pad_token_id = eos_token_id
         if decoder_start_token_id is None:

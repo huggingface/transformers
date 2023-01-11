@@ -24,7 +24,7 @@ import timeout_decorator  # noqa
 from transformers import OPTConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -32,7 +32,13 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import GPT2Tokenizer, OPTForCausalLM, OPTForSequenceClassification, OPTModel
+    from transformers import (
+        GPT2Tokenizer,
+        OPTForCausalLM,
+        OPTForQuestionAnswering,
+        OPTForSequenceClassification,
+        OPTModel,
+    )
 
 
 def prepare_opt_inputs_dict(
@@ -178,7 +184,11 @@ class OPTModelTester:
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (OPTModel, OPTForCausalLM, OPTForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (OPTModel, OPTForCausalLM, OPTForSequenceClassification, OPTForQuestionAnswering)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = True
@@ -480,3 +490,34 @@ class OPTGenerationTest(unittest.TestCase):
             self.assertFalse(
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
+
+    @slow
+    def test_contrastive_search_opt(self):
+        article = (
+            "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the "
+            "Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived "
+            "there?"
+        )
+
+        opt_tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
+        opt_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b").to(torch_device)
+        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = opt_model.generate(input_ids, penalty_alpha=0.6, top_k=5, max_length=256)
+        generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I "
+                "am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have "
+                "you lived there?\nStatue: A hundred years.\nHuman: And you’re from what country?\nStatue: The United "
+                "States of America.\nHuman: Why did you come to America?\nStatue: I came to escape the tyranny of my "
+                "country.\nHuman: What tyranny?\nStatue: They didn’t let me speak my mind.\nHuman: What was your "
+                "country?\nStatue: It was a country of immigrants.\nHuman: Who were the immigrants?\nStatue: They "
+                "were from all over the world.\nHuman: What language did they speak?\nStatue: French, Spanish, "
+                "Italian, German, English—you name it.\nHuman: And where did they come from?\nStatue: They came from "
+                "every country in the world.\nHuman: And you were born in what country?\nStatue: I was born in "
+                "France.\nHuman: And your parents were French?\nStatue"
+            ],
+        )

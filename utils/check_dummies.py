@@ -26,7 +26,7 @@ PATH_TO_TRANSFORMERS = "src/transformers"
 _re_backend = re.compile(r"is\_([a-z_]*)_available()")
 # Matches from xxx import bla
 _re_single_line_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
-_re_test_backend = re.compile(r"^\s+if\s+not\s+is\_[a-z_]*\_available\(\)")
+_re_test_backend = re.compile(r"^\s+if\s+not\s+\(?is\_[a-z_]*\_available\(\)")
 
 
 DUMMY_CONSTANT = """
@@ -105,9 +105,10 @@ def create_dummy_object(name, backend_name):
         return DUMMY_CLASS.format(name, backend_name)
 
 
-def create_dummy_files():
+def create_dummy_files(backend_specific_objects=None):
     """Create the content of the dummy files."""
-    backend_specific_objects = read_init()
+    if backend_specific_objects is None:
+        backend_specific_objects = read_init()
     # For special correspondence backend to module name as used in the function requires_modulename
     dummy_files = {}
 

@@ -218,93 +218,9 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
-    def test_resize_token_embeddings(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def _get_word_embedding_weight(model, embedding_layer):
-            if hasattr(embedding_layer, "weight"):
-                return embedding_layer.weight
-            else:
-                # Here we build the word embeddings weights if not exists.
-                # And then we retry to get the attribute once built.
-                model(model.dummy_inputs)
-                if hasattr(embedding_layer, "weight"):
-                    return embedding_layer.weight
-                else:
-                    return None
-
-        for model_class in self.all_model_classes:
-            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
-                # build the embeddings
-                model = model_class(config=config)
-                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                old_final_logits_bias = model.get_bias()
-
-                # reshape the embeddings
-                model.resize_token_embeddings(size)
-                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                new_final_logits_bias = model.get_bias()
-
-                # check that the resized embeddings size matches the desired size.
-                assert_size = size if size is not None else config.vocab_size
-
-                self.assertEqual(new_input_embeddings.shape[0], assert_size)
-
-                # check that weights remain the same after resizing
-                models_equal = True
-                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
-                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                        models_equal = False
-                self.assertTrue(models_equal)
-
-                if old_output_embeddings is not None and new_output_embeddings is not None:
-                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
-
-                    models_equal = True
-                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
-
-                if old_final_logits_bias is not None and new_final_logits_bias is not None:
-                    old_final_logits_bias = old_final_logits_bias["final_logits_bias"]
-                    new_final_logits_bias = new_final_logits_bias["final_logits_bias"]
-                    self.assertEqual(new_final_logits_bias.shape[0], 1)
-                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
-
-                    models_equal = True
-                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
-                        for p1, p2 in zip(old, new):
-                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                                models_equal = False
-                    self.assertTrue(models_equal)
-
     @tooslow
     def test_saved_model_creation(self):
         pass
-
-
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if tf.debugging.assert_near(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
-
-
-def _long_tensor(tok_lst):
-    return tf.constant(tok_lst, dtype=tf.int32)
-
-
-TOLERANCE = 1e-4
 
 
 @require_sentencepiece

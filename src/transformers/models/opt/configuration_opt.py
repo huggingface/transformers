@@ -67,8 +67,6 @@ class OPTConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
         layerdrop: (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
@@ -76,16 +74,20 @@ class OPTConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        enable_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not if the linear layers in the attention blocks should use the bias term.
+        layer_norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
+            Whether or not if the layer norms should have learnable parameters.
 
     Example:
 
     ```python
-    >>> from transformers import OPTModel, OPTConfig
+    >>> from transformers import OPTConfig, OPTModel
 
     >>> # Initializing a OPT facebook/opt-large style configuration
     >>> configuration = OPTConfig()
 
-    >>> # Initializing a model from the facebook/opt-large style configuration
+    >>> # Initializing a model (with random weights) from the facebook/opt-large style configuration
     >>> model = OPTModel(configuration)
 
     >>> # Accessing the model configuration
@@ -106,7 +108,6 @@ class OPTConfig(PretrainedConfig):
         word_embed_proj_dim=None,
         dropout=0.1,
         attention_dropout=0.0,
-        activation_dropout=0.0,
         num_attention_heads=12,
         activation_function="relu",
         layerdrop=0.0,
@@ -115,6 +116,8 @@ class OPTConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=2,
         eos_token_id=2,
+        enable_bias=True,
+        layer_norm_elementwise_affine=True,
         **kwargs
     ):
         super().__init__(
@@ -132,12 +135,14 @@ class OPTConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
         self.activation_function = activation_function
         self.init_std = init_std
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.do_layer_norm_before = do_layer_norm_before
+        # We keep these variables at `True` for backward compatibility.
+        self.enable_bias = enable_bias
+        self.layer_norm_elementwise_affine = layer_norm_elementwise_affine
 
         # Note that the only purpose of `_remove_final_layer_norm` is to keep backward compatibility
         # with checkpoints that have been fine-tuned before transformers v4.20.1

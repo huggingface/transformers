@@ -48,6 +48,8 @@ class NezhaConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         classifier_dropout (`float`, optional, defaults to 0.1):
             The dropout ratio for attached classifiers.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
 
     Example:
 
@@ -57,13 +59,12 @@ class NezhaConfig(PretrainedConfig):
     >>> # Initializing an Nezha configuration
     >>> configuration = NezhaConfig()
 
-    >>> # Initializing a model from the Nezha-base style configuration model
+    >>> # Initializing a model (with random weights) from the Nezha-base style configuration model
     >>> model = NezhaModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
     pretrained_config_archive_map = NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "nezha"
 

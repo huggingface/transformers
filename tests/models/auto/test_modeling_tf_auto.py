@@ -21,6 +21,7 @@ from transformers import CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config, T5C
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
+    RequestCounter,
     require_tensorflow_probability,
     require_tf,
     slow,
@@ -280,10 +281,27 @@ class TFAutoModelTest(unittest.TestCase):
     def test_model_file_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named tf_model.h5",
+            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
         ):
             _ = TFAutoModel.from_pretrained("hf-internal-testing/config-no-model")
 
     def test_model_from_pt_suggestion(self):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_pt=True` to load this model"):
             _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
+
+    def test_cached_model_has_minimum_calls_to_head(self):
+        # Make sure we have cached the model.
+        _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)
+
+        # With a sharded checkpoint
+        _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
+        with RequestCounter() as counter:
+            _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)

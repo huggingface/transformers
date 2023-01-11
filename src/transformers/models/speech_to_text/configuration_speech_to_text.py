@@ -70,10 +70,10 @@ class Speech2TextConfig(PretrainedConfig):
             The dropout ratio for classifier.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -100,12 +100,12 @@ class Speech2TextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Speech2TextModel, Speech2TextConfig
+    >>> from transformers import Speech2TextConfig, Speech2TextModel
 
     >>> # Initializing a Speech2Text s2t_transformer_s style configuration
     >>> configuration = Speech2TextConfig()
 
-    >>> # Initializing a model from the s2t_transformer_s style configuration
+    >>> # Initializing a model (with random weights) from the s2t_transformer_s style configuration
     >>> model = Speech2TextModel(configuration)
 
     >>> # Accessing the model configuration

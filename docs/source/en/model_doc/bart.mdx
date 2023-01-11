@@ -32,6 +32,11 @@ According to the abstract,
   state-of-the-art results on a range of abstractive dialogue, question answering, and summarization tasks, with gains
   of up to 6 ROUGE.
 
+Tips:
+
+- BART is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
+  the left.
+
 This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The Authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/bart).
 
 
@@ -53,7 +58,7 @@ This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The
 - Model predictions are intended to be identical to the original implementation when
   `forced_bos_token_id=0`. This only works, however, if the string you pass to
   [`fairseq.encode`] starts with a space.
-- [`~generation_utils.GenerationMixin.generate`] should be used for conditional generation tasks like
+- [`~generation.GenerationMixin.generate`] should be used for conditional generation tasks like
   summarization, see the example in that docstrings.
 - Models that load the *facebook/bart-large-cnn* weights will not have a `mask_token_id`, or be able to perform
   mask-filling tasks.
@@ -74,6 +79,33 @@ assert tok.batch_decode(generated_ids, skip_special_tokens=True) == [
     "UN Chief Says There Is No Plan to Stop Chemical Weapons in Syria"
 ]
 ```
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with BART. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+<PipelineTag pipeline="summarization"/>
+
+- A blog post on [Distributed Training: Train BART/T5 for Summarization using 🤗 Transformers and Amazon SageMaker](https://huggingface.co/blog/sagemaker-distributed-training-seq2seq).
+- A notebook on how to [finetune BART for summarization with fastai using blurr](https://colab.research.google.com/github/ohmeow/ohmeow_website/blob/master/_notebooks/2020-05-23-text-generation-with-blurr.ipynb). 🌎
+- A notebook on how to [finetune BART for summarization in two languages with Trainer class](https://colab.research.google.com/github/elsanns/xai-nlp-notebooks/blob/master/fine_tune_bart_summarization_two_langs.ipynb). 🌎
+- [`BartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) and [noteboook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb).
+- [`TFBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).
+- [`FlaxBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization).
+- [Summarization](https://huggingface.co/course/chapter7/5?fw=pt#summarization) chapter of the 🤗 Hugging Face course.
+
+<PipelineTag pipeline="fill-mask"/>
+
+- [`BartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`TFBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
+- [`FlaxBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
+- [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
+
+<PipelineTag pipeline="translation"/>
+
+- A notebook on how to [finetune mBART using Seq2SeqTrainer for Hindi to English translation](https://colab.research.google.com/github/vasudevgupta7/huggingface-tutorials/blob/main/translation_training.ipynb). 🌎
+- [`BartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb).
+- [`TFBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb).
 
 ## BartConfig
 
@@ -123,6 +155,11 @@ assert tok.batch_decode(generated_ids, skip_special_tokens=True) == [
 ## TFBartForConditionalGeneration
 
 [[autodoc]] TFBartForConditionalGeneration
+    - call
+
+## TFBartForSequenceClassification
+
+[[autodoc]] TFBartForSequenceClassification
     - call
 
 ## FlaxBartModel

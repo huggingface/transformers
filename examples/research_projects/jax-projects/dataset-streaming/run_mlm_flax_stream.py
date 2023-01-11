@@ -562,7 +562,7 @@ if __name__ == "__main__":
             samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
         except StopIteration:
             # Once the end of the dataset stream is reached, the training iterator
-            # is reinitialized and reshuffled and a new eval dataset is randomely chosen.
+            # is reinitialized and reshuffled and a new eval dataset is randomly chosen.
             shuffle_seed += 1
             tokenized_datasets.set_epoch(shuffle_seed)
 
@@ -608,9 +608,9 @@ if __name__ == "__main__":
 
             # normalize eval metrics
             eval_metrics = get_metrics(eval_metrics)
-            eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
+            eval_metrics = jax.tree_util.tree_map(jnp.sum, eval_metrics)
             eval_normalizer = eval_metrics.pop("normalizer")
-            eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
+            eval_metrics = jax.tree_util.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
             # Update progress bar
             steps.desc = (
@@ -624,7 +624,7 @@ if __name__ == "__main__":
 
             # save checkpoint after each epoch and push checkpoint to the hub
             if jax.process_index() == 0:
-                params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+                params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
                 model.save_pretrained(
                     training_args.output_dir,
                     params=params,

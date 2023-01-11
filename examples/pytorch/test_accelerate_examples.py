@@ -186,6 +186,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
+            --seed=42
             --max_train_steps=10
             --num_warmup_steps=2
             --learning_rate=2e-4

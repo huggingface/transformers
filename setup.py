@@ -98,11 +98,12 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
-    "black==22.3",
+    "black==22.3",  # after updating to black 2023, also update Python version in pyproject.toml to 3.7
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets",
+    "datasets!=2.5.0",
+    "decord==0.6.0",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
     "evaluate>=0.2.0",
@@ -116,14 +117,17 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.8.1,<1.0",
+    "huggingface-hub>=0.10.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
     "jax>=0.2.8,!=0.3.2,<=0.3.6",
     "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
+    "kenlm",
+    "keras-nlp>=0.3.1",
     "nltk",
+    "natten>=0.14.4",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -133,7 +137,7 @@ _deps = [
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf<=3.20.1",
+    "protobuf<=3.20.2",
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
@@ -145,29 +149,34 @@ _deps = [
     "regex!=2019.12.17",
     "requests",
     "rjieba",
-    "rouge-score",
+    "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
+    "safetensors>=0.2.1",
     "sagemaker>=2.31.0",
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "librosa",
     "starlette",
-    "tensorflow-cpu>=2.3",
-    "tensorflow>=2.3",
+    "tensorflow-cpu>=2.4,<2.12",
+    "tensorflow>=2.4,<2.12",
     "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.11.1,!=0.11.3,<0.13",
-    "torch>=1.0,!=0.12.0",
+    "tokenizers>=0.11.1,!=0.11.3,<0.14",
+    "torch>=1.7,!=1.12.0",
     "torchaudio",
-    "pyctcdecode>=0.3.0",
+    "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
+    "beautifulsoup4",
+    "sudachipy>=0.6.6",
+    "sudachidict_core>=20220729",
+    "rhoknp>=1.1.0",
 ]
 
 
@@ -177,7 +186,7 @@ _deps = [
 # packaging: "packaging"
 #
 # some of the values are versioned whereas others aren't.
-deps = {b: a for a, b in (re.findall(r"^(([^!=<>~]+)(?:[!=<>~].*)?$)", x)[0] for x in _deps)}
+deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
@@ -234,14 +243,13 @@ class DepsTableUpdateCommand(Command):
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
 
-
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 
 extras["torch"] = deps_list("torch")
 extras["accelerate"] = deps_list("accelerate")
@@ -269,7 +277,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -277,7 +285,9 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
+extras["video"] = deps_list("decord")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -300,14 +310,16 @@ extras["testing"] = (
         "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
+        "safetensors",
+        "beautifulsoup4",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
 
-extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"]
+extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 
-extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
+extras["quality"] = deps_list("black", "datasets", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -321,6 +333,7 @@ extras["all"] = (
     + extras["timm"]
     + extras["codecarbon"]
     + extras["accelerate"]
+    + extras["video"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
@@ -400,7 +413,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.22.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.26.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -411,6 +424,7 @@ setup(
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
+    package_data={"transformers": ["py.typed", "*.cu", "*.cpp", "*.cuh", "*.h"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},

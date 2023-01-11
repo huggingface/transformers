@@ -282,8 +282,20 @@ class GPT2Converter(Converter):
 
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
-
+        if self.original_tokenizer.add_bos_token:
+            bos = self.original_tokenizer.bos_token
+            bos_token_id = self.original_tokenizer.bos_token_id
+            tokenizer.post_processor = processors.TemplateProcessing(
+                single=f"{bos}:0 $A:0",  # token_type_id is 2 for Funnel transformer
+                pair=f"{bos}:0 $A:0 $B:1",
+                special_tokens=[
+                    (bos, bos_token_id),
+                ],
+            )
+        else:
+            # XXX trim_offsets=False actually means this post_processor doesn't
+            # really do anything.
+            tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
         return tokenizer
 
 
@@ -1031,6 +1043,44 @@ class XGLMConverter(SpmConverter):
         )
 
 
+class MarkupLMConverter(Converter):
+    def converted(self) -> Tokenizer:
+        ot = self.original_tokenizer
+        vocab = ot.encoder
+        merges = list(ot.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+                unk_token=self.original_tokenizer.unk_token,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls} $A {sep}",
+            pair=f"{cls} $A {sep} $B {sep}",
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
+        )
+
+        return tokenizer
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
@@ -1060,6 +1110,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,
+    "MarkupLMTokenizer": MarkupLMConverter,
     "MBartTokenizer": MBartConverter,
     "MBart50Tokenizer": MBart50Converter,
     "MPNetTokenizer": MPNetConverter,
