@@ -46,6 +46,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
+@require_torch
 class SpeechT5WaveformFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
@@ -98,6 +99,7 @@ class SpeechT5WaveformFeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
+@require_torch
 class SpeechT5WaveformFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
     feature_extraction_class = SpeechT5WaveformFeatureExtractor
@@ -199,7 +201,6 @@ class SpeechT5WaveformFeatureExtractionTest(SequenceFeatureExtractionTestMixin, 
         # make sure that if max_length > longest -> then pad to longest
         self.assertTrue(input_values.shape == (3, 1200))
 
-    @require_torch
     def test_double_precision_pad(self):
         import torch
 
@@ -214,6 +215,8 @@ class SpeechT5WaveformFeatureExtractionTest(SequenceFeatureExtractionTestMixin, 
             self.assertTrue(pt_processed.input_values.dtype == torch.float32)
 
 
+@require_torch
+@require_torchaudio
 class SpeechT5SpectrogramFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
