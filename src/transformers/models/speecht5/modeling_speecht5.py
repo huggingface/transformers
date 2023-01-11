@@ -2204,10 +2204,10 @@ class SpeechT5EncoderWrapper(SpeechT5PreTrainedModel):
 )
 class SpeechT5ForCTC(SpeechT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
+        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
     ]
     _keys_to_ignore_on_save = [
-        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
+        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
     ]
 
     def __init__(self, config: SpeechT5Config):
@@ -2365,10 +2365,11 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
 )
 class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
+        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
+        r"text_decoder_postnet.lm_head.weight",
     ]
     _keys_to_ignore_on_save = [
-        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
+        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
     ]
 
     def __init__(self, config: SpeechT5Config):
