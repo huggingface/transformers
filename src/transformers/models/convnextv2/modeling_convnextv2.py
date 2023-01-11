@@ -181,7 +181,8 @@ class ConvNeXtV2Layer(nn.Module):
         self.layernorm = ConvNeXtV2LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
-        self.pwconv2 = GRN(4 * dim, dim)
+        self.grn = GRN(4 * dim)
+        self.pwconv2 = nn.Linear(4 * dim, dim)
         self.layer_scale_parameter = (
             nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
             if config.layer_scale_init_value > 0
@@ -196,9 +197,8 @@ class ConvNeXtV2Layer(nn.Module):
         x = self.layernorm(x)
         x = self.pwconv1(x)
         x = self.act(x)
+        x = self.grn(x)
         x = self.pwconv2(x)
-        if self.layer_scale_parameter is not None:
-            x = self.layer_scale_parameter * x
         x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
 
         x = input + self.drop_path(x)
