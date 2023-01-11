@@ -161,35 +161,41 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     logits = model(pixel_values).logits
 
     # note: the logits below were obtained without center cropping
-    if checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_tiny_1k_224_ema.pth":
+    if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_atto_1k_224_ema.pt":
         expected_logits = torch.tensor([-0.1210, -0.6605, 0.1918])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_small_1k_224_ema.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_femto_1k_224_ema.pt":
         expected_logits = torch.tensor([-0.4473, -0.1847, -0.6365])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_1k_224_ema.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_pico_1k_224_ema.pt":
         expected_logits = torch.tensor([0.4525, 0.7539, 0.0308])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_1k_384.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_nano_1k_224_ema.pt":
         expected_logits = torch.tensor([0.3561, 0.6350, -0.0384])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_1k_224_ema.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_tiny_1k_224_ema.pt":
         expected_logits = torch.tensor([0.4174, -0.0989, 0.1489])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_1k_384.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_base_1k_224_ema.pt":
         expected_logits = torch.tensor([0.2513, -0.1349, -0.1613])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_22k_224.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_large_1k_224_ema.pt":
         expected_logits = torch.tensor([1.2980, 0.3631, -0.1198])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_22k_224.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_huge_1k_224_ema.pt":
         expected_logits = torch.tensor([1.2963, 0.1227, 0.1723])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_xlarge_22k_224.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_nano_22k_224_ema.pt":
         expected_logits = torch.tensor([1.7956, 0.8390, 0.2820])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_22k_1k_224.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_nano_22k_384_ema.pt":
         expected_logits = torch.tensor([-0.2822, -0.0502, -0.0878])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_22k_1k_384.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_tiny_22k_224_ema.pt":
         expected_logits = torch.tensor([-0.5672, -0.0730, -0.4348])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_22k_1k_224.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_tiny_22k_384_ema.pt":
         expected_logits = torch.tensor([0.2681, 0.2365, 0.6246])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_22k_1k_384.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_224_ema.pt":
         expected_logits = torch.tensor([-0.2642, 0.3931, 0.5116])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_xlarge_22k_1k_224_ema.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_384_ema.pt":
         expected_logits = torch.tensor([-0.6677, -0.1873, -0.8379])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_xlarge_22k_1k_384_ema.pth":
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_large_22k_224_ema.pt":
+        expected_logits = torch.tensor([-0.7749, -0.2967, -0.6444])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_large_22k_384_ema.pt":
+        expected_logits = torch.tensor([-0.7749, -0.2967, -0.6444])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_huge_22k_384_ema.pt":
+        expected_logits = torch.tensor([-0.7749, -0.2967, -0.6444])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_huge_22k_512_ema.pt":
         expected_logits = torch.tensor([-0.7749, -0.2967, -0.6444])
     else:
         raise ValueError(f"Unknown URL: {checkpoint_url}")
