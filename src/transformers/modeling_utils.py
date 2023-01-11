@@ -1855,7 +1855,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
 
                 <Tip>
 
@@ -1922,10 +1924,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             load_in_8bit_skip_modules (`List[str]`, *optional*):
                 An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such
                 as Jukebox that has several heads in different places and not necessarily at the last position.
-            subfolder (`str`, *optional*, defaults to `""`):
-                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
-                specify the folder name here.
-
+            transform_fn (Callable[[nn.Module], None], *optional*):
+                Arbitrary transform to apply on the model before loading weights. The parameter `low_cpu_mem_usage`
+                must be set to True for the model to be loaded on the meta device before doing the transform. The
+                transform_fn must take as its first input a nn.Module on meta device, with optionally other following
+                arguments, and returns None.
+            transform_config (Dict[str, Any], *optional*):
+                Optional arguments to pass to the `transform_fn`. The transform config can be saved as a
+                `transform_config.json` file, which will be used in case this argument is not specified and the file
+                `transform_config.json` is found in the model repository.
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -2002,6 +2009,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _fast_init = kwargs.pop("_fast_init", True)
         torch_dtype = kwargs.pop("torch_dtype", None)
         low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", None)
+        transform_fn = kwargs.pop("transform_fn", None)
+        transform_config = kwargs.pop("transform_config", None)
         device_map = kwargs.pop("device_map", None)
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
@@ -2358,6 +2367,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
+
+            if transform_fn is not None and low_cpu_mem_usage:
+                # must use init_empty_weights
+                if transform_config is not None:
+                    transform_fn(model, **transform_config)
+                else:
+                    transform_fn(model)
+
+            if transform_fn is not None and not low_cpu_mem_usage:
+                raise ValueError("The argument transform_fn requires low_cpu_mem_usage=True.")
 
         # Check first if we are `from_pt`
         if use_keep_in_fp32_modules:
