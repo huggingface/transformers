@@ -10,31 +10,31 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Multilingual models for inference
+# 推論のための多言語モデル
 
 [[open-in-colab]]
 
-There are several multilingual models in 🤗 Transformers, and their inference usage differs from monolingual models. Not *all* multilingual model usage is different though. Some models, like [bert-base-multilingual-uncased](https://huggingface.co/bert-base-multilingual-uncased), can be used just like a monolingual model. This guide will show you how to use multilingual models whose usage differs for inference.
+🤗 Transformers にはいくつかの多言語モデルがあり、それらの推論の使用方法は単一言語モデルとは異なります。ただし、多言語モデルの使用方法がすべて異なるわけではありません。 [bert-base-multilingual-uncased](https://huggingface.co/bert-base-multilingual-uncased) などの一部のモデルは、単一言語モデルと同様に使用できます。 このガイドでは、推論のために使用方法が異なる多言語モデルをどのように使うかを示します。
 
 ## XLM
 
-XLM has ten different checkpoints, only one of which is monolingual. The nine remaining model checkpoints can be split into two categories: the checkpoints that use language embeddings and those that don't.
+XLM には10の異なるチェックポイントがあり、そのうちの1つだけが単一言語です。 残りの9つのモデルチェックポイントは、言語埋め込みを使用するチェックポイントと使用しないチェックポイントの2つのカテゴリに分けることができます。
 
-### XLM with language embeddings
+### 言語の埋め込みがある XLM
 
-The following XLM models use language embeddings to specify the language used at inference:
+次の XLM モデルは、言語の埋め込みを使用して、推論で使用される言語を指定します。
 
-- `xlm-mlm-ende-1024` (Masked language modeling, English-German)
-- `xlm-mlm-enfr-1024` (Masked language modeling, English-French)
-- `xlm-mlm-enro-1024` (Masked language modeling, English-Romanian)
-- `xlm-mlm-xnli15-1024` (Masked language modeling, XNLI languages)
-- `xlm-mlm-tlm-xnli15-1024` (Masked language modeling + translation, XNLI languages)
-- `xlm-clm-enfr-1024` (Causal language modeling, English-French)
-- `xlm-clm-ende-1024` (Causal language modeling, English-German)
+- `xlm-mlm-ende-1024` (マスク化された言語モデリング、英語-ドイツ語)
+- `xlm-mlm-enfr-1024` (マスク化された言語モデリング、英語-フランス語)
+- `xlm-mlm-enro-1024` (マスク化された言語モデリング、英語-ルーマニア語)
+- `xlm-mlm-xnli15-1024` (マスク化された言語モデリング、XNLI 言語)
+- `xlm-mlm-tlm-xnli15-1024` (マスク化された言語モデリング + 翻訳 + XNLI 言語)
+- `xlm-clm-enfr-1024` (因果言語モデリング、英語-フランス語)
+- `xlm-clm-ende-1024` (因果言語モデリング、英語-ドイツ語)
 
-Language embeddings are represented as a tensor of the same shape as the `input_ids` passed to the model. The values in these tensors depend on the language used and are identified by the tokenizer's `lang2id` and `id2lang` attributes.
+言語の埋め込みは、モデルに渡される `input_ids` と同じ形状のテンソルとして表されます。 これらのテンソルの値は、使用される言語に依存し、トークナイザーの `lang2id` および `id2lang` 属性によって識別されます。
 
-In this example, load the `xlm-clm-enfr-1024` checkpoint (Causal language modeling, English-French):
+この例では、`xlm-clm-enfr-1024` チェックポイントをロードします (因果言語モデリング、英語-フランス語)。
 
 ```py
 >>> import torch
@@ -44,20 +44,20 @@ In this example, load the `xlm-clm-enfr-1024` checkpoint (Causal language modeli
 >>> model = XLMWithLMHeadModel.from_pretrained("xlm-clm-enfr-1024")
 ```
 
-The `lang2id` attribute of the tokenizer displays this model's languages and their ids:
+トークナイザーの `lang2id` 属性は、このモデルの言語とその ID を表示します。
 
 ```py
 >>> print(tokenizer.lang2id)
 {'en': 0, 'fr': 1}
 ```
 
-Next, create an example input:
+次に、入力例を作成します。
 
 ```py
 >>> input_ids = torch.tensor([tokenizer.encode("Wikipedia was used to")])  # batch size of 1
 ```
 
-Set the language id as `"en"` and use it to define the language embedding. The language embedding is a tensor filled with `0` since that is the language id for English. This tensor should be the same size as `input_ids`.
+言語 ID を `en` に設定し、それを使用して言語の埋め込みを定義します。 言語の埋め込みは、英語の言語 ID であるため、`0` で埋められたテンソルです。 このテンソルは `input_ids` と同じサイズにする必要があります。
 
 ```py
 >>> language_id = tokenizer.lang2id["en"]  # 0
@@ -67,41 +67,40 @@ Set the language id as `"en"` and use it to define the language embedding. The l
 >>> langs = langs.view(1, -1)  # is now of shape [1, sequence_length] (we have a batch size of 1)
 ```
 
-Now you can pass the `input_ids` and language embedding to the model:
+これで、`input_ids` と言語の埋め込みをモデルに渡すことができます。
 
 ```py
 >>> outputs = model(input_ids, langs=langs)
 ```
 
-The [run_generation.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation/run_generation.py) script can generate text with language embeddings using the `xlm-clm` checkpoints.
+[run_generation.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation/run_generation.py) スクリプトは、`xlm-clm` チェックポイントを使用して、言語が埋め込まれたテキストを生成できます。
 
-### XLM without language embeddings
+### 言語の埋め込みがないXLM
 
-The following XLM models do not require language embeddings during inference:
+次の XLM モデルは、推論中に言語の埋め込みを必要としません。
 
-- `xlm-mlm-17-1280` (Masked language modeling, 17 languages)
-- `xlm-mlm-100-1280` (Masked language modeling, 100 languages)
+- `xlm-mlm-17-1280` (マスク化された言語モデリング、17の言語)
+- `xlm-mlm-100-1280` (マスク化された言語モデリング、100の言語)
 
-These models are used for generic sentence representations, unlike the previous XLM checkpoints.
+これらのモデルは、以前の XLM チェックポイントとは異なり、一般的な文の表現に使用されます。
 
 ## BERT
 
-The following BERT models can be used for multilingual tasks:
+以下の BERT モデルは、多言語タスクに使用できます。
 
-- `bert-base-multilingual-uncased` (Masked language modeling + Next sentence prediction, 102 languages)
-- `bert-base-multilingual-cased` (Masked language modeling + Next sentence prediction, 104 languages)
+- `bert-base-multilingual-uncased` (マスク化された言語モデリング + 次の文の予測、102の言語)
+- `bert-base-multilingual-cased` (マスク化された言語モデリング + 次の文の予測、104の言語)
 
-These models do not require language embeddings during inference. They should identify the language from the
-context and infer accordingly.
+これらのモデルは、推論中に言語の埋め込みを必要としません。 文脈から言語を識別し、それに応じて推測する必要があります。
 
 ## XLM-RoBERTa
 
-The following XLM-RoBERTa models can be used for multilingual tasks:
+次の XLM-RoBERTa モデルは、多言語タスクに使用できます。
 
-- `xlm-roberta-base` (Masked language modeling, 100 languages)
-- `xlm-roberta-large` (Masked language modeling, 100 languages)
+- `xlm-roberta-base` (マスク化された言語モデリング、100の言語)
+- `xlm-roberta-large` (マスク化された言語モデリング、100の言語)
 
-XLM-RoBERTa was trained on 2.5TB of newly created and cleaned CommonCrawl data in 100 languages. It provides strong gains over previously released multilingual models like mBERT or XLM on downstream tasks like classification, sequence labeling, and question answering.
+XLM-RoBERTa は、100の言語で新しく作成およびクリーニングされた2.5 TB の CommonCrawl データでトレーニングされました。 これは、分類、シーケンスのラベル付け、質問応答などのダウンストリームタスクで、mBERT や XLM などの以前にリリースされた多言語モデルを大幅に改善します。
 
 ## M2M100
 
