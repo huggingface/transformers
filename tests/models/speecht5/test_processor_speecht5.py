@@ -19,25 +19,29 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.models.speecht5 import (
-    SpeechT5CTCTokenizer,
-    SpeechT5ProcessorForCTC,
-    SpeechT5ProcessorForSpeechToText,
-    SpeechT5ProcessorForTextToSpeech,
-    SpeechT5SpectrogramFeatureExtractor,
-    SpeechT5Tokenizer,
-    SpeechT5WaveformFeatureExtractor,
-)
-from transformers.testing_utils import get_tests_dir
+from transformers import is_speech_available, is_torch_available
+from transformers.models.speecht5 import SpeechT5CTCTokenizer, SpeechT5Tokenizer
+from transformers.testing_utils import get_tests_dir, require_torch, require_torchaudio
 from transformers.tokenization_utils import AddedToken
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
-from .test_feature_extraction_speecht5 import floats_list
+
+if is_speech_available() and is_torch_available():
+    from transformers import (
+        SpeechT5ProcessorForCTC,
+        SpeechT5ProcessorForSpeechToText,
+        SpeechT5ProcessorForTextToSpeech,
+        SpeechT5SpectrogramFeatureExtractor,
+        SpeechT5WaveformFeatureExtractor,
+    )
+
+    from .test_feature_extraction_speecht5 import floats_list
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")
 
 
+@require_torch
 class SpeechT5ProcessorForSpeechToTextTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -155,6 +159,7 @@ class SpeechT5ProcessorForSpeechToTextTest(unittest.TestCase):
         )
 
 
+@require_torch
 class SpeechT5ProcessorForCTCTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -276,6 +281,8 @@ class SpeechT5ProcessorForCTCTest(unittest.TestCase):
         )
 
 
+@require_torch
+@require_torchaudio
 class SpeechT5ProcessorForTextToSpeechTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()

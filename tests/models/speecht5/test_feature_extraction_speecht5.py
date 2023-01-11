@@ -102,7 +102,7 @@ class SpeechT5WaveformFeatureExtractionTester(unittest.TestCase):
 @require_torch
 class SpeechT5WaveformFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
-    feature_extraction_class = SpeechT5WaveformFeatureExtractor
+    feature_extraction_class = SpeechT5WaveformFeatureExtractor if is_speech_available() else None
 
     def setUp(self):
         self.feat_extract_tester = SpeechT5WaveformFeatureExtractionTester(self)
@@ -290,7 +290,7 @@ class SpeechT5SpectrogramFeatureExtractionTester(unittest.TestCase):
 @require_torchaudio
 class SpeechT5SpectrogramFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
-    feature_extraction_class = SpeechT5SpectrogramFeatureExtractor
+    feature_extraction_class = SpeechT5SpectrogramFeatureExtractor if is_speech_available() else None
 
     def setUp(self):
         self.feat_extract_tester = SpeechT5SpectrogramFeatureExtractionTester(self)
