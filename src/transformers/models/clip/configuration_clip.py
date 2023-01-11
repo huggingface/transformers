@@ -290,6 +290,7 @@ class CLIPConfig(PretrainedConfig):
     >>> configuration = model.config
 
     >>> # We can also initialize a CLIPConfig from a CLIPTextConfig and a CLIPVisionConfig
+    >>> from transformers import CLIPTextConfig, CLIPVisionConfig
 
     >>> # Initializing a CLIPText and CLIPVision configuration
     >>> config_text = CLIPTextConfig()
