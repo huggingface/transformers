@@ -1309,12 +1309,9 @@ class Trainer:
 
         if not training:
             model.eval()
-            inplace = False
-            if not self.is_in_train:
-                dtype = torch.bfloat16 if self.args.bf16_full_eval else dtype
-                inplace = True
+            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
             # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
-            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=inplace)
+            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
         else:
             if not model.training:
                 model.train()
