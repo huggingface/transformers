@@ -104,12 +104,12 @@ XLM-RoBERTa は、100の言語で新しく作成およびクリーニングさ�
 
 ## M2M100
 
-The following M2M100 models can be used for multilingual translation:
+次の M2M100 モデルは、多言語翻訳に使用できます。
 
-- `facebook/m2m100_418M` (Translation)
-- `facebook/m2m100_1.2B` (Translation)
+- `facebook/m2m100_418M` (翻訳)
+- `facebook/m2m100_1.2B` (翻訳)
 
-In this example, load the `facebook/m2m100_418M` checkpoint to translate from Chinese to English. You can set the source language in the tokenizer:
+この例では、`facebook/m2m100_418M` チェックポイントをロードして、中国語から英語に翻訳します。 トークナイザーでソース言語を設定できます。
 
 ```py
 >>> from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
@@ -121,13 +121,13 @@ In this example, load the `facebook/m2m100_418M` checkpoint to translate from Ch
 >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
 ```
 
-Tokenize the text:
+テキストをトークン化します。
 
 ```py
 >>> encoded_zh = tokenizer(chinese_text, return_tensors="pt")
 ```
 
-M2M100 forces the target language id as the first generated token to translate to the target language. Set the `forced_bos_token_id` to `en` in the `generate` method to translate to English:
+M2M100 は、最初に生成されたトークンとしてターゲット言語 ID を強制的にターゲット言語に翻訳します。 英語に翻訳するには、`generate` メソッドで `forced_bos_token_id` を `en` に設定します。
 
 ```py
 >>> generated_tokens = model.generate(**encoded_zh, forced_bos_token_id=tokenizer.get_lang_id("en"))
@@ -137,7 +137,7 @@ M2M100 forces the target language id as the first generated token to translate t
 
 ## MBart
 
-The following MBart models can be used for multilingual translation:
+多言語翻訳には、次の MBart モデルを使用できます。
 
 - `facebook/mbart-large-50-one-to-many-mmt` (One-to-many multilingual machine translation, 50 languages)
 - `facebook/mbart-large-50-many-to-many-mmt` (Many-to-many multilingual machine translation, 50 languages)
@@ -145,7 +145,7 @@ The following MBart models can be used for multilingual translation:
 - `facebook/mbart-large-50` (Multilingual translation, 50 languages)
 - `facebook/mbart-large-cc25`
 
-In this example, load the `facebook/mbart-large-50-many-to-many-mmt` checkpoint to translate Finnish to English. You can set the source language in the tokenizer:
+この例では、`facebook/mbart-large-50-many-to-many-mmt` チェックポイントをロードして、フィンランド語を英語に翻訳します。トークナイザーでソース言語を設定できます。
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -157,13 +157,13 @@ In this example, load the `facebook/mbart-large-50-many-to-many-mmt` checkpoint 
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 ```
 
-Tokenize the text:
+テキストをトークン化します。
 
 ```py
 >>> encoded_en = tokenizer(en_text, return_tensors="pt")
 ```
 
-MBart forces the target language id as the first generated token to translate to the target language. Set the `forced_bos_token_id` to `en` in the `generate` method to translate to English:
+MBart は、最初に生成されたトークンとしてターゲット言語 ID を強制的にターゲット言語に翻訳します。 英語に翻訳するには、`generate` メソッドで `forced_bos_token_id` を `en` に設定します。
 
 ```py
 >>> generated_tokens = model.generate(**encoded_en, forced_bos_token_id=tokenizer.lang_code_to_id("en_XX"))
@@ -171,4 +171,4 @@ MBart forces the target language id as the first generated token to translate to
 "Don't interfere with the wizard's affairs, because they are subtle, will soon get angry."
 ```
 
-If you are using the `facebook/mbart-large-50-many-to-one-mmt` checkpoint, you don't need to force the target language id as the first generated token otherwise the usage is the same.
+`facebook/mbart-large-50-many-to-one-mmt` チェックポイントを使用している場合、最初に生成されたトークンとしてターゲット言語 ID を強制する必要はありません。それ以外の場合、使用方法は同じです。
