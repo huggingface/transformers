@@ -44,10 +44,10 @@ When you load a model explicitly, you can inspect the generation configuration t
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
 >>> model.generation_config
 GenerationConfig {
-  "_from_model_config": true,
-  "bos_token_id": 50256,
-  "eos_token_id": 50256,
-  "transformers_version": "4.26.0.dev0"
+    "_from_model_config": true,
+    "bos_token_id": 50256,
+    "eos_token_id": 50256,
+    "transformers_version": "4.26.0.dev0"
 }
 ```
 
@@ -109,7 +109,7 @@ Greedy search is the default decoding strategy. For generate() method to use it,
 ### Contrastive Search
 The Contrastive search decoding strategy was proposed in the 2022 paper [A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417).
 It demonstrates superior results for generating non-repetitive yet coherent long outputs. To learn how contrastive search
-works, check out <a href="https://huggingface.co/blog/introducing-csearch">this blog post</a>.
+works, check out [this blog post](https://huggingface.co/blog/introducing-csearch).
 The two main parameters that enable and control the behavior of the contrastive search are `penalty_alpha` and `top_k`:
 
 ```python
@@ -203,7 +203,7 @@ the `num_beams` that is greater than 1, and set `do_sample=True` to use this dec
 
 ### Diverse beam search decoding
 The Diverse beam search decoding strategy is an extension of the beam search strategy that allows to generate a more diverse
-set of beam sequences to choose from. To learn how it works, refer to <a href="https://arxiv.org/pdf/1610.02424.pdf">Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models</a>.
+set of beam sequences to choose from. To learn how it works, refer to [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
 The Diverse Beam Search approach has two main parameters: `num_beams` and `num_beam_groups`.
 The groups are selected to ensure they are distinct enough compared to the others, and regular beam search is used within each group.
 
