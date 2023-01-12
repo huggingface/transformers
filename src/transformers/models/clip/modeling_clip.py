@@ -692,6 +692,7 @@ class CLIPTextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        eos_token_id: Optional[int] = 49407
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -739,7 +740,7 @@ class CLIPTextTransformer(nn.Module):
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
             torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
+            input_ids.to(dtype=torch.int, device=last_hidden_state.device) == eos_token_id,
         ]
 
         if not return_dict:
@@ -793,6 +794,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        eos_token_id: Optional[int] = 49407
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -820,6 +822,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            eos_token_id=eos_token_id
         )
 
 
@@ -984,6 +987,7 @@ class CLIPModel(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        eos_token_id: Optional[int] = 49407
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1015,6 +1019,7 @@ class CLIPModel(CLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            eos_token_id=eos_token_id
         )
 
         pooled_output = text_outputs[1]
