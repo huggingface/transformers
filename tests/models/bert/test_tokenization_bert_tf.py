@@ -10,8 +10,8 @@ from transformers.testing_utils import require_tensorflow_text, require_tf, slow
 if is_tf_available():
     import tensorflow as tf
 
-    if is_tensorflow_text_available():
-        from transformers.models.bert import TFBertTokenizer
+if is_tensorflow_text_available():
+    from transformers.models.bert import TFBertTokenizer
 
 
 TOKENIZER_CHECKPOINTS = ["bert-base-uncased", "bert-base-cased"]
