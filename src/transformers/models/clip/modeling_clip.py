@@ -740,7 +740,7 @@ class CLIPTextTransformer(nn.Module):
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
             torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            input_ids.to(dtype=torch.int, device=last_hidden_state.device) == eos_token_id,
+            (input_ids.to(dtype=torch.int, device=last_hidden_state.device)== eos_token_id).nonzero(as_tuple=True)[-1],
         ]
 
         if not return_dict:
