@@ -77,8 +77,6 @@ class RoCBertConfig(PretrainedConfig):
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        enable_cls (`bool`, *optional*, defaults to `True`):
-            Whether or not the model use cls loss when pretrained.
         enable_pronunciation (`bool`, *optional*, defaults to `True`):
             Whether or not the model use pronunciation embed when training.
         enable_shape (`bool`, *optional*, defaults to `True`):
@@ -131,7 +129,6 @@ class RoCBertConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         classifier_dropout=None,
-        enable_cls=True,
         enable_pronunciation=True,
         enable_shape=True,
         pronunciation_embed_dim=768,
@@ -154,7 +151,6 @@ class RoCBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.enable_cls = enable_cls
         self.enable_pronunciation = enable_pronunciation
         self.enable_shape = enable_shape
         self.pronunciation_embed_dim = pronunciation_embed_dim

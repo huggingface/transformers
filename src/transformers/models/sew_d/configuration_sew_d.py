@@ -63,8 +63,6 @@ class SEWDConfig(PretrainedConfig):
             Whether to share attention key with c2p and p2c.
         relative_attention (`bool`, *optional*, defaults to `True`):
             Whether to use relative position encoding.
-        position_biased_input (`bool`, *optional*, defaults to `False`):
-            Whether to add absolute position embedding to content embedding.
         pos_att_type (`Tuple[str]`, *optional*, defaults to `("p2c", "c2p")`):
             The type of relative position attention, it can be a combination of `("p2c", "c2p")`, e.g. `("p2c")`,
             `("p2c", "c2p")`, `("p2c", "c2p")`.
@@ -183,7 +181,6 @@ class SEWDConfig(PretrainedConfig):
         position_buckets=256,
         share_att_key=True,
         relative_attention=True,
-        position_biased_input=False,
         pos_att_type=("p2c", "c2p"),
         norm_rel_ebd="layer_norm",
         hidden_act="gelu_python",
@@ -239,7 +236,6 @@ class SEWDConfig(PretrainedConfig):
         self.share_att_key = share_att_key
         self.relative_attention = relative_attention
         self.norm_rel_ebd = norm_rel_ebd
-        self.position_biased_input = position_biased_input
         self.pos_att_type = list(pos_att_type)
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
