@@ -405,12 +405,7 @@ _import_structure = {
     "models.speecht5": [
         "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SpeechT5Config",
-        "SpeechT5CTCTokenizer",
         "SpeechT5HiFiGANConfig",
-        "SpeechT5ProcessorForCTC",
-        "SpeechT5ProcessorForSpeechToText",
-        "SpeechT5ProcessorForTextToSpeech",
-        "SpeechT5Tokenizer",
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
@@ -642,6 +637,7 @@ else:
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
+    _import_structure["models.speecht5"].extend(["SpeechT5CTCTokenizer", "SpeechT5Tokenizer"])
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
@@ -785,6 +781,9 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
+    _import_structure["models.speecht5"].extend(
+        ["SpeechT5ProcessorForCTC", "SpeechT5ProcessorForSpeechToText", "SpeechT5ProcessorForTextToSpeech"]
+    )
 
 # Vision-specific objects
 try:
@@ -3869,12 +3868,7 @@ if TYPE_CHECKING:
     from .models.speecht5 import (
         SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SpeechT5Config,
-        SpeechT5CTCTokenizer,
         SpeechT5HiFiGANConfig,
-        SpeechT5ProcessorForCTC,
-        SpeechT5ProcessorForSpeechToText,
-        SpeechT5ProcessorForTextToSpeech,
-        SpeechT5Tokenizer,
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
@@ -4088,6 +4082,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
+        from .models.speecht5 import SpeechT5CTCTokenizer, SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
@@ -4198,6 +4193,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_and_speech_objects import *
     else:
         from .models.speech_to_text import Speech2TextProcessor
+        from .models.speecht5 import SpeechT5ProcessorForCTC, SpeechT5ProcessorForSpeechToText, SpeechT5ProcessorForTextToSpeech
 
     try:
         if not is_vision_available():
