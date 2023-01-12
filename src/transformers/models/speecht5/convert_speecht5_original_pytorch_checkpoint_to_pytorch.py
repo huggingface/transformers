@@ -350,6 +350,7 @@ def convert_speecht5_checkpoint(
         model_name = "speecht5_asr"
     elif task == "ctc":
         config.max_length = config.max_text_positions
+        config.is_encoder_decoder = False
         tokenizer_class = SpeechT5CTCTokenizer
         processor_class = SpeechT5ProcessorForCTC
         model = SpeechT5ForCTC(config)
