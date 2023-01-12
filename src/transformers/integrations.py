@@ -767,7 +767,8 @@ class WandbCallback(TrainerCallback):
                 init_args["name"] = trial_name
                 init_args["group"] = args.run_name
             else:
-                init_args["name"] = args.run_name
+                if not (args.run_name is None or args.run_name == args.output_dir):
+                    init_args["name"] = args.run_name
 
             if self._wandb.run is None:
 
