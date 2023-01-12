@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 Text generation is essential to many NLP tasks, such as open-ended text generation, summarization,
 translation, and more. It also plays a role in a variety of mixed-modality applications that have text as an output, e.g.
 speech-to-text, vision-to-text, etc. Some of the models that can generate text in an auto-regressive manner include
-GPT2, XLNet, OpenAi-GPT, CTRL, TransformXL, XLM, Bart, and T5. You can find examples of using the `generate()` method to produce
+GPT2, XLNet, OpenAi-GPT, CTRL, TransformerXL, XLM, Bart, and T5. You can find examples of using the `generate()` method to produce
 text outputs for various tasks in corresponding task guides under the Inference section,
 e.g. [summarization inference with generate()](./tasks/summarization#inference).
 
@@ -107,7 +107,7 @@ Greedy search is the default decoding strategy. For generate() method to use it,
 ```
 
 ### Contrastive Search
-The Contrastive search decoding strategy was proposed in the 2022 paper <a href="https://arxiv.org/abs/2202.06417">"A Contrastive Framework for Neural Text Generation"</a>.
+The Contrastive search decoding strategy was proposed in the 2022 paper [A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417).
 It demonstrates superior results for generating non-repetitive yet coherent long outputs. To learn how contrastive search
 works, check out <a href="https://huggingface.co/blog/introducing-csearch">this blog post</a>.
 The two main parameters that enable and control the behavior of the contrastive search are `penalty_alpha` and `top_k`:
