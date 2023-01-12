@@ -1044,10 +1044,14 @@ class Trainer:
 
                     manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
 
+                    skipped = 0
                     for module in opt_model.modules():
                         if isinstance(module, nn.Embedding):
+                            skipped += sum(dict((p.data_ptr(), p.numel()) for p in module.parameters()).values())
+                            print(f"skipped {module}: {skipped/2**20}M params")
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.debug(f"bitsandbytes: will optimize {module} in fp32")
+                    print(f"skipped: {skipped/2**20}M params")
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
