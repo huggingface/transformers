@@ -23,7 +23,7 @@ from transformers import DetrConfig, is_timm_available, is_vision_available
 from transformers.testing_utils import require_timm, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 
@@ -413,6 +413,26 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                     self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+
+            self.assertTrue(outputs)
+
+    def test_greyscale_images(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # use greyscale pixel values
+        inputs_dict["pixel_values"] = floats_tensor(
+            [self.model_tester.batch_size, 1, self.model_tester.min_size, self.model_tester.max_size]
+        )
+
+        # let's set num_channels to 1
+        config.num_channels = 1
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             self.assertTrue(outputs)
 

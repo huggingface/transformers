@@ -17,14 +17,17 @@ import copy
 import sys
 import tempfile
 import unittest
+from collections import OrderedDict
 from pathlib import Path
 
-from transformers import BertConfig, is_torch_available
+import pytest
+
+from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
-    require_scatter,
+    RequestCounter,
     require_torch,
     slow,
 )
@@ -99,7 +102,10 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertModel)
 
             self.assertEqual(len(loading_info["missing_keys"]), 0)
-            self.assertEqual(len(loading_info["unexpected_keys"]), 8)
+            # When using PyTorch checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
+            # installed), the expected value becomes `7`.
+            EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7 if is_safetensors_available() else 8
+            self.assertEqual(len(loading_info["unexpected_keys"]), EXPECTED_NUM_OF_UNEXPECTED_KEYS)
             self.assertEqual(len(loading_info["mismatched_keys"]), 0)
             self.assertEqual(len(loading_info["error_msgs"]), 0)
 
@@ -115,8 +121,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForPreTraining)
             # Only one value should not be initialized and in the missing keys.
-            missing_keys = loading_info.pop("missing_keys")
-            self.assertListEqual(["cls.predictions.decoder.bias"], missing_keys)
             for key, value in loading_info.items():
                 self.assertEqual(len(value), 0)
 
@@ -195,7 +199,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForQuestionAnswering)
 
     @slow
-    @require_scatter
     def test_table_question_answering_model_from_pretrained(self):
         for model_name in TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
             config = AutoConfig.from_pretrained(model_name)
@@ -273,9 +276,27 @@ class AutoModelTest(unittest.TestCase):
         model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertEqual(model.__class__.__name__, "NewModel")
 
+        # Test model can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            reloaded_model = AutoModel.from_pretrained(tmp_dir, trust_remote_code=True)
+
+        self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
+        for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
         # This one uses a relative import to a util file, this checks it is downloaded and used properly.
         model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_with_util", trust_remote_code=True)
         self.assertEqual(model.__class__.__name__, "NewModel")
+
+        # Test model can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            reloaded_model = AutoModel.from_pretrained(tmp_dir, trust_remote_code=True)
+
+        self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
+        for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
 
     def test_new_model_registration(self):
         AutoConfig.register("custom", CustomConfig)
@@ -354,3 +375,39 @@ class AutoModelTest(unittest.TestCase):
     def test_model_from_flax_suggestion(self):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
+
+    def test_cached_model_has_minimum_calls_to_head(self):
+        # Make sure we have cached the model.
+        _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)
+
+        # With a sharded checkpoint
+        _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+        with RequestCounter() as counter:
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)
+
+    def test_attr_not_existing(self):
+
+        from transformers.models.auto.auto_factory import _LazyAutoMapping
+
+        _CONFIG_MAPPING_NAMES = OrderedDict([("bert", "BertConfig")])
+        _MODEL_MAPPING_NAMES = OrderedDict([("bert", "GhostModel")])
+        _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
+
+        with pytest.raises(ValueError, match=r"Could not find GhostModel neither in .* nor in .*!"):
+            _MODEL_MAPPING[BertConfig]
+
+        _MODEL_MAPPING_NAMES = OrderedDict([("bert", "BertModel")])
+        _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
+        self.assertEqual(_MODEL_MAPPING[BertConfig], BertModel)
+
+        _MODEL_MAPPING_NAMES = OrderedDict([("bert", "GPT2Model")])
+        _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
+        self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)

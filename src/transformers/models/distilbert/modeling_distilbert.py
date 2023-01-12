@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """
  PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
  part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
@@ -39,12 +40,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    is_torch_greater_than_1_6,
-    prune_linear_layer,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -106,10 +102,9 @@ class Embeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
-        if is_torch_greater_than_1_6:
-            self.register_buffer(
-                "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-            )
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """
@@ -147,7 +142,10 @@ class MultiHeadSelfAttention(nn.Module):
         self.dim = config.dim
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
-        assert self.dim % self.n_heads == 0
+        # Have an even number of multi heads that divide the dimensions
+        if self.dim % self.n_heads != 0:
+            # Raise value errors for even multi-head attention nodes
+            raise ValueError(f"self.n_heads: {self.n_heads} must divide self.dim: {self.dim} evenly")
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -155,12 +153,14 @@ class MultiHeadSelfAttention(nn.Module):
         self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
 
         self.pruned_heads: Set[int] = set()
+        self.attention_head_size = self.dim // self.n_heads
 
     def prune_heads(self, heads: List[int]):
-        attention_head_size = self.dim // self.n_heads
         if len(heads) == 0:
             return
-        heads, index = find_pruneable_heads_and_indices(heads, self.n_heads, attention_head_size, self.pruned_heads)
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_heads, self.attention_head_size, self.pruned_heads
+        )
         # Prune linear layers
         self.q_lin = prune_linear_layer(self.q_lin, index)
         self.k_lin = prune_linear_layer(self.k_lin, index)
@@ -168,7 +168,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
         # Update hyper params
         self.n_heads = self.n_heads - len(heads)
-        self.dim = attention_head_size * self.n_heads
+        self.dim = self.attention_head_size * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -261,7 +261,9 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        assert config.dim % config.n_heads == 0
+        # Have an even number of Configure multi-heads
+        if config.dim % config.n_heads != 0:
+            raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
@@ -297,7 +299,9 @@ class TransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
-            assert type(sa_output) == tuple
+            if type(sa_output) != tuple:
+                raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
+
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
 
@@ -326,6 +330,7 @@ class Transformer(nn.Module):
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
+
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
@@ -354,11 +359,14 @@ class Transformer(nn.Module):
             hidden_state = layer_outputs[-1]
 
             if output_attentions:
-                assert len(layer_outputs) == 2
+                if len(layer_outputs) != 2:
+                    raise ValueError(f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}")
+
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                assert len(layer_outputs) == 1
+                if len(layer_outputs) != 1:
+                    raise ValueError(f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}")
 
         # Add last layer
         if output_hidden_states:
@@ -585,6 +593,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["vocab_projector.weight"]
+
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
 
@@ -814,7 +824,9 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
-        assert config.num_labels == 2
+        if config.num_labels != 2:
+            raise ValueError(f"config.num_labels should be 2, but it is {config.num_labels}")
+
         self.dropout = nn.Dropout(config.qa_dropout)
 
         # Initialize weights and apply final processing

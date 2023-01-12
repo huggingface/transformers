@@ -315,6 +315,7 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
         self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
 
+@require_tf
 @slow
 class TFOPTGenerationTest(unittest.TestCase):
     @property

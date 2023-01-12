@@ -85,9 +85,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     num_labels = 1000
     expected_shape = (1, num_labels)
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
@@ -167,12 +167,12 @@ if __name__ == "__main__":
         required=False,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
     parser.add_argument(
-        "--push_to_hub",
-        default=True,
-        type=bool,
-        required=False,
-        help="If True, push model and feature extractor to the hub.",
+        "--no-push_to_hub",
+        dest="push_to_hub",
+        action="store_false",
+        help="Do not push model and feature extractor to the hub",
     )
 
     args = parser.parse_args()

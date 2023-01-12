@@ -93,12 +93,12 @@ class MobileBertConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import MobileBertModel, MobileBertConfig
+    >>> from transformers import MobileBertConfig, MobileBertModel
 
     >>> # Initializing a MobileBERT configuration
     >>> configuration = MobileBertConfig()
 
-    >>> # Initializing a model from the configuration above
+    >>> # Initializing a model (with random weights) from the configuration above
     >>> model = MobileBertModel(configuration)
 
     >>> # Accessing the model configuration

@@ -24,7 +24,7 @@ This document serves as an overview and entry point for the methods that could b
 
 ## Training
 
-Training transformer models efficiently requires an accelerator such as a GPU or TPU. The most common case is where you only have a single GPU, but there is also a section about mutli-GPU and CPU training (with more coming soon).
+Training transformer models efficiently requires an accelerator such as a GPU or TPU. The most common case is where you only have a single GPU, but there is also a section about multi-GPU and CPU training (with more coming soon).
 
 <Tip>
 
@@ -40,7 +40,7 @@ Training large models on a single GPU can be challenging but there are a number 
 
 ### Multi-GPU
 
-In some cases training on a single GPU is still too slow or won't fit the large model. Moving to a mutli-GPU setup is the logical step, but training on multiple GPUs at once comes with new decisions: does each GPU have a full copy of the model or is the model itself also distributed? In this section we look at data, tensor, and pipeline parallism.
+In some cases training on a single GPU is still too slow or won't fit the large model. Moving to a multi-GPU setup is the logical step, but training on multiple GPUs at once comes with new decisions: does each GPU have a full copy of the model or is the model itself also distributed? In this section we look at data, tensor, and pipeline parallism.
 
 [Go to multi-GPU training section](perf_train_gpu_many)
 

@@ -26,12 +26,13 @@ from transformers import (
     AutoTokenizer,
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
+    WhisperForConditionalGeneration,
+    WhisperProcessor,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import chunk_iter
 from transformers.testing_utils import (
-    is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
@@ -52,7 +53,6 @@ if is_torch_available():
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
-@is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = {
         k: v
@@ -119,7 +119,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             )
         else:
             # Non CTC models cannot use return_timestamps
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
                 outputs = speech_recognizer(audio, return_timestamps="char")
 
     @require_torch
@@ -138,6 +138,25 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
+        output = speech_recognizer(waveform, chunk_length_s=10)
+        self.assertEqual(output, {"text": "(Applaudissements)"})
+
+        # Non CTC models cannot use return_timestamps
+        with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
+            _ = speech_recognizer(waveform, return_timestamps="char")
+
+    @slow
+    @require_torch
+    def test_whisper_fp16(self):
+        if not torch.cuda.is_available():
+            self.skipTest("Cuda is necessary for this test")
+        speech_recognizer = pipeline(
+            model="openai/whisper-base",
+            device=0,
+            torch_dtype=torch.float16,
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        speech_recognizer(waveform)
 
     @require_torch
     def test_small_model_pt_seq2seq(self):
@@ -149,6 +168,17 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "あл ش 湯 清 ه ܬ া लᆨしث ल eか u w 全 u"})
+
+    @require_torch
+    def test_small_model_pt_seq2seq_gen_kwargs(self):
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/tiny-random-speech-encoder-decoder",
+            framework="pt",
+        )
+
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform, max_new_tokens=10, generate_kwargs={"num_beams": 2})
+        self.assertEqual(output, {"text": "あл † γ ت ב オ 束 泣 足"})
 
     @slow
     @require_torch
@@ -246,6 +276,22 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @require_torch
     @slow
+    def test_torch_whisper(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": " A man said to the universe, Sir, I exist."})
+
+        output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
+        self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
+
+    @require_torch
+    @slow
     def test_torch_speech_encoder_decoder(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -309,6 +355,55 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             data = f.read()
         output = asr(data)
         self.assertEqual(output, {"text": "Un uomo disse all'universo: \"Signore, io esisto."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_simple_whisper_asr(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny.en",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."},
+        )
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_simple_whisper_translation(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-large",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": " A man said to the universe, Sir, I exist."})
+
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        tokenizer = AutoTokenizer.from_pretrained("openai/whisper-large")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-large")
+
+        speech_recognizer_2 = AutomaticSpeechRecognitionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
+        output_2 = speech_recognizer_2(filename)
+        self.assertEqual(output, output_2)
+
+        processor = WhisperProcessor(feature_extractor, tokenizer)
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", language="it")
+        speech_translator = AutomaticSpeechRecognitionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
+        output_3 = speech_translator(filename)
+        self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
 
     @slow
     @require_torch

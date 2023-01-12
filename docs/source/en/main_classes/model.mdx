@@ -25,9 +25,9 @@ are common among all the models to:
 
 The other methods that are common to each model are defined in [`~modeling_utils.ModuleUtilsMixin`]
 (for the PyTorch models) and [`~modeling_tf_utils.TFModuleUtilsMixin`] (for the TensorFlow models) or
-for text generation, [`~generation_utils.GenerationMixin`] (for the PyTorch models),
-[`~generation_tf_utils.TFGenerationMixin`] (for the TensorFlow models) and
-[`~generation_flax_utils.FlaxGenerationMixin`] (for the Flax/JAX models).
+for text generation, [`~generation.GenerationMixin`] (for the PyTorch models),
+[`~generation.TFGenerationMixin`] (for the TensorFlow models) and
+[`~generation.FlaxGenerationMixin`] (for the Flax/JAX models).
 
 
 ## PreTrainedModel
@@ -105,7 +105,7 @@ You can also write your own device map following the same format (a dictionary l
 device_map = {"shared": 0, "encoder": 0, "decoder": 1, "lm_head": 1}
 ```
 
-Another way to minimize the memory impact of your model is to instantiate it at a lower precision dtype (like `torch.float16`).
+Another way to minimize the memory impact of your model is to instantiate it at a lower precision dtype (like `torch.float16`) or use direct quantization techniques as described below.
 
 ### Model Instantiation dtype
 
@@ -132,7 +132,6 @@ model = AutoModel.from_config(config)
 ```
 
 Due to Pytorch design, this functionality is only available for floating dtypes.
-
 
 
 ## ModuleUtilsMixin

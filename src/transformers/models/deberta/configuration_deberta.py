@@ -90,7 +90,21 @@ class DebertaConfig(PretrainedConfig):
             `["p2c", "c2p"]`.
         layer_norm_eps (`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import DebertaConfig, DebertaModel
+
+    >>> # Initializing a DeBERTa microsoft/deberta-base style configuration
+    >>> configuration = DebertaConfig()
+
+    >>> # Initializing a model (with random weights) from the microsoft/deberta-base style configuration
+    >>> model = DebertaModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "deberta"
 
     def __init__(

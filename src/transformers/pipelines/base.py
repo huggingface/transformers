@@ -178,7 +178,7 @@ def infer_framework_load_model(
     model_classes: Optional[Dict[str, Tuple[type]]] = None,
     task: Optional[str] = None,
     framework: Optional[str] = None,
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
@@ -274,7 +274,7 @@ def infer_framework_from_model(
     model_classes: Optional[Dict[str, Tuple[type]]] = None,
     task: Optional[str] = None,
     framework: Optional[str] = None,
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
@@ -704,7 +704,7 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` too.
+            the associated CUDA device id. You can pass native `torch.device` or a `str` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -747,7 +747,8 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: int = -1,
+        device: Union[int, str, "torch.device"] = -1,
+        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -760,14 +761,22 @@ class Pipeline(_ScikitCompat):
         self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
-        if is_torch_available() and isinstance(device, torch.device):
-            self.device = device
+        if is_torch_available() and self.framework == "pt":
+            if isinstance(device, torch.device):
+                self.device = device
+            elif isinstance(device, str):
+                self.device = torch.device(device)
+            elif device < 0:
+                self.device = torch.device("cpu")
+            else:
+                self.device = torch.device(f"cuda:{device}")
         else:
-            self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
+            self.device = device
+        self.torch_dtype = torch_dtype
         self.binary_output = binary_output
 
         # Special handling
-        if self.framework == "pt" and self.device.type == "cuda":
+        if self.framework == "pt" and self.device.type != "cpu":
             self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
@@ -829,13 +838,13 @@ class Pipeline(_ScikitCompat):
         """
         Scikit / Keras interface to transformers' pipelines. This method will forward to __call__().
         """
-        return self(X=X)
+        return self(X)
 
     def predict(self, X):
         """
         Scikit / Keras interface to transformers' pipelines. This method will forward to __call__().
         """
-        return self(X=X)
+        return self(X)
 
     @contextmanager
     def device_placement(self):
@@ -936,7 +945,7 @@ class Pipeline(_ScikitCompat):
     @abstractmethod
     def preprocess(self, input_: Any, **preprocess_parameters: Dict) -> Dict[str, GenericTensor]:
         """
-        Preprocess will take the `input_` of a specific pipeline and return a dictionnary of everything necessary for
+        Preprocess will take the `input_` of a specific pipeline and return a dictionary of everything necessary for
         `_forward` to run properly. It should contain at least one tensor, but might have arbitrary other items.
         """
         raise NotImplementedError("preprocess not implemented")
@@ -944,7 +953,7 @@ class Pipeline(_ScikitCompat):
     @abstractmethod
     def _forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters: Dict) -> ModelOutput:
         """
-        _forward will receive the prepared dictionnary from `preprocess` and run it on the model. This method might
+        _forward will receive the prepared dictionary from `preprocess` and run it on the model. This method might
         involve the GPU or the CPU and should be agnostic to it. Isolating this function is the reason for `preprocess`
         and `postprocess` to exist, so that the hot path, this method generally can run as fast as possible.
 

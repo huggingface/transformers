@@ -103,12 +103,12 @@ class MCTCTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MCTCTModel, MCTCTConfig
+    >>> from transformers import MCTCTConfig, MCTCTModel
 
     >>> # Initializing a M-CTC-T mctct-large style configuration
     >>> configuration = MCTCTConfig()
 
-    >>> # Initializing a model from the mctct-large style configuration
+    >>> # Initializing a model (with random weights) from the mctct-large style configuration
     >>> model = MCTCTModel(configuration)
 
     >>> # Accessing the model configuration

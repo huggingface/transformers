@@ -281,7 +281,6 @@ class LongT5DenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->LongT5
 class LongT5DenseGatedActDense(nn.Module):
     def __init__(self, config: LongT5Config):
         super().__init__()
@@ -479,6 +478,12 @@ class LongT5Attention(nn.Module):
                     # self-attn
                     # (batch_size, n_heads, key_length, dim_per_head)
                     hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+                elif past_key_value.shape[2] != key_value_states.shape[1]:
+                    # checking that the `sequence_length` of the `past_key_value` is the same as
+                    # the provided `key_value_states` to support prefix tuning
+                    # cross-attn
+                    # (batch_size, n_heads, seq_length, dim_per_head)
+                    hidden_states = shape(proj_layer(key_value_states))
                 else:
                     # cross-attn
                     hidden_states = past_key_value
@@ -518,7 +523,14 @@ class LongT5Attention(nn.Module):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-        scores += position_bias
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        scores += position_bias_masked
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
@@ -635,9 +647,12 @@ class LongT5LocalAttention(nn.Module):
 
     def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
-        memory_position = torch.arange(
-            3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
+        target_device = (
+            self.relative_attention_bias.weight.device
+            if self.relative_attention_bias.weight.device.type != "meta"
+            else None
         )
+        memory_position = torch.arange(3 * block_length, dtype=torch.long, device=target_device)
         context_position = memory_position[block_length:-block_length]
 
         # (block_length, 3 * block_length)
@@ -830,9 +845,12 @@ class LongT5TransientGlobalAttention(nn.Module):
 
     def compute_bias(self, block_length: int):
         """Compute binned relative position bias"""
-        memory_position = torch.arange(
-            3 * block_length, dtype=torch.long, device=self.relative_attention_bias.weight.device
+        target_device = (
+            self.relative_attention_bias.weight.device
+            if self.relative_attention_bias.weight.device.type != "meta"
+            else None
         )
+        memory_position = torch.arange(3 * block_length, dtype=torch.long, device=target_device)
         context_position = memory_position[block_length:-block_length]
 
         # (block_length, 3 * block_length)
@@ -1192,6 +1210,11 @@ class LongT5Block(nn.Module):
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
+        # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
             # the actual query length is unknown for cross attention
@@ -1214,6 +1237,11 @@ class LongT5Block(nn.Module):
             )
             hidden_states = cross_attention_outputs[0]
 
+            # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
+            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
             # Combine self attn and cross attn key value states
             if present_key_value_state is not None:
                 present_key_value_state = present_key_value_state + cross_attention_outputs[1]
@@ -1223,6 +1251,11 @@ class LongT5Block(nn.Module):
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
+
+        # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
 
@@ -1243,6 +1276,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
     config_class = LongT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["LongT5Block"]
 
     @property
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel.dummy_inputs
@@ -1338,7 +1372,9 @@ class LongT5Stack(LongT5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
-        self.embed_tokens = embed_tokens
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
         self.is_decoder = config.is_decoder
 
         self.local_radius = config.local_radius
@@ -1966,13 +2002,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         ... )
 
         >>> # Let's try a very long input.
-        >>> input_ids = tokenizer(
-        ...     "summarize: " + 100 * "studies have shown that owning a dog is good for you ", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> inputs = tokenizer(100 * "studies have shown that owning a dog is good for you ", return_tensors="pt")
+        >>> input_ids = inputs.input_ids
 
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        abstractthe aim of this article is to summarize the studies have shown that owning a dog
+        abstractthe aim of this article is to provide an overview of the literature on the role of dog
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2058,7 +2093,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -2069,12 +2104,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     ):
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
             "decoder_input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -2116,9 +2151,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     LONGT5_START_DOCSTRING,
 )
 class LongT5EncoderModel(LongT5PreTrainedModel):
-    authorized_missing_keys = [
-        r"encoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)

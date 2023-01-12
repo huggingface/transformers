@@ -903,7 +903,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, model.config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.1653, -0.1993, -0.7521], device=torch_device)
+        expected_slice = torch.tensor([-1.1652, -0.1992, -0.7520], device=torch_device)
 
         self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
 

@@ -30,6 +30,7 @@ if is_tf_available():
     from transformers.models.layoutlm.modeling_tf_layoutlm import (
         TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLayoutLMForMaskedLM,
+        TFLayoutLMForQuestionAnswering,
         TFLayoutLMForSequenceClassification,
         TFLayoutLMForTokenClassification,
         TFLayoutLMModel,
@@ -174,6 +175,15 @@ class TFLayoutLMModelTester:
         result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_question_answering(
+        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = TFLayoutLMForQuestionAnswering(config=config)
+
+        result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -199,7 +209,13 @@ class TFLayoutLMModelTester:
 class TFLayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFLayoutLMModel, TFLayoutLMForMaskedLM, TFLayoutLMForTokenClassification, TFLayoutLMForSequenceClassification)
+        (
+            TFLayoutLMModel,
+            TFLayoutLMForMaskedLM,
+            TFLayoutLMForTokenClassification,
+            TFLayoutLMForSequenceClassification,
+            TFLayoutLMForQuestionAnswering,
+        )
         if is_tf_available()
         else ()
     )
@@ -230,11 +246,20 @@ class TFLayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFLayoutLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    # TODO (Joao): fix me
+    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    def test_onnx_compliancy(self):
+        pass
 
 
 def prepare_layoutlm_batch_inputs():
@@ -316,3 +341,18 @@ class TFLayoutLMModelIntegrationTest(unittest.TestCase):
         logits = outputs.logits
         expected_shape = tf.convert_to_tensor((2, 25, 13))
         self.assertEqual(logits.shape, expected_shape)
+
+    @slow
+    def test_forward_pass_question_answering(self):
+        # initialize model with randomly initialized token classification head
+        model = TFLayoutLMForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased")
+
+        input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
+
+        # forward pass
+        outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+
+        # test the shape of the logits
+        expected_shape = tf.convert_to_tensor((2, 25))
+        self.assertEqual(outputs.start_logits.shape, expected_shape)
+        self.assertEqual(outputs.end_logits.shape, expected_shape)

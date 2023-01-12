@@ -85,10 +85,10 @@ class BigBirdPegasusConfig(PretrainedConfig):
             just in case (e.g., 1024 or 2048 or 4096).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -109,19 +109,17 @@ class BigBirdPegasusConfig(PretrainedConfig):
     Example:
 
     ```python
+    >>> from transformers import BigBirdPegasusConfig, BigBirdPegasusModel
 
-    ```
+    >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration
+    >>> configuration = BigBirdPegasusConfig()
 
-        >>> from transformers import BigBirdPegasusModel, BigBirdPegasusConfig
+    >>> # Initializing a model (with random weights) from the bigbird-pegasus-base style configuration
+    >>> model = BigBirdPegasusModel(configuration)
 
-        >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration >>> configuration =
-        BigBirdPegasusConfig()
-
-        >>> # Initializing a model from the bigbird-pegasus-base style configuration >>> model =
-        BigBirdPegasusModel(configuration)
-
-        >>> # Accessing the model configuration >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {

@@ -22,20 +22,11 @@ from transformers import (
     TFAutoModelForTableQuestionAnswering,
     pipeline,
 )
-from transformers.testing_utils import (
-    is_pipeline_test,
-    require_pandas,
-    require_tensorflow_probability,
-    require_tf,
-    require_torch,
-    require_torch_scatter,
-    slow,
-)
+from transformers.testing_utils import require_pandas, require_tensorflow_probability, require_tf, require_torch, slow
 
 from .test_pipelines_common import PipelineTestCaseMeta
 
 
-@is_pipeline_test
 class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     # Putting it there for consistency, but TQA do not have fast tokenizer
     # which are needed to generate automatic tests
@@ -147,7 +138,6 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @require_torch
-    @require_torch_scatter
     def test_small_model_pt(self):
         model_id = "lysandre/tiny-tapas-random-wtq"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
@@ -250,7 +240,6 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @require_torch
-    @require_torch_scatter
     def test_slow_tokenizer_sqa_pt(self):
         model_id = "lysandre/tiny-tapas-random-sqa"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
@@ -492,7 +481,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @slow
-    @require_torch_scatter
+    @require_torch
     def test_integration_wtq_pt(self):
         table_querier = pipeline("table-question-answering")
 
@@ -586,7 +575,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertListEqual(results, expected_results)
 
     @slow
-    @require_torch_scatter
+    @require_torch
     def test_integration_sqa_pt(self):
         table_querier = pipeline(
             "table-question-answering",

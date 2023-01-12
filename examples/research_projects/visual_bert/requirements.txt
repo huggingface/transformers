@@ -4,7 +4,7 @@ async-generator==1.10
 attrs==20.2.0
 backcall==0.2.0
 CacheControl==0.12.6
-certifi==2020.6.20
+certifi==2022.12.7
 cffi==1.14.2
 chardet==3.0.4
 click==7.1.2
@@ -29,7 +29,7 @@ ipython-genutils==0.2.0
 ipywidgets==7.5.1
 jedi==0.17.2
 Jinja2>=2.11.3
-joblib==0.16.0
+joblib==1.2.0
 jsonschema==3.2.0
 jupyter==1.0.0
 jupyter-client==6.1.7
@@ -43,7 +43,7 @@ matplotlib==3.3.1
 mistune==2.0.3
 msgpack==0.6.2
 nbclient==0.5.0
-nbconvert==6.0.1
+nbconvert==6.5.1
 nbformat==5.0.7
 nest-asyncio==1.4.0
 notebook==6.4.12

@@ -1,4 +1,5 @@
 import enum
+import warnings
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
@@ -21,6 +22,21 @@ class TextGenerationPipeline(Pipeline):
     """
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
     specified text prompt.
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> generator = pipeline(model="gpt2")
+    >>> generator("I can't believe you did such a ", do_sample=False)
+    [{'generated_text': "I can't believe you did such a icky thing to me. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I"}]
+
+    >>> # These parameters will return suggestions, and only the newly created text making it easier for prompting suggestions.
+    >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This language generation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"text-generation"`.
@@ -80,6 +96,7 @@ class TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         prefix=None,
         handle_long_generation=None,
+        stop_sequence=None,
         **generate_kwargs
     ):
         preprocess_params = {}
@@ -113,13 +130,28 @@ class TextGenerationPipeline(Pipeline):
 
         postprocess_params = {}
         if return_full_text is not None and return_type is None:
+            if return_text is not None:
+                raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
+            if return_tensors is not None:
+                raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
             return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
         if return_tensors is not None and return_type is None:
+            if return_text is not None:
+                raise ValueError("`return_text` is mutually exclusive with `return_tensors`")
             return_type = ReturnType.TENSORS
         if return_type is not None:
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+
+        if stop_sequence is not None:
+            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            if len(stop_sequence_ids) > 1:
+                warnings.warn(
+                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
+                    " the stop sequence will be used as the stop sequence string in the interim."
+                )
+            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -142,11 +174,12 @@ class TextGenerationPipeline(Pipeline):
             args (`str` or `List[str]`):
                 One or several prompts (or one list of prompts) to complete.
             return_tensors (`bool`, *optional*, defaults to `False`):
-                Whether or not to include the tensors of predictions (as token indices) in the outputs.
+                Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
+                `True`, the decoded text is not returned.
             return_text (`bool`, *optional*, defaults to `True`):
-                Whether or not to include the decoded texts in the outputs.
+                Whether or not to return the decoded texts in the outputs.
             return_full_text (`bool`, *optional*, defaults to `True`):
-                If set to `False` only added text is returned, otherwise the full text is returned Only meaningful if
+                If set to `False` only added text is returned, otherwise the full text is returned. Only meaningful if
                 *return_text* is set to True.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
@@ -167,7 +200,8 @@ class TextGenerationPipeline(Pipeline):
                 corresponding to your framework [here](./model#generative-models)).
 
         Return:
-            A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
+            A list or a list of list of `dict`: Returns one of the following dictionaries (cannot return a combination
+            of both `generated_text` and `generated_token_ids`):
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
             - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token

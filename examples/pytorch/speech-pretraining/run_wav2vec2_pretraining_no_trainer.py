@@ -247,6 +247,24 @@ def parse_args():
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
     )
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--mask_time_prob",
+        type=float,
+        default=None,
+        help=(
+            "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked in the"
+            " contrastive task. If omitted, will pull value from model config."
+        ),
+    )
+    parser.add_argument(
+        "--mask_time_length",
+        type=int,
+        default=None,
+        help=(
+            "Length of each vector mask span to mask along the time axis in the contrastive task."
+            " If omitted, will pull value from model config."
+        ),
+    )
     args = parser.parse_args()
 
     if args.push_to_hub:
@@ -285,12 +303,22 @@ class DataCollatorForWav2Vec2Pretraining:
             If set will pad the sequence to a multiple of the provided value.
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
+        mask_time_prob (:obj:`float`, `optional`, defaults to :obj:`0.65`):
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked for the contrastive task.
+            Note that overlap between masked sequences may decrease the actual percentage of masked vectors.
+            The default value is taken from the original wav2vec 2.0 article (https://arxiv.org/abs/2006.11477),
+            and results in about 49 percent of each sequence being masked on average.
+        mask_time_length (:obj:`int`, `optional`, defaults to :obj:`10`):
+            Length of each vector mask span to mask along the time axis in the contrastive task. The default value
+            originates from the original wav2vec 2.0 article and corresponds to the ``M`` variable mentioned there.
     """
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
+    mask_time_prob: Optional[float] = 0.65
+    mask_time_length: Optional[int] = 10
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
@@ -320,8 +348,8 @@ class DataCollatorForWav2Vec2Pretraining:
         # sample randomly masked indices
         mask_time_indices = _compute_mask_indices(
             features_shape,
-            self.model.config.mask_time_prob,
-            self.model.config.mask_time_length,
+            self.mask_time_prob,
+            self.mask_time_length,
             attention_mask=batch.get("sub_attention_mask"),
         )
 
@@ -515,8 +543,16 @@ def main():
         model.gradient_checkpointing_enable()
 
     # 4. Define data collator, optimizer and scheduler
+
+    mask_time_prob = config.mask_time_prob if args.mask_time_prob is None else args.mask_time_prob
+    mask_time_length = config.mask_time_length if args.mask_time_length is None else args.mask_time_length
+
     data_collator = DataCollatorForWav2Vec2Pretraining(
-        model=model, feature_extractor=feature_extractor, pad_to_multiple_of=args.pad_to_multiple_of
+        model=model,
+        feature_extractor=feature_extractor,
+        pad_to_multiple_of=args.pad_to_multiple_of,
+        mask_time_prob=mask_time_prob,
+        mask_time_length=mask_time_length,
     )
     train_dataloader = DataLoader(
         vectorized_datasets["train"],
@@ -596,7 +632,7 @@ def main():
             # make sure that `num_losses` is summed for distributed training
             # and average gradients over losses of all devices
             if accelerator.state.num_processes > 1:
-                num_losses = accelerator.gather(num_losses).sum()
+                num_losses = accelerator.gather_for_metrics(num_losses).sum()
                 gradient_multiplier = accelerator.state.num_processes / num_losses
                 multiply_grads(model.module.parameters(), gradient_multiplier)
             else:
@@ -647,10 +683,10 @@ def main():
                 outputs.diversity_loss.detach()
 
                 if accelerator.state.num_processes > 1:
-                    loss = accelerator.gather(loss).sum()
-                    outputs.contrastive_loss = accelerator.gather(outputs.contrastive_loss).sum()
-                    outputs.diversity_loss = accelerator.gather(outputs.diversity_loss).sum()
-                    percent_masked = accelerator.gather(percent_masked).sum()
+                    loss = accelerator.gather_for_metrics(loss).sum()
+                    outputs.contrastive_loss = accelerator.gather_for_metrics(outputs.contrastive_loss).sum()
+                    outputs.diversity_loss = accelerator.gather_for_metrics(outputs.diversity_loss).sum()
+                    percent_masked = accelerator.gather_for_metrics(percent_masked).sum()
 
                 train_logs = {
                     "loss": (loss * args.gradient_accumulation_steps) / num_losses,
@@ -713,7 +749,7 @@ def main():
 
         # sum over devices in multi-processing
         if accelerator.num_processes > 1:
-            val_logs = {k: accelerator.gather(v).sum() for k, v in val_logs.items()}
+            val_logs = {k: accelerator.gather_for_metrics(v).sum() for k, v in val_logs.items()}
 
         val_logs = {k: v / val_logs["val_num_losses"] for k, v in val_logs.items()}
 

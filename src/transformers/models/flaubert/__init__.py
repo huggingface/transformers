@@ -41,6 +41,7 @@ else:
         "FlaubertForTokenClassification",
         "FlaubertModel",
         "FlaubertWithLMHeadModel",
+        "FlaubertPreTrainedModel",
     ]
 
 try:
@@ -79,6 +80,7 @@ if TYPE_CHECKING:
             FlaubertForSequenceClassification,
             FlaubertForTokenClassification,
             FlaubertModel,
+            FlaubertPreTrainedModel,
             FlaubertWithLMHeadModel,
         )
 
