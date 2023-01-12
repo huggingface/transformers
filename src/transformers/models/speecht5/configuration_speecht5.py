@@ -193,6 +193,7 @@ class SpeechT5Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "speecht5"
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "num_hidden_layers": "encoder_layers"}
 
     def __init__(
         self,
@@ -254,15 +255,6 @@ class SpeechT5Config(PretrainedConfig):
         is_encoder_decoder=True,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_layers = encoder_layers
@@ -336,6 +328,15 @@ class SpeechT5Config(PretrainedConfig):
         self.decoder_max_relative_position = decoder_max_relative_position
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )
 
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)

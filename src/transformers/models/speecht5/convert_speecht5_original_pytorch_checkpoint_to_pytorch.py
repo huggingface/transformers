@@ -344,10 +344,12 @@ def convert_speecht5_checkpoint(
     tokenizer_class = SpeechT5Tokenizer
 
     if task == "s2t":
+        config.max_length = config.max_text_positions
         processor_class = SpeechT5ProcessorForSpeechToText
         model = SpeechT5ForSpeechToText(config)
         model_name = "speecht5_asr"
     elif task == "ctc":
+        config.max_length = config.max_text_positions
         tokenizer_class = SpeechT5CTCTokenizer
         processor_class = SpeechT5ProcessorForCTC
         model = SpeechT5ForCTC(config)
@@ -355,6 +357,7 @@ def convert_speecht5_checkpoint(
     elif task == "t2s":
         config.max_speech_positions = 1876
         config.max_text_positions = 600
+        config.max_length = config.max_speech_positions
         model = SpeechT5ForTextToSpeech(config)
         model_name = "speecht5_tts"
     else:

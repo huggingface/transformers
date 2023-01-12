@@ -17,10 +17,20 @@
 import copy
 import inspect
 import math
+import tempfile
 import unittest
 
-from transformers import SpeechT5Config, SpeechT5HiFiGANConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import SpeechT5Config, SpeechT5HiFiGANConfig
+from transformers.testing_utils import (
+    is_torch_available,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torchaudio,
+    slow,
+    torch_device,
+)
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, random_attention_mask
@@ -35,6 +45,7 @@ if is_torch_available():
         SpeechT5ForTextToSpeech,
         SpeechT5HiFiGAN,
         SpeechT5Model,
+        SpeechT5ProcessorForSpeechToText,
     )
 
 
@@ -213,7 +224,6 @@ class SpeechT5SpeechToTextModelTester:
             vocab_size=self.vocab_size,
         )
 
-#TODO: test this one
     def create_and_check_model_forward(self, config, inputs_dict):
         model = SpeechT5ForSpeechToText(config=config).to(torch_device).eval()
 
@@ -223,13 +233,41 @@ class SpeechT5SpeechToTextModelTester:
 
         result = model(input_values, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+            result.logits.shape, (self.batch_size, self.decoder_seq_length, self.vocab_size)
         )
 
-    #TODO: create_and_check_decoder_model_past_large_inputs (s2t)
-    #TODO: check_encoder_decoder_model_standalone (s2t)
-    #TODO: create_and_check_batch_inference? (w2v2)
-    #TODO: check_labels_out_of_vocab? (w2v2)
+    def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = SpeechT5ForSpeechToText(config=config).get_decoder().to(torch_device).eval()
+        input_ids = inputs_dict["decoder_input_ids"]
+        attention_mask = inputs_dict["decoder_attention_mask"]
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
+
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
 
 
 @require_torch
@@ -246,19 +284,26 @@ class SpeechT5SpeechToTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = SpeechT5SpeechToTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
 
-#TODO
-    # def test_config(self):
-    #     self.config_tester.run_common_tests()
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
-#TODO test_save_load_strict
+    def test_save_load_strict(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
 
-    # def test_model_forward(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.create_and_check_model_forward(*config_and_inputs)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+            self.assertEqual(info["missing_keys"], [])
 
-#TODO test_decoder_model_past_with_large_inputs
+    def test_model_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-#TODO test_encoder_decoder_model_standalone
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     # this model has no inputs_embeds
     def test_inputs_embeds(self):
@@ -582,8 +627,65 @@ class SpeechT5SpeechToTextModelTest(ModelTesterMixin, unittest.TestCase):
             module.masked_spec_embed.data.fill_(3)
 
 
+@require_torch
+@require_torchaudio
+@require_sentencepiece
+@require_tokenizers
+@slow
+class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return SpeechT5ProcessorForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
 
-#TODO: like Speech2TextModelIntegrationTests
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    def test_generation_librispeech(self):
+        model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+        model.to(torch_device)
+        processor = self.default_processor
+
+        input_speech = self._load_datasamples(1)
+
+        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+
+        generated_ids = model.generate(input_values)
+        generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        ]
+        self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
+
+    def test_generation_librispeech_batched(self):
+        model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+        model.to(torch_device)
+        processor = self.default_processor
+
+        input_speech = self._load_datasamples(4)
+
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+
+        generated_ids = model.generate(input_values, attention_mask=attention_mask)
+        generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+            "nor is mister quilter's manner less interesting than his matter",
+            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us similars drawn from eating and its results occur most readily to the mind",
+            "he has grave doubts whether sir frederick latin's work is really greek after all and can discover in it but little of rocky ithica",
+        ]
+        self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)
+
 
 
 #TODO: SpeechT5ForCTC needs to have its own tests since it doesn't have a decoder
