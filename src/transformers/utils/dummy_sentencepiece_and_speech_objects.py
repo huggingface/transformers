@@ -8,3 +8,24 @@ class Speech2TextProcessor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece", "speech"])
+
+
+class SpeechT5ProcessorForCTC(metaclass=DummyObject):
+    _backends = ["sentencepiece", "speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece", "speech"])
+
+
+class SpeechT5ProcessorForSpeechToText(metaclass=DummyObject):
+    _backends = ["sentencepiece", "speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece", "speech"])
+
+
+class SpeechT5ProcessorForTextToSpeech(metaclass=DummyObject):
+    _backends = ["sentencepiece", "speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece", "speech"])

@@ -3865,11 +3865,7 @@ if TYPE_CHECKING:
         Speech2Text2Processor,
         Speech2Text2Tokenizer,
     )
-    from .models.speecht5 import (
-        SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        SpeechT5Config,
-        SpeechT5HiFiGANConfig,
-    )
+    from .models.speecht5 import SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP, SpeechT5Config, SpeechT5HiFiGANConfig
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
@@ -4193,7 +4189,11 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_and_speech_objects import *
     else:
         from .models.speech_to_text import Speech2TextProcessor
-        from .models.speecht5 import SpeechT5ProcessorForCTC, SpeechT5ProcessorForSpeechToText, SpeechT5ProcessorForTextToSpeech
+        from .models.speecht5 import (
+            SpeechT5ProcessorForCTC,
+            SpeechT5ProcessorForSpeechToText,
+            SpeechT5ProcessorForTextToSpeech,
+        )
 
     try:
         if not is_vision_available():

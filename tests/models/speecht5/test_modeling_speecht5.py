@@ -16,7 +16,6 @@
 
 import copy
 import inspect
-import math
 import tempfile
 import unittest
 
@@ -33,7 +32,13 @@ from transformers.testing_utils import (
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_torch_available():
@@ -62,14 +67,14 @@ def prepare_speech_to_text_inputs_dict(
     cross_attn_head_mask=None,
 ):
     if input_ids is not None:
-        encoder_dict = { "input_ids": input_ids }
+        encoder_dict = {"input_ids": input_ids}
     else:
-        encoder_dict = { "input_values": input_values }
+        encoder_dict = {"input_values": input_values}
 
     if decoder_input_ids is not None:
-        decoder_dict = { "decoder_input_ids": decoder_input_ids }
+        decoder_dict = {"decoder_input_ids": decoder_input_ids}
     else:
-        decoder_dict = { "decoder_input_values": decoder_input_values }
+        decoder_dict = {"decoder_input_values": decoder_input_values}
 
     if decoder_attention_mask is None:
         if decoder_input_ids is not None:
@@ -155,9 +160,7 @@ class SpeechT5ModelTester:
         decoder_input_values = inputs_dict["decoder_input_values"]
 
         result = model(input_values, attention_mask=attention_mask, decoder_input_values=decoder_input_values)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
 
 @require_torch
@@ -180,27 +183,27 @@ class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-#TODO
+    # TODO
     def test_model_common_attributes(self):
         pass
 
-#TODO
+    # TODO
     def test_determinism(self):
         pass
 
-#TODO
+    # TODO
     def test_feed_forward_chunking(self):
         pass
 
-#TODO
+    # TODO
     def test_forward_signature(self):
         pass
 
-#TODO
+    # TODO
     def test_attention_outputs(self):
         pass
 
-#TODO
+    # TODO
     def test_hidden_states_output(self):
         pass
 
@@ -208,19 +211,19 @@ class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-#TODO
+    # TODO
     def test_model_outputs_equivalence(self):
         pass
 
-#TODO
+    # TODO
     def test_resize_tokens_embeddings(self):
         pass
 
-#TODO
+    # TODO
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-#TODO
+    # TODO
     def test_save_load(self):
         pass
 
@@ -323,9 +326,7 @@ class SpeechT5ForSpeechToTextTester:
         decoder_input_ids = inputs_dict["decoder_input_ids"]
 
         result = model(input_values, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.decoder_seq_length, self.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.decoder_seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = SpeechT5ForSpeechToText(config=config).get_decoder().to(torch_device).eval()
@@ -526,8 +527,12 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            subsampled_encoder_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(encoder_seq_length)
-            subsampled_encoder_key_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(encoder_key_length)
+            subsampled_encoder_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                encoder_seq_length
+            )
+            subsampled_encoder_key_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                encoder_key_length
+            )
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
@@ -772,11 +777,12 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
             "nor is mister quilter's manner less interesting than his matter",
-            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us similars drawn from eating and its results occur most readily to the mind",
-            "he has grave doubts whether sir frederick latin's work is really greek after all and can discover in it but little of rocky ithica",
+            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us"
+            " similars drawn from eating and its results occur most readily to the mind",
+            "he has grave doubts whether sir frederick latin's work is really greek after all and can discover in it"
+            " but little of rocky ithica",
         ]
         self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)
-
 
 
 @require_torch
@@ -853,9 +859,7 @@ class SpeechT5ForCTCTester:
 
         subsampled_encoder_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(self.seq_length)
 
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, subsampled_encoder_seq_length, self.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, subsampled_encoder_seq_length, self.vocab_size))
 
 
 @require_torch
@@ -883,35 +887,35 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-#TODO
+    # TODO
     def test_attention_outputs(self):
         pass
 
-#TODO
+    # TODO
     def test_forward_signature(self):
         pass
 
-#TODO
+    # TODO
     def test_hidden_states_output(self):
         pass
 
-#TODO
+    # TODO
     def test_initialization(self):
         pass
 
-#TODO
+    # TODO
     def test_model_common_attributes(self):
         pass
 
-#TODO
+    # TODO
     def test_resize_tokens_embeddings(self):
         pass
 
-#TODO
+    # TODO
     def test_save_load_fast_init_from_base(self):
         pass
 
-    #TODO: CTC tests from Wav2Vec2
+    # TODO: CTC tests from Wav2Vec2
 
 
 @require_torch
@@ -986,42 +990,44 @@ class SpeechT5ForTextToSpeechTester:
 
         result = model(input_ids, attention_mask=attention_mask, decoder_input_values=decoder_input_values)
         self.parent.assertEqual(
-            result.spectrogram.shape, (self.batch_size, self.decoder_seq_length * self.reduction_factor, self.num_mel_bins)
+            result.spectrogram.shape,
+            (self.batch_size, self.decoder_seq_length * self.reduction_factor, self.num_mel_bins),
         )
 
-#TODO
-    # def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-    #     model = SpeechT5ForTextToSpeech(config=config).get_decoder().to(torch_device).eval()
-    #     input_ids = inputs_dict["decoder_input_ids"]
-    #     attention_mask = inputs_dict["decoder_attention_mask"]
 
-    #     # first forward pass
-    #     outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+# TODO
+# def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
+#     model = SpeechT5ForTextToSpeech(config=config).get_decoder().to(torch_device).eval()
+#     input_ids = inputs_dict["decoder_input_ids"]
+#     attention_mask = inputs_dict["decoder_attention_mask"]
 
-    #     output, past_key_values = outputs.to_tuple()
+#     # first forward pass
+#     outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-    #     # create hypothetical multiple next token and extent to next_input_ids
-    #     next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
-    #     next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+#     output, past_key_values = outputs.to_tuple()
 
-    #     # append to next input_ids and
-    #     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-    #     next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
+#     # create hypothetical multiple next token and extent to next_input_ids
+#     next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
+#     next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
-    #     output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-    #     output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-    #         "last_hidden_state"
-    #     ]
+#     # append to next input_ids and
+#     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+#     next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-    #     # select random slice
-    #     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-    #     output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-    #     output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+#     output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
+#     output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+#         "last_hidden_state"
+#     ]
 
-    #     self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+#     # select random slice
+#     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+#     output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+#     output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
-    #     # test that outputs are equal for slice
-    #     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+#     self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+#     # test that outputs are equal for slice
+#     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
 
 
 @require_torch
@@ -1041,7 +1047,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-#TODO
+    # TODO
     # def test_save_load_strict(self):
     #     config, inputs_dict = self.model_tester.prepare_config_and_inputs()
     #     for model_class in self.all_model_classes:
@@ -1056,76 +1062,76 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-#TODO
+    # TODO
     # def test_decoder_model_past_with_large_inputs(self):
     #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
     #     self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-#TODO
+    # TODO
     def test_model_main_input_name(self):
         pass
 
-#TODO
+    # TODO
     def test_attention_outputs(self):
         pass
 
-#TODO
+    # TODO
     def test_determinism(self):
         pass
 
-#TODO
+    # TODO
     def test_feed_forward_chunking(self):
         pass
 
-#TODO
+    # TODO
     def test_forward_signature(self):
         pass
 
-#TODO
+    # TODO
     def test_hidden_states_output(self):
         pass
 
-#TODO
+    # TODO
     def test_initialization(self):
         pass
 
-#TODO
+    # TODO
     def test_inputs_embeds(self):
         pass
 
-#TODO
+    # TODO
     def test_model_outputs_equivalence(self):
         pass
 
-#TODO
+    # TODO
     def test_resize_tokens_embeddings(self):
         pass
 
-#TODO
+    # TODO
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-#TODO
+    # TODO
     def test_save_load(self):
         pass
 
-#TODO
+    # TODO
     @slow
     def test_torchscript_output_attentions(self):
         pass
 
-#TODO
+    # TODO
     @slow
     def test_torchscript_output_hidden_state(self):
         pass
 
-#TODO
+    # TODO
     @slow
     def test_torchscript_simple(self):
         pass
 
 
-#TODO: for TTS
+# TODO: for TTS
 # @require_torch
 # @require_torchaudio
 # @require_sentencepiece
@@ -1218,7 +1224,7 @@ class SpeechT5HiFiGANModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values = self.prepare_config_and_inputs()
-        inputs_dict = {"input_values": input_values }
+        inputs_dict = {"input_values": input_values}
         return config, inputs_dict
 
 
@@ -1242,7 +1248,7 @@ class SpeechT5HiFiGANModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = SpeechT5HiFiGANModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5HiFiGANConfig)
 
-#TODO
+    # TODO
     def test_config(self):
         # self.config_tester.run_common_tests()
         pass
@@ -1251,54 +1257,54 @@ class SpeechT5HiFiGANModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-#TODO
+    # TODO
     def test_determinism(self):
         pass
 
-#TODO
+    # TODO
     def test_feed_forward_chunking(self):
         pass
 
-#TODO
+    # TODO
     def test_forward_signature(self):
         pass
 
-#TODO
+    # TODO
     def test_hidden_states_output(self):
         pass
 
-#TODO
+    # TODO
     def test_initialization(self):
         pass
 
-#TODO
+    # TODO
     def test_inputs_embeds(self):
         pass
 
-#TODO
+    # TODO
     def test_model_common_attributes(self):
         pass
 
-#TODO
+    # TODO
     def test_model_main_input_name(self):
         pass
 
-#TODO
+    # TODO
     def test_model_outputs_equivalence(self):
         pass
 
-#TODO
+    # TODO
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-#TODO
+    # TODO
     def test_save_load(self):
         pass
 
-#TODO
+    # TODO
     def test_save_load_fast_init_from_base(self):
         pass
 
-#TODO
+    # TODO
     def test_save_load_fast_init_to_base(self):
         pass
