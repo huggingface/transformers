@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     get_gpu_count,
     get_tests_dir,
     is_staging_test,
+    require_accelerate,
     require_intel_extension_for_pytorch,
     require_optuna,
     require_ray,
@@ -1285,6 +1286,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertAlmostEqual(b, b1, delta=1e-5)
 
     @slow
+    @require_accelerate
     @require_torch_non_multi_gpu
     def test_auto_batch_size_finder(self):
 
