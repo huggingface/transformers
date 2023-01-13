@@ -29,7 +29,7 @@ from .configuration_upernet import UperNetConfig
 
 
 UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/upernet-convnext-tiny",
+    "openmmlab/upernet-convnext-tiny",
     # See all UperNet models at https://huggingface.co/models?filter=upernet
 ]
 
@@ -378,8 +378,8 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         >>> from PIL import Image
         >>> from huggingface_hub import hf_hub_download
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("nielsr/upernet-convnext-tiny")
-        >>> model = UperNetForSemanticSegmentation.from_pretrained("nielsr/upernet-convnext-tiny")
+        >>> image_processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-convnext-tiny")
+        >>> model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-tiny")
 
         >>> filepath = hf_hub_download(
         ...     repo_id="hf-internal-testing/fixtures_ade20k", filename="ADE_val_00000001.jpg", repo_type="dataset"
