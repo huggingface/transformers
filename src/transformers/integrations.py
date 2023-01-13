@@ -704,7 +704,7 @@ class WandbCallback(TrainerCallback):
             If not set, defaults to `"~/.config/wandb"`.
         - **wWANDB_DIR** (`str`, *optional*, defaults to `None`):
             Set this to an absolute path to store all generated files here instead of the wandb directory
-            relative to your training script. be sure this directory exists and the user your process runs as can write to it
+            relative to your training script. Be sure this directory exists and the user your process runs can write to it.
         - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
             Whether or not to disable wandb entirely. Set `WANDB_DISABLED=True` to disable.
         - **WANDB_DISABLE_CODE** (`bool`, *optional*, defaults to `False`):
