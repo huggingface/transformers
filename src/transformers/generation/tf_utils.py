@@ -432,12 +432,15 @@ class TFGenerationMixin:
 
     The class exposes [`~generation.TFGenerationMixin.generate`], which can be used for:
         - *greedy decoding* by calling [`~generation.TFGenerationMixin.greedy_search`] if `num_beams=1` and
-          `do_sample=False`.
+          `do_sample=False`
         - *contrastive search* by calling [`~generation.TFGenerationMixin.contrastive_search`] if `penalty_alpha>0` and
           `top_k>1`
         - *multinomial sampling* by calling [`~generation.TFGenerationMixin.sample`] if `num_beams=1` and
-          `do_sample=True`.
-        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`.
+          `do_sample=True`
+        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`
+
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead.
+    To learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     _seed_generator = None
@@ -541,7 +544,7 @@ class TFGenerationMixin:
         model's default generation configuration. You can override any `generation_config` by passing the corresponding
         parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
-        To learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+        For an overview of generation strategies and code examples, check out the [following guide](./generation_strategies).
 
         </Tip>
 

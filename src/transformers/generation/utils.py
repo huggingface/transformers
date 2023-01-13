@@ -464,13 +464,23 @@ class GenerationMixin:
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
-        - *greedy decoding* if `num_beams=1` and `do_sample=False`
-        - *contrastive search* if `penalty_alpha>0` and `top_k>1`
-        - *multinomial sampling* if `num_beams=1` and `do_sample=True`
-        - *beam-search decoding* if `num_beams>1` and `do_sample=False`
-        - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
-        - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
-        - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
+        - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
+          `do_sample=False`
+        - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0` and
+          `top_k>1`
+        - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
+          `do_sample=True`
+        - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
+          `do_sample=False`
+        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if `num_beams>1`
+          and `do_sample=True`
+        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if `num_beams>1`
+          and `num_beam_groups>1`
+        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
+          `constraints!=None` or `force_words_ids!=None`
+
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead.
+    To learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
@@ -1002,7 +1012,7 @@ class GenerationMixin:
         model's default generation configuration. You can override any `generation_config` by passing the corresponding
         parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
-        For a complete overview of generate and code examples, check the [following guide](./generation_strategies).
+        For an overview of generation strategies and code examples, check out the [following guide](./generation_strategies).
 
         </Tip>
 
@@ -1566,6 +1576,14 @@ class GenerationMixin:
         Generates sequences of token ids for models with a language modeling head using **contrastive search** and can
         be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.contrastive_search`] directly. Use generate()
+        instead.
+        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+
+        </Tip>
+
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
@@ -1914,6 +1932,15 @@ class GenerationMixin:
         Generates sequences of token ids for models with a language modeling head using **greedy decoding** and can be
         used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.greedy_search`] directly. Use generate()
+        instead.
+        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+
+        </Tip>
+
+
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
@@ -2148,6 +2175,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **multinomial sampling** and
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.sample`] directly. Use generate()
+        instead.
+        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2406,6 +2441,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **beam search decoding** and
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.beam_search`] directly. Use generate()
+        instead.
+        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2722,6 +2765,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **beam search multinomial
         sampling** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.beam_sample`] directly. Use generate()
+        instead.
+        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3043,6 +3094,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **diverse beam search
         decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.group_beam_search`] directly. Use generate()
+        instead.
+        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3413,6 +3472,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **constrained beam search
         decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.constrained_beam_search`] directly. Use generate()
+        instead.
+        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

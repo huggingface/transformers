@@ -131,11 +131,14 @@ class FlaxGenerationMixin:
 
     The class exposes [`~generation.FlaxGenerationMixin.generate`], which can be used for:
             - *greedy decoding* by calling [`~generation.FlaxGenerationMixin._greedy_search`] if `num_beams=1` and
-              `do_sample=False`.
+              `do_sample=False`
             - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
-              `do_sample=True`.
+              `do_sample=True`
             - *beam-search decoding* by calling [`~generation.FlaxGenerationMixin._beam_search`] if `num_beams>1` and
-              `do_sample=False`.
+              `do_sample=False`
+
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead.
+    To learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
@@ -225,25 +228,7 @@ class FlaxGenerationMixin:
         **kwargs,
     ):
         r"""
-        Generates sequences of token ids for models with a language modeling head. The method supports the following
-        generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
-
-            - *greedy decoding* by calling [`~generation.FlaxGenerationMixin._greedy_search`] if `num_beams=1` and
-              `do_sample=False`.
-            - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
-              `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation.FlaxGenerationMixin._beam_search`] if `num_beams>1` and
-              `do_sample=False`.
-
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-
-        To learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
-
-        </Tip>
+        Generates sequences of token ids for models with a language modeling head.
 
         Parameters:
             input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
