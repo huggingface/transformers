@@ -110,7 +110,6 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
     ].T
     new["encoder.final_layer_norm.weight"] = old["encoder/encoder_norm/scale"]
 
-
     if not is_encoder_only:
         # Decoder.
         for i in range(num_layers):
@@ -183,7 +182,9 @@ def load_t5x_weights_in_t5(model, config, t5x_checkpoint_path, is_encoder_only):
     model.load_state_dict(state_dict, strict=True)
 
 
-def convert_t5x_checkpoint_to_pytorch(t5x_checkpoint_path, config_file, pytorch_dump_path, is_encoder_only: bool = False):
+def convert_t5x_checkpoint_to_pytorch(
+    t5x_checkpoint_path, config_file, pytorch_dump_path, is_encoder_only: bool = False
+):
     """Loads the config and model, converts the T5X checkpoint, and saves a PyTorch checkpoint."""
     # Initialise PyTorch model
     config = T5Config.from_json_file(config_file)
@@ -224,7 +225,9 @@ if __name__ == "__main__":
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--is_encoder_only", action='store_true', help="Check if the model is encoder-decoder model"
+        "--is_encoder_only", action="store_true", help="Check if the model is encoder-decoder model", default=False
     )
     args = parser.parse_args()
-    convert_t5x_checkpoint_to_pytorch(args.t5x_checkpoint_path, args.config_file, args.pytorch_dump_path, args.is_encoder_only)
+    convert_t5x_checkpoint_to_pytorch(
+        args.t5x_checkpoint_path, args.config_file, args.pytorch_dump_path, args.is_encoder_only
+    )
