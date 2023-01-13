@@ -183,7 +183,7 @@ def load_t5x_weights_in_t5(model, config, t5x_checkpoint_path, is_encoder_only):
     model.load_state_dict(state_dict, strict=True)
 
 
-def convert_t5x_checkpoint_to_pytorch(t5x_checkpoint_path, config_file, pytorch_dump_path, is_encoder_only: bool):
+def convert_t5x_checkpoint_to_pytorch(t5x_checkpoint_path, config_file, pytorch_dump_path, is_encoder_only: bool = False):
     """Loads the config and model, converts the T5X checkpoint, and saves a PyTorch checkpoint."""
     # Initialise PyTorch model
     config = T5Config.from_json_file(config_file)
