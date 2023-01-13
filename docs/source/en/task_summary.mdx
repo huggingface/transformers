@@ -12,19 +12,19 @@ specific language governing permissions and limitations under the License.
 
 # What 🤗 Transformers can do
 
-🤗 Transformers is a library of pretrained state-of-the-art models for natural language processing (NLP), computer vision, and audio and speech processing tasks. Not only does the library contain Transformer models, but it also has non-Transformer models like modern convolutional networks for computer vision tasks. If you look at some of the most popular consumer products today like smartphones, apps, and televisions, odds are that there is some kind of deep learning technology behind it. Removing background objects from pictures taken by your smartphone? This is an example of a panoptic segmentation task (don't worry if you don't know what this means yet, we'll describe it in the following sections!). 
+🤗 Transformers is a library of pretrained state-of-the-art models for natural language processing (NLP), computer vision, and audio and speech processing tasks. Not only does the library contain Transformer models, but it also has non-Transformer models like modern convolutional networks for computer vision tasks. If you look at some of the most popular consumer products today, like smartphones, apps, and televisions, odds are that some kind of deep learning technology is behind it. Want to remove a background object from a picture taken by your smartphone? This is an example of a panoptic segmentation task (don't worry if you don't know what this means yet, we'll describe it in the following sections!). 
 
-This page provides an overview of some of the different speech and audio, computer vision, and NLP tasks that can be solved with the 🤗 Transformers library in just three lines of code!
+This page provides an overview of the different speech and audio, computer vision, and NLP tasks that can be solved with the 🤗 Transformers library in just three lines of code!
 
 ## Audio
 
-Audio and speech processing tasks are a little different from the other modalities mainly because audio as an input is a continuous signal. Unlike text, a raw audio waveform can't be neatly split into discrete chunks the way a sentence can be split into words. To get around this, the raw audio signal is typically sampled at regular intervals. If you take more samples within an interval, the sampling rate is higher and the audio more closely resembles the original audio source.
+Audio and speech processing tasks are a little different from the other modalities mainly because audio as an input is a continuous signal. Unlike text, a raw audio waveform can't be neatly split into discrete chunks the way a sentence can be divided into words. To get around this, the raw audio signal is typically sampled at regular intervals. If you take more samples within an interval, the sampling rate is higher, and the audio more closely resembles the original audio source.
 
-Previous approaches preprocessed the audio to extract useful features from it. It is now more common to start audio and speech processing tasks by directly feeding the raw audio waveform to a feature encoder to extract an audio representation. This simplifies the preprocessing step and allows the model to learn the most important features.
+Previous approaches preprocessed the audio to extract useful features from it. It is now more common to start audio and speech processing tasks by directly feeding the raw audio waveform to a feature encoder to extract an audio representation. This simplifies the preprocessing step and allows the model to learn the most essential features.
 
 ### Audio classification
 
-Audio classification is a type of task that labels audio data from a predefined set of classes. It is a broad category with many specific applications, some of which include:
+Audio classification is a task that labels audio data from a predefined set of classes. It is a broad category with many specific applications, some of which include:
 
 * acoustic scene classification: label audio with a scene label ("office", "beach", "stadium")
 * acoustic event detection: label audio with a sound event label ("car horn", "whale calling", "glass breaking")
@@ -40,7 +40,7 @@ Audio classification is a type of task that labels audio data from a predefined 
 
 ### Automatic speech recognition
 
-Automatic speech recognition (ASR) transcribes speech into text. It is one of the most common audio tasks due in part to speech being such a natural form of human communication. Today, ASR systems are embedded in "smart" technology products like speakers, phones, and cars. We can ask our virtual assistants to play music, set reminders, and tell us the weather. 
+Automatic speech recognition (ASR) transcribes speech into text. It is one of the most common audio tasks due partly to speech being such a natural form of human communication. Today, ASR systems are embedded in "smart" technology products like speakers, phones, and cars. We can ask our virtual assistants to play music, set reminders, and tell us the weather. 
 
 But one of the key challenges Transformer architectures have helped with is in low-resource languages. By pretraining on large amounts of speech data, finetuning the model on only one hour of labeled speech data in a low-resource language can still produce high-quality results compared to previous ASR systems trained on 100x more labeled data.
 
@@ -53,10 +53,12 @@ But one of the key challenges Transformer architectures have helped with is in l
 
 ## Computer vision
 
-One of the first and earliest successful computer vision tasks was recognizing images of zip code numbers using a [convolutional neural network (CNN)](glossary#convolution). An image is composed of pixels, and each pixel has a numerical value. This makes it easy to represent an image as a matrix of pixel values, and each particular combination of pixel values describe the colors of an image. Two general way computer vision tasks can be solved are:
+One of the first and earliest successful computer vision tasks was recognizing images of zip code numbers using a [convolutional neural network (CNN)](glossary#convolution). An image is composed of pixels, and each pixel has a numerical value. This makes it easy to represent an image as a matrix of pixel values. Each particular combination of pixel values describes the colors of an image. 
+
+Two general ways computer vision tasks can be solved are:
 
 1. Use convolutions to learn the hierarchical features of an image from low-level features to high-level abstract things.
-2. Use a Transformer and split an image into patches and gradually learn how each image patch is related to each other to form an image. Unlike the bottom-up approach favored by a CNN, this is kind of like starting out with a blurry image and then gradually bringing it into focus.
+2. Split an image into patches and use a Transformer to gradually learn how each image patch is related to each other to form an image. Unlike the bottom-up approach favored by a CNN, this is kind of like starting out with a blurry image and then gradually bringing it into focus.
 
 ### Image classification
 
@@ -76,9 +78,9 @@ Image classification labels an entire image from a predefined set of classes. Li
 
 ### Object detection
 
-Unlike image classification, object detection identifies multiple objects within an image, as well as the objects' positions in an image (defined by the bounding box). Some example applications of object detection include:
+Unlike image classification, object detection identifies multiple objects within an image and the objects' positions in an image (defined by the bounding box). Some example applications of object detection include:
 
-* self-driving vehicles: detect common traffic objects such as other vehicles, pedestrians, and traffic lights
+* self-driving vehicles: detect everyday traffic objects such as other vehicles, pedestrians, and traffic lights
 * remote sensing: disaster monitoring, urban planning, and weather forecasting
 * defect detection: detect cracks or structural damage in buildings, and manufacturing defects
 
@@ -91,12 +93,12 @@ Unlike image classification, object detection identifies multiple objects within
 
 ### Image segmentation
 
-Image segmentation is a pixel-level task that assigns every pixel in an image to a class. It differs from object detection, which uses bounding boxes to label and predict objects in an image, because segmentation is more granular. Segmentation can detect objects at a pixel-level. There are several types of image segmentation:
+Image segmentation is a pixel-level task that assigns every pixel in an image to a class. It differs from object detection, which uses bounding boxes to label and predict objects in an image because segmentation is more granular. Segmentation can detect objects at a pixel-level. There are several types of image segmentation:
 
 * instance segmentation: in addition to labeling the class of an object, it also labels each distinct instance of an object ("dog-1", "dog-2")
 * panoptic segmentation: a combination of semantic and instance segmentation; it labels each pixel with a semantic class **and** each distinct instance of an object
 
-Segmentation tasks are useful for helping self-driving vehicles create a pixel-level map of the world around them so they can navigate safely around pedestrians and other vehicles. It is also useful for medical imaging where the task's finer granularity can help identify anomalous cells or organ features. Image segmentation can also be used in ecommerce to virtually try on clothes or create augmented reality experiences by overlaying objects in the real-world through your camera.
+Segmentation tasks are helpful in self-driving vehicles to create a pixel-level map of the world around them so they can navigate safely around pedestrians and other vehicles. It is also useful for medical imaging, where the task's finer granularity can help identify abnormal cells or organ features. Image segmentation can also be used in ecommerce to virtually try on clothes or create augmented reality experiences by overlaying objects in the real world through your camera.
 
 ```py
 >>> from transformers import pipeline
@@ -107,7 +109,7 @@ Segmentation tasks are useful for helping self-driving vehicles create a pixel-l
 
 ### Depth estimation
 
-Depth estimation predicts the distance of each pixel in an image from the camera. This type of computer vision task is especially important for scene understanding and reconstruction. For example, in self-driving cars, vehicles need to understand how far objects like pedestrians, traffic signs, and other vehicles are to avoid obstacles and collision. Depth information is also useful for constructing 3D representations from 2D images, and can be used to create high-quality 3D representations of biological structures or buildings.
+Depth estimation predicts the distance of each pixel in an image from the camera. This computer vision task is especially important for scene understanding and reconstruction. For example, in self-driving cars, vehicles need to understand how far objects like pedestrians, traffic signs, and other vehicles are to avoid obstacles and collisions. Depth information is also helpful for constructing 3D representations from 2D images and can be used to create high-quality 3D representations of biological structures or buildings.
 
 There are two approaches to depth estimation:
 
@@ -123,11 +125,11 @@ There are two approaches to depth estimation:
 
 ## Natural language processing
 
-NLP tasks are among the most common types of tasks because text is such a natural way for us to communicate. To get text into a format recognized by a model, it needs to be tokenized. This simply means dividing a sequence of text into separate words or subwords (tokens), and then converting these tokens into numbers. As a result, you can represent a sequence of text as a sequence of numbers. Once you have a sequence of numbers, it can be input into a model to solve all sorts of NLP tasks!
+NLP tasks are among the most common types of tasks because text is such a natural way for us to communicate. To get text into a format recognized by a model, it needs to be tokenized. This means dividing a sequence of text into separate words or subwords (tokens) and then converting these tokens into numbers. As a result, you can represent a sequence of text as a sequence of numbers, and once you have a sequence of numbers, it can be input into a model to solve all sorts of NLP tasks!
 
 ### Text classification
 
-Like classification tasks in any modality, text classification labels a sequence of text (it can be sentence-level, a paragraph or a document) from a predefined set of classes. There are many useful applications for text classification, some of which include:
+Like classification tasks in any modality, text classification labels a sequence of text (it can be sentence-level, a paragraph, or a document) from a predefined set of classes. There are many practical applications for text classification, some of which include:
 
 * sentiment analysis: label text according to some polarity like `positive` or `negative` which can inform and support decision-making in fields like politics, finance, and marketing
 * content classification: label text according to some topic to help organize and filter information in news and social media feeds (`weather`, `sports`, `finance`, etc.)
@@ -141,9 +143,11 @@ Like classification tasks in any modality, text classification labels a sequence
 
 ### Token classification
 
-In any NLP task, text is preprocessed by separating the sequence of text into individual words or subwords. These are known as [tokens](/glossary#token). Token classification assigns each token a label from a predefined set of classes. Two common types of token classification are:
+In any NLP task, text is preprocessed by separating the sequence of text into individual words or subwords. These are known as [tokens](/glossary#token). Token classification assigns each token a label from a predefined set of classes. 
 
-* named entity recognition (NER): label a token according to an entity category like organization, person, location or date. NER is especially popular in the biomedical domain where it can be used to label genes, proteins, and drug names.
+Two common types of token classification are:
+
+* named entity recognition (NER): label a token according to an entity category like organization, person, location or date. NER is especially popular in biomedical settings, where it can label genes, proteins, and drug names.
 * part-of-speech tagging (POS): label a token according to its part-of-speech like noun, verb, or adjective. POS is useful for helping translation systems understand how two identical words are grammatically different (bank as a noun versus bank as a verb).
 
 ```py
@@ -155,12 +159,12 @@ In any NLP task, text is preprocessed by separating the sequence of text into in
 
 ### Question answering
 
-Question answering is another token-level task that returns an answer to a question, sometimes with context (open-domain) and other times without any context (closed-domain). This type of task is seen whenever we ask a virtual assistant to tell us whether a restaurant is open. It can also provide customer or technical support, and help search engines retrieve the relevant information you're asking for. 
+Question answering is another token-level task that returns an answer to a question, sometimes with context (open-domain) and other times without context (closed-domain). This task happens whenever we ask a virtual assistant something like whether a restaurant is open. It can also provide customer or technical support and help search engines retrieve the relevant information you're asking for. 
 
 There are two common types of question answering:
 
-* extractive: given a question and some context, the answer is a span of text from the context the model must extract
-* abstractive: given a question and some context, the answer is generated from the context; this approach is handled by the [`Text2TextGenerationPipeline`]
+* extractive: extractive: given a question and some context, the answer is a span of text from the context the model must extract
+* abstractive: given a question and some context, the answer is generated from the context; this approach is handled by the [`Text2TextGenerationPipeline`] instead of the [`QuestionAnsweringPipeline`] shown below
 
 
 ```py
@@ -175,12 +179,12 @@ There are two common types of question answering:
 
 ### Summarization
 
-Summarization creates a shorter version of a text from a longer one while trying to preserve most of the meaning of the original document. Summarization is a type of sequence-to-sequence task, it just outputs a shorter sequence of text than the input. A lot of long-form documents that can be summarized to help readers quickly understand the main points. Legislative bills, legal and financial documents, patents, and scientific papers are just a few examples of documents that could be summarized to save readers time and serve as a reading aid.
+Summarization creates a shorter version of a text from a longer one while trying to preserve most of the meaning of the original document. Summarization is a sequence-to-sequence task; it outputs a shorter text sequence than the input. There are a lot of long-form documents that can be summarized to help readers quickly understand the main points. Legislative bills, legal and financial documents, patents, and scientific papers are a few examples of documents that could be summarized to save readers time and serve as a reading aid.
 
 Like question answering, there are two types of summarization:
 
 * extractive: identify and extract the most important sentences from the original text
-* abstractive: generate the target summary (which may include new words not in the input document) from the original text; the summarization pipeline below uses the abstractive approach
+* abstractive: generate the target summary (which may include new words not in the input document) from the original text; the [`SummarizationPipeline`] uses the abstractive approach
 
 ```py
 >>> from transformers import pipeline
@@ -193,9 +197,9 @@ Like question answering, there are two types of summarization:
 
 ### Translation
 
-Translation converts a sequence of text in one language to another. It is important for helping people from different backgrounds communicate with each other, help translate content to reach wider audiences, and it can even be used as a learning tool to help people learn a new language. Along with summarization, translation is a sequence-to-sequence task, meaning the model receives an input sequence and returns a target output sequence. 
+Translation converts a sequence of text in one language to another. It is important in helping people from different backgrounds communicate with each other, help translate content to reach wider audiences, and even be a learning tool to help people learn a new language. Along with summarization, translation is a sequence-to-sequence task, meaning the model receives an input sequence and returns a target output sequence. 
 
-In the early days, translation models were mostly monolingual but recently, there is increasing interest in multilingual models that can translate between many pairs of languages.
+In the early days, translation models were mostly monolingual, but recently, there has been increasing interest in multilingual models that can translate between many pairs of languages.
 
 ```py
 >>> from transformers import pipeline
@@ -207,7 +211,7 @@ In the early days, translation models were mostly monolingual but recently, ther
 
 ### Language modeling
 
-Language modeling is a task that predicts a word in a sequence of text. It has become a very popular NLP task because a pretrained language model can be finetuned for many other downstream tasks. Recently, there has been a lot of interest in large language models (LLMs) which demonstrate zero- or few-shot learning. This means the model can solve tasks it wasn't explicitly trained to do! Language models can be used to generate fluent and convincing text, though you need to be careful since the text may not always be accurate.
+Language modeling is a task that predicts a word in a sequence of text. It has become a very popular NLP task because a pretrained language model can be finetuned for many other downstream tasks. Lately, there has been a lot of interest in large language models (LLMs) which demonstrate zero- or few-shot learning. This means the model can solve tasks it wasn't explicitly trained to do! Language models can be used to generate fluent and convincing text, though you need to be careful since the text may not always be accurate.
 
 There are two types of language modeling:
 
@@ -229,4 +233,4 @@ There are two types of language modeling:
     >>> fill_mask(text, top_k=3)
     ```
 
-Hopefully, this has given you some more background information about all the types of tasks in each modality, and the practical importance of each one. In the next [section](tasks_explained), you'll learn **how** 🤗 Transformers work to solve these tasks.
+Hopefully, this page has given you some more background information about all the types of tasks in each modality and the practical importance of each one. In the next [section](tasks_explained), you'll learn **how** 🤗 Transformers work to solve these tasks.
