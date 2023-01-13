@@ -321,6 +321,8 @@ class GitModelTester:
         result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values, labels=input_ids)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertTrue(result.loss.item() > 0)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
