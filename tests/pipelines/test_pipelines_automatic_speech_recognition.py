@@ -23,6 +23,7 @@ from transformers import (
     MODEL_FOR_CTC_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     AutoFeatureExtractor,
+    AutoProcessor,
     AutoTokenizer,
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
@@ -31,7 +32,7 @@ from transformers import (
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
-from transformers.pipelines.automatic_speech_recognition import chunk_iter
+from transformers.pipelines.automatic_speech_recognition import chunk_iter, _find_timestamp_sequence
 from transformers.testing_utils import (
     is_torch_available,
     nested_simplify,
@@ -306,31 +307,53 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
     def test_find_longest_common_subsequence(self):
+        max_source_positions = 1500
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
         # Let's test the corner cases when merging 2 chunks:
-        previous_sequence = [51492,   406,  3163,  1953,   466,    13, 51612]
+        previous_sequence = [[51492,   406,  3163,  1953,   466,    13, 51612]]
         # [{'text': ' not worth thinking about.', 'timestamp': (22.56, 24.96)}
-        
+
         # Merge when the previous sequence is a suffix of the next sequence
-        next_sequences_1 = [50364,   295,  6177,  3391,    11, 19817,  3337,   507,   307,
+        next_sequences_1 = [[50364,   295,  6177,  3391,    11, 19817,  3337,   507,   307,
                 406,  3163,  1953,   466,    13, 50614, 50614,  2812,  9836,
                 14783,   390,  6263,   538,   257,  1359,    11,  8199,  6327,
-                1090,   322,   702,  7443,    13, 50834, 50257]
+                1090,   322,   702,  7443,    13, 50834, 50257]]
         # {'text': ' of spectators, retrievality is not worth thinking about.','timestamp': (0.0, 5.0)},
         # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (5.0, 9.4)}]
+        merge = _find_timestamp_sequence(
+            [[previous_sequence,(3000,0,0)], [next_sequences_1, (3000,0,0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions
+        )
         
+        self.assertEqual(merge, [51492,   406,  3163,  1953,   466,    13, 51612, 51612,   295,  6177,  3391,    11, 19817,  3337,   507,   307,
+                406,  3163,  1953,   466,    13, 50614, 50614,  2812,  9836,
+                14783,   390,  6263,   538,   257,  1359,    11,  8199,  6327,
+                1090,   322,   702,  7443,    13, 50834, 50257])
         # Merge when the sequence is in the middle of the 1st next sequence
         next_sequences_2 = [50364,   295,  6177,  3391,    11, 19817,  3337,   507,   307,
         406,  3163,  1953,   466,    13, 2812,  9836,
         14783,   390,  6263,   538,   257,  1359,    11,  8199,  6327,
         1090,   322,   702,  7443,    13, 50834, 50257]
         # {'text': ' of spectators, retrievality is not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
-        
+        merge = _find_timestamp_sequence(
+            [[previous_sequence,(3000,0,0)], [next_sequences_2, (3000,0,0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions
+        )
         # Merge when the previous sequence is not included in the current sequence
-        next_sequences_2 = [50364, 2812,  9836,
+        next_sequences_3 = [50364, 2812,  9836,
         14783,   390,  6263,   538,   257,  1359,    11,  8199,  6327,
         1090,   322,   702,  7443,    13, 50834, 50257]
         # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
-        
+        merge = _find_timestamp_sequence(
+            [[previous_sequence,(3000,0,0)], [next_sequences_2, (3000,0,0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions
+        )
     @slow
     @require_torch
     def test_whisper_timestamp_prediction(self):
@@ -356,7 +379,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             model="openai/whisper-small",
             return_timestamps=True,
         )
-        output = pipe(array, chunk_length_s=30)
+        output = pipe(array, chunk_length_s=10)
         self.assertDictEqual(
             output,
             {
