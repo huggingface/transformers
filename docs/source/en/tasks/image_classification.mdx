@@ -136,7 +136,6 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 >>> food = food.with_transform(transforms)
 ```
 
-
 Now create a batch of examples using [`DefaultDataCollator`]. Unlike other data collators in 🤗 Transformers, the `DefaultDataCollator` does not apply additional preprocessing such as padding.
 
 ```py
@@ -169,8 +168,8 @@ Set `batched=True` to speed things up by processing multiple elements of the dat
 >>> food = food.map(process, batched=True)
 ```
 
-AS a final preprocessing step, create a batch of examples using `DefaultDataCollator`. Unlike other data collators in 🤗 Transformers, the
-DefaultDataCollator does not apply additional preprocessing, such as padding.
+As a final preprocessing step, create a batch of examples using `DefaultDataCollator`. Unlike other data collators in 🤗 Transformers, the
+`DefaultDataCollator` does not apply additional preprocessing, such as padding.
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -179,8 +178,6 @@ DefaultDataCollator does not apply additional preprocessing, such as padding.
 ```
 </tf>
 </frameworkcontent>
-
-
 
 ## Evaluate
 
@@ -286,10 +283,10 @@ If you are unfamiliar with fine-tuning a model with Keras, check out the <a href
 To fine-tune a model in TensorFlow, follow these steps:
 1. define the training hyperparameters, and set up an optimizer and a learning rate schedule
 2. instantiate a pre-treined model
-3. convert a 🤗Dataset to a `tf.data.Dataset`
+3. convert a 🤗 Dataset to a `tf.data.Dataset`
 4. compile your model
 5. add callbacks and use the `fit()` method to run the training
-6. upload your model to 🤗Hub to share with the community
+6. upload your model to 🤗 Hub to share with the community
 
 Start by defining the hyperparameters, optimizer and learning rate schedule:
 
@@ -409,7 +406,7 @@ you need to upload the following files to Hub:
 ... )
 ```
 
-Congratulations! Your model has been shared on 🤗Hub, and you can use it for inference!
+Congratulations! Your model has been shared on 🤗 Hub, and you can use it for inference!
 </tf>
 </frameworkcontent>
 
@@ -490,8 +487,8 @@ Load an image processor to preprocess the image and return the `input` as Tensor
 ```py
 >>> from transformers import AutoImageProcessor
 
->>> im_processor = AutoImageProcessor.from_pretrained("MariaK/food_classifier")
->>> inputs = im_processor(image, return_tensors="tf")
+>>> image_processor = AutoImageProcessor.from_pretrained("MariaK/food_classifier")
+>>> inputs = image_processor(image, return_tensors="tf")
 ```
 
 Pass your inputs to the model and return the logits:
