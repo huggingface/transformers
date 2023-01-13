@@ -153,11 +153,7 @@ Create a preprocessing function to resize the images and return the `pixel_value
 
 ```py
 >>> def process(examples):
-...     examples.update(
-...         image_processor(
-...             examples["image"],
-...         )
-...     )
+...     examples.update(image_processor(examples["image"]))
 ...     return examples
 ```
 
