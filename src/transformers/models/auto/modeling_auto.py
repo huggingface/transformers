@@ -707,10 +707,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 )
 
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
-    [
-        ("vilt", "ViltForQuestionAnswering"),
-        ("visual_bert", "VisualBertForQuestionAnswering")
-    ]
+    [("vilt", "ViltForQuestionAnswering"), ("visual_bert", "VisualBertForQuestionAnswering")]
 )
 
 MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
