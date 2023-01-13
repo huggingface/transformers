@@ -9,12 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-# Text Generation Strategies
+# Text generation strategies
 
 Text generation is essential to many NLP tasks, such as open-ended text generation, summarization,
-translation, and more. It also plays a role in a variety of mixed-modality applications that have text as an output, e.g.
-speech-to-text, vision-to-text, etc. Some of the models that can generate text in an auto-regressive manner include
-GPT2, XLNet, OpenAi-GPT, CTRL, TransformerXL, XLM, Bart, and T5. You can find examples of using the `generate()` method to produce
+translation, and more. It also plays a role in a variety of mixed-modality applications that have text as an output like speech-to-text and vision-to-text. Some of the models that can generate text in an auto-regressive manner include
+GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, and T5. You can find examples of using the [`~transformers.generation_utils.GenerationMixin.generate`] method to produce
 text outputs for various tasks in corresponding task guides under the Inference section,
 e.g. [summarization inference with generate()](./tasks/summarization#inference).
 
@@ -31,7 +30,7 @@ This guide describes:
 ## Default text generation configuration
 
 A decoding strategy for a model is defined in its generation configuration. When using pre-trained models for inference
-within a `pipeline()`, the models call the `PreTrainedModel.generate()` method that applies a default generation
+within a [`pipeline`], the models call the `PreTrainedModel.generate()` method that applies a default generation
 configuration under the hood. The default configuration is also used when no custom configuration has been saved with
 the model.
 
@@ -55,8 +54,7 @@ If a model has any modified values in the generation configuration, you can revi
 that the default values are not displayed.
 
 The default generation configuration limits the size of the output combined with the input prompt to a maximum of 20
-tokens to avoid running into resource limitations. And the default decoding strategy is greedy search.
-This is the simplest decoding strategy that picks a token with the highest probability as the next token. For many tasks
+tokens to avoid running into resource limitations. The default decoding strategy is greedy search, which is the simplest decoding strategy that picks a token with the highest probability as the next token. For many tasks
 and small output sizes this works well. However, when used to generate longer outputs, greedy search can start
 producing highly repetitive results.
 
@@ -76,7 +74,7 @@ into account the input's size.
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
 has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
 sequences that start with a lower probability initial tokens and would've been ignored by the greedy search.
-- `do_sample`: If set to `True`, this parameter enables such decoding strategies as multinomial sampling, beam-search
+- `do_sample`: if set to `True`, this parameter enables decoding strategies such as multinomial sampling, beam-search
 multinomial sampling, Top-K sampling and Top-p sampling. All these strategies select the next token from the probability
 distribution over the entire vocabulary with various strategy-specific adjustments.
 
@@ -85,10 +83,10 @@ distribution over the entire vocabulary with various strategy-specific adjustmen
 Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
 decoding strategies. If you are new to this concept, we recommend reading [this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
 
-Here, we'll show what parameters control some of the strategies, and illustrate how you can use them.
+Here, we'll show some of the parameters that control the decoding strategies and illustrate how you can use them.
 
 ### Greedy Search
-Greedy search is the default decoding strategy. For generate() method to use it, `num_beams` has to be set to 1, and
+[`generate`] uses greedy search decoding by default so you don't have to pass any parameters to enable it. This means the parameters `num_beams` is set to 1 and `do_sample=False`.
 `do_sample=False`. Because it is a default strategy, you do not have to pass any parameters to `generate()` method to enable it.
 
 ```python
@@ -106,11 +104,11 @@ Greedy search is the default decoding strategy. For generate() method to use it,
 ['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
 ```
 
-### Contrastive Search
-The Contrastive search decoding strategy was proposed in the 2022 paper [A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417).
+### Contrastive search
+The contrastive search decoding strategy was proposed in the 2022 paper [A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417).
 It demonstrates superior results for generating non-repetitive yet coherent long outputs. To learn how contrastive search
 works, check out [this blog post](https://huggingface.co/blog/introducing-csearch).
-The two main parameters that enable and control the behavior of the contrastive search are `penalty_alpha` and `top_k`:
+The two main parameters that enable and control the behavior of contrastive search are `penalty_alpha` and `top_k`:
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -158,9 +156,9 @@ name for themselves and become famous for what they']
 ```
 
 ### Beam-search decoding
-As opposed to the greedy search, beam search decoding keeps several hypotheses at each time step and eventually chooses
+Unlike greedy search, beam-search decoding keeps several hypotheses at each time step and eventually chooses
 the hypothesis that has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
-sequences that start with a lower probability initial tokens and would've been ignored by the greedy search.
+sequences that start with lower probability initial tokens and would've been ignored by the greedy search.
 
 To enable this decoding strategy, specify the `num_beams` that is greater than 1.
 
@@ -183,7 +181,7 @@ time."\n\nHe added: "I am very proud of the work I have been able to do in the l
 
 ### Beam-search multinomial sampling
 As the name implies, this decoding strategy combines beam search with multinomial sampling. You need to specify
-the `num_beams` that is greater than 1, and set `do_sample=True` to use this decoding strategy.
+the `num_beams` greater than 1, and set `do_sample=True` to use this decoding strategy.
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -202,9 +200,9 @@ the `num_beams` that is greater than 1, and set `do_sample=True` to use this dec
 ```
 
 ### Diverse beam search decoding
-The Diverse beam search decoding strategy is an extension of the beam search strategy that allows to generate a more diverse
+The diverse beam search decoding strategy is an extension of the beam search strategy that allows for generating a more diverse
 set of beam sequences to choose from. To learn how it works, refer to [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
-The Diverse Beam Search approach has two main parameters: `num_beams` and `num_beam_groups`.
+This approach has two main parameters: `num_beams` and `num_beam_groups`.
 The groups are selected to ensure they are distinct enough compared to the others, and regular beam search is used within each group.
 
 ```python
@@ -237,14 +235,14 @@ The groups are selected to ensure they are distinct enough compared to the other
 ```
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
-generate() method, which give you even further control over the generate() method's behavior.
+[`generate`] method, which gives you even further control over the [`generate`] method's behavior.
 For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.mdx).
 
 ## Save a custom decoding strategy with your model
-If you would like to share your fine-tuned model with a specific generation configuration, you can do so:
-* Create a `GenerationConfig` class instance
+If you would like to share your fine-tuned model with a specific generation configuration, you can:
+* Create a [`GenerationConfig`] class instance
 * Specify the decoding strategy parameters
-* Save your generation configuration with `save_pretrained`, making sure to leave its `config_file_name` argument empty
+* Save your generation configuration with [`GenerationConfig.save_pretrained`], making sure to leave its `config_file_name` argument empty
 * Set `push_to_hub` to `True` to upload your config to the model's repo
 
 ```python
@@ -258,7 +256,7 @@ If you would like to share your fine-tuned model with a specific generation conf
 ```
 
 You can also store several generation parametrizations in a single directory, making use of the `config_file_name`
-argument in `save_pretrained`. You can later instantiate them with `from_pretrained`. This is useful if you want to
+argument in [`GenerationConfig.save_pretrained`]. You can later instantiate them with [`GenerationConfig.from_pretrained`]. This is useful if you want to
 store several generation configurations for a single model (e.g. one for creative text generation with sampling, and
 other for summarization with beam search). You must have the right Hub permissions to add configuration files to a model.
 
