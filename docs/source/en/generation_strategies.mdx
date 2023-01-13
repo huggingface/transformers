@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+
 # Text generation strategies
 
 Text generation is essential to many NLP tasks, such as open-ended text generation, summarization,
@@ -86,6 +87,7 @@ decoding strategies. If you are new to this concept, we recommend reading [this 
 Here, we'll show some of the parameters that control the decoding strategies and illustrate how you can use them.
 
 ### Greedy Search
+
 [`generate`] uses greedy search decoding by default so you don't have to pass any parameters to enable it. This means the parameters `num_beams` is set to 1 and `do_sample=False`.
 `do_sample=False`. Because it is a default strategy, you do not have to pass any parameters to `generate()` method to enable it.
 
@@ -105,6 +107,7 @@ Here, we'll show some of the parameters that control the decoding strategies and
 ```
 
 ### Contrastive search
+
 The contrastive search decoding strategy was proposed in the 2022 paper [A Contrastive Framework for Neural Text Generation](https://arxiv.org/abs/2202.06417).
 It demonstrates superior results for generating non-repetitive yet coherent long outputs. To learn how contrastive search
 works, check out [this blog post](https://huggingface.co/blog/introducing-csearch).
@@ -129,6 +132,7 @@ We pride ourselves on being the best in the business and our customer service is
 ```
 
 ### Multinomial sampling
+
 As opposed to greedy search that always chooses a token with the highest probability as the
 next token, multinomial sampling randomly selects the next token based on the probability distribution over the entire
 vocabulary given by the model. Every token with a non-zero probability has a chance of being selected, thus reducing the
@@ -156,6 +160,7 @@ name for themselves and become famous for what they']
 ```
 
 ### Beam-search decoding
+
 Unlike greedy search, beam-search decoding keeps several hypotheses at each time step and eventually chooses
 the hypothesis that has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
 sequences that start with lower probability initial tokens and would've been ignored by the greedy search.
@@ -180,6 +185,7 @@ time."\n\nHe added: "I am very proud of the work I have been able to do in the l
 ```
 
 ### Beam-search multinomial sampling
+
 As the name implies, this decoding strategy combines beam search with multinomial sampling. You need to specify
 the `num_beams` greater than 1, and set `do_sample=True` to use this decoding strategy.
 
@@ -200,6 +206,7 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 ```
 
 ### Diverse beam search decoding
+
 The diverse beam search decoding strategy is an extension of the beam search strategy that allows for generating a more diverse
 set of beam sequences to choose from. To learn how it works, refer to [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
 This approach has two main parameters: `num_beams` and `num_beam_groups`.
@@ -239,6 +246,7 @@ This guide illustrates the main parameters that enable various decoding strategi
 For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.mdx).
 
 ## Save a custom decoding strategy with your model
+
 If you would like to share your fine-tuned model with a specific generation configuration, you can:
 * Create a [`GenerationConfig`] class instance
 * Specify the decoding strategy parameters
