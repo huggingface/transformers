@@ -130,19 +130,23 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     """
     # index of the first timestamp token
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
-    begin = np.where(sequences[0][0] == timestamp_begin)[1]
-    if len(begin.shape) == 0:
-        raise ValueError("No timestamp detected")
-    begin_idx = begin.item()
     items = []
     # approximation of the token to time ratio : ~0.2seconds
     time_precision = feature_extractor.chunk_length / max_source_positions
     time = 0
     actual_offset = 0
     for seq_idx, item in enumerate(sequences):
+
         sequence, stride = item
-        chunk_len, stride_left, stride_right = stride
+        if isinstance(sequence, list):
+            sequence = np.array(sequence)
+
+
+        chunk_len, stride_left, _ = stride
         sequence = sequence.squeeze(0)
+
+        # remove the `forced_decoder_idx` that are use to parametrize the generation
+        begin_idx =  np.where(sequence == timestamp_begin)[0].item() if timestamp_begin in sequence else 0
         sequence = sequence[begin_idx:]
 
         if seq_idx != 0:
