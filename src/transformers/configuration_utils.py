@@ -146,7 +146,7 @@ class PretrainedConfig(PushToHubMixin):
             only the most probable tokens with probabilities that add up to `top_p` or higher are kept for generation.
         typical_p (`float`, *optional*, defaults to 1):
             Locally typical sampling orders tokens according to how similar the negative log probability of predicting a
-            specific token is to the expected conditional entropy of a random next token. The smallest set of most
+            specific token is to the expected conditional entropy of a random next token. If set to float < 1, the smallest set of most
             similar tokens with probability masses that add up to `typical_p` or higher are kept for generation.
         repetition_penalty (`float`, *optional*, defaults to 1):
             Parameter for repetition penalty that will be used by default in the `generate` method of the model. 1.0
