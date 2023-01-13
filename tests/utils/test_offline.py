@@ -30,7 +30,7 @@ class OfflineTests(TestCasePlus):
 
         # this must be loaded before socket.socket is monkey-patched
         load = """
-from transformers import BertConfig, BertModel, BertTokenizer
+from transformers import BertConfig, BertModel, BertTokenizer, pipeline
         """
 
         run = """
@@ -38,6 +38,7 @@ mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
 BertModel.from_pretrained(mname)
 BertTokenizer.from_pretrained(mname)
+pipe = pipeline(task="fill-mask", model=mname)
 print("success")
         """
 
@@ -119,3 +120,27 @@ socket.socket = offline_socket
         result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("success", result.stdout.decode())
+
+    @require_torch
+    def test_offline_mode_pipeline_exception(self):
+        load = """
+from transformers import pipeline
+        """
+        run = """
+mname = "hf-internal-testing/tiny-random-bert"
+pipe = pipeline(model=mname)
+        """
+
+        mock = """
+import socket
+def offline_socket(*args, **kwargs): raise socket.error("Offline mode is enabled")
+socket.socket = offline_socket
+        """
+        env = self.get_env()
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        cmd = [sys.executable, "-c", "\n".join([load, mock, run])]
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "You cannot infer task automatically within pipeline when using offline mode", result.stderr.decode()
+        )
