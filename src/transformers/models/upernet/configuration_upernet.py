@@ -59,13 +59,13 @@ class UperNetConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import UperNetConfig, UperNetForSemanticsegmentation
+    >>> from transformers import UperNetConfig, UperNetForSemanticSegmentation
 
     >>> # Initializing a configuration
     >>> configuration = UperNetConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = UperNetForSemanticsegmentation(configuration)
+    >>> model = UperNetForSemanticSegmentation(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
