@@ -505,7 +505,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             return []
         elif np.where(timestamp_tokens)[0][-1] + 1 not in consecutive:
             # we add the final timestamp if it is not already in the list
-            consecutive = np.append(consecutive,np.where(timestamp_tokens)[0][-1] + 1)
+            consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
 
         last_slice = np.where(timestamp_tokens)[0][0]
         for current_slice in consecutive:
