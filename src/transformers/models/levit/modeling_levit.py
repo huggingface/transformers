@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "LevitConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "LevitImageProcessor"
+_IMAGE_PROCESSOR_FOR_DOC = "LevitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/levit-128S"
@@ -549,7 +549,7 @@ class LevitModel(LevitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -618,7 +618,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -711,7 +711,7 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=LevitForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,
