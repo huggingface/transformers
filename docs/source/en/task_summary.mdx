@@ -12,17 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # What 🤗 Transformers can do
 
-The [Transformer](https://arxiv.org/abs/1706.03762) is a uniquely flexible and powerful architecture. While it is typically associated with natural language processing (NLP) tasks, other fields like computer vision and speech processing are increasingly adopting Transformer architectures to solve tasks in their area. If you look at some of the underlying technology behind popular consumer products like smartphones, apps, and self-driving cars, odds are that you'll find some variant of a Transformer behind it. That is because the Transformer is a general architecture that can be applied to many tasks!
+🤗 Transformers is a library of pretrained state-of-the-art models for natural language processing (NLP), computer vision, and audio and speech processing tasks. Not only does the library contain Transformer models, but it also has non-Transformer models like modern convolutional networks for computer vision tasks. If you look at some of the most popular consumer products today like smartphones, apps, and televisions, odds are that there is some kind of deep learning technology behind it. Removing background objects from pictures taken by your smartphone? This is an example of a panoptic segmentation task (don't worry if you don't know what this means yet, we'll describe it in the following sections!). 
 
-This page provides an overview of some of the different audio, computer vision, and natural language processing tasks that can be solved by Transformer models. We'll also show you how easy it is to solve these tasks with 🤗 Transformers in just three lines of code!
+This page provides an overview of some of the different speech and audio, computer vision, and NLP tasks that can be solved with the 🤗 Transformers library in just three lines of code!
 
 ## Audio
 
-Classical speech and audio processing techniques typically involved Gaussian mixture models, Hidden Markov models, and recurrent neural networks (RNNs). But these have been eclipsed by more modern approaches like [sequence-to-sequence models](./glossary#sequencetosequence-seq2seq) and [connectionist temporal classification (CTC)](./glossary#connectionist-temporal-classification-ctc), which dramatically simplify training end-to-end audio and speech processing systems and improve performance.
+Audio and speech processing tasks are a little different from the other modalities mainly because audio as an input is a continuous signal. Unlike text, a raw audio waveform can't be neatly split into discrete chunks the way a sentence can be split into words. To get around this, the raw audio signal is typically sampled at regular intervals. If you take more samples within an interval, the sampling rate is higher and the audio more closely resembles the original audio source.
 
-The [wav2vec2](./model_doc/wav2vec2) model was one of the first successful Transformer-based speech processing models. It adapted some of the ideas that made pretrained language models like BERT so successful. For instance, wav2vec2 pretrained on raw unlabeled speech and used a Transformer encoder to contextualize the speech representations. Its pretraining objective was to predict masked parts of the audio, just like the [masked language modeling](./glossary#masked-language-modeling) objective in BERT!
-
-Speech and audio tasks today continue to rely on Transformer architectures, with greater emphasis being placed on models with multilingual capabilities. This makes it possible to build more robust speech processing systems that can be used across many languages and dialects, especially low-resource languages.
+Previous approaches preprocessed the audio to extract useful features from it. It is now more common to start audio and speech processing tasks by directly feeding the raw audio waveform to a feature encoder to extract an audio representation. This simplifies the preprocessing step and allows the model to learn the most important features.
 
 ### Audio classification
 
@@ -55,11 +53,10 @@ But one of the key challenges Transformer architectures have helped with is in l
 
 ## Computer vision
 
-One of the first and earliest successful computer vision applications was recognizing zip code numbers using a [convolutional neural network (CNN)](glossary#convolution). For many years, CNNs have been the go-to for computer vision tasks, and modern CNNs like [ConvNeXT](./model_doc/convnext) continue to see strong usage with competitive performance.
+One of the first and earliest successful computer vision tasks was recognizing images of zip code numbers using a [convolutional neural network (CNN)](glossary#convolution). An image is composed of pixels, and each pixel has a numerical value. This makes it easy to represent an image as a matrix of pixel values, and each particular combination of pixel values describe the colors of an image. Two general way computer vision tasks can be solved are:
 
-However, with the introduction of the [Vision Transformers (ViT)](./model_doc/vit), many computer vision tasks have now shifted towards Transformer architectures. Drawing on the success of Transformers in NLP, ViT splits an image into patches and passes these to the encoder, similar to how text is tokenized. Instead of training a CNN for each type of computer vision task, a large and scalable pretrained ViT can be used for many different vision tasks. Today, it is common for other vision Transformer models to use ViT as a [backbone](.glossary#backcone).
-
-While speech and NLP tasks today mainly use Transformer models, in computer vision, convolutions are still a powerful tool for building up an understanding of an image and have not been completely replaced. There are computer vision models that combine convolutions with Transformers, like [CvT](./model_doc/cvt), or use a pretrained convolutional backbone, such as [DETR](./model_doc/detr).
+1. Use convolutions to learn the hierarchical features of an image from low-level features to high-level abstract things.
+2. Use a Transformer and split an image into patches and gradually learn how each image patch is related to each other to form an image. Unlike the bottom-up approach favored by a CNN, this is kind of like starting out with a blurry image and then gradually bringing it into focus.
 
 ### Image classification
 
@@ -126,7 +123,7 @@ There are two approaches to depth estimation:
 
 ## Natural language processing
 
-The Transformer was introduced in the, [*Attention Is All You Need*](https://arxiv.org/abs/1706.03762), paper for tasks such as language modeling, translation, and summarization. At the time, NLP tasks were typically solved with long short-term memory (LSTM) networks and recurrent neural networks (RNNs). But the Transformer introduced a new architecture based entirely on self-attention mechanisms. These attention layers allow the Transformer to focus on specific words when learning the representation of each word. As a result, the Transformer didn't only outperform previous models, but it was also more efficient and faster to train! Since then, Transformer models have driven most of the recent progress in NLP.
+NLP tasks are among the most common types of tasks because text is such a natural way for us to communicate. To get text into a format recognized by a model, it needs to be tokenized. This simply means dividing a sequence of text into separate words or subwords (tokens), and then converting these tokens into numbers. As a result, you can represent a sequence of text as a sequence of numbers. Once you have a sequence of numbers, it can be input into a model to solve all sorts of NLP tasks!
 
 ### Text classification
 
@@ -158,12 +155,13 @@ In any NLP task, text is preprocessed by separating the sequence of text into in
 
 ### Question answering
 
-Question answering is another token-level task that returns an answer to a question, sometimes with context (open-domain) and other times without any context (closed-domain). There are two common types of question answering:
+Question answering is another token-level task that returns an answer to a question, sometimes with context (open-domain) and other times without any context (closed-domain). This type of task is seen whenever we ask a virtual assistant to tell us whether a restaurant is open. It can also provide customer or technical support, and help search engines retrieve the relevant information you're asking for. 
+
+There are two common types of question answering:
 
 * extractive: given a question and some context, the answer is a span of text from the context the model must extract
-* abstractive: given a question and some context, the answer is generated from the context
+* abstractive: given a question and some context, the answer is generated from the context; this approach is handled by the [`Text2TextGenerationPipeline`]
 
-This type of task is seen whenever we ask a virtual assistant to tell us whether a restaurant is open. It can also provide customer or technical support, and help search engines retrieve the relevant information you're asking for.
 
 ```py
 >>> from transformers import pipeline
@@ -182,7 +180,7 @@ Summarization creates a shorter version of a text from a longer one while trying
 Like question answering, there are two types of summarization:
 
 * extractive: identify and extract the most important sentences from the original text
-* abstractive: generate the target summary (which may include new words not in the input document) from the original text
+* abstractive: generate the target summary (which may include new words not in the input document) from the original text; the summarization pipeline below uses the abstractive approach
 
 ```py
 >>> from transformers import pipeline
@@ -214,20 +212,21 @@ Language modeling is a task that predicts a word in a sequence of text. It has b
 There are two types of language modeling:
 
 * causal: the model's objective is to predict the next token in a sequence, and future tokens are masked
+
+    ```py
+    >>> from transformers import pipeline
+
+    >>> prompt = "Hugging Face is a"
+    >>> text_generator = pipeline(task="text-generation")
+    >>> text_generator(prompt)
+    ```
+
 * masked: the model's objective is to predict a masked token in a sequence with full access to the tokens in the sequence
+    
+    ```py
+    >>> text = "Hugging Face is a <mask> company based in New York City."
+    >>> fill_mask = pipeline(task="fill-mask")
+    >>> fill_mask(text, top_k=3)
+    ```
 
-```py
->>> from transformers import pipeline
-# causal language modeling
-
->>> prompt = "Hugging Face is a"
->>> text_generator = pipeline(task="text-generation")
->>> text_generator(prompt)
-# masked language modeling
-
->>> text = "Hugging Face is a <mask> company based in New York City."
->>> fill_mask = pipeline(task="fill-mask")
->>> fill_mask(text, top_k=3)
-```
-
-Hopefully, this has given you some more background information about all these tasks and the practical importance of each one. The Transformer really changed the paradigm for how we approach all these different tasks and it's exciting to see how Transformer models are being used to solve problems new and old. In the next [section](tasks_explained), you'll learn **how** 🤗 Transformers work to solve these tasks.
+Hopefully, this has given you some more background information about all the types of tasks in each modality, and the practical importance of each one. In the next [section](tasks_explained), you'll learn **how** 🤗 Transformers work to solve these tasks.
