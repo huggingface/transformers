@@ -439,8 +439,8 @@ class TFGenerationMixin:
           `do_sample=True`
         - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`
 
-    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead.
-    To learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
+    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     _seed_generator = None
@@ -544,7 +544,8 @@ class TFGenerationMixin:
         model's default generation configuration. You can override any `generation_config` by passing the corresponding
         parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
-        For an overview of generation strategies and code examples, check out the [following guide](./generation_strategies).
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
 
         </Tip>
 

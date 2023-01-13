@@ -137,8 +137,8 @@ class FlaxGenerationMixin:
             - *beam-search decoding* by calling [`~generation.FlaxGenerationMixin._beam_search`] if `num_beams>1` and
               `do_sample=False`
 
-    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead.
-    To learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
+    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     def prepare_inputs_for_generation(self, *args, **kwargs):

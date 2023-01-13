@@ -479,8 +479,8 @@ class GenerationMixin:
         - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
           `constraints!=None` or `force_words_ids!=None`
 
-    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead.
-    To learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
+    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
@@ -1012,7 +1012,8 @@ class GenerationMixin:
         model's default generation configuration. You can override any `generation_config` by passing the corresponding
         parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
-        For an overview of generation strategies and code examples, check out the [following guide](./generation_strategies).
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -1578,9 +1579,9 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.contrastive_search`] directly. Use generate()
-        instead.
-        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+        In most cases, you do not need to call [`~generation.GenerationMixin.contrastive_search`] directly. Use
+        generate() instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -1935,8 +1936,8 @@ class GenerationMixin:
         <Tip warning={true}>
 
         In most cases, you do not need to call [`~generation.GenerationMixin.greedy_search`] directly. Use generate()
-        instead.
-        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+        instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -2178,9 +2179,9 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.sample`] directly. Use generate()
-        instead.
-        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+        In most cases, you do not need to call [`~generation.GenerationMixin.sample`] directly. Use generate() instead.
+        For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -2445,8 +2446,8 @@ class GenerationMixin:
         <Tip warning={true}>
 
         In most cases, you do not need to call [`~generation.GenerationMixin.beam_search`] directly. Use generate()
-        instead.
-        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+        instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -2769,8 +2770,8 @@ class GenerationMixin:
         <Tip warning={true}>
 
         In most cases, you do not need to call [`~generation.GenerationMixin.beam_sample`] directly. Use generate()
-        instead.
-        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+        instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -3097,9 +3098,9 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.group_beam_search`] directly. Use generate()
-        instead.
-        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+        In most cases, you do not need to call [`~generation.GenerationMixin.group_beam_search`] directly. Use
+        generate() instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -3475,9 +3476,9 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.constrained_beam_search`] directly. Use generate()
-        instead.
-        For an overview of generation strategies and code examples, check the [following guide](./generation_strategies).
+        In most cases, you do not need to call [`~generation.GenerationMixin.constrained_beam_search`] directly. Use
+        generate() instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
 
         </Tip>
 
