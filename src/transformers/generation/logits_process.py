@@ -138,7 +138,6 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: int):
-
         for arg_name, arg_value in [
             ("prompt_length_to_skip", prompt_length_to_skip),
             ("min_new_tokens", min_new_tokens),
@@ -152,7 +151,6 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         if new_tokens_length < self.min_new_tokens:
             scores[:, self.eos_token_id] = -float("inf")
@@ -297,7 +295,6 @@ class TypicalLogitsWarper(LogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-
         # calculate entropy
         normalized = torch.nn.functional.log_softmax(scores, dim=-1)
         p = torch.exp(normalized)
@@ -324,9 +321,9 @@ class TypicalLogitsWarper(LogitsWarper):
 
 class EpsilonLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs epsilon, i.e. restricting to tokens with absolute prob > prob_cut_off.
-    Takes the largest min_tokens_to_keep tokens if no tokens satisfy this constraint.
-    See [Truncation Sampling as Language Model Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
+    [`LogitsWarper`] that performs epsilon, i.e. restricting to tokens with absolute prob > prob_cut_off. Takes the
+    largest min_tokens_to_keep tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
+    Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
 
     Args:
         epsilon (`float`):
@@ -367,8 +364,8 @@ class EpsilonLogitsWarper(LogitsWarper):
 
 class EtaLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs eta-sampling.
-    See [Truncation Sampling as Language Model Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
+    [`LogitsWarper`] that performs eta-sampling. See [Truncation Sampling as Language Model
+    Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
 
     Args:
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
@@ -520,7 +517,6 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
-
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
             raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
         if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):

@@ -119,14 +119,14 @@ class GenerationConfig(PushToHubMixin):
         epsilon_cutoff (`float`, *optional*, defaults to 0):
             If set to float strictly between 0 and 1, only tokens with a conditional probability greater than
             `epsilon_cutoff` will be sampled. In the paper, suggested values range from 3e-4 to 9e-4, depending on the
-            size of the model.
-            See [Truncation Sampling as Language Model Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+            size of the model. See [Truncation Sampling as Language Model
+            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
         eta_cutoff (`float`, *optional*, defaults to 0):
             Eta sampling is a hybrid of locally typical sampling and epsilon sampling. If set to float strictly between
-            0 and 1, a token is only considered if it is greater than either the cutoff or
-            sqrt(eta_cutoff) * expected_next_random_token_probability. In the paper, suggested values range from
-            3e-4 to 2e-3, depending on the size of the model.
-            See [Truncation Sampling as Language Model Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+            0 and 1, a token is only considered if it is greater than either the cutoff or sqrt(eta_cutoff) *
+            expected_next_random_token_probability. In the paper, suggested values range from 3e-4 to 2e-3, depending
+            on the size of the model. See [Truncation Sampling as Language Model
+            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
