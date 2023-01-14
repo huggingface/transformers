@@ -297,7 +297,9 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # create distribution and take log (inverse to Softmax as taken in TopPLogitsWarper)
         dist = torch.log(
-            torch.tensor([[0.87, 0.099, 0.001, 0.03], [0.4, 0.299, 0.101, 0.2]], device=torch_device, dtype=torch.float)
+            torch.tensor(
+                [[0.87, 0.099, 0.001, 0.03], [0.4, 0.299, 0.101, 0.2]], device=torch_device, dtype=torch.float
+            )
         )
 
         epsilon_warp = EpsilonLogitsWarper(0.1)

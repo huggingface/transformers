@@ -336,6 +336,7 @@ class EpsilonLogitsWarper(LogitsWarper):
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
     """
+
     def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         epsilon = float(epsilon)
         if epsilon <= 0 or epsilon >= 1:
@@ -343,7 +344,9 @@ class EpsilonLogitsWarper(LogitsWarper):
 
         min_tokens_to_keep = int(min_tokens_to_keep)
         if min_tokens_to_keep < 1:
-            raise ValueError(f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}")
+            raise ValueError(
+                f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
+            )
 
         self.epsilon = epsilon
         self.filter_value = filter_value
@@ -369,8 +372,8 @@ class EtaLogitsWarper(LogitsWarper):
 
     Args:
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimum number of tokens that cannot be filtered.
-"""
+            Minimum number of tokens that cannot be filtered."""
+
     def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         epsilon = float(epsilon)
         if epsilon <= 0 or epsilon >= 1:
@@ -378,7 +381,9 @@ class EtaLogitsWarper(LogitsWarper):
 
         min_tokens_to_keep = int(min_tokens_to_keep)
         if min_tokens_to_keep < 1:
-            raise ValueError(f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}")
+            raise ValueError(
+                f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
+            )
 
         self.epsilon = epsilon
         self.filter_value = filter_value
@@ -388,7 +393,7 @@ class EtaLogitsWarper(LogitsWarper):
         # Calculate the adaptive cutoff
         probabilities = scores.softmax(dim=-1)
         entropy = torch.distributions.Categorical(probs=scores.softmax(dim=-1)).entropy()
-        eta = min(self.epsilon, torch.sqrt(torch.tensor(self.epsilon))*torch.exp(-entropy))
+        eta = min(self.epsilon, torch.sqrt(torch.tensor(self.epsilon)) * torch.exp(-entropy))
         indices_to_remove = probabilities < eta
 
         # Keep the words with the 'min_tokens_to_keep'-highest probabilities
