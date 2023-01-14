@@ -321,7 +321,7 @@ class LogitsProcessorTest(unittest.TestCase):
         ramp_logits[1] = ramp_logits[1] * 100.0
 
         # make sure at least 2 tokens are kept
-        epsilon_warp = EpsilonLogitsWarper(5e-2, min_tokens_to_keep=2)
+        epsilon_warp = EpsilonLogitsWarper(5e-2, min_tokens_to_keep=2, filter_value=0.0)
         filtered_dist = epsilon_warp(input_ids, ramp_logits)
 
         # first batch should keep 3 tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
@@ -355,10 +355,10 @@ class LogitsProcessorTest(unittest.TestCase):
         ) - (vocab_size // 2)
 
         # make ramp_logits more extreme
-        ramp_logits[1] = ramp_logits[1] * 100.0 + 0.5
+        ramp_logits[1] = ramp_logits[1] * 100.0
 
         # make sure at least 2 tokens are kept
-        eta_warp = EtaLogitsWarper(0.01, min_tokens_to_keep=2)
+        eta_warp = EtaLogitsWarper(0.1, min_tokens_to_keep=2, filter_value=0.0)
         filtered_dist = eta_warp(input_ids, ramp_logits)
 
         # first batch should keep 2 tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.

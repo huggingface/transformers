@@ -356,7 +356,7 @@ class EpsilonLogitsWarper(LogitsWarper):
 
         # Keep the words with the 'min_tokens_to_keep'-highest probabilities
         top_k = min(self.min_tokens_to_keep, scores.size(-1))  # Safety check
-        indices_to_remove = indices_to_remove | (scores < torch.topk(scores, top_k)[0][..., -1, None])
+        indices_to_remove = indices_to_remove & (scores < torch.topk(scores, top_k)[0][..., -1, None])
 
         scores = scores.masked_fill(indices_to_remove, self.filter_value)
         return scores
@@ -382,20 +382,20 @@ class EtaLogitsWarper(LogitsWarper):
                 f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
             )
 
-        self.epsilon = epsilon
+        self.epsilon = torch.tensor(epsilon)
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # Calculate the adaptive cutoff
         probabilities = scores.softmax(dim=-1)
-        entropy = torch.distributions.Categorical(probs=scores.softmax(dim=-1)).entropy()
-        eta = min(self.epsilon, torch.sqrt(torch.tensor(self.epsilon)) * torch.exp(-entropy))
+        entropy = torch.distributions.Categorical(probs=probabilities).entropy()
+        eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
         indices_to_remove = probabilities < eta
 
         # Keep the words with the 'min_tokens_to_keep'-highest probabilities
         top_k = min(self.min_tokens_to_keep, scores.size(-1))  # Safety check
-        indices_to_remove = indices_to_remove | (scores < torch.topk(scores, top_k)[0][..., -1, None])
+        indices_to_remove = indices_to_remove & (scores < torch.topk(scores, top_k)[0][..., -1, None])
 
         scores = scores.masked_fill(indices_to_remove, self.filter_value)
         return scores
