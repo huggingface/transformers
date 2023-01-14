@@ -152,11 +152,15 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
             time -= stride_left / 100
             actual_offset = int(time / time_precision)
 
-            timestamp_tokens = np.where(sequence >= timestamp_begin)[0][0::2]
+            timestamp_tokens = np.where(sequence >= timestamp_begin)[0][1::2]
             previous_tokens = items[-1][1:-1]
 
-            if len(timestamp_tokens) > 1 and len(previous_tokens) > 0:
-                end_of_curr_sequence_idx = timestamp_tokens[1]
+
+            if len(timestamp_tokens) >= 1 and len(previous_tokens) > 0:
+                # Here we only take the first slice of the current sequence.
+                # This needs to be more general to handle the cases where the chunk-size is very big
+                # and the merge sequence is not in the first slice.
+                end_of_curr_sequence_idx = timestamp_tokens[0]
                 current_slice = sequence[:end_of_curr_sequence_idx]
 
                 trie = SuffixTrie(current_slice)
@@ -170,15 +174,18 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
                     # if we have a suffix, then the timestamp token is the last token of the previous slice
                     if list(sequence[idx : longest_common_sequence[-1][0] + 1]) == list(sliced_sequence[:-1]):
                         sliced_sequence[-1] = items[-1][-1]
-                    elif longest_common_sequence[0][-1] < end_of_curr_sequence_idx:
-                        print("TO DO, we have to rely on the actual timing here, but it is approximate")
-                        # the matching sequence is included in the middle of the current slice
-                        # we need to offset the timestamp token by the actual time and properly merge the two slices
+                    elif longest_common_sequence[-1][0] < end_of_curr_sequence_idx:
+                        # in that case, we found the merge in the middle of the current slice,
+                        # which means that we do not have the exact end timestamp.
+                        # We have [previous, ......, begin, merge, end]
+                        #     [0 (begin not offseted), ..., merge, ......., end]
+                        # We offset `end` by the time of the previous slice
                         actual_offset = int(time / time_precision)
-                        sliced_sequence[-1] += actual_offset
+                        prev_duration = items[-1][-1] - items[-1][0]
+                        sliced_sequence = np.insert(sliced_sequence, len(sliced_sequence), sequence[end_of_curr_sequence_idx] + actual_offset - prev_duration)
 
                     # update the last item : merge the two slices
-                    items[-1][1:] = sliced_sequence
+                    items[-1] = np.insert(sliced_sequence, 0, items[-1][0])
                     sequence = sequence[end_of_curr_sequence_idx:]
 
                     # since we merged, we have the starting time for the next sequences

@@ -510,14 +510,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
         last_slice = np.where(timestamp_tokens)[0][0]
         for current_slice in consecutive:
             sliced_tokens = token_ids[last_slice:current_slice]
-            start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
-            end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
-            offsets.append(
-                {
-                    "text": self._decode(sliced_tokens),
-                    "timestamp": (start_timestamp_position * time_precision, end_timestamp_position * time_precision),
-                }
-            )
+            if len(sliced_tokens) > 1:
+                start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
+                end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+                offsets.append(
+                    {
+                        "text": self._decode(sliced_tokens),
+                        "timestamp": (start_timestamp_position * time_precision, end_timestamp_position * time_precision),
+                    }
+                )
             last_slice = current_slice
 
         return offsets
