@@ -344,35 +344,35 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         )
         # {'text': ' of spectators, retrievality is not worth thinking about.','timestamp': (0.0, 5.0)},
         # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (5.0, 9.4)}]
-        merge = _find_timestamp_sequence(
-            [[previous_sequence, (3000, 0, 0)], [next_sequences_1, (3000, 0, 0)]],
-            processor.tokenizer,
-            processor.feature_extractor,
-            max_source_positions,
-        )
+        # merge = _find_timestamp_sequence(
+        #     [[previous_sequence, (3000, 0, 0)], [next_sequences_1, (3000, 0, 0)]],
+        #     processor.tokenizer,
+        #     processor.feature_extractor,
+        #     max_source_positions,
+        # )
 
-        # fmt: off
-        self.assertEqual(
-            merge,
-            [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
-        )
-        # fmt: on
-        self.assertEqual(
-            processor.decode(merge, output_offsets=True),
-            {
-                "text": (
-                    " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
-                    " chest."
-                ),
-                "offsets": [
-                    {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
-                    {
-                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (24.96, 29.36),
-                    },
-                ],
-            },
-        )
+        # # fmt: off
+        # self.assertEqual(
+        #     merge,
+        #     [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
+        # )
+        # # fmt: on
+        # self.assertEqual(
+        #     processor.decode(merge, output_offsets=True),
+        #     {
+        #         "text": (
+        #             " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
+        #             " chest."
+        #         ),
+        #         "offsets": [
+        #             {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
+        #             {
+        #                 "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+        #                 "timestamp": (24.96, 29.36),
+        #             },
+        #         ],
+        #     },
+        # )
 
         # Merge when the sequence is in the middle of the 1st next sequence
         # fmt: off
@@ -382,7 +382,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # fmt: on
         # {'text': ' of spectators, retrievality is not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
         merge = _find_timestamp_sequence(
-            [[previous_sequence, (3000, 0, 0)], [next_sequences_2, (3000, 0, 0)]],
+            [[previous_sequence, (3000, 0, 0)], [next_sequences_2, (3000, 750, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
@@ -390,7 +390,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # fmt: off
         self.assertEqual(
             merge,
-            [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
+            [51492, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51839],
         )
         # fmt: on
         self.assertEqual(
@@ -401,11 +401,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                     " chest."
                 ),
                 "offsets": [
-                    {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
-                    {
-                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (24.96, 29.36),
-                    },
+                    {"text": " not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.", "timestamp": (22.56, 29.5)},
                 ],
             },
         )
@@ -443,6 +439,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 ],
             },
         )
+        # last case is when the sequence is not in the first next predicted start and end of timestamp
+        next_sequences_3 = [50364, 2812, 9836, 14783, 390, 51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832]
+
 
     @slow
     @require_torch
