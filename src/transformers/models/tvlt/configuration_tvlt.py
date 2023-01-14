@@ -36,7 +36,7 @@ class TvltConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        pixel_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         audio_size (`int`, *optional*, defaults to 2048):
             The time length of each audio spectrogram.
