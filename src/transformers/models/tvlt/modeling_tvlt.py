@@ -518,8 +518,6 @@ class TvltOutput(nn.Module):
 
 
 class TvltLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
-
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
