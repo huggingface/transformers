@@ -309,9 +309,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     def test_find_longest_common_subsequence(self):
         max_source_positions = 1500
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
-        # Let's test the corner cases when merging 2 chunks:
+
         previous_sequence = [[51492, 406, 3163, 1953, 466, 13, 51612, 51612]]
-        # [{'text': ' not worth thinking about.', 'timestamp': (22.56, 24.96)}
         self.assertEqual(
             processor.decode(previous_sequence[0], output_offsets=True),
             {
@@ -342,77 +341,81 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 ],
             },
         )
-        # {'text': ' of spectators, retrievality is not worth thinking about.','timestamp': (0.0, 5.0)},
-        # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (5.0, 9.4)}]
-        # merge = _find_timestamp_sequence(
-        #     [[previous_sequence, (3000, 0, 0)], [next_sequences_1, (3000, 0, 0)]],
-        #     processor.tokenizer,
-        #     processor.feature_extractor,
-        #     max_source_positions,
-        # )
+        merge = _find_timestamp_sequence(
+            [[previous_sequence, (3000, 0, 0)], [next_sequences_1, (3000, 750, 0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions,
+        )
 
-        # # fmt: off
-        # self.assertEqual(
-        #     merge,
-        #     [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
-        # )
-        # # fmt: on
-        # self.assertEqual(
-        #     processor.decode(merge, output_offsets=True),
-        #     {
-        #         "text": (
-        #             " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
-        #             " chest."
-        #         ),
-        #         "offsets": [
-        #             {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
-        #             {
-        #                 "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-        #                 "timestamp": (24.96, 29.36),
-        #             },
-        #         ],
-        #     },
-        # )
+        # fmt: off
+        self.assertEqual(
+            merge,
+            [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
+        )
+        # fmt: on
+        self.assertEqual(
+            processor.decode(merge, output_offsets=True),
+            {
+                "text": (
+                    " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
+                    " chest."
+                ),
+                "offsets": [
+                    {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
+                    {
+                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+                        "timestamp": (24.96, 29.36),
+                    },
+                ],
+            },
+        )
 
         # Merge when the sequence is in the middle of the 1st next sequence
-        # # fmt: off
-        # next_sequences_2 = [
-        #     [50364, 295, 6177, 3391, 11, 19817, 3337, 507, 307, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50834, 50257]
-        # ]
-        # # fmt: on
-        # # {'text': ' of spectators, retrievality is not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
-        # merge = _find_timestamp_sequence(
-        #     [[previous_sequence, (3000, 0, 0)], [next_sequences_2, (3000, 750, 0)]],
-        #     processor.tokenizer,
-        #     processor.feature_extractor,
-        #     max_source_positions,
-        # )
-        # # fmt: off
-        # self.assertEqual(
-        #     merge,
-        #     [51492, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51839],
-        # )
-        # # fmt: on
-        # self.assertEqual(
-        #     processor.decode(merge, output_offsets=True),
-        #     {
-        #         "text": (
-        #             " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
-        #             " chest."
-        #         ),
-        #         "offsets": [
-        #             {"text": " not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.", "timestamp": (22.56, 29.5)},
-        #         ],
-        #     },
-        # )
+        # fmt: off
+        next_sequences_2 = [
+            [50364, 295, 6177, 3391, 11, 19817, 3337, 507, 307, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50834, 50257]
+        ]
+        # fmt: on
+        # {'text': ' of spectators, retrievality is not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
+        merge = _find_timestamp_sequence(
+            [[previous_sequence, (3000, 0, 0)], [next_sequences_2, (3000, 750, 0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions,
+        )
+        # fmt: off
+        self.assertEqual(
+            merge,
+            [51492, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51839],
+        )
+        # fmt: on
+        self.assertEqual(
+            processor.decode(merge, output_offsets=True),
+            {
+                "text": (
+                    " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
+                    " chest."
+                ),
+                "offsets": [
+                    {
+                        "text": (
+                            " not worth thinking about. His instant panic was followed by a small, sharp blow high on"
+                            " his chest."
+                        ),
+                        "timestamp": (22.56, 29.5),
+                    },
+                ],
+            },
+        )
 
         # Merge when the previous sequence is not included in the current sequence
         # fmt: off
-        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50834, 50257]]
+        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51831, 50257]]
         # fmt: on
         # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
         merge = _find_timestamp_sequence(
-            [[previous_sequence, (3000, 0, 0)], [next_sequences_3, (3000, 0, 0)]],
+            [[previous_sequence, (3000, 0, 0)], [next_sequences_3, (3000, 750, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
@@ -440,40 +443,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             },
         )
         # last case is when the sequence is not in the first next predicted start and end of timestamp
+        # fmt: off
         next_sequences_3 = [
-            [
-                50364,
-                2812,
-                9836,
-                14783,
-                390,
-                51492,
-                406,
-                3163,
-                1953,
-                466,
-                13,
-                51612,
-                51612,
-                2812,
-                9836,
-                14783,
-                390,
-                6263,
-                538,
-                257,
-                1359,
-                11,
-                8199,
-                6327,
-                1090,
-                322,
-                702,
-                7443,
-                13,
-                51832,
-            ]
+            [50364, 2812, 9836, 14783, 390, 51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832]
         ]
+        # fmt: on
         merge = _find_timestamp_sequence(
             [[previous_sequence, (3000, 0, 0)], [next_sequences_3, (3000, 0, 0)]],
             processor.tokenizer,

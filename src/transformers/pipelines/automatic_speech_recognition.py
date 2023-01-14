@@ -160,7 +160,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
                 longest_common_sequence = trie.search(previous_tokens)
                 if len(longest_common_sequence) > 0:
                     idx = longest_common_sequence[0][0]
-                    end_of_curr_sequence_idx = np.where(sequence[idx:] >= timestamp_begin)[0].item() + 1
+                    end_of_curr_sequence_idx = np.where(sequence[idx:] >= timestamp_begin)[0][0] + 1
                     sliced_sequence = sequence[idx : end_of_curr_sequence_idx + idx]
 
                     # if we have a suffix, then the timestamp token is the last token of the previous slice
@@ -214,8 +214,8 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
                 sliced_sequence = sequence[: last_idx + 1]
                 duration = sliced_sequence[-1] - sliced_sequence[0]
                 # We need to discard the previous timing information
-                sliced_sequence[0] = actual_offset + timestamp_begin
-                sliced_sequence[-1] = actual_offset + timestamp_begin + duration
+                sliced_sequence[0] = items[-1][-1]
+                sliced_sequence[-1] = items[-1][-1] + duration
                 items.append(sliced_sequence)
         # The beginning time of the next chunk
         time += chunk_len / 100
