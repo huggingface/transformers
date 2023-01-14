@@ -29,6 +29,7 @@ Tips:
   This processor wraps an image processor (for the image/video modality) and an audio feature extractor (for the audio modality) into one.
 - TVLT is trained with images/videos and audios of various sizes: the authors resize and crop the input images/videos to 224 and limit the length of audio spectrogram to 2048. To make batching of videos and audios possible, the authors use a `pixel_mask` that indicates which pixels are real/padding and `audio_masks` that indicates which audio values are real/padding.
 - The design of TVLT is very similar to that of a standard Vision Transformer (ViT) and masked autoencoder (MAE). The difference is that the model includes embedding layers for the audio modality.
+- The PyTorch version of this model is only available in torch 1.10 and higher.
 
 <p align="center">
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/tvlt_architecture.png"
@@ -37,12 +38,7 @@ alt="drawing" width="600"/>
 
 <small> TVLT architecture. Taken from the <a href="[https://arxiv.org/abs/2102.03334](https://arxiv.org/abs/2209.14156)">original paper</a>. </small>
 
-The original code can be found [here](https://github.com/zinengtang/TVLT).
-
-
-Tips:
-
-- The PyTorch version of this model is only available in torch 1.10 and higher.
+The original code can be found [here](https://github.com/zinengtang/TVLT). This model was contributed by [Zineng Tang](https://huggingface.co/TVLT).
 
 ## TvltConfig
 
