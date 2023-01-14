@@ -516,7 +516,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 offsets.append(
                     {
                         "text": self._decode(sliced_tokens),
-                        "timestamp": (start_timestamp_position * time_precision, end_timestamp_position * time_precision),
+                        "timestamp": (
+                            start_timestamp_position * time_precision,
+                            end_timestamp_position * time_precision,
+                        ),
                     }
                 )
             last_slice = current_slice
