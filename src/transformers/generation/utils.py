@@ -1374,7 +1374,6 @@ class GenerationMixin:
             )
 
         elif is_contrastive_search_gen_mode:
-
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
@@ -1771,7 +1770,6 @@ class GenerationMixin:
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None:
-
                 # prepare inputs
                 model_kwargs["use_cache"] = True
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
