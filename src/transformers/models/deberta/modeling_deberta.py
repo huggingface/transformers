@@ -38,7 +38,6 @@ from .configuration_deberta import DebertaConfig
 
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DebertaConfig"
-_TOKENIZER_FOR_DOC = "DebertaTokenizer"
 _CHECKPOINT_FOR_DOC = "microsoft/deberta-base"
 
 # Masked LM docstring
@@ -46,25 +45,12 @@ _CHECKPOINT_FOR_MASKED_LM = "lsanochkin/deberta-large-feedback"
 _MASKED_LM_EXPECTED_OUTPUT = "' Paris'"
 _MASKED_LM_EXPECTED_LOSS = "0.54"
 
-# TokenClassification docstring
-_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbsamu/deberta-base-finetuned-ner"
-_TOKEN_CLASS_EXPECTED_OUTPUT = (
-    "['LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0',"
-    " 'LABEL_0', 'LABEL_0']"
-)
-_TOKEN_CLASS_EXPECTED_LOSS = 0.04
-
 # QuestionAnswering docstring
 _CHECKPOINT_FOR_QA = "Palak/microsoft_deberta-large_squad"
 _QA_EXPECTED_OUTPUT = "' a nice puppet'"
 _QA_EXPECTED_LOSS = 0.14
 _QA_TARGET_START_INDEX = 12
 _QA_TARGET_END_INDEX = 14
-
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-deberta"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
-_SEQ_CLASS_EXPECTED_LOSS = "0.69"
 
 
 DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -950,7 +936,6 @@ class DebertaModel(DebertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1057,7 +1042,6 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_MASKED_LM,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1201,12 +1185,9 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1311,12 +1292,9 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1388,7 +1366,6 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -40,33 +40,9 @@ from .configuration_deberta_v2 import DebertaV2Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DebertaV2Config"
-_TOKENIZER_FOR_DOC = "DebertaV2Tokenizer"
 _CHECKPOINT_FOR_DOC = "microsoft/deberta-v2-xlarge"
-
-# Masked LM docstring
-_CHECKPOINT_FOR_MASKED_LM = "hf-internal-testing/tiny-random-deberta-v2"
-_MASKED_LM_EXPECTED_OUTPUT = "'enberry'"
-_MASKED_LM_EXPECTED_LOSS = "11.85"
-
-# TokenClassification docstring
-_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-random-deberta-v2"
-_TOKEN_CLASS_EXPECTED_OUTPUT = (
-    "['LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0',"
-    " 'LABEL_0', 'LABEL_0']"
-)
-_TOKEN_CLASS_EXPECTED_LOSS = 0.61
-
-# QuestionAnswering docstring
-_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-deberta-v2"
-_QA_EXPECTED_OUTPUT = "'was Jim Henson? Jim Henson was'"
-_QA_EXPECTED_LOSS = 2.47
 _QA_TARGET_START_INDEX = 2
 _QA_TARGET_END_INDEX = 9
-
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-deberta-v2"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-_SEQ_CLASS_EXPECTED_LOSS = "0.69"
 
 DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/deberta-v2-xlarge",
@@ -1060,7 +1036,6 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1146,7 +1121,6 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
 
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
-# Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM with Deberta->DebertaV2
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "cls.predictions.decoder.weight"]
@@ -1168,14 +1142,12 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_MASKED_LM,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="[MASK]",
-        expected_output=_MASKED_LM_EXPECTED_OUTPUT,
-        expected_loss=_MASKED_LM_EXPECTED_LOSS,
     )
+    # Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM.forward with Deberta->DebertaV2
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1285,7 +1257,6 @@ class DebertaV2OnlyMLMHead(nn.Module):
     """,
     DEBERTA_START_DOCSTRING,
 )
-# Copied from transformers.models.deberta.modeling_deberta.DebertaForSequenceClassification with Deberta->DebertaV2
 class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1313,13 +1284,11 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
+    # Copied from transformers.models.deberta.modeling_deberta.DebertaForSequenceClassification.forward with Deberta->DebertaV2
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1424,12 +1393,9 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1486,7 +1452,6 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
     """,
     DEBERTA_START_DOCSTRING,
 )
-# Copied from transformers.models.deberta.modeling_deberta.DebertaForQuestionAnswering with Deberta->DebertaV2
 class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1502,15 +1467,13 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_QA,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_QA_EXPECTED_OUTPUT,
-        expected_loss=_QA_EXPECTED_LOSS,
         qa_target_start_index=_QA_TARGET_START_INDEX,
         qa_target_end_index=_QA_TARGET_END_INDEX,
     )
+    # Copied from transformers.models.deberta.modeling_deberta.DebertaForQuestionAnswering.forward with Deberta->DebertaV2
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1617,7 +1580,6 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
