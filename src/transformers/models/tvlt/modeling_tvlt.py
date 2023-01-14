@@ -655,35 +655,32 @@ TVLT_START_DOCSTRING = r"""
 TVLT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`TvltPixelFeatureExtractor`]. See
-            [`TvltFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`TvltProcessor`]. See
+            [`TvltProcessor.__call__`] for details.
 
         audio_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Audio values. Audio values can be obtained using [`TvltAudioFeatureExtractor`]. See
-            [`TvltFeatureExtractor.__call__`] for details.
+            Audio values. Audio values can be obtained using [`TvltProcessor`]. See
+            [`TvltProcessor.__call__`] for details.
 
         pixel_masks (`torch.FloatTensor` of shape `(batch_size, num_pixel_patches)`):
-            Pixel masks. Pixel masks can be obtained using [`TvltPixelFeatureExtractor`]. See
-            [`TvltFeatureExtractor.__call__`] for details.
+            Pixel masks. Pixel masks can be obtained using [`TvltProcessor`]. See
+            [`TvltProcessor.__call__`] for details.
 
         audio_masks (`torch.FloatTensor` of shape `(batch_size, num_audio_patches)`):
-            Audio masks. Audio masks can be obtained using [`TvltAudioFeatureExtractor`]. See
-            [`TvltFeatureExtractor.__call__`] for details.
+            Audio masks. Audio masks can be obtained using [`TvltProcessor`]. See
+            [`TvltProcessor.__call__`] for details.
 
         pixel_masking_noise (`torch.FloatTensor` of shape `(batch_size, num_pixel_patches)`):
             Noises for pixel masks for MAE reconstruction. Pixel masks can be obtained using
-            [`TvltPixelFeatureExtractor`]. See [`TvltFeatureExtractor.__call__`] for details.
+            [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltPixelFeatureExtractor`].
-            See [`TvltPixelFeatureExtractor.__call__`] for details.
+            Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
+            obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
         pixel_masks_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
-            obtained using [`TvltPixelFeatureExtractor`]. See [`TvltPixelFeatureExtractor.__call__`] for details.
-
-        labels (`torch.FloatTensor` of shape `(batch_size, num_labls)`):
-            Number of labels for pretrainings. For example, whether vision and audio match in pretraining.
+            Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltProcessor`].
+            See [`TvltProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
