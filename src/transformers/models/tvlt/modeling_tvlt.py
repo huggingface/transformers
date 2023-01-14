@@ -1218,7 +1218,7 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
             nn.Linear(config.hidden_size, config.hidden_size * 2),
             nn.LayerNorm(config.hidden_size * 2),
             nn.GELU(),
-            nn.Linear(config.hidden_size * 2, config.num_qa_labels),
+            nn.Linear(config.hidden_size * 2, config.num_labels),
         )
 
         # Initialize weights and apply final processing
