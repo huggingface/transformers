@@ -46,7 +46,7 @@ class TvltConfig(PretrainedConfig):
             The size (resolution) of each image patch.
         audio_patch_size (`list`, *optional*, defaults to [16, 16]):
             The size (resolution) of each audio patch.
-        num_pixel_channels (`int`, *optional*, defaults to 3):
+        num_image_channels (`int`, *optional*, defaults to 3):
             The number of input image channels.
         num_audio_channels (`int`, *optional*, defaults to 1):
             The number of input audio channels.
