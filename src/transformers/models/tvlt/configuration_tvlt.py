@@ -91,10 +91,6 @@ class TvltConfig(PretrainedConfig):
             Whether to use vision audio matching task in pretraining.
         task_mae (`bool`, *optional*, defaults to `True`):
             Whether to use mae task in pretraining.
-        num_qa_labels (`int`, *optional*, defaults to `1`):
-            Number of labels in question answering.
-        num_labels (`int`, *optional*, defaults to `1`):
-            Number of labels in tasks like classification.
 
     Example:
 
@@ -141,8 +137,6 @@ class TvltConfig(PretrainedConfig):
         audio_mask_ratio=0.15,
         task_matching=True,
         task_mae=True,
-        num_qa_labels=1,
-        num_labels=1,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -177,5 +171,3 @@ class TvltConfig(PretrainedConfig):
 
         self.task_matching = task_matching
         self.task_mae = task_mae
-        self.num_qa_labels = num_qa_labels
-        self.num_labels = num_labels
