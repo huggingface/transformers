@@ -1021,7 +1021,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
-    def cat_mask(self, mask_token, sequence, ids_restore):
+    def concatenate_mask(self, mask_token, sequence, ids_restore):
         batch_size, seq_length, dim = sequence.shape
         mask_tokens = mask_token.repeat(batch_size, ids_restore.shape[1] - seq_length, 1)
         padded_sequence = torch.cat([sequence, mask_tokens], dim=1)
@@ -1124,7 +1124,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
                 audio_sequence_output
             )  # [batch_size, num_masked_audio_patches, decoder_hidden_size]
             num_frames = pixel_values.size(1)
-            pixel_decoder_input = self.cat_mask(self.pixel_mask_token, pixel_decoder_input, pixel_ids_restore)
+            pixel_decoder_input = self.concatenate_mask(self.pixel_mask_token, pixel_decoder_input, pixel_ids_restore)
             pixel_decoder_input = pixel_decoder_input + self.decoder_pixel_pos_embed.repeat(1, num_frames, 1)
             pixel_decoder_input = pixel_decoder_input + torch.repeat_interleave(
                 self.decoder_temporal_embed[:, :num_frames], self.num_patches_per_image, dim=1
@@ -1133,7 +1133,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
             pixel_decoder_outputs = self.decoder(pixel_decoder_input)
             pixel_logits = self.pixel_mae_head(pixel_decoder_outputs.logits)
 
-            audio_decoder_input = self.cat_mask(self.audio_mask_token, audio_decoder_input, audio_ids_restore)
+            audio_decoder_input = self.concatenate_mask(self.audio_mask_token, audio_decoder_input, audio_ids_restore)
             num_time_patches = audio_decoder_input.size(1) // self.num_freq_patches
             audio_decoder_input = audio_decoder_input + self.decoder_freq_embed.repeat(1, num_time_patches, 1)
             audio_decoder_input = audio_decoder_input + torch.repeat_interleave(
