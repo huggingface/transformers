@@ -90,6 +90,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         self.padding_value = padding_value
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
 
+    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.get_mel_filters with 45.245640471924965->59.99247463746737
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
         n_mels = int(n_mels)
@@ -354,7 +355,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
                 noise = torch.rand(batch_size, max_patch_len)  # noise in [0, 1]
             # sort noise for each sample
             ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
-            data.update({"audio_mask_pos_perm": ids_shuffle})
+            data.update({"audio_mask_position_permutation": ids_shuffle})
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         return encoded_inputs

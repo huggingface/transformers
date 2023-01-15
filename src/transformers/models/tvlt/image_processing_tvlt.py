@@ -448,6 +448,6 @@ class TvltImageProcessor(BaseImageProcessor):
             noise = np.random.rand(batch_size, max_patch_len)  # noise in [0, 1]
             # sort noise for each sample
             ids_shuffle = np.argsort(noise, axis=1)  # ascend: small is keep, large is remove
-            data.update({"pixel_mask_pos_perm": ids_shuffle})
+            data.update({"pixel_mask_position_permutation": ids_shuffle})
 
         return BatchFeature(data=data, tensor_type=return_tensors)

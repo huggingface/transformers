@@ -371,9 +371,9 @@ class TvltAudioPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAESelfAttention with ViTMAE->Tvlt
+# Copied from transformers.models.vilt.modeling_vilt.ViltSelfAttention with Vilt->Tvlt
 class TvltSelfAttention(nn.Module):
-    def __init__(self, config: TvltConfig) -> None:
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -391,14 +391,12 @@ class TvltSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+    def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
+        x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -407,11 +405,13 @@ class TvltSelfAttention(nn.Module):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -425,14 +425,14 @@ class TvltSelfAttention(nn.Module):
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        context_layer = context_layer.view(*new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAESelfOutput with ViTMAE->Tvlt
+# Copied from transformers.models.vilt.modeling_vilt.ViltSelfOutput with Vilt->Tvlt
 class TvltSelfOutput(nn.Module):
     """
     The residual connection is defined in TvltLayer instead of here (as is the case with other models), due to the
@@ -451,15 +451,15 @@ class TvltSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEAttention with ViTMAE->Tvlt
+# Copied from transformers.models.vilt.modeling_vilt.ViltAttention with Vilt->Tvlt
 class TvltAttention(nn.Module):
-    def __init__(self, config: TvltConfig) -> None:
+    def __init__(self, config):
         super().__init__()
         self.attention = TvltSelfAttention(config)
         self.output = TvltSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -477,13 +477,8 @@ class TvltAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+        self_outputs = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -491,7 +486,7 @@ class TvltAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEIntermediate with ViTMAE->Tvlt
+# Copied from transformers.models.vilt.modeling_vilt.ViltIntermediate with Vilt->Tvlt
 class TvltIntermediate(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
         super().__init__()
@@ -508,7 +503,7 @@ class TvltIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEOutput with ViTMAE->Tvlt
+# Copied from transformers.models.vilt.modeling_vilt.ViltOutput with Vilt->Tvlt
 class TvltOutput(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
         super().__init__()
@@ -524,11 +519,8 @@ class TvltOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAELayer with ViTMAE->Tvlt
 class TvltLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
-
-    def __init__(self, config: TvltConfig) -> None:
+    def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -538,14 +530,10 @@ class TvltLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in Tvlt, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in TVLT, layernorm is applied before self-attention
+            attention_mask,
             head_mask,
             output_attentions=output_attentions,
         )
@@ -553,9 +541,9 @@ class TvltLayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = attention_output + hidden_states.to(attention_output.device)
 
-        # in Tvlt, layernorm is also applied after self-attention
+        # in TVLT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
 
@@ -567,9 +555,9 @@ class TvltLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEEncoder with ViTMAE->Tvlt
+# Copied from transformers.models.vilt.modeling_vilt.ViltEncoder with Vilt->Tvlt
 class TvltEncoder(nn.Module):
-    def __init__(self, config: TvltConfig) -> None:
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([TvltLayer(config) for _ in range(config.num_hidden_layers)])
@@ -577,12 +565,13 @@ class TvltEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -603,10 +592,11 @@ class TvltEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
+                    attention_mask,
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
