@@ -350,21 +350,21 @@ class Decoder(nn.Module):
 
 class InformerModel(nn.Module):
     @validated()
-    def __init__(
+    def __init__(  # add loss param
         self,
-        freq: str,
+        freq: str, # frequency
         context_length: int,
         prediction_length: int,
-        num_feat_dynamic_real: int,
-        num_feat_static_real: int,
-        num_feat_static_cat: int,
+        num_feat_dynamic_real: int,  # num_dynamic_real_features
+        num_feat_static_real: int,  # num_static_real_features
+        num_feat_static_cat: int,  # num_static_categorical_features
         cardinality: List[int],
         # Informer arguments
         nhead: int,
-        num_encoder_layers: int,
-        num_decoder_layers: int,
+        num_encoder_layers: int, # encoder_layers
+        num_decoder_layers: int, # decoder_layers
         dim_feedforward: int,
-        activation: str = "gelu",
+        activation: str = "gelu", # activation_function
         dropout: float = 0.1,
         attn: str = "prob",
         factor: int = 5,
@@ -720,4 +720,3 @@ class InformerModel(nn.Module):
         return concat_future_samples.reshape(
             (-1, self.num_parallel_samples, self.prediction_length) + self.target_shape,
         )
-    
