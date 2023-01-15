@@ -39,8 +39,8 @@ class TvltProcessor(ProcessorMixin):
     def __init__(self, image_processor, feature_extractor):
         super().__init__(image_processor=image_processor, feature_extractor=feature_extractor)
 
-        self.current_image_processor = image_processor
-        self.current_feature_extractor = feature_extractor
+        self.image_processor = image_processor
+        self.feature_extractor = feature_extractor
 
     def __call__(
         self,
@@ -63,14 +63,12 @@ class TvltProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `visual_inputs` or `audio_inputs` input to process.")
 
         if visual_inputs is not None:
-            visual_inputs_dict = self.current_image_processor(visual_inputs, mask_pixel=mask_pixel, *args, **kwargs)
+            visual_inputs_dict = self.image_processor(visual_inputs, mask_pixel=mask_pixel, *args, **kwargs)
             visual_inputs_mixed_dict = None
         if visual_inputs_mixed is not None:
-            visual_inputs_mixed_dict = self.current_image_processor(
-                visual_inputs_mixed, is_mixed=True, *args, **kwargs
-            )
+            visual_inputs_mixed_dict = self.image_processor(visual_inputs_mixed, is_mixed=True, *args, **kwargs)
         if audio_inputs is not None:
-            audio_inputs_dict = self.current_feature_extractor(
+            audio_inputs_dict = self.feature_extractor(
                 audio_inputs, *args, sampling_rate=sampling_rate, mask_audio=mask_audio, **kwargs
             )
 
@@ -87,6 +85,6 @@ class TvltProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        image_processor_input_names = self.current_image_processor.model_input_names
-        feature_extractor_input_names = self.current_feature_extractor.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(image_processor_input_names + feature_extractor_input_names))

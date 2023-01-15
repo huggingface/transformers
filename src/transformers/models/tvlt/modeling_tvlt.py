@@ -24,7 +24,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput
@@ -212,7 +212,9 @@ class TvltPixelEmbeddings(nn.Module):
         ids_restore = None
         if pixel_mask_position_permutation is not None:
             embeddings, attention_masks, label_masks, ids_restore = self.random_masking(
-                embeddings, attention_masks=attention_masks, pixel_mask_position_permutation=pixel_mask_position_permutation
+                embeddings,
+                attention_masks=attention_masks,
+                pixel_mask_position_permutation=pixel_mask_position_permutation,
             )
 
         return embeddings, attention_masks, label_masks, ids_restore
@@ -280,7 +282,9 @@ class TvltAudioEmbeddings(nn.Module):
         ids_restore = None
         if audio_mask_position_permutation is not None:
             embeddings, attention_masks, label_masks, ids_restore = self.random_masking(
-                embeddings, attention_masks=attention_masks, audio_mask_position_permutation=audio_mask_position_permutation
+                embeddings,
+                attention_masks=attention_masks,
+                audio_mask_position_permutation=audio_mask_position_permutation,
             )
 
         return embeddings, attention_masks, label_masks, ids_restore
@@ -669,10 +673,6 @@ TVLT_INPUTS_DOCSTRING = r"""
             Audio masks. Audio masks can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
             details.
 
-        pixel_masking_noise (`torch.FloatTensor` of shape `(batch_size, num_pixel_patches)`):
-            Noises for pixel masks for MAE reconstruction. Pixel masks can be obtained using [`TvltProcessor`]. See
-            [`TvltProcessor.__call__`] for details.
-
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
             obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
@@ -682,12 +682,12 @@ TVLT_INPUTS_DOCSTRING = r"""
             [`TvltProcessor.__call__`] for details.
 
         pixel_mask_position_permutation (`torch.LongTensor` of shape `(batch_size, num_pixel_patches)`):
-            Pixel mask position permutation of masked autoencoder objective. Pixel mask position permutation can be obtained using [`TvltProcessor`]. See
-            [`TvltProcessor.__call__`] for details.
+            Pixel mask position permutation of masked autoencoder objective. Pixel mask position permutation can be
+            obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
         audio_mask_position_permutation (`torch.LongTensor` of shape `(batch_size, num_audio_patches)`):
-            Audio mask position permutation of masked autoencoder objective. Audio mask position permutation can be obtained using [`TvltProcessor`]. See
-            [`TvltProcessor.__call__`] for details.
+            Audio mask position permutation of masked autoencoder objective. Audio mask position permutation can be
+            obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -1055,8 +1055,25 @@ class TvltForPreTraining(TvltPreTrainedModel):
         return_dict=None,
     ) -> Union[tuple, TvltForPreTrainingOutput]:
         r"""
-        Returns:
+        pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
+            obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
+        pixel_masks_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltProcessor`]. See
+            [`TvltProcessor.__call__`] for details.
+
+        pixel_mask_position_permutation (`torch.LongTensor` of shape `(batch_size, num_pixel_patches)`):
+            Pixel mask position permutation of masked autoencoder objective. Pixel mask position permutation can be
+            obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
+
+        audio_mask_position_permutation (`torch.LongTensor` of shape `(batch_size, num_audio_patches)`):
+            Audio mask position permutation of masked autoencoder objective. Audio mask position permutation can be
+            obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
+
+        labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
+            Labels for computing the vision audio matching loss. Indices should be in `[0, 1]`. num_labels has to be 1.
+        Return:
         Examples:
         ```python
         >>> from transformers import TvltProcessor, TvltForPreTraining
@@ -1242,7 +1259,10 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
         labels=None,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
+            Labels for computing the question answering loss. Indices should be in `[0, ..., num_answer_choices-1]`
+            where num_answer_choices refers to the number of answer choices in question answering.
+        Return:
 
         Examples:
         ```python
@@ -1313,6 +1333,7 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
             nn.GELU(),
             nn.Linear(config.hidden_size * 2, config.num_labels),
         )
+        self.config = config
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1331,7 +1352,10 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         labels=None,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
+            Labels for computing the audiovisual loss. Indices should be in `[0, ..., num_classes-1]` where num_classes
+            refers to the number of classes in audiovisual tasks.
+        Return:
 
         Examples:
         ```python
@@ -1367,8 +1391,12 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits, labels)
+            if self.config.loss_type == "regression":
+                loss_fct = MSELoss()
+                loss = loss_fct(logits, labels)
+            elif self.config.loss_type == "classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[4:]
