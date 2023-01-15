@@ -139,7 +139,7 @@
   - local: glossary
     title: Glossary
   - local: task_summary
-    title: Summary of the tasks
+    title: What 🤗 Transformers can do
   - local: model_summary
     title: Summary of the models
   - local: tokenizer_summary
