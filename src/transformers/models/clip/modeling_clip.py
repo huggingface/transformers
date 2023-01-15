@@ -691,7 +691,7 @@ class CLIPTextTransformer(nn.Module):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -792,7 +792,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -819,7 +819,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
 
@@ -983,7 +983,7 @@ class CLIPModel(CLIPPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None
+        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1014,7 +1014,7 @@ class CLIPModel(CLIPPreTrainedModel):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
         pooled_output = text_outputs[1]
