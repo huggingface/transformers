@@ -538,7 +538,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
-        self.replace_maskformer_swin_backbone(dst_state_dict, src_state_dict, self.config)
+        self.replace_swin_backbone(dst_state_dict, src_state_dict, self.config)
 
         def rename_keys_for_weight_bias(src_prefix: str, dst_prefix: str):
             return [
@@ -979,6 +979,7 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
+        model_name = get_model_name(checkpoint_file)
         feature_extractor = OriginalMask2FormerConfigToFeatureExtractorConverter()(
             setup_cfg(Args(config_file=config_file))
         )
@@ -1000,22 +1001,10 @@ if __name__ == "__main__":
         mask2former_for_segmentation.model = mask2former
 
         mask2former_for_segmentation = converter.convert_universal_segmentation(mask2former_for_segmentation)
-        model_name = get_model_name(checkpoint_file)
 
         tolerance = 3e-3
-        high_tolerance_models = [
-            "mask2former-swin-base-IN21k-coco-instance",
-            "mask2former-swin-base-coco-instance",
-            "mask2former-swin-small-cityscapes-semantic",
-        ]
-
-        if model_name in high_tolerance_models:
-            tolerance = 3e-1
-
         logger.info(f"🪄 Testing {model_name}...")
-
         test(original_model, mask2former_for_segmentation, feature_extractor, tolerance)
-
         logger.info(f"🪄 Pushing {model_name} to hub...")
 
         feature_extractor.push_to_hub(model_name)
