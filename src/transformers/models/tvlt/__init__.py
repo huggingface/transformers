@@ -60,9 +60,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_tvlt"] = [
-        "TvltFeatureExtractor",
-    ]
+    _import_structure["feature_extraction_tvlt"] = ["TvltFeatureExtractor"]
 
 if TYPE_CHECKING:
     from .configuration_tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
