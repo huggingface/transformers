@@ -587,7 +587,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if return_timestamps == "char" and self.type == "ctc_with_lm":
             raise ValueError("CTC with LM cannot return `char` timestamps, only `words`")
         if return_timestamps in {"char", "words"} and self.type == "seq2seq_whisper":
-            raise ValueError("Whisper cannot return `char` nor `words` timestamps")
+            raise ValueError("Whisper cannot return `char` nor `words` timestamps, use `True` instead.")
 
         final_items = []
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
@@ -607,7 +607,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # Whisper needs the stride data
                 items = [items, stride]
             final_items.append(items)
-        if stride and self.type == "seq2seq" and not return_timestamps:
+        if stride and self.type in {"seq2seq", "seq2seq_whisper"} and not return_timestamps:
             items = _find_longest_common_sequence(final_items, self.tokenizer)
         elif stride and self.type == "seq2seq_whisper" and return_timestamps:
             items = _find_timestamp_sequence(
