@@ -75,7 +75,11 @@ class GenerationConfig(PushToHubMixin):
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         min_length (`int`, *optional*, defaults to 0):
-            The minimum length of the sequence to be generated.
+            The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
+            `min_new_tokens`. In general, prefer the use of `min_new_tokens`, which ignores the number of tokens in the
+            prompt.
+        min_new_tokens (`int`, *optional*):
+            The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         early_stopping (`bool`, *optional*, defaults to `False`):
             Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
         max_time(`float`, *optional*):
@@ -207,6 +211,7 @@ class GenerationConfig(PushToHubMixin):
         self.max_length = kwargs.pop("max_length", 20)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
         self.min_length = kwargs.pop("min_length", 0)
+        self.min_new_tokens = kwargs.pop("min_new_tokens", None)
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.max_time = kwargs.pop("max_time", None)
 
