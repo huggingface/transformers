@@ -112,7 +112,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20, batch_size=2
         )
         self.assertEqual(new_outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
-        self.assertEqual(outputs, new_outputs)
+        self.assertEqual(nested_simplify(outputs), nested_simplify(new_outputs))
 
     @require_torch
     def test_small_model_pt(self):

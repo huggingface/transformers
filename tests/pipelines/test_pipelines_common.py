@@ -971,7 +971,7 @@ class CustomPipelineTest(unittest.TestCase):
         # Make sure we have cached the pipeline.
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
         dataset = datasets.load_dataset("Narsil/asr_dummy")
-        filename = dataset["test"][3]["file"]
+        filename = dataset["test"][3]["audio"]
 
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
         # For some reason scoping doesn't work if not using `self.`
