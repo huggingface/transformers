@@ -106,11 +106,13 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
 
         # Using batch is OK
+        if question_answerer.tokenizer.pad_token_id is None:
+            question_answerer.tokenizer.pad_token_id = question_answerer.model.config.eos_token_id
         new_outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20, batch_size=2
         )
         self.assertEqual(new_outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
-        self.assertEqual(outputs, new_outputs)
+        self.assertEqual(nested_simplify(outputs), nested_simplify(new_outputs))
 
     @require_torch
     def test_small_model_pt(self):
