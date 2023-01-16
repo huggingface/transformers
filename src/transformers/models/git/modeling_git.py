@@ -1487,20 +1487,21 @@ class GitForCausalLM(GitPreTrainedModel):
         sequence_output = outputs[0]
         logits = self.output(sequence_output)
 
-        lm_loss = None
+        loss = None
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_logits = logits[:, :-1, :].contiguous()
+            num_image_tokens = self.git.encoder.layer[0].attention.self.image_patch_tokens
+            shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = loss_fct(shifted_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
-            loss=lm_loss,
+            loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
