@@ -450,6 +450,8 @@
         title: Table Transformer
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/upernet
+        title: UperNet
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
