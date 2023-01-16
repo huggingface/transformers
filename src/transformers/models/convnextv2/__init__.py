@@ -26,7 +26,11 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_convnextv2": ["CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNeXtV2Config", "ConvNeXtV2OnnxConfig"]
+    "configuration_convnextv2": [
+        "CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ConvNeXtV2Config",
+        "ConvNeXtV2OnnxConfig",
+    ]
 }
 
 try:
@@ -43,7 +47,11 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_convnextv2 import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNeXtV2Config, ConvNeXtV2OnnxConfig
+    from .configuration_convnextv2 import (
+        CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ConvNeXtV2Config,
+        ConvNeXtV2OnnxConfig,
+    )
 
     try:
         if not is_torch_available():

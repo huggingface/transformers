@@ -31,7 +31,6 @@ CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class ConvNeXtV2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvNeXtV2Model`]. It is used to instantiate an

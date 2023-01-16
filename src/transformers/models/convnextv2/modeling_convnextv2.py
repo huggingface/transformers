@@ -53,7 +53,6 @@ CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     """
@@ -147,15 +146,15 @@ class ConvNeXtV2Embeddings(nn.Module):
 
 
 class GRN(nn.Module):
-    """ GRN (Global Response Normalization) layer
-    """
+    """GRN (Global Response Normalization) layer"""
+
     def __init__(self, dim):
         super().__init__()
         self.gamma = nn.Parameter(torch.zeros(1, 1, 1, dim))
         self.beta = nn.Parameter(torch.zeros(1, 1, 1, dim))
 
     def forward(self, x):
-        Gx = torch.norm(x, p=2, dim=(1,2), keepdim=True)
+        Gx = torch.norm(x, p=2, dim=(1, 2), keepdim=True)
         Nx = Gx / (Gx.mean(dim=-1, keepdim=True) + 1e-6)
         return self.gamma * (x * Nx) + self.beta + x
 

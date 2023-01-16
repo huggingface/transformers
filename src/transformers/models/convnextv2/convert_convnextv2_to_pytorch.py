@@ -89,7 +89,7 @@ def get_convnextv2_config(checkpoint_url):
 
 
 def rename_key(name):
-        
+
     if "downsample_layers.0.0" in name:
         name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
     if "downsample_layers.0.1" in name:
@@ -113,8 +113,8 @@ def rename_key(name):
         name = name.replace("stages", "encoder.stages")
     if "norm" in name:
         name = name.replace("norm", "layernorm")
-    """if "gamma" in name:
-        name = name.replace("gamma", "layer_scale_parameter")"""
+    if "grn.gamma" in name:
+        name = name.replace("layer_scale_parameter", "grn.gamma")
     if "head" in name:
         name = name.replace("head", "classifier")
 
@@ -156,7 +156,7 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Check outputs on an image, prepared by ConvNextFeatureExtractor
     size = 224 if "224" in checkpoint_url else 384
-    feature_extractor =  ConvNextFeatureExtractor(size=size)
+    feature_extractor = ConvNextFeatureExtractor(size=size)
     pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
 
     logits = model(pixel_values).logits
@@ -201,7 +201,7 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     else:
         raise ValueError(f"Unknown URL: {checkpoint_url}")
 
-    #assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
+    # assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
     assert logits.shape == expected_shape
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
