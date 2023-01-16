@@ -907,13 +907,9 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_mask_feature_prob_ctc(self):
-        model = SpeechT5ForCTC.from_pretrained(
-            "Matthijs/speecht5_ctc", mask_feature_prob=0.2, mask_feature_length=2
-        )
+        model = SpeechT5ForCTC.from_pretrained("Matthijs/speecht5_ctc", mask_feature_prob=0.2, mask_feature_length=2)
         model.to(torch_device).train()
-        processor = SpeechT5ProcessorForCTC.from_pretrained(
-            "Matthijs/speecht5_ctc", return_attention_mask=True
-        )
+        processor = SpeechT5ProcessorForCTC.from_pretrained("Matthijs/speecht5_ctc", return_attention_mask=True)
 
         batch_duration_in_seconds = [1, 3, 2, 6]
         input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
@@ -931,13 +927,9 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_mask_time_prob_ctc(self):
-        model = SpeechT5ForCTC.from_pretrained(
-            "Matthijs/speecht5_ctc", mask_time_prob=0.2, mask_time_length=2
-        )
+        model = SpeechT5ForCTC.from_pretrained("Matthijs/speecht5_ctc", mask_time_prob=0.2, mask_time_length=2)
         model.to(torch_device).train()
-        processor = SpeechT5ProcessorForCTC.from_pretrained(
-            "Matthijs/speecht5_ctc", return_attention_mask=True
-        )
+        processor = SpeechT5ProcessorForCTC.from_pretrained("Matthijs/speecht5_ctc", return_attention_mask=True)
 
         batch_duration_in_seconds = [1, 3, 2, 6]
         input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
@@ -1057,7 +1049,9 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(self.model_tester.seq_length)
+            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                self.model_tester.seq_length
+            )
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
