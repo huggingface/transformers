@@ -106,6 +106,8 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
 
         # Using batch is OK
+        if question_answerer.tokenizer.pad_token_id is None:
+            question_answerer.tokenizer.pad_token_id = question_answerer.model.config.eos_token_id
         new_outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20, batch_size=2
         )

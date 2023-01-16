@@ -970,27 +970,24 @@ class CustomPipelineTest(unittest.TestCase):
     def test_chunk_pipeline_batching_single_file(self):
         # Make sure we have cached the pipeline.
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
-        ds = datasets.load_dataset("common_voice", "ja", split="test", streaming=True)
-        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
-        input_speech = next(iter(ds))["audio"]
+        dataset = datasets.load_dataset("Narsil/asr_dummy")
+        filename = dataset["test"][3]["file"]
 
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
-        COUNT = 0
+        # For some reason scoping doesn't work if not using `self.`
+        self.COUNT = 0
         forward = pipe.model.forward
 
         def new_forward(*args, **kwargs):
-            global COUNT
-            COUNT += 1
+            self.COUNT += 1
             return forward(*args, **kwargs)
 
         pipe.model.forward = new_forward
 
-        for out in pipe(
-            input_speech, return_timestamps="char", chunk_length_s=3, stride_length_s=[1, 1], batch_size=1024
-        ):
+        for out in pipe(filename, return_timestamps="char", chunk_length_s=3, stride_length_s=[1, 1], batch_size=1024):
             pass
 
-        self.assertEqual(COUNT, 1)
+        self.assertEqual(self.COUNT, 1)
 
 
 @require_torch
