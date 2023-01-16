@@ -79,12 +79,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_tf_xlm_roberta"] = [
         "TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFXLMRobertaForCausalLM",
         "TFXLMRobertaForMaskedLM",
         "TFXLMRobertaForMultipleChoice",
         "TFXLMRobertaForQuestionAnswering",
         "TFXLMRobertaForSequenceClassification",
         "TFXLMRobertaForTokenClassification",
         "TFXLMRobertaModel",
+        "TFXLMRobertaPreTrainedModel",
     ]
 
 try:
@@ -95,11 +97,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_flax_xlm_roberta"] = [
         "FlaxXLMRobertaForMaskedLM",
+        "FlaxXLMRobertaForCausalLM",
         "FlaxXLMRobertaForMultipleChoice",
         "FlaxXLMRobertaForQuestionAnswering",
         "FlaxXLMRobertaForSequenceClassification",
         "FlaxXLMRobertaForTokenClassification",
         "FlaxXLMRobertaModel",
+        "FlaxXLMRobertaPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -151,12 +155,14 @@ if TYPE_CHECKING:
     else:
         from .modeling_tf_xlm_roberta import (
             TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFXLMRobertaForCausalLM,
             TFXLMRobertaForMaskedLM,
             TFXLMRobertaForMultipleChoice,
             TFXLMRobertaForQuestionAnswering,
             TFXLMRobertaForSequenceClassification,
             TFXLMRobertaForTokenClassification,
             TFXLMRobertaModel,
+            TFXLMRobertaPreTrainedModel,
         )
 
     try:
@@ -166,12 +172,15 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_xlm_roberta import (
+            FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlaxXLMRobertaForCausalLM,
             FlaxXLMRobertaForMaskedLM,
             FlaxXLMRobertaForMultipleChoice,
             FlaxXLMRobertaForQuestionAnswering,
             FlaxXLMRobertaForSequenceClassification,
             FlaxXLMRobertaForTokenClassification,
             FlaxXLMRobertaModel,
+            FlaxXLMRobertaPreTrainedModel,
         )
 
 else:

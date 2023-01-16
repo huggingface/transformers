@@ -56,10 +56,6 @@ remat = nn_partitioning.remat
 FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-base",
     "xlm-roberta-large",
-    "xlm-roberta-large-finetuned-conll02-dutch",
-    "xlm-roberta-large-finetuned-conll02-spanish",
-    "xlm-roberta-large-finetuned-conll03-english",
-    "xlm-roberta-large-finetuned-conll03-german",
     # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
 ]
 
