@@ -502,7 +502,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
             padded_inputs["input_features"] = self._mask_input_features(
                 padded_inputs["input_features"],
-                attention_mask=padded_inputs.attention_mask[:, ::self.hop_length],
+                attention_mask=padded_inputs["attention_mask"][:, ::self.hop_length],
             )
 
         if return_tensors is not None:
