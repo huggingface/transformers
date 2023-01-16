@@ -1072,7 +1072,7 @@ class Pipeline(_ScikitCompat):
             )
         elif is_iterable:
             return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
-        elif isinstance(self, ChunkPipeline):
+        elif can_use_iterator and isinstance(self, ChunkPipeline):
             return next(
                 iter(
                     self.get_iterator(
