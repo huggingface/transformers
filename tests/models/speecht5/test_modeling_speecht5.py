@@ -1359,7 +1359,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         self.assertEqual(generated_speech.shape, (1800, model.config.num_mel_bins))
 
 
-class SpeechT5HiFiGANModelTester:
+class SpeechT5HiFiGANTester:
     def __init__(
         self,
         parent,
@@ -1391,12 +1391,12 @@ class SpeechT5HiFiGANModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values = self.prepare_config_and_inputs()
-        inputs_dict = {"input_values": input_values}
+        inputs_dict = {"spectrogram": input_values}
         return config, inputs_dict
 
 
 @require_torch
-class SpeechT5HiFiGANModelTest(ModelTesterMixin, unittest.TestCase):
+class SpeechT5HiFiGANTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5HiFiGAN,) if is_torch_available() else ()
     test_torchscript = False
     test_pruning = False
@@ -1412,66 +1412,64 @@ class SpeechT5HiFiGANModelTest(ModelTesterMixin, unittest.TestCase):
     input_name = "spectrogram"
 
     def setUp(self):
-        self.model_tester = SpeechT5HiFiGANModelTester(self)
+        self.model_tester = SpeechT5HiFiGANTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5HiFiGANConfig)
 
-    # TODO
     def test_config(self):
-        # self.config_tester.run_common_tests()
-        pass
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_from_and_save_pretrained_subfolder()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # TODO
-    def test_determinism(self):
-        pass
-
-    # TODO
-    def test_feed_forward_chunking(self):
-        pass
-
-    # TODO
     def test_forward_signature(self):
-        pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # TODO
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "spectrogram",
+            ]
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    # this model does not output hidden states
     def test_hidden_states_output(self):
         pass
 
-    # TODO
+    # skip
     def test_initialization(self):
         pass
 
-    # TODO
+    # this model has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    # TODO
+    # this model has no input embeddings
     def test_model_common_attributes(self):
         pass
 
-    # TODO
-    def test_model_main_input_name(self):
-        pass
-
-    # TODO
+    # skip as this model doesn't support all arguments tested
     def test_model_outputs_equivalence(self):
         pass
 
-    # TODO
+    # this model does not output hidden states
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # TODO
-    def test_save_load(self):
-        pass
-
-    # TODO
+    # skip because it fails on automapping of SpeechT5HiFiGANConfig
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # TODO
+    # skip because it fails on automapping of SpeechT5HiFiGANConfig
     def test_save_load_fast_init_to_base(self):
         pass

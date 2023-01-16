@@ -2910,6 +2910,7 @@ class HiFiGANResidualBlock(nn.Module):
 )
 class SpeechT5HiFiGAN(PreTrainedModel):
     config_class = SpeechT5HiFiGANConfig
+    main_input_name = "spectrogram"
 
     def __init__(self, config: SpeechT5HiFiGANConfig):
         super().__init__(config)
@@ -2944,7 +2945,10 @@ class SpeechT5HiFiGAN(PreTrainedModel):
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
         self.register_buffer("mean", torch.zeros(config.model_in_dim))
-        self.register_buffer("scale", torch.zeros(config.model_in_dim))
+        self.register_buffer("scale", torch.ones(config.model_in_dim))
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def _init_weights(self, module):
         """Initialize the weights."""
