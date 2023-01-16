@@ -76,12 +76,6 @@ def prepare_speech_to_text_inputs_dict(
     else:
         decoder_dict = {"decoder_input_values": decoder_input_values}
 
-    if decoder_attention_mask is None:
-        if decoder_input_ids is not None:
-            decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-        else:
-            decoder_attention_mask = decoder_input_values.ne(config.pad_token_id)
-
     if head_mask is None:
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
     if decoder_head_mask is None:
@@ -127,6 +121,7 @@ class SpeechT5ModelTester:
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         decoder_input_values = floats_tensor([self.batch_size, self.seq_length, self.hidden_size], scale=1.0)
+        decoder_attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
         inputs_dict = prepare_speech_to_text_inputs_dict(
@@ -134,6 +129,7 @@ class SpeechT5ModelTester:
             input_values=input_values,
             decoder_input_values=decoder_input_values,
             attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
         )
         return config, inputs_dict
 
@@ -169,6 +165,7 @@ class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
+    test_resize_embeddings = False
 
     input_name = "input_values"
 
@@ -183,48 +180,38 @@ class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    # TODO
-    def test_model_common_attributes(self):
-        pass
-
-    # TODO
-    def test_determinism(self):
-        pass
-
-    # TODO
-    def test_feed_forward_chunking(self):
-        pass
-
-    # TODO
     def test_forward_signature(self):
-        pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # TODO
-    def test_attention_outputs(self):
-        pass
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
 
-    # TODO
-    def test_hidden_states_output(self):
+            expected_arg_names = [
+                "input_values",
+                "attention_mask",
+                "decoder_input_values",
+                "decoder_attention_mask",
+            ]
+            expected_arg_names.extend(
+                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                else ["encoder_outputs"]
+            )
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    # this model has no input embeddings
+    def test_model_common_attributes(self):
         pass
 
     # this model has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    # TODO
-    def test_model_outputs_equivalence(self):
-        pass
-
-    # TODO
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    # TODO
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    # TODO
-    def test_save_load(self):
+        # decoder cannot keep gradients
         pass
 
     @slow
@@ -286,6 +273,7 @@ class SpeechT5ForSpeechToTextTester:
         attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
 
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size).clamp(2)
+        decoder_attention_mask = random_attention_mask([self.batch_size, self.decoder_seq_length])
 
         config = self.get_config()
         inputs_dict = prepare_speech_to_text_inputs_dict(
@@ -293,6 +281,7 @@ class SpeechT5ForSpeechToTextTester:
             input_values=input_values,
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
         )
         return config, inputs_dict
 
@@ -915,6 +904,10 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_from_base(self):
         pass
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        pass
+
     # TODO: CTC tests from Wav2Vec2
 
 
@@ -953,6 +946,7 @@ class SpeechT5ForTextToSpeechTester:
         attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
 
         decoder_input_values = floats_tensor([self.batch_size, self.decoder_seq_length, self.num_mel_bins], scale=1.0)
+        decoder_attention_mask = random_attention_mask([self.batch_size, self.decoder_seq_length])
 
         config = self.get_config()
         inputs_dict = prepare_speech_to_text_inputs_dict(
@@ -960,6 +954,7 @@ class SpeechT5ForTextToSpeechTester:
             input_ids=input_ids,
             decoder_input_values=decoder_input_values,
             attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
         )
         return config, inputs_dict
 
@@ -1107,8 +1102,8 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    # TODO
     def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
         pass
 
     # TODO
