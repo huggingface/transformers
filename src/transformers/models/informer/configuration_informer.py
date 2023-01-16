@@ -53,10 +53,11 @@ class InformerConfig(PretrainedConfig):
         input_size: int = 1,
         embedding_dimension: Optional[List[int]] = None,
         distr_output: str = "student_t",
-        lags_seq: Optional[List[int]] = None, # used to be freq.
+        lags_seq: Optional[List[int]] = None,  # used to be freq.
         scaling: bool = True,
         num_parallel_samples: int = 100,
         is_encoder_decoder: bool = True,
+        **kwargs
     ):
         # time series specific configuration
         self.prediction_length = prediction_length
@@ -67,7 +68,7 @@ class InformerConfig(PretrainedConfig):
         # self.target_shape = distr_output.event_shape  # Eli: I think can be removed
         # self.num_time_features = num_time_features # Eli: From vanilla ts transformer
         self.lags_seq = lags_seq
-        # self.scaling = scaling # Eli: From vanilla ts transformer
+        self.scaling = scaling
         self.num_feat_dynamic_real = num_feat_dynamic_real
         self.num_feat_static_cat = num_feat_static_cat
         self.num_feat_static_real = num_feat_static_real
@@ -91,22 +92,42 @@ class InformerConfig(PretrainedConfig):
             self.embedding_dimension = embedding_dimension
         else:
             self.embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.cardinality]
-            
+
         self.num_parallel_samples = num_parallel_samples
+        # self.history_length = context_length + max(self.lags_seq) # Eli: I think can be removed
 
-        # self.history_length = context_length + max(self.lags_seq)
-        self.embedder = FeatureEmbedder(
-            cardinalities=cardinality,
-            embedding_dims=self.embedding_dimension,
-        )
-        if scaling:
-            self.scaler = MeanScaler(dim=1, keepdim=True)
-        else:
-            self.scaler = NOPScaler(dim=1, keepdim=True)
+        # Transformer architecture configuration
+        self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
+        self.nhead = nhead
+        self.num_encoder_layers = num_encoder_layers # encoder_layers
+        self.num_decoder_layers = num_decoder_layers # decoder_layers
+        self.dim_feedforward = dim_feedforward
+        self.activation = activation  # activation_function
+        self.dropout = dropout
+        self.attn = attn,
+        self.factor = factor
+        self.distil = distil
 
-        # total feature size
-        d_model = self.input_size * len(self.lags_seq) + self._number_of_features
-
-        self.param_proj = distr_output.get_args_proj(d_model)
+        # self.param_proj = distr_output.get_args_proj(d_model)
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+    @property
+    def _number_of_features(self) -> int:
+        return (
+            sum(self.embedding_dimension)
+            + self.num_feat_dynamic_real
+            + self.num_feat_static_real
+            + self.input_size  # the log(scale)
+        )
+
+
+    # @property
+    # def _number_of_features(self) -> int:
+    #     return (
+    #         sum(self.embedding_dimension)
+    #         + self.num_dynamic_real_features
+    #         + self.num_time_features
+    #         + max(1, self.num_static_real_features)  # there is at least one dummy static real feature
+    #         + self.input_size  # the log(scale)
+    #     )
