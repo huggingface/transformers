@@ -1220,13 +1220,13 @@ class OneFormerImageProcessor(BaseImageProcessor):
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None
             segmentation, segments = compute_segments(
-                mask_probs_item,
-                pred_scores_item,
-                pred_labels_item,
-                mask_threshold,
-                overlap_mask_area_threshold,
-                label_ids_to_fuse,
-                target_size,
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=label_ids_to_fuse,
+                target_size=target_size,
             )
 
             results.append({"segmentation": segmentation, "segments_info": segments})
