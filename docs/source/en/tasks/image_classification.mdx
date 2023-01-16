@@ -342,14 +342,20 @@ Configure the model for training with `compile()`:
 >>> model.compile(optimizer=optimizer, loss=loss)
 ```
 
-To compute the accuracy from the predictions use a [Keras callback](https://huggingface.co/docs/transformers/main/en/tasks/./main_classes/keras_callbacks).
-Pass your `compute_metrics` function to [KerasMetricCallback](https://huggingface.co/docs/transformers/main/en/main_classes/keras_callbacks#transformers.KerasMetricCallback):
+To compute the accuracy from the predictions and push your model to the 🤗 Hub, use [Keras callbacks](./main_classes/keras_callbacks).
+Pass your `compute_metrics` function to [KerasMetricCallback](./main_classes/keras_callbacks#transformers.KerasMetricCallback),
+and use [PushToHubCallback](./main_classes/keras_callbacks#transformers.PushToHubCallback) to upload the model:
 
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback
 
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset)
->>> callbacks = [metric_callback]
+>>> push_to_hub_callback = PushToHubCallback(
+...     output_dir="food_classifier",
+...     tokenizer=image_processor,
+...     save_strategy="no",
+... )
+>>> callbacks = [metric_callback, push_to_hub_callback]
 ```
 
 Finally, you are ready to train your model! Call `fit()` with your training and validation datasets, the number of epochs,
@@ -369,44 +375,7 @@ Epoch 5/5
 250/250 [==============================] - 238s 949ms/step - loss: 0.1232 - val_loss: 0.3259 - accuracy: 0.9890
 ```
 
-In order to push your trained Keras model to Hub, you need to build it first. When building a Keras model, you must
-provide the model's input shape. In this case, we can get it using image processor's attributes. Note that depending on
-the pretrained model you are fine-tuning, the corresponding image processors may have other dictionary keys
-(e.g. `shortest_edge` instead of `height` and `width`).
-
-```py
->>> from huggingface_hub import push_to_hub_keras
-
->>> model.build((None, None, image_processor.size["height"], image_processor.size["width"]))
->>> output_dir = "food_classifier"
->>> push_to_hub_keras(model, repo_id=f"MariaK/{output_dir}")
-```
-
-Finally, if you want to use this model for inference with [`pipeline`], or re-use it for further fine-tuning,
-you need to upload the following files to Hub:
-- `preprocessor_config.json` that you can save from the image_processor you have used during the training
-- model's weights in `h5` format, and model's `config.json` that you can save by calling the `save_pretrained()` method on the model
-
-```py
->>> from huggingface_hub import HfApi
->>> from huggingface_hub import HfFolder
-
->>> api = HfApi()
->>> hub_token = HfFolder.get_token()
-
->>> image_processor.save_pretrained(output_dir)
->>> model.save_pretrained(output_dir)
-
->>> api.upload_folder(
-...     token=hub_token,
-...     folder_path=output_dir,
-...     path_in_repo="",
-...     repo_id=f"MariaK/{output_dir}",
-...     ignore_patterns="**/logs/*.txt",
-... )
-```
-
-Congratulations! Your model has been shared on 🤗 Hub, and you can use it for inference!
+Congratulations! You have trained your model and shared it on the 🤗 Hub. You can now use it for inference!
 </tf>
 </frameworkcontent>
 
