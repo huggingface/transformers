@@ -52,9 +52,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_tvlt"] = [
-        "TvltImageProcessor",
-    ]
+    _import_structure["image_processing_tvlt"] = ["TvltImageProcessor"]
 
 try:
     if not is_speech_available():
