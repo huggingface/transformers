@@ -1206,41 +1206,6 @@ class SpeechT5ForTextToSpeechTester:
         )
 
 
-# TODO
-# def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-#     model = SpeechT5ForTextToSpeech(config=config).get_decoder().to(torch_device).eval()
-#     input_ids = inputs_dict["decoder_input_ids"]
-#     attention_mask = inputs_dict["decoder_attention_mask"]
-
-#     # first forward pass
-#     outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
-
-#     output, past_key_values = outputs.to_tuple()
-
-#     # create hypothetical multiple next token and extent to next_input_ids
-#     next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
-#     next_attn_mask = ids_tensor((self.batch_size, 3), 2)
-
-#     # append to next input_ids and
-#     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-#     next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
-
-#     output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-#     output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-#         "last_hidden_state"
-#     ]
-
-#     # select random slice
-#     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-#     output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-#     output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-#     self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-#     # test that outputs are equal for slice
-#     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
-
-
 @require_torch
 class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
@@ -1258,88 +1223,118 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # TODO
-    # def test_save_load_strict(self):
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-    #     for model_class in self.all_model_classes:
-    #         model = model_class(config)
+    def test_save_load_strict(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
 
-    #         with tempfile.TemporaryDirectory() as tmpdirname:
-    #             model.save_pretrained(tmpdirname)
-    #             model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-    #         self.assertEqual(info["missing_keys"], [])
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+            self.assertEqual(info["missing_keys"], [])
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    # TODO
-    # def test_decoder_model_past_with_large_inputs(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    # TODO
-    def test_model_main_input_name(self):
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    def test_decoder_model_past_with_large_inputs(self):
         pass
 
-    # TODO
-    def test_attention_outputs(self):
-        pass
-
-    # TODO
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_determinism(self):
         pass
 
-    # TODO
-    def test_feed_forward_chunking(self):
-        pass
-
-    # TODO
     def test_forward_signature(self):
-        pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # TODO
-    def test_hidden_states_output(self):
-        pass
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
 
-    # TODO
+            expected_arg_names = [
+                "input_ids",
+                "attention_mask",
+                "decoder_input_values",
+                "decoder_attention_mask",
+            ]
+            expected_arg_names.extend(
+                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                else ["encoder_outputs"]
+            )
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
     def test_initialization(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # TODO
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                ]
+                if param.requires_grad:
+                    if any([x in name for x in uniform_init_parms]):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    # this model has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    # TODO
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_model_outputs_equivalence(self):
         pass
 
-    # TODO
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
-        pass
-
-    # TODO
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_save_load(self):
         pass
 
-    # TODO
     @slow
     def test_torchscript_output_attentions(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
-    # TODO
     @slow
     def test_torchscript_output_hidden_state(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
 
-    # TODO
     @slow
     def test_torchscript_simple(self):
+        # disabled because this model doesn't have decoder_input_ids
         pass
+
+    # training is not supported yet
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "weight_g") and module.weight_g is not None:
+            module.weight_g.data.fill_(3)
+        if hasattr(module, "weight_v") and module.weight_v is not None:
+            module.weight_v.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
+
 
 
 # TODO: for TTS

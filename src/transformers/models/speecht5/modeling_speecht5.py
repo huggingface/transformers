@@ -2587,6 +2587,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = []
     _keys_to_ignore_on_save = []
 
+    main_input_name = "input_ids"
+
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 
