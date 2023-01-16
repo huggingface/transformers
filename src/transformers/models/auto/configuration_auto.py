@@ -163,6 +163,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("trocr", "TrOCRConfig"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
+        ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
@@ -313,6 +314,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("upernet", "UPERNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("videomae", "VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -492,6 +494,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ul2", "UL2"),
         ("unispeech", "UniSpeech"),
         ("unispeech-sat", "UniSpeechSat"),
+        ("upernet", "UPerNet"),
         ("van", "VAN"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
@@ -856,6 +859,7 @@ class AutoConfig:
             config_class = get_class_from_dynamic_module(
                 pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
             )
+            config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]

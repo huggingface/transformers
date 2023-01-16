@@ -898,8 +898,8 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
 
 @add_start_docstrings(
-    """VideoMAE Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.""",
+    """VideoMAE Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
+    states of all tokens) e.g. for ImageNet.""",
     VIDEOMAE_START_DOCSTRING,
 )
 class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
