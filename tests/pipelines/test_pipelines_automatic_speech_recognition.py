@@ -306,6 +306,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
+    @slow
     def test_find_longest_common_subsequence(self):
         max_source_positions = 1500
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
@@ -351,7 +352,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # fmt: off
         self.assertEqual(
             merge,
-            [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
+            [51492, 406, 3163, 1953, 466, 13, 51739, 51739, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51959],
         )
         # fmt: on
         self.assertEqual(
@@ -362,10 +363,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                     " chest."
                 ),
                 "offsets": [
-                    {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
+                    {"text": " not worth thinking about.", "timestamp": (22.56, 27.5)},
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (24.96, 29.36),
+                        "timestamp": (27.5, 31.900000000000002),
                     },
                 ],
             },
@@ -387,7 +388,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # fmt: off
         self.assertEqual(
             merge,
-            [51492, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51839],
+            [51492, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51959],
         )
         # fmt: on
         self.assertEqual(
@@ -403,7 +404,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             " not worth thinking about. His instant panic was followed by a small, sharp blow high on"
                             " his chest."
                         ),
-                        "timestamp": (22.56, 29.5),
+                        "timestamp": (22.56, 31.900000000000002),
                     },
                 ],
             },
@@ -445,11 +446,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # last case is when the sequence is not in the first next predicted start and end of timestamp
         # fmt: off
         next_sequences_3 = [
-            [50364, 2812, 9836, 14783, 390, 51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832]
+            [50364, 2812, 9836, 14783, 390, 51492, 406, 3163, 1953, 466, 13, 50634, 50634, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50934]
         ]
         # fmt: on
         merge = _find_timestamp_sequence(
-            [[previous_sequence, (3000, 0, 0)], [next_sequences_3, (3000, 0, 0)]],
+            [[previous_sequence, (3000, 0, 0)], [next_sequences_3, (3000, 750, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
@@ -457,7 +458,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # fmt: off
         self.assertEqual(
             merge,
-            [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
+            [51492, 406, 3163, 1953, 466, 13, 53112, 53112, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 53332],
         )
         # fmt: on
         self.assertEqual(
@@ -492,7 +493,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = pipe(ds[40]["audio"])
         self.assertDictEqual(
             output,
-            # TODO This is not great, we're missing the last segment.
             {
                 "text": " A man said to the universe, Sir, I exist.",
                 "chunks": [{"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 4.26)}],
@@ -536,7 +536,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             },
         )
 
-        output = pipe(array, chunk_length_s=10)
+        output = pipe(array)
         self.assertDictEqual(
             nested_simplify(output),
             {
@@ -594,7 +594,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     #         model=model,
     #         tokenizer=processor.tokenizer,
     #         feature_extractor=processor.feature_extractor,
-    #         forced_bos_token_id=None,
     #         max_new_tokens=448,
     #     )
     #     output = pipe(array, return_timestamps=True, chunk_length_s=30, stride_length_s=[15, 0])
@@ -611,7 +610,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     #             {'text': " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment", 'timestamp': (5.5, 10.24)},
     #             {'text': ' you wore.', 'timestamp': (10.24, 11.74)}, {'text': ' The cut on his chest still dripping blood.', 'timestamp': (11.74, 14.88)},
     #             {'text': ' The ache of his overstrain dyes.', 'timestamp': (14.88, 17.6)},
-    #             {'text': ' Even the soaring arena around him with thousands of spectators, retrievalidies not worth', 'timestamp': (17.6, 23.28)}
+    #             {'text': ' Even the soaring arena around him with thousands of spectators, retrievalidies not worth', 'timestamp': (17.6, 23.28)},
+    #             {'text': ' thinking about.', 'timestamp': (23.28, 24.28)}
     #         ],
     #     }
     #     # fmt: on
