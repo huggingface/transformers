@@ -29,7 +29,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices with attention_mask from torch.LongTensor to np.array
+# Modified from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices with attention_mask from torch.LongTensor to np.array
 def _compute_mask_indices(
     shape: Tuple[int, int],
     mask_prob: float,
@@ -85,9 +85,7 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).tolist()
-        if attention_mask is not None
-        else [sequence_length for _ in range(batch_size)]
+        attention_mask.sum(-1).tolist() if attention_mask is not None else [sequence_length for _ in range(batch_size)]
     )
 
     # SpecAugment mask to fill
@@ -394,11 +392,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         Args:
             input_features (`np.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-                loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
-                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-                [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-                tensor of type `torch.FloatTensor`.
+                Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained
+                by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`,
+                *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`,
+                the [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion
+                into a tensor of type `torch.FloatTensor`.
             mask_time_indices (`np.ndarray`, *optional*, defaults to None):
                 Indices to mask extracted features along time axis.
             attention_mask (`np.ndarray`, *optional*, defaults to None):
@@ -550,7 +548,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
             padded_inputs["input_features"] = self._mask_input_features(
                 padded_inputs["input_features"],
-                attention_mask=padded_inputs["attention_mask"][:, ::self.hop_length],
+                attention_mask=padded_inputs["attention_mask"][:, :: self.hop_length],
             )
 
         if return_tensors is not None:
