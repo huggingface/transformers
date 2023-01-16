@@ -19,6 +19,8 @@ import inspect
 import tempfile
 import unittest
 
+import numpy as np
+
 from transformers import SpeechT5Config, SpeechT5HiFiGANConfig
 from transformers.testing_utils import (
     is_torch_available,
@@ -50,6 +52,7 @@ if is_torch_available():
         SpeechT5ForTextToSpeech,
         SpeechT5HiFiGAN,
         SpeechT5Model,
+        SpeechT5ProcessorForCTC,
         SpeechT5ProcessorForSpeechToText,
     )
 
@@ -846,9 +849,33 @@ class SpeechT5ForCTCTester:
         model = SpeechT5ForCTC(config=config).to(torch_device).eval()
         result = model(input_values, attention_mask=attention_mask)
 
-        subsampled_encoder_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(self.seq_length)
+        subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(self.seq_length)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, subsampled_encoder_seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, subsampled_seq_length, self.vocab_size))
+
+    def check_ctc_loss(self, config, input_values, *args):
+        model = SpeechT5ForCTC(config=config).to(torch_device).eval()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        max_length_labels = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
+
+        model.config.ctc_loss_reduction = "sum"
+        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+
+        model.config.ctc_loss_reduction = "mean"
+        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+
+        self.parent.assertTrue(isinstance(sum_loss, float))
+        self.parent.assertTrue(isinstance(mean_loss, float))
 
 
 @require_torch
@@ -858,6 +885,7 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     test_pruning = False
     test_headmasking = False
+    test_resize_embeddings = False
 
     input_name = "input_values"
 
@@ -872,43 +900,231 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_ctc_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_loss(*config_and_inputs)
+
+    # this model has no input embeddings
+    def test_model_common_attributes(self):
+        pass
+
     # this model has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
-    # TODO
-    def test_attention_outputs(self):
-        pass
-
-    # TODO
     def test_forward_signature(self):
-        pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # TODO
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "input_values",
+                "attention_mask",
+            ]
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
     def test_hidden_states_output(self):
-        pass
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-    # TODO
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(self.model_tester.seq_length)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [subsampled_seq_length, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            subsampled_encoder_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                encoder_seq_length
+            )
+            subsampled_encoder_key_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                encoder_key_length
+            )
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+            )
+            out_len = len(outputs)
+
+            correct_outlen = 2
+
+            # loss is at first position
+            if "labels" in inputs_dict:
+                correct_outlen += 1  # loss is added to beginning
+
+            self.assertEqual(out_len, correct_outlen)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+            )
+
     def test_initialization(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # TODO
-    def test_model_common_attributes(self):
-        pass
-
-    # TODO
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    # TODO
-    def test_save_load_fast_init_from_base(self):
-        pass
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "feature_projection.projection.weight",
+                    "feature_projection.projection.bias",
+                ]
+                if param.requires_grad:
+                    if any([x in name for x in uniform_init_parms]):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         pass
 
-    # TODO: CTC tests from Wav2Vec2
+    @slow
+    def test_mask_feature_prob_ctc(self):
+        model = SpeechT5ForCTC.from_pretrained(
+            "Matthijs/speecht5_ctc", mask_feature_prob=0.2, mask_feature_length=2
+        )
+        model.to(torch_device).train()
+        processor = SpeechT5ProcessorForCTC.from_pretrained(
+            "Matthijs/speecht5_ctc", return_attention_mask=True
+        )
+
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
+
+        self.assertEqual(logits.shape, (4, 299, 81))
+
+    @slow
+    def test_mask_time_prob_ctc(self):
+        model = SpeechT5ForCTC.from_pretrained(
+            "Matthijs/speecht5_ctc", mask_time_prob=0.2, mask_time_length=2
+        )
+        model.to(torch_device).train()
+        processor = SpeechT5ProcessorForCTC.from_pretrained(
+            "Matthijs/speecht5_ctc", return_attention_mask=True
+        )
+
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
+
+        self.assertEqual(logits.shape, (4, 299, 81))
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "weight_g") and module.weight_g is not None:
+            module.weight_g.data.fill_(3)
+        if hasattr(module, "weight_v") and module.weight_v is not None:
+            module.weight_v.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
+        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+            module.masked_spec_embed.data.fill_(3)
 
 
 @require_torch
