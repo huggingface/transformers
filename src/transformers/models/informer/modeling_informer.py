@@ -1,3 +1,42 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" PyTorch Informer model."""
+
+import random
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Tuple, Union
+
+import torch
+from torch import nn
+from torch.distributions import (
+    AffineTransform,
+    Distribution,
+    Independent,
+    NegativeBinomial,
+    Normal,
+    StudentT,
+    TransformedDistribution,
+)
+
+from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from .configuration_informer import InformerConfig
+
 from math import sqrt
 from typing import List, Optional
 
@@ -5,9 +44,109 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from gluonts.torch.distributions import DistributionOutput, StudentTOutput
-from gluonts.torch.modules.feature import FeatureEmbedder
-from gluonts.torch.modules.scaler import MeanScaler, NOPScaler
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "InformerConfig"
+
+
+class FeatureEmbedder(nn.Module):
+    def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
+        super().__init__()
+
+        self.num_features = len(cardinalities)
+        self.embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if self.num_features > 1:
+            # we slice the last dimension, giving an array of length
+            # self.num_features with shape (N,T) or (N)
+            cat_feature_slices = torch.chunk(features, self.num_features, dim=-1)
+        else:
+            cat_feature_slices = [features]
+
+        return torch.cat(
+            [
+                embed(cat_feature_slice.squeeze(-1))
+                for embed, cat_feature_slice in zip(self.embedders, cat_feature_slices)
+            ],
+            dim=-1,
+        )
+
+
+class MeanScaler(nn.Module):
+    """
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
+        super().__init__()
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
+
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # these will have shape (N, C)
+        total_weight = weights.sum(dim=self.dim)
+        weighted_sum = (data.abs() * weights).sum(dim=self.dim)
+
+        # first compute a global scale per-dimension
+        total_observed = total_weight.sum(dim=0)
+        denominator = torch.max(total_observed, torch.ones_like(total_observed))
+        default_scale = weighted_sum.sum(dim=0) / denominator
+
+        # then compute a per-item, per-dimension scale
+        denominator = torch.max(total_weight, torch.ones_like(total_weight))
+        scale = weighted_sum / denominator
+
+        # use per-batch scale when no element is observed
+        # or when the sequence contains only zeros
+        scale = (
+            torch.max(
+                self.minimum_scale,
+                torch.where(
+                    weighted_sum > torch.zeros_like(weighted_sum),
+                    scale,
+                    default_scale * torch.ones_like(total_weight),
+                ),
+            )
+            .detach()
+            .unsqueeze(dim=self.dim)
+        )
+
+        return data / scale, scale if self.keepdim else scale.squeeze(dim=self.dim)
+
+
+class NOPScaler(nn.Module):
+    """
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+
+    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        scale = torch.ones_like(data).mean(dim=self.dim, keepdim=self.keepdim)
+        return data, scale
 
 
 class TriangularCausalMask:
@@ -263,9 +402,9 @@ class EncoderLayer(nn.Module):
         return self.norm2(x + y), attn
 
 
-class Encoder(nn.Module):
+class InformerEncoder(nn.Module):
     def __init__(self, attn_layers, conv_layers=None, norm_layer=None):
-        super(Encoder, self).__init__()
+        super(InformerEncoder, self).__init__()
         self.attn_layers = nn.ModuleList(attn_layers)
         self.conv_layers = (
             nn.ModuleList(conv_layers) if conv_layers is not None else None
@@ -330,7 +469,7 @@ class DecoderLayer(nn.Module):
         return self.norm3(x + y)
 
 
-class Decoder(nn.Module):
+class InformerDecoder(nn.Module):
     def __init__(self, layers, norm_layer=None):
         super(Decoder, self).__init__()
         self.layers = nn.ModuleList(layers)
@@ -346,132 +485,116 @@ class Decoder(nn.Module):
         return x
 
 
-class InformerModel(nn.Module):
-    def __init__(  # add loss param
-        self,
-        freq: str, # frequency
-        context_length: int,
-        prediction_length: int,
-        num_feat_dynamic_real: int,  # num_dynamic_real_features
-        num_feat_static_real: int,  # num_static_real_features
-        num_feat_static_cat: int,  # num_static_categorical_features
-        cardinality: List[int],
-        # Informer arguments
-        nhead: int,
-        num_encoder_layers: int, # encoder_layers
-        num_decoder_layers: int, # decoder_layers
-        dim_feedforward: int,
-        activation: str = "gelu", # activation_function
-        dropout: float = 0.1,
-        attn: str = "prob",
-        factor: int = 5,
-        distil: bool = True,
-        # univariate input
-        input_size: int = 1,
-        embedding_dimension: Optional[List[int]] = None,
-        distr_output: DistributionOutput = StudentTOutput(),
-        lags_seq: Optional[List[int]] = None,
-        scaling: bool = True,
-        num_parallel_samples: int = 100,
-    ) -> None:
-        super().__init__()
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerPreTrainedModel with TimeSeriesTransformer->Informer
+class InformerPreTrainedModel(PreTrainedModel):
+    config_class = InformerConfig
+    base_model_prefix = "model"
+    main_input_name = "past_values"
+    supports_gradient_checkpointing = True
 
-        self.input_size = input_size
+    def _init_weights(self, module):
+        std = self.config.init_std
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
-        self.target_shape = distr_output.event_shape
-        self.num_feat_dynamic_real = num_feat_dynamic_real
-        self.num_feat_static_cat = num_feat_static_cat
-        self.num_feat_static_real = num_feat_static_real
-        self.embedding_dimension = (
-            embedding_dimension
-            if embedding_dimension is not None or cardinality is None
-            else [min(50, (cat + 1) // 2) for cat in cardinality]
-        )
-        self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=freq)
-        self.num_parallel_samples = num_parallel_samples
-        self.history_length = context_length + max(self.lags_seq)
-        self.embedder = FeatureEmbedder(
-            cardinalities=cardinality,
-            embedding_dims=self.embedding_dimension,
-        )
-        if scaling:
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (InformerDecoder, InformerEncoder)):
+            module.gradient_checkpointing = value
+
+
+class InformerModel(InformerPreTrainedModel):
+    def __init__(self, config: InformerConfig):
+        super().__init__(config)
+
+        if config.scaling:
             self.scaler = MeanScaler(dim=1, keepdim=True)
         else:
             self.scaler = NOPScaler(dim=1, keepdim=True)
 
-        # total feature size
-        d_model = self.input_size * len(self.lags_seq) + self._number_of_features
+        self.embedder = FeatureEmbedder(
+            cardinalities=config.cardinality,
+            embedding_dims=config.embedding_dimension,
+        )
 
-        self.context_length = context_length
-        self.prediction_length = prediction_length
-        self.distr_output = distr_output
-        self.param_proj = distr_output.get_args_proj(d_model)
+        # Informer encoder-decoder and mask initializer
+        self.encoder = InformerEncoder(config)
+        self.decoder = InformerDecoder(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # Informer enc-decoder
-        Attn = ProbAttention if attn == "prob" else FullAttention
-        # Encoder
-        self.encoder = Encoder(
-            [
-                EncoderLayer(
-                    AttentionLayer(
-                        Attn(
-                            mask_flag=False,
-                            factor=factor,
-                            attention_dropout=dropout,
-                            output_attention=False,
-                        ),
-                        d_model,
-                        nhead,
-                        mix=False,
-                    ),
-                    d_model,
-                    d_ff=dim_feedforward,
-                    dropout=dropout,
-                    activation=activation,
-                )
-                for l in range(num_encoder_layers)
-            ],
-            [ConvLayer(d_model) for l in range(num_encoder_layers - 1)]
-            if distil
-            else None,
-            norm_layer=torch.nn.LayerNorm(d_model),
-        )
+        # Attn = ProbAttention if config.attn == "prob" else FullAttention
 
-        # Masked Decoder
-        self.decoder = Decoder(
-            [
-                DecoderLayer(
-                    AttentionLayer(
-                        Attn(
-                            mask_flag=True,
-                            factor=factor,
-                            attention_dropout=dropout,
-                            output_attention=False,
-                        ),
-                        d_model,
-                        nhead,
-                        mix=True,
-                    ),
-                    AttentionLayer(
-                        FullAttention(
-                            mask_flag=False,
-                            factor=factor,
-                            attention_dropout=dropout,
-                            output_attention=False,
-                        ),
-                        d_model,
-                        nhead,
-                        mix=False,
-                    ),
-                    d_model,
-                    d_ff=dim_feedforward,
-                    dropout=dropout,
-                    activation=activation,
-                )
-                for l in range(num_decoder_layers)
-            ],
-            norm_layer=torch.nn.LayerNorm(d_model),
-        )
+        # Encoder
+        # self.encoder = Encoder(
+        #     [
+        #         EncoderLayer(
+        #             AttentionLayer(
+        #                 Attn(
+        #                     mask_flag=False,
+        #                     factor=factor,
+        #                     attention_dropout=dropout,
+        #                     output_attention=False,
+        #                 ),
+        #                 d_model,
+        #                 nhead,
+        #                 mix=False,
+        #             ),
+        #             d_model,
+        #             d_ff=dim_feedforward,
+        #             dropout=dropout,
+        #             activation=activation,
+        #         )
+        #         for l in range(num_encoder_layers)
+        #     ],
+        #     [ConvLayer(d_model) for l in range(num_encoder_layers - 1)]
+        #     if distil
+        #     else None,
+        #     norm_layer=torch.nn.LayerNorm(d_model),
+        # )
+        #
+        # # Masked Decoder
+        # self.decoder = Decoder(
+        #     [
+        #         DecoderLayer(
+        #             AttentionLayer(
+        #                 Attn(
+        #                     mask_flag=True,
+        #                     factor=factor,
+        #                     attention_dropout=dropout,
+        #                     output_attention=False,
+        #                 ),
+        #                 d_model,
+        #                 nhead,
+        #                 mix=True,
+        #             ),
+        #             AttentionLayer(
+        #                 FullAttention(
+        #                     mask_flag=False,
+        #                     factor=factor,
+        #                     attention_dropout=dropout,
+        #                     output_attention=False,
+        #                 ),
+        #                 d_model,
+        #                 nhead,
+        #                 mix=False,
+        #             ),
+        #             d_model,
+        #             d_ff=dim_feedforward,
+        #             dropout=dropout,
+        #             activation=activation,
+        #         )
+        #         for l in range(num_decoder_layers)
+        #     ],
+        #     norm_layer=torch.nn.LayerNorm(d_model),
+        # )
 
     @property
     def _number_of_features(self) -> int:
