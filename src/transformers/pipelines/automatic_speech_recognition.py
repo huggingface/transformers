@@ -110,32 +110,41 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         sequence = sequence[begin_idx:]
 
         if seq_idx != 0:
-            time -= stride_left / 100
-            actual_offset = int(time / time_precision)
-
+            time -= stride_left
+            # TODO last think is to convert the time to the token space
+            offset = int((time / feature_extractor.sampling_rate) / time_precision)
             timestamp_tokens = np.where(sequence >= timestamp_begin)[0][1::2]
-            previous_tokens = items[-1][1:-1]
-
-            if len(timestamp_tokens) >= 1 and len(previous_tokens) > 0:
-                index_left, index_right, match_length = _fast_find_longest_common_sequence(sequence, previous_tokens)
-                # don't do anything if only 1 token was matched
-                if match_length > 1:
-                    end_of_curr_sequence_idx = np.where(sequence[index_left:] >= timestamp_begin)[0][0] + 1
-                    sliced_sequence = sequence[index_left : end_of_curr_sequence_idx + index_left]
-                    # if all the tokens are matched, suffix
-                    if index_left == 0:
-                        sliced_sequence[-1] = items[-1][-1]
-                    # if part of the previous sequence is not taken
-                    elif index_left > 0:
-                        # prev_duration = items[-1][-1] - items[-1][0]
-                        # let's insert the missing part of the previous sequence
-                        sliced_sequence = np.insert(sliced_sequence, 0, items[-1][: index_right + 1])
-                        sliced_sequence[-1] += actual_offset
-
-                    items[-1] = sliced_sequence
-                    sequence = sequence[end_of_curr_sequence_idx + index_left :]
-
-                actual_offset = items[-1][-1] - timestamp_begin
+            if len(timestamp_tokens) >= 1:
+                # if a big chunk lenght is used, we need to check all of the previous items
+                best_match = 0
+                sliced_sequence = []
+                for idx, previous_sequence in enumerate(reversed(items)):
+                    previous_tokens = previous_sequence[1:-1]
+                    if len(previous_tokens) > 0:
+                        index_left, index_right, match_length = _fast_find_longest_common_sequence(
+                            sequence, previous_tokens
+                        )
+                        # don't do anything if only 1 token was matched
+                        if match_length > 1 and match_length > best_match:
+                            best_match = match_length
+                            best_idx = idx
+                            end_of_curr_sequence_idx = (
+                                np.where(sequence[index_left:] >= timestamp_begin)[0][0] + 1 + index_left
+                            )
+                            sliced_sequence = sequence[index_left:end_of_curr_sequence_idx]
+                            # if all the tokens are matched, suffix
+                            if index_left == 0 and match_length == len(previous_tokens):
+                                sliced_sequence[-1] = previous_sequence[-1]
+                            # if part of the previous sequence is not taken
+                            elif index_left > 0:
+                                # let's insert the missing part of the previous sequence
+                                sliced_sequence = np.insert(sliced_sequence, 0, previous_sequence[: index_right + 1])
+                                sliced_sequence[-1] += offset
+                if len(sliced_sequence) > 0:
+                    items[len(items) - best_idx - 1] = sliced_sequence
+                    items = items[: len(items) - best_idx]
+                    sequence = sequence[end_of_curr_sequence_idx:]
+            actual_offset = items[-1][-1] - timestamp_begin
 
         timestamp_tokens = sequence >= timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
@@ -170,7 +179,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
                 sliced_sequence[-1] = items[-1][-1] + duration
                 items.append(sliced_sequence)
         # The beginning time of the next chunk
-        time += chunk_len / 100
+        time += chunk_len
     result = []
     for i in range(len(items)):
         result += items[i].tolist()
