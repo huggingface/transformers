@@ -186,6 +186,13 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
+        apply_spec_augment=False,
+        mask_time_prob=0.0,
+        mask_time_length=10,
+        mask_time_min_masks=2,
+        mask_feature_prob=0.0,
+        mask_feature_length=10,
+        mask_feature_min_masks=0,
         **kwargs
     ):
         super().__init__(
@@ -202,6 +209,14 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
+        # specaugment related
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
 
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
@@ -350,15 +365,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         # generate indices & apply SpecAugment along time axis
         batch_size, hidden_size, sequence_length = input_features.shape
 
-        # todo: move to config
-        self.mask_time_prob = 0.05
-        self.mask_time_length = 2
-        self.mask_time_min_masks = 2
-
-        self.mask_feature_prob = 0.05
-        self.mask_feature_length = 10
-        self.mask_feature_min_masks = 0
-
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
             input_features[mask_time_indices] = 0
@@ -494,9 +500,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         else:
             padded_inputs["input_features"] = input_features
 
-        # todo: move to config
-        apply_spec_augment = True
-        if apply_spec_augment:
+        if self.apply_spec_augment:
             # todo: input_features to np array
             padded_inputs["input_features"] = np.stack(padded_inputs["input_features"], 0)
 
