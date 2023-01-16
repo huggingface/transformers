@@ -12,34 +12,35 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvNext model. """
+""" Testing suite for the PyTorch UperNet framework. """
 
 
 import inspect
 import unittest
 
-from transformers import ConvNextConfig
+from huggingface_hub import hf_hub_download
+from transformers import ConvNextConfig, UperNetConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import ConvNextBackbone, ConvNextForImageClassification, ConvNextModel
-    from transformers.models.convnext.modeling_convnext import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import UperNetForSemanticSegmentation
+    from transformers.models.upernet.modeling_upernet import UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
-class ConvNextModelTester:
+class UperNetModelTester:
     def __init__(
         self,
         parent,
@@ -53,9 +54,10 @@ class ConvNextModelTester:
         use_labels=True,
         intermediate_size=37,
         hidden_act="gelu",
-        num_labels=10,
+        type_sequence_label_size=10,
         initializer_range=0.02,
         out_features=["stage2", "stage3", "stage4"],
+        num_labels=3,
         scope=None,
     ):
         self.parent = parent
@@ -69,115 +71,89 @@ class ConvNextModelTester:
         self.use_labels = use_labels
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.num_labels = num_labels
+        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.out_features = out_features
+        self.num_labels = num_labels
         self.scope = scope
+        self.num_hidden_layers = num_stages
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.num_labels)
+            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
 
         return config, pixel_values, labels
 
-    def get_config(self):
+    def get_backbone_config(self):
         return ConvNextConfig(
             num_channels=self.num_channels,
+            num_stages=self.num_stages,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
-            num_stages=self.num_stages,
+            is_training=self.is_training,
+            intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
             out_features=self.out_features,
+        )
+
+    def get_config(self):
+        return UperNetConfig(
+            backbone_config=self.get_backbone_config(),
+            hidden_size=512,
+            pool_scales=[1, 2, 3, 6],
+            use_auxiliary_head=True,
+            auxiliary_loss_weight=0.4,
+            auxiliary_in_channels=40,
+            auxiliary_channels=256,
+            auxiliary_num_convs=1,
+            auxiliary_concat_input=False,
+            loss_ignore_index=255,
             num_labels=self.num_labels,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
-        model = ConvNextModel(config=config)
+    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
+        model = UperNetForSemanticSegmentation(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
         )
-
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        model = ConvNextForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_backbone(self, config, pixel_values, labels):
-        model = ConvNextBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
-        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
-
-        # verify backbone works with out_features=None
-        config.out_features = None
-        model = ConvNextBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify feature maps
-        self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), 1)
-        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, labels = config_and_inputs
+        (
+            config,
+            pixel_values,
+            labels,
+        ) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
 @require_torch
-class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
+class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ConvNext does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as UperNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            ConvNextModel,
-            ConvNextForImageClassification,
-            ConvNextBackbone,
-        )
-        if is_torch_available()
-        else ()
-    )
-
-    fx_compatible = True
+    all_model_classes = (UperNetForSemanticSegmentation,) if is_torch_available() else ()
+    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torchscript = False
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = ConvNextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = UperNetModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=UperNetConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -191,18 +167,6 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="ConvNext does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="ConvNext does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="ConvNext does not use feedforward chunking")
-    def test_feed_forward_chunking(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -215,9 +179,25 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model(self):
+    def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
+
+    @unittest.skip(reason="UperNet does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="UperNet does not support input and output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="UperNet does not have a base model")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="UperNet does not have a base model")
+    def test_save_load_fast_init_to_base(self):
+        pass
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -251,46 +231,77 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        configs_no_init.backbone_config = _config_zero_init(configs_no_init.backbone_config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
+    @unittest.skip(reason="UperNet does not have tied weights")
+    def test_tied_model_weights_key_ignore(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvNextModel.from_pretrained(model_name)
+        for model_name in UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = UperNetForSemanticSegmentation.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-# We will verify our results on an image of cute cats
+# We will verify our results on an image of ADE20k
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    filepath = hf_hub_download(
+        repo_id="hf-internal-testing/fixtures_ade20k", repo_type="dataset", filename="ADE_val_00000001.jpg"
+    )
+    image = Image.open(filepath).convert("RGB")
     return image
 
 
 @require_torch
 @require_vision
-class ConvNextModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+@slow
+class UperNetModelIntegrationTest(unittest.TestCase):
+    def test_inference_swin_backbone(self):
+        processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-swin-tiny")
+        model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-swin-tiny")
 
-    @slow
-    def test_inference_image_classification_head(self):
-        model = ConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224").to(torch_device)
-
-        feature_extractor = self.default_feature_extractor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
-        # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
+        expected_shape = torch.Size((1, model.config.num_labels, 512, 512))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
+        expected_slice = torch.tensor(
+            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+    def test_inference_convnext_backbone(self):
+        processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-convnext-tiny")
+        model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-tiny")
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape = torch.Size((1, model.config.num_labels, 512, 512))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))

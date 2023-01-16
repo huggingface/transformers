@@ -576,8 +576,12 @@ class Swin2SRLayer(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.set_shift_and_window_size(input_dimensions)
+        if not always_partition:
+            self.set_shift_and_window_size(input_dimensions)
+        else:
+            pass
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states

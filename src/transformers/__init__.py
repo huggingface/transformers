@@ -425,6 +425,7 @@ _import_structure = {
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
     ],
+    "models.upernet": ["UperNetConfig"],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
     "models.vilt": [
@@ -1225,6 +1226,7 @@ else:
     _import_structure["models.convnext"].extend(
         [
             "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextBackbone",
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
@@ -2269,6 +2271,12 @@ else:
             "UniSpeechSatForXVector",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.upernet"].extend(
+        [
+            "UperNetForSemanticSegmentation",
+            "UperNetPreTrainedModel",
         ]
     )
     _import_structure["models.van"].extend(
@@ -3785,6 +3793,7 @@ if TYPE_CHECKING:
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.upernet import UperNetConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import (
@@ -4469,6 +4478,7 @@ if TYPE_CHECKING:
         )
         from .models.convnext import (
             CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextBackbone,
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,
@@ -5316,6 +5326,7 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
+        from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
         from .models.van import (
             VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
             VanForImageClassification,

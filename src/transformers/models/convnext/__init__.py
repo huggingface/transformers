@@ -51,6 +51,7 @@ else:
         "ConvNextForImageClassification",
         "ConvNextModel",
         "ConvNextPreTrainedModel",
+        "ConvNextBackbone",
     ]
 
 try:
@@ -85,6 +86,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_convnext import (
             CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextBackbone,
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,
