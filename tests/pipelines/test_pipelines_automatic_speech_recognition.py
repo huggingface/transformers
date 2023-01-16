@@ -1013,22 +1013,22 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     def test_chunk_iterator(self):
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
         inputs = torch.arange(100).long()
-
-        outs = list(chunk_iter(inputs, feature_extractor, 100, 0, 0))
+        ratio = 1
+        outs = list(chunk_iter(inputs, feature_extractor, 100, 0, 0, ratio))
         self.assertEqual(len(outs), 1)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
         self.assertEqual([o["is_last"] for o in outs], [True])
 
         # two chunks no stride
-        outs = list(chunk_iter(inputs, feature_extractor, 50, 0, 0))
+        outs = list(chunk_iter(inputs, feature_extractor, 50, 0, 0, ratio))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(50, 0, 0), (50, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 50), (1, 50)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
         # two chunks incomplete last
-        outs = list(chunk_iter(inputs, feature_extractor, 80, 0, 0))
+        outs = list(chunk_iter(inputs, feature_extractor, 80, 0, 0, ratio))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(80, 0, 0), (20, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 80), (1, 20)])
@@ -1039,7 +1039,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # This test is specifically crafted to trigger a bug if next chunk
         # would be ignored by the fact that all the data would be
         # contained in the strided left data.
-        outs = list(chunk_iter(inputs, feature_extractor, 105, 5, 5))
+        outs = list(chunk_iter(inputs, feature_extractor, 105, 5, 5, ratio))
         self.assertEqual(len(outs), 1)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
@@ -1052,20 +1052,20 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[
             "input_values"
         ]
-
-        outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10))
+        ratio = 1
+        outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10, ratio))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 10), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100), (1, 30)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
-        outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10))
+        outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10, ratio))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(80, 0, 10), (50, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 80), (1, 50)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
-        outs = list(chunk_iter(inputs, feature_extractor, 90, 20, 0))
+        outs = list(chunk_iter(inputs, feature_extractor, 90, 20, 0, ratio))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(90, 0, 0), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 90), (1, 30)])
@@ -1074,7 +1074,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[
             "input_values"
         ]
-        outs = list(chunk_iter(inputs, feature_extractor, 30, 5, 5))
+        outs = list(chunk_iter(inputs, feature_extractor, 30, 5, 5, ratio))
         self.assertEqual(len(outs), 5)
         self.assertEqual([o["stride"] for o in outs], [(30, 0, 5), (30, 5, 5), (30, 5, 5), (30, 5, 5), (20, 5, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 30), (1, 30), (1, 30), (1, 30), (1, 20)])
