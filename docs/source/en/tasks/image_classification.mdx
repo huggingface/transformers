@@ -344,7 +344,7 @@ Configure the model for training with `compile()`:
 
 To compute the accuracy from the predictions and push your model to the 🤗 Hub, use [Keras callbacks](./main_classes/keras_callbacks).
 Pass your `compute_metrics` function to [KerasMetricCallback](./main_classes/keras_callbacks#transformers.KerasMetricCallback),
-and use [PushToHubCallback](./main_classes/keras_callbacks#transformers.PushToHubCallback) to upload the model:
+and use the [PushToHubCallback](./main_classes/keras_callbacks#transformers.PushToHubCallback) to upload the model:
 
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback
@@ -375,7 +375,7 @@ Epoch 5/5
 250/250 [==============================] - 238s 949ms/step - loss: 0.1232 - val_loss: 0.3259 - accuracy: 0.9890
 ```
 
-Congratulations! You have trained your model and shared it on the 🤗 Hub. You can now use it for inference!
+Congratulations! You have fine-tuned your model and shared it on the 🤗 Hub. You can now use it for inference!
 </tf>
 </frameworkcontent>
 
