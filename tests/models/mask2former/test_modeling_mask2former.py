@@ -233,7 +233,7 @@ class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["facebook/mask2former-swin-small-coco"]:
+        for model_name in ["facebook/mask2former-swin-small-coco-instance"]:
             model = Mask2FormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

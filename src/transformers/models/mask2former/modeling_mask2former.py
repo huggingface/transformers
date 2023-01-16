@@ -99,10 +99,6 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads. Returned when `output_attentions=True`.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
         masks_queries_logits (`tuple(torch.FloatTensor)` of shape `(batch_size, num_queries, height, width)`):
             Tuple of mask predictions from all layers of the transformer decoder.
         intermediate_hidden_states (`tuple(torch.FloatTensor)` of shape `(num_queries, 1, hidden_size)`):
@@ -110,6 +106,9 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
             layernorm.
     """
 
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[torch.FloatTensor] = None
     masks_queries_logits: Tuple[torch.FloatTensor] = None
     intermediate_hidden_states: Tuple[torch.FloatTensor] = None
 
@@ -175,14 +174,9 @@ class Mask2FormerModelOutput(ModelOutput):
             layernorm.
         masks_queries_logits (`tuple(torch.FloatTensor)` of shape `(batch_size, num_queries, height, width)`)
             Mask Predictions from each layer in the transformer decoder.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs. Returned when `output_hidden_states=True`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*):
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed):
             Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Self and Cross Attentions weights from transformer decoder. Returned when
-            `output_attentions=True` is passed.
+            sequence_length)`. Self attentions weights from transformer decoder.
     """
 
     encoder_last_hidden_state: torch.FloatTensor = None
@@ -193,7 +187,6 @@ class Mask2FormerModelOutput(ModelOutput):
     transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     transformer_decoder_intermediate_states: Tuple[torch.FloatTensor] = None
     masks_queries_logits: Tuple[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -236,10 +229,6 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs. Returned when `output_hidden_states=True`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Self and Cross Attentions weights from transformer decoder.
@@ -255,7 +244,6 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -1854,8 +1842,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        attentions = () if output_attentions else None
 
         # intermediate mask predictions from transformer decoder layers
         intermediate_mask_predictions = ()
@@ -1925,25 +1912,21 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+                attentions += (layer_outputs[1],)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
+        hidden_states = hidden_states.transpose(1, 0)
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions, intermediate]
-                if v is not None
-            )
+            outputs = [hidden_states, all_hidden_states, attentions, intermediate, intermediate_mask_predictions]
+            return tuple(v for v in outputs if v is not None)
+
         return Mask2FormerMaskedAttentionDecoderOutput(
-            last_hidden_state=hidden_states.transpose(1, 0),
+            last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
-            attentions=all_self_attns,
+            attentions=attentions,
             intermediate_hidden_states=intermediate,
             masks_queries_logits=intermediate_mask_predictions,
         )
@@ -2106,6 +2089,7 @@ class Mask2FormerTransformerModule(nn.Module):
             feature_size_list=size_list,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            return_dict=True,
         )
 
         return decoder_output
@@ -2297,14 +2281,12 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         pixel_decoder_hidden_states = None
         transformer_decoder_hidden_states = None
         transformer_decoder_intermediate_states = None
-        hidden_states = None
 
         if output_hidden_states:
             encoder_hidden_states = pixel_level_module_output.encoder_hidden_states
             pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states
             transformer_decoder_hidden_states = transformer_module_output.hidden_states
             transformer_decoder_intermediate_states = transformer_module_output.intermediate_hidden_states
-            hidden_states = encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states
 
         output = Mask2FormerModelOutput(
             encoder_last_hidden_state=pixel_level_module_output.encoder_last_hidden_state,
@@ -2314,13 +2296,12 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
             transformer_decoder_intermediate_states=transformer_decoder_intermediate_states,
-            hidden_states=hidden_states,
             attentions=transformer_module_output.attentions,
             masks_queries_logits=transformer_module_output.masks_queries_logits,
         )
 
         if not return_dict:
-            output = tuple(v for v in output.values())
+            output = tuple(v for v in output.values() if v is not None)
 
         return output
 
@@ -2503,12 +2484,11 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
-            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
         if not return_dict:
-            output = tuple(v for v in output.values())
+            output = tuple(v for v in output.values() if v is not None)
             if loss is not None:
                 output = ((loss)) + output
         return output
