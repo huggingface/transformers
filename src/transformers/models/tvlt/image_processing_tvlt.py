@@ -407,12 +407,11 @@ class TvltImageProcessor(BaseImageProcessor):
 
         max_num_frames = max([len(visual_input) for visual_input in visual_inputs])
         num_patches_per_image = (self.size["shortest_edge"] // self.patch_size) ** 2
-        visual_masks = [
+        visual_masks = np.array([
             len(visual_input) * num_patches_per_image * [1]
             + (max_num_frames - len(visual_input)) * num_patches_per_image * [0]
             for visual_input in visual_inputs
-        ]
-        visual_masks = np.array(visual_masks)
+        ])
 
         visual_inputs = [
             [
