@@ -26,6 +26,7 @@ from functools import lru_cache
 from pathlib import Path
 from unittest import skipIf
 
+import datasets
 import numpy as np
 
 from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
@@ -964,6 +965,32 @@ class CustomPipelineTest(unittest.TestCase):
             self.assertEqual(counter.get_request_count, 0)
             self.assertEqual(counter.head_request_count, 1)
             self.assertEqual(counter.other_request_count, 0)
+
+    @require_torch
+    def test_chunk_pipeline_batching_single_file(self):
+        # Make sure we have cached the pipeline.
+        pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
+        ds = datasets.load_dataset("common_voice", "ja", split="test", streaming=True)
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        input_speech = next(iter(ds))["audio"]
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
+        COUNT = 0
+        forward = pipe.model.forward
+
+        def new_forward(*args, **kwargs):
+            global COUNT
+            COUNT += 1
+            return forward(*args, **kwargs)
+
+        pipe.model.forward = new_forward
+
+        for out in pipe(
+            input_speech, return_timestamps="char", chunk_length_s=3, stride_length_s=[1, 1], batch_size=1024
+        ):
+            pass
+
+        self.assertEqual(COUNT, 1)
 
 
 @require_torch
