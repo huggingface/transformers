@@ -229,7 +229,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         self.assertListEqual(batch, transcription)
 
     def test_offset_decoding(self):
-        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="spanish")
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
         # fmt: off
         INPUT_TOKENS = [
             50258, 50259, 50359, 50364, 441, 1857, 4174, 11, 5242, 366,

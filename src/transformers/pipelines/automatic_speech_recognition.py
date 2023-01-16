@@ -484,6 +484,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if isinstance(stride_length_s, (int, float)):
                 stride_length_s = [stride_length_s, stride_length_s]
 
+            # XXX: Carefuly, this variable will not exist in `seq2seq` setting.
+            # Currently chunking is not possible at this level for `seq2seq` so
+            # it's ok.
             align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
             chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
             stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
@@ -652,9 +655,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})
             optional["chunks"] = chunks
         elif return_timestamps and self.type == "seq2seq_whisper":
-            optional["chunks"] = offsets
-
-        elif return_timestamps and "Whisper" in self.model.__class__.__name__:
             optional["chunks"] = offsets
 
         extra = defaultdict(list)
