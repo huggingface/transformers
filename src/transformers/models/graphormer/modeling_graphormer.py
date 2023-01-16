@@ -723,8 +723,8 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         super().__init__(config)
         self.encoder = GraphormerModel(config)
         self.embedding_dim = config.embedding_dim
-
-        self.classifier = GraphormerDecoderHead(self.embedding_dim, config.num_labels)
+        self.num_classes = config.num_classes
+        self.classifier = GraphormerDecoderHead(self.embedding_dim, self.num_classes)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -750,12 +750,12 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         if labels is not None:
             mask = ~torch.isnan(labels)
 
-            if self.classifier.num_classes == 1:  # regression
+            if self.num_classes == 1:  # regression
                 loss_fct = MSELoss()
                 loss = loss_fct(logits[mask].squeeze(), labels[mask].squeeze().float())
-            elif self.classifier.num_classes > 1 and len(labels.shape) == 1:  # One task classification
+            elif self.num_classes > 1 and len(labels.shape) == 1:  # One task classification
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits[mask].view(-1, self.classifier.num_classes), labels[mask].view(-1))
+                loss = loss_fct(logits[mask].view(-1, self.num_classes), labels[mask].view(-1))
             else:  # Binary multi-task classification
                 loss_fct = BCEWithLogitsLoss(reduction="sum")
                 loss = loss_fct(logits[mask], labels[mask])

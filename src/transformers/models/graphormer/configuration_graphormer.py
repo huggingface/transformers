@@ -178,6 +178,7 @@ class GraphormerConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs,
     ):
+        self.num_classes = num_classes
         self.num_atoms = num_atoms
         self.num_in_degree = num_in_degree
         self.num_out_degree = num_out_degree
