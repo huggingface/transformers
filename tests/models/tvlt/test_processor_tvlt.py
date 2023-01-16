@@ -52,13 +52,13 @@ class TvltProcessorTest(unittest.TestCase):
 
         processor = TvltProcessor(image_processor=image_processor, feature_extractor=feature_extractor)
 
-        audio_inputs = np.ones([12000])
+        audio = np.ones([12000])
 
-        audio_inputs_dict = feature_extractor(audio_inputs, return_tensors="np")
-        input_processor = processor(audio_inputs=audio_inputs, return_tensors="np")
+        audio_dict = feature_extractor(audio, return_tensors="np")
+        input_processor = processor(audio=audio, return_tensors="np")
 
-        for key in audio_inputs_dict.keys():
-            self.assertAlmostEqual(audio_inputs_dict[key].sum(), input_processor[key].sum(), delta=1e-2)
+        for key in audio_dict.keys():
+            self.assertAlmostEqual(audio_dict[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -66,13 +66,13 @@ class TvltProcessorTest(unittest.TestCase):
 
         processor = TvltProcessor(image_processor=image_processor, feature_extractor=feature_extractor)
 
-        visual_inputs = np.ones([3, 224, 224])
+        images = np.ones([3, 224, 224])
 
-        visual_inputs_dict = image_processor(visual_inputs, return_tensors="np")
-        input_processor = processor(visual_inputs=visual_inputs, return_tensors="np")
+        image_dict = image_processor(images, return_tensors="np")
+        input_processor = processor(images=images, return_tensors="np")
 
-        for key in visual_inputs_dict.keys():
-            self.assertAlmostEqual(visual_inputs_dict[key].sum(), input_processor[key].sum(), delta=1e-2)
+        for key in image_dict.keys():
+            self.assertAlmostEqual(image_dict[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_model_input_names(self):
         image_processor = self.get_image_processor()

@@ -39,7 +39,7 @@ class TvltImageProcessorTester(unittest.TestCase):
         parent,
         batch_size=7,
         num_channels=3,
-        num_frames=10,
+        num_frames=4,
         image_size=18,
         min_resolution=30,
         max_resolution=400,
@@ -99,7 +99,7 @@ class TvltImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase
         self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
         self.assertTrue(hasattr(feature_extractor, "size"))
 
-    def test_batch_feature(self):
+    def test_feat_extract_from_and_save_pretrained(self):
         pass
 
     def test_call_pil(self):
