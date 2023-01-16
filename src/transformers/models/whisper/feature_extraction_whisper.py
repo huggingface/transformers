@@ -491,6 +491,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
+        return_attention_mask = return_attention_mask or self.apply_spec_augment
+
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
@@ -511,14 +513,13 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         # convert into correct format for padding
 
-        # todo: auto return_attention_mask
         padded_inputs = self.pad(
             batched_speech,
             padding=padding,
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=True,
+            return_attention_mask=return_attention_mask,
         )
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
