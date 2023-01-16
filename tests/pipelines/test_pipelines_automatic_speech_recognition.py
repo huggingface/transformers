@@ -547,16 +547,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         output = pipe(array)
         self.assertDictEqual(
-            nested_simplify(output),
+            output,
             {
-                "text": (
-                    " A man said to the universe, Sir, I exist. Sweat covered Brian's body, trickling into the titling"
-                    " cloth that was the only garment that he wore"
-                    " The cut on his chest still dripping blood. The ache of his overstrained eyes."
-                    " Even the soaring arena around him with thousands of"
-                    " spectators, or trivialities not worth thinking about. His instant panic was followed by a small"
-                    " sharp blow high on his chest."
-                ),
                 "chunks": [
                     {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
                     {
@@ -577,6 +569,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                     },
                     {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
                 ],
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Brion's "
+                    "body, trickling into the tight-loan cloth that was the only garment "
+                    "he wore. The cut on his chest still dripping blood. The ache of his "
+                    "overstrained eyes. Even the soaring arena around him with the "
+                    "thousands of spectators were trivialities not worth thinking about."
+                ),
             },
         )
 
