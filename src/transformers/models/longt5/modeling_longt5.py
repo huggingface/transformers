@@ -1449,11 +1449,6 @@ class LongT5Stack(LongT5PreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(
-                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
-            )
 
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
