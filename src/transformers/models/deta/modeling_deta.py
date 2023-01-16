@@ -66,6 +66,7 @@ if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
@@ -510,6 +511,7 @@ def build_position_encoding(config):
     return position_embedding
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.ms_deform_attn_core_pytorch
 def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations, attention_weights):
     # for debug and test only,
     # need to use cuda version instead
