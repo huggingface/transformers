@@ -506,33 +506,42 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertDictEqual(
             output,
             {
-                "text": (
-                    " A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the"
-                    " tight-wing cloth that was the only garment you wore. The cut on his chest still dripping blood."
-                    " The ache of his overstrain dyes. Even the soaring arena around him with thousands of spectators,"
-                    " retrievalidies not worth thinking about."
-                ),
                 "chunks": [
                     {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
                     {
                         "text": (
-                            " Sweat covered Breon's body, trickling into the tight-wing cloth that was the only"
-                            " garment"
+                            " Sweat covered Brion's body, trickling into the "
+                            "tight-loan cloth that was the only garment he wore, the "
+                            "cut"
                         ),
-                        "timestamp": (5.5, 10.24),
+                        "timestamp": (5.5, 13.6),
                     },
-                    {"text": " you wore.", "timestamp": (10.24, 11.74)},
-                    {"text": " The cut on his chest still dripping blood.", "timestamp": (11.74, 14.88)},
-                    {"text": " The ache of his overstrain dyes.", "timestamp": (14.88, 17.6)},
                     {
                         "text": (
-                            " Even the soaring arena around him with thousands of spectators, retrievalidies not worth"
+                            " on his chest still dripping blood, the ache of his "
+                            "overstrained eyes, even the soaring arena around him "
+                            "with"
                         ),
-                        "timestamp": (17.6, 23.28),
+                        "timestamp": (13.6, 22.94),
                     },
-                    # TODO Seems like a bug, no ?
-                    {"text": " thinking about.", "timestamp": (23.28, 1026.98)},
+                    {
+                        "text": " the thousands of spectators, retrievality is not worth thinking about.",
+                        "timestamp": (22.94, 29.98),
+                    },
+                    {
+                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+                        "timestamp": (29.98, 35.980000000000004),
+                    },
                 ],
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Brion's "
+                    "body, trickling into the tight-loan cloth that was the only garment "
+                    "he wore, the cut on his chest still dripping blood, the ache of his "
+                    "overstrained eyes, even the soaring arena around him with the "
+                    "thousands of spectators, retrievality is not worth thinking about. "
+                    "His instant panic was followed by a small, sharp blow high on his "
+                    "chest."
+                ),
             },
         )
 
