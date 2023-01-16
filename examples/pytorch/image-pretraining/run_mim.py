@@ -27,7 +27,7 @@ from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalF
 import transformers
 from transformers import (
     CONFIG_MAPPING,
-    FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
     AutoConfig,
     AutoImageProcessor,
@@ -340,10 +340,10 @@ def main():
     elif model_args.model_name_or_path:
         image_processor = AutoImageProcessor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
-        FEATURE_EXTRACTOR_TYPES = {
-            conf.model_type: image_processor_class for conf, image_processor_class in FEATURE_EXTRACTOR_MAPPING.items()
+        IMAGE_PROCESSOR_TYPES = {
+            conf.model_type: image_processor_class for conf, image_processor_class in IMAGE_PROCESSOR_MAPPING.items()
         }
-        image_processor = FEATURE_EXTRACTOR_TYPES[model_args.model_type]()
+        image_processor = IMAGE_PROCESSOR_TYPES[model_args.model_type]()
 
     # create model
     if model_args.model_name_or_path:

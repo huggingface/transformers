@@ -68,8 +68,8 @@ model = VisionTextDualEncoderModel.from_vision_text_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-feat_ext = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
-processor = VisionTextDualEncoderProcessor(feat_ext, tokenizer)
+image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
+processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
 
 # save the model and processor
 model.save_pretrained("clip-roberta")
