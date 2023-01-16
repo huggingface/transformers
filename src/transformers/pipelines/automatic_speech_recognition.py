@@ -82,44 +82,6 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
             yield {"is_last": is_last, "stride": stride, **processed}
 
 
-class SuffixTrie:
-    """
-    SuffixTrie in Python. Creates a Trie out of a list of objects. The trie is used to find the longest common sequence
-    and return the index in the compared sequence. This is used to merge two chunks of tokens into one.
-    """
-
-    def __init__(self, list=None):
-        self.data = {}
-        sub_lists = [list[i:] for i in range(len(list))]
-        for curr_list in sub_lists:
-            ref = self.data
-            for item in curr_list:
-                ref[item] = item in ref and ref[item] or {}
-                ref = ref[item]
-
-    def add(self, data):
-
-        if not data:
-            # Prevent empty string
-            return
-        ref = self.data
-        for char in data:
-            ref[char] = char in ref and ref[char] or {}
-            ref = ref[char]
-        ref[""] = 1
-
-    def search(self, data):
-        ref = self.data
-        res = []
-        for char in data:
-            if char not in ref:
-                return res
-            start_idx = list(self.data.keys()).index(char)
-            res += [(start_idx, char)]
-            ref = ref[char]
-        return res
-
-
 def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source_positions):
     """
     Computes the final sequences by merging the end of the nth sequence with the beginning of the n+1th sequence. Since
@@ -136,7 +98,6 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     time = 0
     actual_offset = 0
     for seq_idx, item in enumerate(sequences):
-
         sequence, stride = item
         if isinstance(sequence, list):
             sequence = np.array(sequence)
@@ -144,7 +105,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         chunk_len, stride_left, _ = stride
         sequence = sequence.squeeze(0)
 
-        # remove the `forced_decoder_idx` that are use to parametrize the generation
+        # get rid of the `forced_decoder_idx` that are use to parametrize the generation
         begin_idx = np.where(sequence == timestamp_begin)[0].item() if timestamp_begin in sequence else 0
         sequence = sequence[begin_idx:]
 
@@ -156,34 +117,25 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
             previous_tokens = items[-1][1:-1]
 
             if len(timestamp_tokens) >= 1 and len(previous_tokens) > 0:
-                trie = SuffixTrie(sequence)
-                longest_common_sequence = trie.search(previous_tokens)
-                if len(longest_common_sequence) > 0:
-                    idx = longest_common_sequence[0][0]
-                    end_of_curr_sequence_idx = np.where(sequence[idx:] >= timestamp_begin)[0][0] + 1
-                    sliced_sequence = sequence[idx : end_of_curr_sequence_idx + idx]
-
-                    # if we have a suffix, then the timestamp token is the last token of the previous slice
-                    if list(sequence[idx : longest_common_sequence[-1][0] + 1]) == list(sliced_sequence[:-1]):
+                index_left, index_right, match_length = _fast_find_longest_common_sequence(sequence, previous_tokens)
+                # don't do anything if only 1 token was matched
+                if match_length > 1:
+                    end_of_curr_sequence_idx = np.where(sequence[index_left:] >= timestamp_begin)[0][0] + 1
+                    sliced_sequence = sequence[index_left : end_of_curr_sequence_idx + index_left]
+                    # if all the tokens are matched, suffix
+                    if index_left == 0:
                         sliced_sequence[-1] = items[-1][-1]
-                    elif longest_common_sequence[-1][0] < end_of_curr_sequence_idx + idx:
-                        # in that case, we found the merge in the middle of the current slice,
-                        # which means that we do not have the exact end timestamp.
-                        # We have [previous, ......, begin, merge, end]
-                        #     [0 (begin not offseted), ..., merge, ......., end]
-                        # We offset `end` by the time of the previous slice
-                        prev_duration = items[-1][-1] - items[-1][0]
-                        sliced_sequence[-1] += actual_offset - prev_duration
+                    # if part of the previous sequence is not taken
+                    elif index_left > 0:
+                        # prev_duration = items[-1][-1] - items[-1][0]
+                        # let's insert the missing part of the previous sequence
+                        sliced_sequence = np.insert(sliced_sequence, 0, items[-1][: index_right + 1])
+                        sliced_sequence[-1] += actual_offset
 
-                    # update the last item : merge the two slices
-                    items[-1] = np.insert(sliced_sequence, 0, items[-1][0])
-                    sequence = sequence[end_of_curr_sequence_idx + idx :]
+                    items[-1] = sliced_sequence
+                    sequence = sequence[end_of_curr_sequence_idx + index_left :]
 
-                    # since we merged, we have the starting time for the next sequences
-                    actual_offset = items[-1][-1] - timestamp_begin
-                else:
-                    # no match, the merge will be naturally handled
-                    actual_offset = items[-1][-1] - timestamp_begin
+                actual_offset = items[-1][-1] - timestamp_begin
 
         timestamp_tokens = sequence >= timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
@@ -225,16 +177,24 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     return result
 
 
-def _fast_find_longest_common_sequence(sequences, tokenizer):
-    sequence = [tok_id for tok_id in sequences[0][0].tolist() if tok_id not in tokenizer.all_special_ids]
-    initial_trie = SuffixTrie(sequence)
-    for new_seq in sequences[1:]:
-        new_sequence = [tok_id for tok_id in new_seq[0].tolist() if tok_id not in tokenizer.all_special_ids]
-        longest_common_sequence = initial_trie.search(new_sequence)
-        index = longest_common_sequence[0][0]
-        sequence.extend(new_sequence[index:])
-        initial_trie = SuffixTrie(new_sequence[index:])
-    return np.array(sequence)
+def _fast_find_longest_common_sequence(sequence_left, sequence_right):
+    seq_len_left = len(sequence_left)
+    seq_len_right = len(sequence_right)
+    counter = [[0] * (seq_len_right + 1) for _ in range(seq_len_left + 1)]
+    longest = 0
+    for i in range(seq_len_left):
+        for j in range(seq_len_right):
+            if sequence_left[i] == sequence_right[j]:
+                previous_counter = counter[i][j] + 1
+                counter[i + 1][j + 1] = previous_counter
+                if previous_counter > longest:
+                    longest = previous_counter
+
+    counter = np.array(counter)
+    # we return the idx of the first element of the longest common sequence in the left sequence
+    index_left = np.argwhere(counter == longest)[-1][0] - longest if longest != 0 else -1
+    index_right = np.argwhere(counter == longest)[-1][1] - longest if longest != 0 else -1
+    return index_left, index_right, longest
 
 
 def _find_longest_common_sequence(sequences, tokenizer):
@@ -648,7 +608,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 items = [items, stride]
             final_items.append(items)
         if stride and self.type == "seq2seq" and not return_timestamps:
-            items = _fast_find_longest_common_sequence(final_items, self.tokenizer)
+            items = _find_longest_common_sequence(final_items, self.tokenizer)
         elif stride and self.type == "seq2seq_whisper" and return_timestamps:
             items = _find_timestamp_sequence(
                 final_items, self.tokenizer, self.feature_extractor, self.model.config.max_source_positions
