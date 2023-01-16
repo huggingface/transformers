@@ -16,12 +16,14 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="tjAIM7BOYhw"/>
 
-Image classification assigns a label or class to an image. Unlike text or audio classification, the inputs are the pixel values that comprise an image. There are many applications for image classification such as detecting damage after a natural disaster, monitoring crop health, or helping screen medical images for signs of disease.
+Image classification assigns a label or class to an image. Unlike text or audio classification, the inputs are the
+pixel values that comprise an image. There are many applications for image classification, such as detecting damage
+after a natural disaster, monitoring crop health, or helping screen medical images for signs of disease.
 
-This guide will show you how to:
+This guide illustrates how to:
 
-1. Finetune [ViT](https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/vit) on the [Food-101](https://huggingface.co/datasets/food101) dataset to classify a food item in an image.
-2. Use your finetuned model for inference.
+1. Fine-tune [ViT](https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/vit) on the [Food-101](https://huggingface.co/datasets/food101) dataset to classify a food item in an image.
+2. Use your fine-tuned model for inference.
 
 <Tip>
 
@@ -35,7 +37,7 @@ Before you begin, make sure you have all the necessary libraries installed:
 pip install transformers datasets evaluate
 ```
 
-We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
+We encourage you to log in to your Hugging Face account to upload and share your model with the community. When prompted, enter your token to log in:
 
 ```py
 >>> from huggingface_hub import notebook_login
@@ -45,7 +47,8 @@ We encourage you to log in to your Hugging Face account so you can upload and sh
 
 ## Load Food-101 dataset
 
-Start by loading a smaller subset of the Food-101 dataset from the 🤗 Datasets library. This will give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
+Start by loading a smaller subset of the Food-101 dataset from the 🤗 Datasets library. This will give you a chance to
+experiment and make sure everything works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset
@@ -67,12 +70,13 @@ Then take a look at an example:
  'label': 79}
 ```
 
-There are two fields:
+Each example in the dataset has two fields:
 
-- `image`: a PIL image of the food item.
-- `label`: the label class of the food item.
+- `image`: a PIL image of the food item
+- `label`: the label class of the food item
 
-To make it easier for the model to get the label name from the label id, create a dictionary that maps the label name to an integer and vice versa:
+To make it easier for the model to get the label name from the label id, create a dictionary that maps the label name
+to an integer and vice versa:
 
 ```py
 >>> labels = food["train"].features["label"].names
@@ -95,8 +99,8 @@ The next step is to load a ViT image processor to process the image into a tenso
 
 ```py
 >>> from transformers import AutoImageProcessor
-
->>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+>>> checkpoint = "google/vit-base-patch16-224-in21k"
+>>> image_processor = AutoImageProcessor.from_pretrained(checkpoint)
 ```
 
 <frameworkcontent>
@@ -132,7 +136,6 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 >>> food = food.with_transform(transforms)
 ```
 
-
 Now create a batch of examples using [`DefaultDataCollator`]. Unlike other data collators in 🤗 Transformers, the `DefaultDataCollator` does not apply additional preprocessing such as padding.
 
 ```py
@@ -150,23 +153,19 @@ Create a preprocessing function to resize the images and return the `pixel_value
 
 ```py
 >>> def process(examples):
-...     examples.update(
-...         image_processor(
-...             examples["image"],
-...         )
-...     )
+...     examples.update(image_processor(examples["image"]))
 ...     return examples
 ```
 
-Apply the preprocessing transformations over the entire dataset using 🤗 Datasets `map()` function.
-You can speed up map by setting `batched=True` to process multiple elements of the dataset at once:
+Apply the preprocessing transformations over the entire dataset using 🤗 Datasets [`~datasets.Dataset.map`] method.
+Set `batched=True` to speed things up by processing multiple elements of the dataset at once:
 
 ```py
 >>> food = food.map(process, batched=True)
 ```
 
-Next, create a batch of examples using `DefaultDataCollator`. Unlike other data collators in 🤗 Transformers, the
-DefaultDataCollator does not apply additional preprocessing such as padding.
+As a final preprocessing step, create a batch of examples using `DefaultDataCollator`. Unlike other data collators in 🤗 Transformers, the
+`DefaultDataCollator` does not apply additional preprocessing, such as padding.
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -176,11 +175,11 @@ DefaultDataCollator does not apply additional preprocessing such as padding.
 </tf>
 </frameworkcontent>
 
-
-
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load an
+evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load
+the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -200,7 +199,7 @@ Then create a function that passes your predictions and labels to [`~evaluate.Ev
 ...     return accuracy.compute(predictions=predictions, references=labels)
 ```
 
-Your `compute_metrics` function is ready to go now, and you'll return to it when you setup your training.
+Your `compute_metrics` function is ready to go now, and you'll return to it when you set up your training.
 
 ## Train
 
@@ -211,13 +210,14 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 </Tip>
+
 You're ready to start training your model now! Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels along with the number of expected labels, and the label mappings:
 
 ```py
 >>> from transformers import AutoModelForImageClassification, TrainingArguments, Trainer
 
 >>> model = AutoModelForImageClassification.from_pretrained(
-...     "google/vit-base-patch16-224-in21k",
+...     checkpoint,
 ...     num_labels=len(labels),
 ...     id2label=id2label,
 ...     label2id=label2id,
@@ -273,10 +273,20 @@ Once training is completed, share your model to the Hub with the [`~transformers
 <tf>
 
 <Tip>
-If you are not familiar with fine-tuning a model with Keras, take a look at the [basic tutorial](https://huggingface.co/docs/transformers/main/en/tasks/../training#train-a-tensorflow-model-with-keras)!
+
+If you are unfamiliar with fine-tuning a model with Keras, check out the [basic tutorial](./training#train-a-tensorflow-model-with-keras) first!
+
 </Tip>
 
-To fine-tune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
+To fine-tune a model in TensorFlow, follow these steps:
+1. Define the training hyperparameters, and set up an optimizer and a learning rate schedule.
+2. Instantiate a pre-treined model.
+3. Convert a 🤗 Dataset to a `tf.data.Dataset`.
+4. Compile your model.
+5. Add callbacks and use the `fit()` method to run the training.
+6. Upload your model to 🤗 Hub to share with the community.
+
+Start by defining the hyperparameters, optimizer and learning rate schedule:
 
 ```py
 >>> from transformers import create_optimizer
@@ -296,7 +306,7 @@ To fine-tune a model in TensorFlow, start by setting up an optimizer function, l
 ... )
 ```
 
-Then you can load ViT with `TFAutoModelForImageClassification` along with the label mappings:
+Then, load ViT with [`TFAutoModelForImageClassification`] along with the label mappings:
 
 ```py
 >>> from transformers import TFAutoModelForImageClassification
@@ -308,7 +318,7 @@ Then you can load ViT with `TFAutoModelForImageClassification` along with the la
 ... )
 ```
 
-Convert your datasets to the `tf.data.Dataset` format with `to_tf_dataset()`:
+Convert your datasets to the `tf.data.Dataset` format using the [`~datasets.Dataset.to_tf_dataset`] and your `data_collator`:
 
 ```py
 >>> # converting our train dataset to tf.data.Dataset
@@ -323,6 +333,7 @@ Convert your datasets to the `tf.data.Dataset` format with `to_tf_dataset()`:
 ```
 
 Configure the model for training with `compile()`:
+
 ```py
 >>> from tensorflow.keras.losses import SparseCategoricalCrossentropy
 
@@ -358,7 +369,9 @@ Epoch 5/5
 ```
 
 In order to push your trained Keras model to Hub, you need to build it first. When building a Keras model, you must
-provide the model's input shape. In this case we can get it using image processor's attributes.
+provide the model's input shape. In this case, we can get it using image processor's attributes. Note that depending on
+the pretrained model you are fine-tuning, the corresponding image processors may have other dictionary keys
+(e.g. `shortest_edge` instead of `height` and `width`).
 
 ```py
 >>> from huggingface_hub import push_to_hub_keras
@@ -368,8 +381,8 @@ provide the model's input shape. In this case we can get it using image processo
 >>> push_to_hub_keras(model, repo_id=f"MariaK/{output_dir}")
 ```
 
-Finally, if you want to use this model for inference with Transformers Pipeline, or re-use it for further fine-tuning,
-you need the following files to Hub:
+Finally, if you want to use this model for inference with [`pipeline`], or re-use it for further fine-tuning,
+you need to upload the following files to Hub:
 - `preprocessor_config.json` that you can save from the image_processor you have used during the training
 - model's weights in `h5` format, and model's `config.json` that you can save by calling the `save_pretrained()` method on the model
 
@@ -392,7 +405,7 @@ you need the following files to Hub:
 ... )
 ```
 
-Congratulations! Your model has been shared on Hub, and you can use it for inference!
+Congratulations! Your model has been shared on 🤗 Hub, and you can use it for inference!
 </tf>
 </frameworkcontent>
 
@@ -425,12 +438,12 @@ The simplest way to try out your finetuned model for inference is to use it in a
 
 >>> classifier = pipeline("image-classification", model="my_awesome_food_model")
 >>> classifier(image)
-[{'score': 0.9209485054016113, 'label': 'beignets'},
- {'score': 0.0064862510189414024, 'label': 'bruschetta'},
- {'score': 0.0054233744740486145, 'label': 'prime_rib'},
- {'score': 0.005338452290743589, 'label': 'pork_chop'},
- {'score': 0.005172972567379475, 'label': 'chicken_wings'}]
- ```
+[{'score': 0.31856709718704224, 'label': 'beignets'},
+ {'score': 0.015232225880026817, 'label': 'bruschetta'},
+ {'score': 0.01519392803311348, 'label': 'chicken_wings'},
+ {'score': 0.013022331520915031, 'label': 'pork_chop'},
+ {'score': 0.012728818692266941, 'label': 'prime_rib'}]
+```
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
@@ -473,8 +486,8 @@ Load an image processor to preprocess the image and return the `input` as Tensor
 ```py
 >>> from transformers import AutoImageProcessor
 
->>> im_processor = AutoImageProcessor.from_pretrained("MariaK/food_classifier")
->>> inputs = im_processor(image, return_tensors="tf")
+>>> image_processor = AutoImageProcessor.from_pretrained("MariaK/food_classifier")
+>>> inputs = image_processor(image, return_tensors="tf")
 ```
 
 Pass your inputs to the model and return the logits:
@@ -494,5 +507,5 @@ Get the predicted label with the highest probability, and use the model's `id2la
 'beignets'
 ```
 
-</ptf>
+</tf>
 </frameworkcontent>
