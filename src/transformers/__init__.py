@@ -322,6 +322,10 @@ _import_structure = {
         "MarkupLMProcessor",
         "MarkupLMTokenizer",
     ],
+    "models.mask2former": [
+        "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Mask2FormerConfig",
+    ],
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
@@ -1706,6 +1710,14 @@ else:
             "MarkupLMForTokenClassification",
             "MarkupLMModel",
             "MarkupLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mask2former"].extend(
+        [
+            "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Mask2FormerForUniversalSegmentation",
+            "Mask2FormerModel",
+            "Mask2FormerPreTrainedModel",
         ]
     )
     _import_structure["models.maskformer"].extend(
@@ -3695,6 +3707,7 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
+    from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
@@ -4856,6 +4869,12 @@ if TYPE_CHECKING:
             MarkupLMForTokenClassification,
             MarkupLMModel,
             MarkupLMPreTrainedModel,
+        )
+        from .models.mask2former import (
+            MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Mask2FormerForUniversalSegmentation,
+            Mask2FormerModel,
+            Mask2FormerPreTrainedModel,
         )
         from .models.maskformer import (
             MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
