@@ -23,10 +23,8 @@ text outputs for different tasks:
 * [Image captioning](./model_doc/git#transformers.GitForCausalLM.forward.example)
 * [Audio transcription](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)
 
-Note that the inputs to the generate method depend on the model's modality:
-* `input_ids` for the decoder-only models
-* `input_ids`, `input_values`, `input_features`, or `pixel_values` for the encoder-decoder models
-In some cases, such as visual question answering, the inputs should have both `pixel_values` and `input_ids`.
+Note that the inputs to the generate method depend on the model's modality. They can be `input_ids` for text, `input_values`
+or `input_features` for speech and `pixel_values` for computer vision. When in doubt, refer to the model's documentation.
 
 The process of selecting output tokens to generate text is known as decoding, and you can customize the decoding strategy
 that the `generate()` method will use. Modifying a decoding strategy does not change the values of any trainable parameters.
