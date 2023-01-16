@@ -29,7 +29,14 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_FOR_PRETRAINING_MAPPING, GitForCausalLM, GitModel, GitVisionModel
+    from transformers import (
+        MODEL_FOR_BACKBONE_MAPPING,
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_MAPPING,
+        GitForCausalLM,
+        GitModel,
+        GitVisionModel,
+    )
     from transformers.models.git.modeling_git import GIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -317,10 +324,12 @@ class GitModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.vocab_size))
 
-        # TODO training
-        # result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
-        # self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        # self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        # training
+        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values, labels=input_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertTrue(result.loss.item() > 0)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -350,17 +359,16 @@ class GitModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_torchscript = False
 
-    # special case for ForPreTraining model
+    # special case for GitForCausalLM model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
+            if model_class in get_values(MODEL_FOR_CAUSAL_LM_MAPPING):
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-                )
-                inputs_dict["next_sentence_label"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, self.model_tester.text_seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
                 )
         return inputs_dict
 
@@ -384,6 +392,31 @@ class GitModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            if model_class in [
+                *get_values(MODEL_MAPPING),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING),
+            ]:
+                continue
+
+            print("Model class:", model_class)
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            for k, v in inputs.items():
+                print(k, v.shape)
+            loss = model(**inputs).loss
+            loss.backward()
 
     @slow
     def test_model_from_pretrained(self):
