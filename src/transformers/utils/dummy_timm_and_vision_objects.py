@@ -3,110 +3,110 @@
 from ..utils import DummyObject, requires_backends
 
 
-CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST, = None
+CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ConditionalDetrForObjectDetection,(metaclass=DummyObject):
+class ConditionalDetrForObjectDetection(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class ConditionalDetrForSegmentation,(metaclass=DummyObject):
+class ConditionalDetrForSegmentation(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class ConditionalDetrModel,(metaclass=DummyObject):
+class ConditionalDetrModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class ConditionalDetrPreTrainedModel,(metaclass=DummyObject):
+class ConditionalDetrPreTrainedModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST, = None
+DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class DeformableDetrForObjectDetection,(metaclass=DummyObject):
+class DeformableDetrForObjectDetection(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class DeformableDetrModel,(metaclass=DummyObject):
+class DeformableDetrModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class DeformableDetrPreTrainedModel,(metaclass=DummyObject):
+class DeformableDetrPreTrainedModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-DETR_PRETRAINED_MODEL_ARCHIVE_LIST, = None
+DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class DetrForObjectDetection,(metaclass=DummyObject):
+class DetrForObjectDetection(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class DetrForSegmentation,(metaclass=DummyObject):
+class DetrForSegmentation(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class DetrModel,(metaclass=DummyObject):
+class DetrModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class DetrPreTrainedModel,(metaclass=DummyObject):
+class DetrPreTrainedModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST, = None
+TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class TableTransformerForObjectDetection,(metaclass=DummyObject):
+class TableTransformerForObjectDetection(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class TableTransformerModel,(metaclass=DummyObject):
+class TableTransformerModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["timm", "vision"])
 
 
-class TableTransformerPreTrainedModel,(metaclass=DummyObject):
+class TableTransformerPreTrainedModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 
     def __init__(self, *args, **kwargs):
