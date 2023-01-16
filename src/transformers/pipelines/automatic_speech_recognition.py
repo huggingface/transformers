@@ -56,7 +56,7 @@ def rescale_stride(stride, ratio):
     return new_strides
 
 
-def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, dtype=None):
+def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, ratio, dtype=None):
     inputs_len = inputs.shape[0]
     step = chunk_len - stride_left - stride_right
     for i in range(0, inputs_len, step):
@@ -68,15 +68,9 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
         _stride_left = 0 if i == 0 else stride_left
         is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
-
-        if "input_features" in processed:
-            processed_len = processed["input_features"].shape[-1]
-        elif "input_values" in processed:
-            processed_len = processed["input_values"].shape[-1]
         chunk_len = chunk.shape[0]
         stride = (chunk_len, _stride_left, _stride_right)
-        if processed_len != chunk.shape[-1]:
-            ratio = processed_len / chunk_len
+        if ratio != 1:
             stride = rescale_stride([stride], ratio)[0]
         if chunk.shape[0] > _stride_left:
             yield {"is_last": is_last, "stride": stride, **processed}
@@ -101,17 +95,14 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         sequence, stride = item
         if isinstance(sequence, list):
             sequence = np.array(sequence)
-
         chunk_len, stride_left, _ = stride
         sequence = sequence.squeeze(0)
-
         # get rid of the `forced_decoder_idx` that are use to parametrize the generation
         begin_idx = np.where(sequence == timestamp_begin)[0].item() if timestamp_begin in sequence else 0
         sequence = sequence[begin_idx:]
 
         if seq_idx != 0:
             time -= stride_left
-            # TODO last think is to convert the time to the token space
             offset = int((time / feature_extractor.sampling_rate) / time_precision)
             timestamp_tokens = np.where(sequence >= timestamp_begin)[0][1::2]
             if len(timestamp_tokens) >= 1:
@@ -493,20 +484,26 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if isinstance(stride_length_s, (int, float)):
                 stride_length_s = [stride_length_s, stride_length_s]
 
-            # XXX: Carefuly, this variable will not exist in `seq2seq` setting.
-            # Currently chunking is not possible at this level for `seq2seq` so
-            # it's ok.
-            align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
-            chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
-            stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
-            stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to)
+            if self.type in {"ctc", "ctc_with_lm", "seq2seq_whisper"}:
+                align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
+                chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
+                stride_left = int(
+                    round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to
+                )
+                stride_right = int(
+                    round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to
+                )
+                ratio = align_to
+                if self.type == "seq2seq_whisper":
+                    # Whisper is special, required the strides in seconds, no rescaling
+                    ratio = 1
 
-            if chunk_len < stride_left + stride_right:
-                raise ValueError("Chunk length must be superior to stride length")
+                if chunk_len < stride_left + stride_right:
+                    raise ValueError("Chunk length must be superior to stride length")
 
             # make sure that
             for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.torch_dtype
+                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, ratio, self.torch_dtype
             ):
                 yield item
         else:
