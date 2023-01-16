@@ -484,26 +484,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if isinstance(stride_length_s, (int, float)):
                 stride_length_s = [stride_length_s, stride_length_s]
 
-            if self.type in {"ctc", "ctc_with_lm", "seq2seq_whisper"}:
-                align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
-                chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
-                stride_left = int(
-                    round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to
-                )
-                stride_right = int(
-                    round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to
-                )
-                ratio = align_to
-                if self.type == "seq2seq_whisper":
-                    # Whisper is special, required the strides in seconds, no rescaling
-                    ratio = 1
+            align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
+            chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
+            stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
+            stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to)
 
-                if chunk_len < stride_left + stride_right:
-                    raise ValueError("Chunk length must be superior to stride length")
+            if chunk_len < stride_left + stride_right:
+                raise ValueError("Chunk length must be superior to stride length")
 
             # make sure that
             for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, ratio, self.torch_dtype
+                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, align_to, self.torch_dtype
             ):
                 yield item
         else:
