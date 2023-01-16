@@ -201,7 +201,7 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     else:
         raise ValueError(f"Unknown URL: {checkpoint_url}")
 
-    # assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
+    assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
     assert logits.shape == expected_shape
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
