@@ -102,6 +102,7 @@ from . import (
     m2m_100,
     marian,
     markuplm,
+    mask2former,
     maskformer,
     mbart,
     mbart50,

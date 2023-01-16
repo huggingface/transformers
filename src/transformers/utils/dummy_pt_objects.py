@@ -3568,6 +3568,30 @@ class MarkupLMPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Mask2FormerForUniversalSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Mask2FormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Mask2FormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
