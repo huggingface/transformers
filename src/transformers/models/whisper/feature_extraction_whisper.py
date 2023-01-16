@@ -240,7 +240,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
-        # specaugment related
+        # SpecAugment related
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
@@ -384,13 +384,25 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     # Modified from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_input_features(
         self,
-        input_features: List[np.array],
-        mask_time_indices: Optional[np.array] = None,
-        attention_mask: Optional[np.array] = None,
-    ):
+        input_features: np.ndarray,
+        mask_time_indices: Optional[np.ndarray] = None,
+        attention_mask: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
         """
         Masks extracted features along time axis and/or along feature axis according to
         [SpecAugment](https://arxiv.org/abs/1904.08779).
+
+        Args:
+            input_features (`np.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
+                loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+                [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+                tensor of type `torch.FloatTensor`.
+            mask_time_indices (`np.ndarray`, *optional*, defaults to None):
+                Indices to mask extracted features along time axis.
+            attention_mask (`np.ndarray`, *optional*, defaults to None):
+                A (right-padded) attention mask which independently shortens the feature axis of each batch dimension.
         """
 
         # generate indices & apply SpecAugment along time axis
