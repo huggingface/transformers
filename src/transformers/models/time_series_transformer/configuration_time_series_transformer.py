@@ -137,7 +137,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
-        lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
+        lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7], # Eli: Remove the default here
         scaling: bool = True,
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
@@ -151,7 +151,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         decoder_attention_heads: int = 2,
         encoder_layers: int = 2,
         decoder_layers: int = 2,
-        is_encoder_decoder: bool = True, # Eli: remove from signature?
+        is_encoder_decoder: bool = True,
         activation_function: str = "gelu",
         dropout: float = 0.1,
         encoder_layerdrop: float = 0.1,
