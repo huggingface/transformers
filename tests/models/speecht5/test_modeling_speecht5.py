@@ -54,6 +54,7 @@ if is_torch_available():
         SpeechT5Model,
         SpeechT5ProcessorForCTC,
         SpeechT5ProcessorForSpeechToText,
+        SpeechT5ProcessorForTextToSpeech,
     )
 
 
@@ -205,12 +206,12 @@ class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    # this model has no input embeddings
-    def test_model_common_attributes(self):
-        pass
-
     # this model has no inputs_embeds
     def test_inputs_embeds(self):
+        pass
+
+    # this model has no input embeddings
+    def test_model_common_attributes(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -389,118 +390,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    # this model has no inputs_embeds
-    def test_inputs_embeds(self):
-        pass
-
-    # training is not supported yet
-    def test_training(self):
-        pass
-
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                ]
-                if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = [
-                "input_values",
-                "attention_mask",
-                "decoder_input_ids",
-                "decoder_attention_mask",
-            ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            if hasattr(self.model_tester, "encoder_seq_length"):
-                seq_length = self.model_tester.encoder_seq_length
-            else:
-                seq_length = self.model_tester.seq_length
-
-            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(seq_length)
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [subsampled_seq_length, self.model_tester.hidden_size],
-            )
-
-            if config.is_encoder_decoder:
-                hidden_states = outputs.decoder_hidden_states
-
-                self.assertIsInstance(hidden_states, (list, tuple))
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
-                )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -600,53 +489,110 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
             )
 
-    def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "input_values",
+                "attention_mask",
+                "decoder_input_ids",
+                "decoder_attention_mask",
+            ]
+            expected_arg_names.extend(
+                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                else ["encoder_outputs"]
+            )
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             model.to(torch_device)
+            model.eval()
 
-            if self.model_tester.is_training is False:
-                model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            model_vocab_size = config.vocab_size
-            # Retrieve the embeddings and clone theme
-            model_embed = model.resize_token_embeddings(model_vocab_size)
-            cloned_embeddings = model_embed.weight.clone()
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
 
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+            else:
+                seq_length = self.model_tester.seq_length
 
-            # make sure that decoder_input_ids are resized
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(seq_length)
 
-            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
-            models_equal = True
-            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [subsampled_seq_length, self.model_tester.hidden_size],
+            )
 
-            self.assertTrue(models_equal)
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "feature_projection.projection.weight",
+                    "feature_projection.projection.bias",
+                ]
+                if param.requires_grad:
+                    if any([x in name for x in uniform_init_parms]):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    # this model has no inputs_embeds
+    def test_inputs_embeds(self):
+        pass
 
     def test_resize_embeddings_untied(self):
         (
@@ -697,8 +643,63 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    def test_resize_tokens_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # make sure that decoder_input_ids are resized
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
+        pass
+
+    # training is not supported yet
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
         pass
 
     # overwrite from test_modeling_common
@@ -904,63 +905,53 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
-    # this model has no input embeddings
-    def test_model_common_attributes(self):
-        pass
+    @slow
+    def test_mask_feature_prob_ctc(self):
+        model = SpeechT5ForCTC.from_pretrained(
+            "Matthijs/speecht5_ctc", mask_feature_prob=0.2, mask_feature_length=2
+        )
+        model.to(torch_device).train()
+        processor = SpeechT5ProcessorForCTC.from_pretrained(
+            "Matthijs/speecht5_ctc", return_attention_mask=True
+        )
 
-    # this model has no inputs_embeds
-    def test_inputs_embeds(self):
-        pass
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
 
-            expected_arg_names = [
-                "input_values",
-                "attention_mask",
-            ]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+        self.assertEqual(logits.shape, (4, 299, 81))
 
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
+    @slow
+    def test_mask_time_prob_ctc(self):
+        model = SpeechT5ForCTC.from_pretrained(
+            "Matthijs/speecht5_ctc", mask_time_prob=0.2, mask_time_length=2
+        )
+        model.to(torch_device).train()
+        processor = SpeechT5ProcessorForCTC.from_pretrained(
+            "Matthijs/speecht5_ctc", return_attention_mask=True
+        )
 
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        batch_duration_in_seconds = [1, 3, 2, 6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
 
-            hidden_states = outputs.hidden_states
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
 
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
 
-            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(self.model_tester.seq_length)
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [subsampled_seq_length, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
+        self.assertEqual(logits.shape, (4, 299, 81))
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1035,6 +1026,56 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
             )
 
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "input_values",
+                "attention_mask",
+            ]
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(self.model_tester.seq_length)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [subsampled_seq_length, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1061,57 +1102,17 @@ class SpeechT5ForCTCTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    # this model has no inputs_embeds
+    def test_inputs_embeds(self):
+        pass
+
+    # this model has no input embeddings
+    def test_model_common_attributes(self):
+        pass
+
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         pass
-
-    @slow
-    def test_mask_feature_prob_ctc(self):
-        model = SpeechT5ForCTC.from_pretrained(
-            "Matthijs/speecht5_ctc", mask_feature_prob=0.2, mask_feature_length=2
-        )
-        model.to(torch_device).train()
-        processor = SpeechT5ProcessorForCTC.from_pretrained(
-            "Matthijs/speecht5_ctc", return_attention_mask=True
-        )
-
-        batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-        batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-
-        logits = model(
-            input_values=batch["input_values"].to(torch_device),
-            attention_mask=batch["attention_mask"].to(torch_device),
-        ).logits
-
-        self.assertEqual(logits.shape, (4, 299, 81))
-
-    @slow
-    def test_mask_time_prob_ctc(self):
-        model = SpeechT5ForCTC.from_pretrained(
-            "Matthijs/speecht5_ctc", mask_time_prob=0.2, mask_time_length=2
-        )
-        model.to(torch_device).train()
-        processor = SpeechT5ProcessorForCTC.from_pretrained(
-            "Matthijs/speecht5_ctc", return_attention_mask=True
-        )
-
-        batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-        batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-
-        logits = model(
-            input_values=batch["input_values"].to(torch_device),
-            attention_mask=batch["attention_mask"].to(torch_device),
-        ).logits
-
-        self.assertEqual(logits.shape, (4, 299, 81))
 
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
@@ -1336,66 +1337,26 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
             module.bias.data.fill_(3)
 
 
+@require_torch
+@require_torchaudio
+@require_sentencepiece
+@require_tokenizers
+@slow
+class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return SpeechT5ProcessorForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
 
-# TODO: for TTS
-# @require_torch
-# @require_torchaudio
-# @require_sentencepiece
-# @require_tokenizers
-# @slow
-# class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
-#     @cached_property
-#     def default_processor(self):
-#         return SpeechT5ProcessorForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+    def test_generation_librispeech(self):
+        model = SpeechT5ForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
+        model.to(torch_device)
+        processor = self.default_processor
 
-#     def _load_datasamples(self, num_samples):
-#         from datasets import load_dataset
+        input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        input_ids = processor(input_text, return_tensors="pt").input_ids.to(torch_device)
 
-#         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-#         # automatic decoding with librispeech
-#         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-#         return [x["array"] for x in speech_samples]
-
-#     def test_generation_librispeech(self):
-#         model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
-#         model.to(torch_device)
-#         processor = self.default_processor
-
-#         input_speech = self._load_datasamples(1)
-
-#         input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
-
-#         generated_ids = model.generate(input_values)
-#         generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
-
-#         EXPECTED_TRANSCRIPTIONS = [
-#             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
-#         ]
-#         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
-
-#     def test_generation_librispeech_batched(self):
-#         model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
-#         model.to(torch_device)
-#         processor = self.default_processor
-
-#         input_speech = self._load_datasamples(4)
-
-#         inputs = processor(input_speech, return_tensors="pt", padding=True)
-
-#         input_values = inputs.input_values.to(torch_device)
-#         attention_mask = inputs.attention_mask.to(torch_device)
-
-#         generated_ids = model.generate(input_values, attention_mask=attention_mask)
-#         generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
-
-#         EXPECTED_TRANSCRIPTIONS = [
-#             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
-#             "nor is mister quilter's manner less interesting than his matter",
-#             "he tells us that at this festive season of the year with christmas and rosebeaf looming before us similars drawn from eating and its results occur most readily to the mind",
-#             "he has grave doubts whether sir frederick latin's work is really greek after all and can discover in it but little of rocky ithica",
-#         ]
-#         self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)
+        generated_speech = model.generate_speech(input_ids)
+        self.assertEqual(generated_speech.shape, (1800, model.config.num_mel_bins))
 
 
 class SpeechT5HiFiGANModelTester:
