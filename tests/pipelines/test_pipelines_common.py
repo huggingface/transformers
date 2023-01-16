@@ -970,8 +970,8 @@ class CustomPipelineTest(unittest.TestCase):
     def test_chunk_pipeline_batching_single_file(self):
         # Make sure we have cached the pipeline.
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
-        dataset = datasets.load_dataset("Narsil/asr_dummy")
-        filename = dataset["test"][3]["audio"]
+        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
 
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
         # For some reason scoping doesn't work if not using `self.`
@@ -984,7 +984,7 @@ class CustomPipelineTest(unittest.TestCase):
 
         pipe.model.forward = new_forward
 
-        for out in pipe(filename, return_timestamps="char", chunk_length_s=3, stride_length_s=[1, 1], batch_size=1024):
+        for out in pipe(audio, return_timestamps="char", chunk_length_s=3, stride_length_s=[1, 1], batch_size=1024):
             pass
 
         self.assertEqual(self.COUNT, 1)
