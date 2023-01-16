@@ -21,10 +21,17 @@ import numpy as np
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import (
+    center_crop,
+    get_resize_output_image_size,
+    normalize,
+    rescale,
+    resize,
+    to_channel_dimension_format,
+)
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -52,6 +59,12 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
+            `preprocess` method.
+        crop_size (`Dict[str, int]` *optional*, defaults to 224):
+            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
+            method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
@@ -75,9 +88,11 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_center_crop: bool = True,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
+        crop_size: Dict[str, int] = None,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -86,14 +101,19 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
         size = get_size_dict(size)
+        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+
         self.do_resize = do_resize
         self.do_rescale = do_rescale
         self.do_normalize = do_normalize
+        self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
         self.size = size
         self.resample = resample
         self.rescale_factor = rescale_factor
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     def resize(
         self,
@@ -123,11 +143,39 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
             `np.ndarray`: The resized image.
         """
         size = get_size_dict(size)
+
+        if "shortest_edge" in size:
+            size = get_resize_output_image_size(image, size=size["shortest_edge"], default_to_square=False)
+            # size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+        else:
+            raise ValueError(f"Size must contain 'height' and 'width' keys or 'shortest_edge' key. Got {size.keys()}")
+        return resize(image, size=size, resample=resample, data_format=data_format, **kwargs)
+
+    def center_crop(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
+    ) -> np.ndarray:
+        """
+        Center crop an image. If the image is too small to be cropped to the size given, it will be padded (so the
+        returned result will always be of size `size`).
+
+        Args:
+            image (`np.ndarray`):
+                Image to center crop.
+            size (`Dict[str, int]`):
+                Size of the output image in the form of a dictionary with keys `height` and `width`.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
+        size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
-        )
+            raise ValueError(f"The `size` parameter must contain the keys (height, width). Got {size.keys()}")
+        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
         self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
@@ -186,6 +234,8 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: int = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -209,10 +259,14 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
                 `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
                 an effect if `do_resize` is set to `True`.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
@@ -235,6 +289,9 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
         resample = resample if resample is not None else self.resample
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
@@ -255,6 +312,9 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
 
+        if do_center_crop and crop_size is None:
+            raise ValueError("Crop size must be specified if do_center_crop is True.")
+
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
@@ -263,6 +323,9 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]
+
+        if do_center_crop:
+            images = [self.center_crop(image=image, size=crop_size) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]

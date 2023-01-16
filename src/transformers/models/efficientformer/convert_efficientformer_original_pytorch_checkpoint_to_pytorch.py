@@ -13,19 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert EfficientFormer checkpoints from the original repository."""
+"""Convert EfficientFormer checkpoints from the original repository.
+
+URL: https://github.com/snap-research/EfficientFormer
+"""
 
 import argparse
 import re
 from pathlib import Path
 
 import torch
+from PIL import Image
+from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
+import requests
 from transformers import (
     EfficientFormerConfig,
     EfficientFormerForImageClassificationWithTeacher,
     EfficientFormerImageProcessor,
 )
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 
 
 def rename_key(old_name, num_meta4D_last_stage):
@@ -61,9 +68,9 @@ def rename_key(old_name, num_meta4D_last_stage):
                 layer_index = str(int(match[2]) - num_meta4D_last_stage)
                 trimmed_name = trimmed_name.replace("network", "meta3D_layers.blocks." + layer_index)
                 if "norm1" in old_name:
-                    trimmed_name = trimmed_name.replace("norm1", "layernorm")
+                    trimmed_name = trimmed_name.replace("norm1", "layernorm1")
                 elif "norm2" in old_name:
-                    trimmed_name = trimmed_name.replace("norm2", "layernorm")
+                    trimmed_name = trimmed_name.replace("norm2", "layernorm2")
                 elif "fc1" in old_name:
                     trimmed_name = trimmed_name.replace("fc1", "linear_in")
                 elif "fc2" in old_name:
@@ -76,9 +83,9 @@ def rename_key(old_name, num_meta4D_last_stage):
 
     if "fc" in new_name:
         new_name = new_name.replace("fc", "convolution")
-    elif "norm1" in new_name:
+    elif ("norm1" in new_name) and ("layernorm1" not in new_name):
         new_name = new_name.replace("norm1", "batchnorm_before")
-    elif "norm2" in new_name:
+    elif ("norm2" in new_name) and ("layernorm2" not in new_name):
         new_name = new_name.replace("norm2", "batchnorm_after")
     if "proj" in new_name:
         new_name = new_name.replace("proj", "projection")
@@ -105,26 +112,89 @@ def convert_torch_checkpoint(checkpoint, num_meta4D_last_stage):
     return checkpoint
 
 
+# We will verify our results on a COCO image
+def prepare_img():
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+
+    return image
+
+
 def convert_efficientformer_checkpoint(
     checkpoint_path: Path, efficientformer_config_file: Path, pytorch_dump_path: Path, push_to_hub: bool
 ):
     orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     config = EfficientFormerConfig.from_json_file(efficientformer_config_file)
     model = EfficientFormerForImageClassificationWithTeacher(config)
+    model_name = "_".join(checkpoint_path.split("/")[-1].split(".")[0].split("_")[:-1])
 
-    num_meta4D_last_stage = config.layers[-1] - config.vit_num + 1
+    num_meta4D_last_stage = config.depths[-1] - config.num_meta3d_blocks + 1
     new_state_dict = convert_torch_checkpoint(orig_state_dict, num_meta4D_last_stage)
 
     model.load_state_dict(new_state_dict)
     model.eval()
 
-    feature_extractor = EfficientFormerImageProcessor(size=config.input_size[-1])
+    pillow_resamplings = {
+        "bilinear": PILImageResampling.BILINEAR,
+        "bicubic": PILImageResampling.BICUBIC,
+        "nearest": PILImageResampling.NEAREST,
+    }
+
+    # prepare image
+    image = prepare_img()
+    image_size = 224
+    processor = EfficientFormerImageProcessor(
+        size={"shortest_edge": image_size},
+        crop_size={"height": image_size, "width": image_size},
+        resample=pillow_resamplings["bicubic"],
+    )
+    pixel_values = processor(images=image, return_tensors="pt").pixel_values
+
+    # original processing pipeline
+    image_transforms = Compose(
+        [
+            Resize(image_size, interpolation=pillow_resamplings["bicubic"]),
+            CenterCrop(image_size),
+            ToTensor(),
+            Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
+        ]
+    )
+    original_pixel_values = image_transforms(image).unsqueeze(0)
+
+    assert torch.allclose(original_pixel_values, pixel_values)
+
+    outputs = model(pixel_values)
+    logits = outputs.logits
+
+    expected_shape = (1, 1000)
+
+    if "l1" in model_name:
+        expected_logits = torch.Tensor(
+            [-0.1464, 0.6383, -0.9990, 0.2989, 0.6212, 0.2271, -0.5734, 0.0676, -0.9517, -1.6891]
+        )
+        assert torch.allclose(logits[0, :10], expected_logits, atol=1e-3)
+        assert logits.shape == expected_shape
+    elif "l3" in model_name:
+        expected_logits = torch.Tensor(
+            [-1.2776, -1.0806, -1.0127, -0.3779, -0.4981, -0.4043, -0.9484, -0.2823, 0.1894, -0.2498]
+        )
+        assert torch.allclose(logits[0, :10], expected_logits, atol=1e-3)
+        assert logits.shape == expected_shape
+    elif "l7" in model_name:
+        expected_logits = torch.Tensor(
+            [-1.2137, -1.3781, -0.6700, -0.9551, -0.1888, -0.8147, -0.7939, -0.0544, -0.3307, 0.0831]
+        )
+        assert logits.shape == expected_shape
+    else:
+        raise ValueError(
+            f"Unknown model checkpoint: {checkpoint_path}. Supported version of efficientformer are l1, l3 and l7"
+        )
 
     # Save Checkpoints
     Path(pytorch_dump_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_path)
     print(f"Checkpoint successfuly converted. Model saved at {pytorch_dump_path}")
-    feature_extractor.save_pretrained(pytorch_dump_path)
+    processor.save_pretrained(pytorch_dump_path)
     print(f"Feature extractor successfuly saved at {pytorch_dump_path}")
 
     if push_to_hub:
@@ -135,7 +205,7 @@ def convert_efficientformer_checkpoint(
             commit_message="Add model",
             use_temp_dir=True,
         )
-        feature_extractor.push_to_hub(
+        processor.push_to_hub(
             repo_id=f"Bearnardd/{pytorch_dump_path}",
             commit_message="Add feature extractor",
             use_temp_dir=True,
