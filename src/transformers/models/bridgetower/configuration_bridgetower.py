@@ -269,8 +269,6 @@ class BridgeTowerConfig(PretrainedConfig):
             Type of the bridge/link layer.
         max_text_len (`int`, *optional*, defaults to 50):
             Maximum text length.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of MLP hidden dimension to embedding dimension.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 6):
@@ -310,7 +308,6 @@ class BridgeTowerConfig(PretrainedConfig):
         share_link_tower_layers=False,
         link_tower_type="add",
         max_text_len=50,
-        mlp_ratio=4,
         num_attention_heads=12,
         num_hidden_layers=6,
         tie_word_embeddings=False,
@@ -331,7 +328,6 @@ class BridgeTowerConfig(PretrainedConfig):
         self.share_link_tower_layers = share_link_tower_layers
         self.link_tower_type = link_tower_type
         self.max_text_len = max_text_len
-        self.mlp_ratio = mlp_ratio
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.tie_word_embeddings = tie_word_embeddings
