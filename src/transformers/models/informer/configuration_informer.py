@@ -55,6 +55,8 @@ class InformerConfig(PretrainedConfig):
             factor: int = 5,
             distil: bool = True,
             num_parallel_samples: int = 100,
+            init_std: float = 0.02,
+            use_cache=True,
             **kwargs
     ):
         # time series specific configuration
@@ -105,6 +107,8 @@ class InformerConfig(PretrainedConfig):
         self.attn = attn,
         self.factor = factor
         self.distil = distil
+        self.init_std = init_std
+        self.use_cache = use_cache
 
         # self.param_proj = distr_output.get_args_proj(d_model)
 
