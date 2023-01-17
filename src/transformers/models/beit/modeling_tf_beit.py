@@ -86,12 +86,8 @@ class TFBeitModelOutputWithPooling(TFBaseModelOutputWithPooling):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
             `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
             the initial embedding outputs.
-            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
-            the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
@@ -1311,7 +1307,6 @@ class TFBeitUperHead(tf.keras.layers.Layer):
 
 class TFBeitFCNHead(tf.keras.layers.Layer):
     """
-    Args:
     Args:
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
     [FCNNet](https://arxiv.org/abs/1411.4038).

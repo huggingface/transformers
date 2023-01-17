@@ -44,7 +44,6 @@ if is_tf_available():
 
 if is_vision_available():
     import PIL
-    import PIL
     from PIL import Image
 
     from transformers import BeitImageProcessor
