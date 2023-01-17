@@ -23,8 +23,9 @@ text outputs for different tasks:
 * [Image captioning](./model_doc/git#transformers.GitForCausalLM.forward.example)
 * [Audio transcription](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)
 
-Note that the inputs to the generate method depend on the model's modality. They can be `input_ids` for text, `input_values`
-or `input_features` for speech and `pixel_values` for computer vision. When in doubt, refer to the model's documentation.
+Note that the inputs to the generate method depend on the model's modality. They are returned by the model's preprocessor
+class, such as AutoTokenizer or AutoProcessor. If a model's preprocessor creates more than one kind of input, pass all
+the inputs to generate(). You can learn more about the individual model's preprocessor in the corresponding model's documentation.
 
 The process of selecting output tokens to generate text is known as decoding, and you can customize the decoding strategy
 that the `generate()` method will use. Modifying a decoding strategy does not change the values of any trainable parameters.
@@ -74,6 +75,7 @@ You can override any `generation_config` by passing the parameters and their val
 ```python
 >>> my_model.generate(**inputs, num_beams=4, do_sample=True)
 ```
+
 Even if the default decoding strategy mostly works for your task, you can still tweak a few things. Some of the
 commonly adjusted parameters include:
 
@@ -89,6 +91,53 @@ distribution over the entire vocabulary with various strategy-specific adjustmen
 - `num_return_sequences`: the number of sequence candidates to return for each input. This options is only available for
 the decoding strategies that support multiple sequence candidates, e.g. variations of beam search and sampling. Decoding
 strategies like greedy search and contrastive search return a single output sequence.
+
+## Save a custom decoding strategy with your model
+
+If you would like to share your fine-tuned model with a specific generation configuration, you can:
+* Create a [`GenerationConfig`] class instance
+* Specify the decoding strategy parameters
+* Save your generation configuration with [`GenerationConfig.save_pretrained`], making sure to leave its `config_file_name` argument empty
+* Set `push_to_hub` to `True` to upload your config to the model's repo
+
+```python
+>>> from transformers import AutoModelForCausalLM, GenerationConfig
+
+>>> model = AutoModelForCausalLM.from_pretrained("my_account/my_model")
+>>> generation_config = GenerationConfig(
+...     max_new_tokens=50, do_sample=True, top_k=50, eos_token_id=model.config.eos_token_id
+... )
+>>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)
+```
+
+You can also store several generation configurations in a single directory, making use of the `config_file_name`
+argument in [`GenerationConfig.save_pretrained`]. You can later instantiate them with [`GenerationConfig.from_pretrained`]. This is useful if you want to
+store several generation configurations for a single model (e.g. one for creative text generation with sampling, and
+one for summarization with beam search). You must have the right Hub permissions to add configuration files to a model.
+
+```python
+>>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
+
+>>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+
+>>> translation_generation_config = GenerationConfig(
+...     num_beams=4,
+...     early_stopping=True,
+...     decoder_start_token_id=0,
+...     eos_token_id=model.config.eos_token_id,
+...     pad_token=model.config.pad_token_id,
+... )
+
+>>> translation_generation_config.save_pretrained("t5-small", "translation_generation_config.json", push_to_hub=True)
+
+>>> # You could then use the named generation config file to parameterize generation
+>>> generation_config = GenerationConfig.from_pretrained("t5-small", "translation_generation_config.json")
+>>> inputs = tokenizer("translate English to French: Configuration files are easy to use!", return_tensors="pt")
+>>> outputs = model.generate(**inputs, generation_config=generation_config)
+>>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+['Les fichiers de configuration sont faciles à utiliser !']
+```
 
 ## Decoding strategies
 
@@ -255,50 +304,3 @@ The groups are selected to ensure they are distinct enough compared to the other
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
 For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.mdx).
-
-## Save a custom decoding strategy with your model
-
-If you would like to share your fine-tuned model with a specific generation configuration, you can:
-* Create a [`GenerationConfig`] class instance
-* Specify the decoding strategy parameters
-* Save your generation configuration with [`GenerationConfig.save_pretrained`], making sure to leave its `config_file_name` argument empty
-* Set `push_to_hub` to `True` to upload your config to the model's repo
-
-```python
->>> from transformers import AutoModelForCausalLM, GenerationConfig
-
->>> model = AutoModelForCausalLM.from_pretrained("my_account/my_model")
->>> generation_config = GenerationConfig(
-...     max_new_tokens=50, do_sample=True, top_k=50, eos_token_id=model.config.eos_token_id
-... )
->>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)
-```
-
-You can also store several generation configurations in a single directory, making use of the `config_file_name`
-argument in [`GenerationConfig.save_pretrained`]. You can later instantiate them with [`GenerationConfig.from_pretrained`]. This is useful if you want to
-store several generation configurations for a single model (e.g. one for creative text generation with sampling, and
-one for summarization with beam search). You must have the right Hub permissions to add configuration files to a model.
-
-```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
-
->>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
-
->>> translation_generation_config = GenerationConfig(
-...     num_beams=4,
-...     early_stopping=True,
-...     decoder_start_token_id=0,
-...     eos_token_id=model.config.eos_token_id,
-...     pad_token=model.config.pad_token_id,
-... )
-
->>> translation_generation_config.save_pretrained("t5-small", "translation_generation_config.json", push_to_hub=True)
-
->>> # You could then use the named generation config file to parameterize generation
->>> generation_config = GenerationConfig.from_pretrained("t5-small", "translation_generation_config.json")
->>> inputs = tokenizer("translate English to French: Configuration files are easy to use!", return_tensors="pt")
->>> outputs = model.generate(**inputs, generation_config=generation_config)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['Les fichiers de configuration sont faciles à utiliser !']
-```
