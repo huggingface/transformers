@@ -782,7 +782,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
     _import_structure["models.speecht5"].extend(
-        ["SpeechT5ProcessorForCTC", "SpeechT5ProcessorForSpeechToText", "SpeechT5ProcessorForTextToSpeech"]
+        ["SpeechT5ProcessorForCTC", "SpeechT5ProcessorForSpeechToSpeech", "SpeechT5ProcessorForSpeechToText", "SpeechT5ProcessorForTextToSpeech"]
     )
 
 # Vision-specific objects
@@ -4192,6 +4192,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextProcessor
         from .models.speecht5 import (
             SpeechT5ProcessorForCTC,
+            SpeechT5ProcessorForSpeechToSpeech,
             SpeechT5ProcessorForSpeechToText,
             SpeechT5ProcessorForTextToSpeech,
         )

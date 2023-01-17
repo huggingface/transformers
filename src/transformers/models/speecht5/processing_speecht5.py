@@ -198,3 +198,63 @@ class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
             inputs["labels"] = encodings["input_values"]
             inputs["stop_labels"] = encodings["stop_labels"]
             return inputs
+
+
+class SpeechT5ProcessorForSpeechToSpeech(ProcessorMixin):
+    r"""
+    Constructs a SpeechT5 processor which wraps a waveform feature extractor and spectrogram feature extractor into a single processor.
+
+    [`SpeechT5ProcessorForSpeechToSpeech`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and
+    [`SpeechT5SpectrogramFeatureExtractor`]. See the docstring of [`~SpeechT5ProcessorForSpeechToSpeech.__call__`] for more information.
+
+    Args:
+        feature_extractor_encoder (`SpeechT5WaveformFeatureExtractor`):
+            An instance of [`SpeechT5WaveformFeatureExtractor`]. This is a required input.
+        feature_extractor_decoder (`SpeechT5SpectrogramFeatureExtractor`):
+            An instance of [`SpeechT5SpectrogramFeatureExtractor`]. This is a required input.
+    """
+    attributes = ["feature_extractor_encoder", "feature_extractor_decoder"]
+
+    feature_extractor_encoder_class = "SpeechT5WaveformFeatureExtractor"
+    feature_extractor_decoder_class = "SpeechT5SpectrogramFeatureExtractor"
+
+    def __init__(self, feature_extractor_encoder, feature_extractor_decoder):
+        super().__init__(feature_extractor_encoder, feature_extractor_decoder)
+
+    def __call__(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
+        [`~SpeechT5WaveformFeatureExtractor.__call__`] and returns its output.
+
+        You can process your labels by using the argument `decoder_audio`. This forwards its arguments to
+        SpeechT5SpectrogramFeatureExtractor's [`~SpeechT5SpectrogramFeatureExtractor.__call__`].
+
+        Please refer to the docstring of the above two methods for more information.
+        """
+        encoder_audio = kwargs.pop("encoder_audio", None)
+        decoder_audio = kwargs.pop("decoder_audio", None)
+        sampling_rate = kwargs.pop("sampling_rate", None)
+
+        if len(args) > 0:
+            encoder_audio = args[0]
+            args = args[1:]
+
+        if encoder_audio is None and decoder_audio is None:
+            raise ValueError("You need to specify either an `encoder_audio` or `decoder_audio` input to process.")
+
+        if encoder_audio is not None:
+            encoder_inputs = self.feature_extractor_encoder(encoder_audio, *args, sampling_rate=sampling_rate, **kwargs)
+        if decoder_audio is not None:
+            decoder_inputs = self.feature_extractor_decoder(decoder_audio, *args, sampling_rate=sampling_rate, **kwargs)
+
+        if decoder_audio is None:
+            return encoder_inputs
+        elif encoder_audio is None:
+            return decoder_inputs
+        else:
+            encoder_inputs["labels"] = decoder_inputs["input_values"]
+            encoder_inputs["stop_labels"] = decoder_inputs["stop_labels"]
+            decoder_attention_mask = decoder_inputs.get("attention_mask")
+            if decoder_attention_mask is not None:
+                encoder_inputs["decoder_attention_mask"] = decoder_attention_mask
+            return encoder_inputs

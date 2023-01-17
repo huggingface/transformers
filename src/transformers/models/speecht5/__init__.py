@@ -58,6 +58,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["processing_speecht5"] = [
         "SpeechT5ProcessorForCTC",
+        "SpeechT5ProcessorForSpeechToSpeech",
         "SpeechT5ProcessorForSpeechToText",
         "SpeechT5ProcessorForTextToSpeech",
     ]
@@ -107,6 +108,7 @@ if TYPE_CHECKING:
     else:
         from .processing_speecht5 import (
             SpeechT5ProcessorForCTC,
+            SpeechT5ProcessorForSpeechToSpeech,
             SpeechT5ProcessorForSpeechToText,
             SpeechT5ProcessorForTextToSpeech,
         )

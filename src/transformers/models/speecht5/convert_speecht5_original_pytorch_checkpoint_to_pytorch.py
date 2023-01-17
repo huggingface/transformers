@@ -30,6 +30,7 @@ from transformers import (
     SpeechT5ForSpeechToSpeech,
     SpeechT5ForTextToSpeech,
     SpeechT5ProcessorForCTC,
+    SpeechT5ProcessorForSpeechToSpeech,
     SpeechT5ProcessorForSpeechToText,
     SpeechT5ProcessorForTextToSpeech,
     SpeechT5SpectrogramFeatureExtractor,
@@ -413,17 +414,17 @@ def convert_speecht5_checkpoint(
         processor = SpeechT5ProcessorForTextToSpeech(tokenizer=tokenizer, feature_extractor=feature_extractor)
         processor.save_pretrained(pytorch_dump_folder_path)
 
-    # if task == "s2s":
-    #     feature_extractor_encoder = SpeechT5WaveformFeatureExtractor(
-    #         feature_size=1,
-    #         sampling_rate=16000,
-    #         padding_value=0.0,
-    #         do_normalize=False,
-    #         return_attention_mask=True,
-    #     )
-    #     feature_extractor_decoder = SpeechT5SpectrogramFeatureExtractor()
-    #     processor = SpeechT5ProcessorForSpeechToSpeech(feature_extractor_encoder, feature_extractor_decoder)
-    #     processor.save_pretrained(pytorch_dump_folder_path)
+    if task == "s2s":
+        feature_extractor_encoder = SpeechT5WaveformFeatureExtractor(
+            feature_size=1,
+            sampling_rate=16000,
+            padding_value=0.0,
+            do_normalize=False,
+            return_attention_mask=True,
+        )
+        feature_extractor_decoder = SpeechT5SpectrogramFeatureExtractor()
+        processor = SpeechT5ProcessorForSpeechToSpeech(feature_extractor_encoder, feature_extractor_decoder)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     fairseq_checkpoint = torch.load(checkpoint_path)
     recursively_load_weights(fairseq_checkpoint["model"], model, task)
