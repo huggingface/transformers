@@ -1183,7 +1183,11 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         >>> outputs = model(**inputs)
         ```"""
         if labels is None and decoder_input_ids is None:
-            raise ValueError("Either `decoder_input_ids` or `labels` should be passed during inference.")
+            raise ValueError(
+                "Either `decoder_input_ids` or `labels` should be passed when calling `forward` with"
+                " `BlipForQuestionAnswering`. if you are training the model make sure that `labels` is passed, if you"
+                " are using the model for inference make sure that `decoder_input_ids` is passed."
+            )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
