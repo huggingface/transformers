@@ -19,6 +19,32 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
 jobs:
+  run_pr_doctests:
+    name: "Check PR's added documentation"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: "Fetch new docstring"
+        run: |
+          "git diff"
+      - name: "Run doctest on modified docstring"
+        run: |
+          "python3 -m pytest "--doctest-modules $(modified_files) -sv --doctest-continue-on-failure"
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_new_models/failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: run_pr_doctests_test_reports
+          path: reports/run_pr_doctests
+
+
+
   run_doctests:
     runs-on: [self-hosted, doc-tests-gpu]
     container:
