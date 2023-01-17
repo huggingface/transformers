@@ -5997,10 +5997,12 @@ if TYPE_CHECKING:
         from .models.xlm_roberta import (
             TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLMRobertaForMaskedLM,
+            TFXLMRobertaForCausalLM,
             TFXLMRobertaForMultipleChoice,
             TFXLMRobertaForQuestionAnswering,
             TFXLMRobertaForSequenceClassification,
             TFXLMRobertaForTokenClassification,
+            TFXLMRobertaPreTrainedModel,
             TFXLMRobertaModel,
         )
         from .models.xlnet import (
@@ -6214,11 +6216,14 @@ if TYPE_CHECKING:
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
+            FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaxXLMRobertaForMaskedLM,
+            FlaxXLMRobertaForCausalLM,
             FlaxXLMRobertaForMultipleChoice,
             FlaxXLMRobertaForQuestionAnswering,
             FlaxXLMRobertaForSequenceClassification,
             FlaxXLMRobertaForTokenClassification,
+            FlaxXLMRobertaPreTrainedModel,
             FlaxXLMRobertaModel,
         )
 
