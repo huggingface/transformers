@@ -105,7 +105,6 @@ OPT_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->OPT
 class FlaxOPTAttention(nn.Module):
     config: OPTConfig
     embed_dim: int
@@ -245,7 +244,7 @@ class FlaxOPTAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
             )
         else:
             attention_bias = None
