@@ -4,5 +4,5 @@ from gluonts.time_feature import get_lags_for_frequency
 if __name__ == '__main__':
     freq = "h"
     lags = get_lags_for_frequency(freq_str=freq)
-    model = InformerModel(InformerConfig())
+    model = InformerModel(InformerConfig(lags_seq=lags))
     print(model)

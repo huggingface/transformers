@@ -32,37 +32,35 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class InformerConfig(PretrainedConfig):
     def __init__(
-        self,
-        context_length: int,
-        prediction_length: int,
-        num_feat_dynamic_real: int,  # num_dynamic_real_features
-        num_feat_static_real: int,  # num_static_real_features
-        num_feat_static_cat: int,  # num_static_categorical_features
-        cardinality: List[int],
-        # Informer arguments
-        nhead: int,
-        num_encoder_layers: int, # encoder_layers
-        num_decoder_layers: int, # decoder_layers
-        dim_feedforward: int,
-        activation: str = "gelu", # activation_function
-        dropout: float = 0.1,
-        attn: str = "prob",
-        factor: int = 5,
-        distil: bool = True,
-        # univariate input
-        input_size: int = 1,
-        embedding_dimension: Optional[List[int]] = None,
-        distr_output: str = "student_t",
-        lags_seq: Optional[List[int]] = None,  # used to be freq.
-        scaling: bool = True,
-        num_parallel_samples: int = 100,
-        is_encoder_decoder: bool = True,
-        **kwargs
+            self,
+            input_size: int = 1,
+            prediction_length: Optional[int] = None,
+            context_length: Optional[int] = None,
+            distr_output: str = "student_t",
+            lags_seq: Optional[List[int]] = None,  # used to be freq.
+            scaling: bool = True,
+            num_feat_dynamic_real: int = 0,  # num_dynamic_real_features
+            num_feat_static_real: int = 0,  # num_static_real_features
+            num_feat_static_cat: int = 0,  # num_static_categorical_features
+            cardinality: Optional[List[int]] = None,
+            embedding_dimension: Optional[List[int]] = None,
+            dim_feedforward: int = 32,  # decoder_ffn_dim & encoder_ffn_dim
+            nhead: int = 2,  # Eli: not sure what the name
+            num_encoder_layers: int = 2,  # encoder_layers
+            num_decoder_layers: int = 2,  # decoder_layers
+            is_encoder_decoder: bool = True,
+            activation: str = "gelu",  # activation_function
+            dropout: float = 0.1,
+            attn: str = "prob",
+            factor: int = 5,
+            distil: bool = True,
+            num_parallel_samples: int = 100,
+            **kwargs
     ):
         # time series specific configuration
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
-        self.distr_output = distr_output # Eli: change to distribution_output
+        self.distr_output = distr_output  # Eli: change to distribution_output
         # self.loss = loss # Eli: From vanilla ts transformer
         self.input_size = input_size
         # self.target_shape = distr_output.event_shape  # Eli: I think can be removed
@@ -99,8 +97,8 @@ class InformerConfig(PretrainedConfig):
         # Transformer architecture configuration
         self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
         self.nhead = nhead
-        self.num_encoder_layers = num_encoder_layers # encoder_layers
-        self.num_decoder_layers = num_decoder_layers # decoder_layers
+        self.num_encoder_layers = num_encoder_layers  # encoder_layers
+        self.num_decoder_layers = num_decoder_layers  # decoder_layers
         self.dim_feedforward = dim_feedforward
         self.activation = activation  # activation_function
         self.dropout = dropout
