@@ -132,12 +132,11 @@ class TFTopKLogitsWarper(TFLogitsWarper):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
-        self.top_k = top_k
+        self.top_k = max(top_k, min_tokens_to_keep)
         self.filter_value = filter_value
-        self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
+        top_k = min(self.top_k, scores.shape[-1])  # Safety check
         # Boolean mask containing all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < tf.math.top_k(scores, k=top_k)[0][..., -1:]
         next_scores = tf.where(indices_to_remove, self.filter_value, scores)
