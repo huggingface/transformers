@@ -165,12 +165,10 @@ any other library you prefer.
 >>> train_data_augmentation = keras.Sequential(
 ...     [
 ...         layers.RandomCrop(size[0], size[1]),
-...         layers.Rescaling(scale=1./127.5, offset=-1),
+...         layers.Rescaling(scale=1.0 / 127.5, offset=-1),
 ...         layers.RandomFlip("horizontal"),
 ...         layers.RandomRotation(factor=0.02),
-...         layers.RandomZoom(
-...             height_factor=0.2, width_factor=0.2
-...         ),
+...         layers.RandomZoom(height_factor=0.2, width_factor=0.2),
 ...     ],
 ...     name="train_data_augmentation",
 ... )
@@ -178,7 +176,7 @@ any other library you prefer.
 >>> val_data_augmentation = keras.Sequential(
 ...     [
 ...         layers.CenterCrop(size[0], size[1]),
-...         layers.Rescaling(scale=1./127.5, offset=-1),
+...         layers.Rescaling(scale=1.0 / 127.5, offset=-1),
 ...     ],
 ...     name="val_data_augmentation",
 ... )
@@ -191,12 +189,14 @@ Next, create functions to apply appropriate transformations to a batch of images
 >>> import tensorflow as tf
 >>> from PIL import Image
 
+
 >>> def convert_to_tf_tensor(image: Image):
 ...     np_image = np.array(image)
 ...     tf_image = tf.convert_to_tensor(np_image)
 ...     # `expand_dims()` is used to add a batch dimension since
 ...     # the TF augmentation layers operates on batched inputs.
 ...     return tf.expand_dims(tf_image, 0)
+
 
 >>> def preprocess_train(example_batch):
 ...     """Apply train_transforms across a batch."""
@@ -206,7 +206,8 @@ Next, create functions to apply appropriate transformations to a batch of images
 ...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
 ...     return example_batch
 
->>> def preprocess_val(example_batch):
+
+... def preprocess_val(example_batch):
 ...     """Apply val_transforms across a batch."""
 ...     images = [
 ...         val_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
