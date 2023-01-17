@@ -58,6 +58,7 @@ from transformers.utils import (
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
+    is_torchvision_available,
     is_vision_available,
 )
 from transformers.utils.generic import ExplicitEnum, TensorType
@@ -66,8 +67,9 @@ from transformers.utils.generic import ExplicitEnum, TensorType
 if is_torch_available():
     import torch
     from torch import nn
-    from torchvision.ops.boxes import batched_nms
 
+if is_torchvision_available():
+    from torchvision.ops.boxes import batched_nms
 
 if is_vision_available():
     import PIL
