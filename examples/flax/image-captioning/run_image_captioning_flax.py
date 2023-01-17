@@ -45,7 +45,7 @@ from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
 from transformers import (
     AutoFeatureExtractor,
     AutoTokenizer,
@@ -430,6 +430,7 @@ def main():
             )
         else:
             repo_name = training_args.hub_model_id
+        create_repo(repo_name, exist_ok=True)
         repo = Repository(training_args.output_dir, clone_from=repo_name)
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)

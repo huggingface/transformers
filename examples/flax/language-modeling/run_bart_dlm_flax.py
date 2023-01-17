@@ -45,7 +45,7 @@ from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
@@ -502,6 +502,7 @@ def main():
             )
         else:
             repo_name = training_args.hub_model_id
+        create_repo(repo_name, exist_ok=True)
         repo = Repository(training_args.output_dir, clone_from=repo_name)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
