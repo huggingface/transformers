@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -12,21 +12,25 @@ specific language governing permissions and limitations under the License.
 
 # How 🤗 Transformers solve tasks
 
-In [What 🤗 Transformers can do](task_summary), you learned how natural language processing (NLP), speech and audio, and computer vision problems used to be solved before the Transformer was introduced and some important applications of these problems. 
+In [What 🤗 Transformers can do](task_summary), you learned about natural language processing (NLP), speech and audio, and computer vision tasks and some important applications of them.
 
-This page will dig deeper into how Transformer models solve these tasks, and explain what's happening under the hood for each of them. Each Transformer model is a bit different - some may implement certain tricks or techniques - but the general idea is the same. So to keep things relatively brief, for each task, we'll discuss how a specific Transformer model works. Then, to use the pretrained model for a specific downstream task, you only need to add a task-specific head on top and finetune it on your data.
+This page will take a closer look at how models solve these tasks, and explain what's happening under the hood for each of them. There are many ways to solve a given task, some models may implement certain techniques or even approach the task from a new angle, but for Transformer models the general idea is the same. Owing to it's flexible architecture, most model's are a variant of an encoder, decoder or encoder-decoder structure. The exception is modern convolutional neural networks (CNNs) which are still used today for computer vision tasks, but we'll also explain how these work.
 
-The Transformer models we'll look at are among the most common ones in their field, and they'll provide you with a good understanding of how they solve a task:
+To keep things relatively brief, for each task, we'll provide a high-level overview of how each of the following models work. The models we'll look at are among the most popular ones for solving a task:
 
-- [wav2vec2](model_doc/wav2vec2) for audio classification and automatic speech recognition
-- [Vision Transformer (ViT)](model_doc/vit) for image classification
+- [wav2vec2](model_doc/wav2vec2) for audio classification and automatic speech recognition (ASR)
+- [Vision Transformer (ViT)](model_doc/vit) and[ConvNeXT](model_doc/convnext) for image classification
 - [DPR](model_doc/dpr) for image segmentation and object detection
 - [GLPN](model_doc/glpn) for depth estimation
-- [BERT](model_doc/bert) for NLP tasks like text classification that use an encoder, [GPTJ](model_doc/gptj) for NLP tasks like text generation that use a decoder, and [T5](model_doc/t5) for NLP tasks like summarization that use both an encoder and a decoder
+- [BERT](model_doc/bert) for NLP tasks like text classification, token classification and question answering that use an encoder
+- [GPT2](model_doc/gpt2) for NLP tasks like text generation that use a decoder
+- [T5](model_doc/t5) for NLP tasks like summarization and translation that use an encoder-decoder
+
+To use a pretrained model for a downstream task, you only need to add a task-specific head and finetune it on your data.
 
 <Tip>
 
-Before you go further, you should have a basic understanding of the original Transformer architecture and know how encoders, decoders, and attention work. If you're just getting started or need a refresher, check out our [course](https://huggingface.co/course/chapter1/4?fw=pt) for more information about how Transformers work.
+Before you go further, you should have a basic understanding of the original Transformer architecture and know how encoders, decoders, and attention work. If you're just getting started or need a refresher, check out our [course](https://huggingface.co/course/chapter1/4?fw=pt) for more information about how Transformers work! 
 
 </Tip>
 
@@ -50,21 +54,32 @@ Now that wav2vec2 is pretrained, you can finetune it for downstream tasks like a
 
 To use the pretrained model for audio classification, you add a sequence classification head on top of the base wav2vec2 model. The sequence classification head is just a linear layer that accepts the hidden states output by wav2vec2 and does a linear transformation to convert them into logits. The cross-entropy loss is then calculated between the logits and target to find the most likely label.
 
-You can see this in [`Wav2Vec2ForSequenceClassification.forward`].
-
 ### Automatic speech recognition
 
 To use the pretrained model for automatic speech recognition, you add a language modeling head on top of the base wav2vec2 model for [connectionist temporal classification (CTC)](glossary#connectionist-temporal-classification-ctc). The language modeling head is just a linear layer that accepts the hidden states output by wav2vec2 and does a linear transformation to convert them into logits which represent a token class (the number of tokens comes from the vocabulary of the task). The CTC loss is then calculated between the logits and target to find the most likely token.
 
-You can see this in [`Wav2Vec2ForCTC.forward`].
-
 ## Computer vision
 
-ViT follows closely to the original Transformer, and it opened the door to vision models beyond convolutional neural networks. This is important because the Transformer architecture is more efficient than CNNs which means it can be pretrained and scaled up to get even better performance on vision tasks. 
+There are two ways to computer vision tasks:
 
-ViT is commonly used for classification, but for other vision tasks like object detection, segmentation and depth estimation, we'll take a look at DETR and GLPN respectively, which are better suited for those tasks.
+1. Use a modern CNN, like ConvNeXT, which continue to rely on convolutional layers but with new network designs.
+2. Use a Transformer architecture to split an image into patches and process the patches as a sequence.
+
+<Tip>
+
+A third way is a hybrid Transformer with convolutions (for example, [Convolutional Vision Transformer](model_doc/cvt), or [LeViT](model_doc/levit)) but we won't discuss those here because they just combine the two approaches we examine here.
+
+</Tip>
+
+ViT follows closely to the original Transformer, and it opened the door to vision models beyond convolutional neural networks. This is important because the Transformer architecture is more efficient than CNNs which means it can be pretrained and scaled up to get even better performance on vision tasks. However, this doesn't mean CNNs are obsolete for vision tasks because convolutions are a powerful idea and still used in models today with competitive performance to Transformers. 
+
+ViT and ConvNeXT are commonly used for classification, but for other vision tasks like object detection, segmentation and depth estimation, we'll take a look at DETR and GLPN respectively, which are better suited for those tasks.
 
 ### Image classification
+
+ViT and ConvNeXT are both used for image classification; the main difference is that ViT uses a Transformer architecture while ConvNeXT uses convolutions.
+
+#### Transformer
 
 ViT replaces convolutions entirely with a pure Transformer architecture. This is important because the Transformer architecture is more efficient than CNNs which means it can be pretrained and scaled up to get even better performance. If you're familiar with the original Transformer, then you're already most of the way towards understanding ViT.
 
@@ -82,9 +97,29 @@ The main change ViT introduced was in how images are processed:
 
 ViT's pretraining objective is actually just a classification task so you can use it for image classification! The output can also be used for other tasks beyond classification such as segmentation or regression by passing the output to a decoder.
 
+#### ConvNet
+
+ConvNeXT is a CNN architecture that uses a new and modern network design to improve performance of CNNs. CNNs work particularly well for visual processing due to inherent properties like equivariance and preserving spatial information with sliding windows. ConvNeXT keeps these properties that made CNNs so popular in computer vision, and improves on the architectural design.
+
+To understand ConvNeXT, you'll need an intuitive understanding of convolutions. From a very high-level, a [convolution](glossary#convolution) looks at a small window of the image pixels and computes some features from it such as a certain texture or the curvature of a line. You can feed this output to another convolutional layer, and with each successive layer, the network learns more complex and abstract things like hotdogs or rockets. Between convolutional layers, it is common to add a pooling layer to reduce dimensionality and make the model more robust to variations of a feature's position. 
+
+From here, ConvNeXT makes several changes:
+
+1. High-level architecture design: changes the number of blocks in each stage and "patchifying" an image with a 4x4 stride 4 convolutional layer. The larger stride and correspodning kernel size, and non-overlapping sliding window makes this patchifying strategy similar to how ViT splits an image into patches.
+
+2. Adopt ideas from [ResNeXT](https://arxiv.org/abs/1611.05431): replaces the typical 3x3 convolutional layer in the bottleneck block with *depthwise convolution*, which is just applying a convolution to each input channel separately and then stacking them back together at the end. This widens the network width which improves performance.
+
+3. Inverted bottleneck: a *bottleneck* layer shrinks the number of channels and then restores it because it is faster to do a 1x1 convolution and you can increase the depth. An inverted bottleneck does the opposite by expanding the number of channels first and then shrinking it which is more memory efficient.
+
+4. Big kernel: ViT has a global receptive field which means it can see more of an image at once thanks to its attention mechanism. ConvNeXT attempts to replicate this effect by increasing the kernel size to 7x7.
+
+5. Low-level layer design: many of the changes at this level adopt design choices in Transformers. The ReLU is replaced by GELU (which is used in BERT and ViT), fewer activation layers (the Transformer only uses one activation function in the MLP block), fewer normalization layers and replace BatchNorm with LayerNorm (LayerNorm is used in Transformers), and separate downsampling layers (do spatial downsampling in between stages like [Swin](model_doc/swin)).
+
+All together, these improvements allow ConvNeXT to perform competitively with Transformer models like Swin!
+
 ### Object detection
 
-DETR, *DEtection TRansformer*, is an end-to-end object detection model that combines a CNN with a Transformer encoder-decoder. Preview detection models involved several components, each with a specific function like filtering over image regions and cropping features in a location. DETR significantly simplifies this by just passing the image features through a Transformer encoder-decoder.
+DETR, *DEtection TRansformer*, is an end-to-end object detection model that combines a CNN with a Transformer encoder-decoder. Previous detection models involved several components, each with a specific function like filtering over image regions and cropping features in a location. DETR significantly simplifies this by just passing the image features through a Transformer encoder-decoder.
 
 1. A pretrained CNN *backbone* takes an image, represented by its pixel values (`channels, height, width`), and creates a low resolution activation map of the image features. A 1x1 convolution is applied to the feature map to reduce dimensionality, creating a new feature map that gives a high-level representation of the image. Since the Transformer is a sequential model, the feature map is flattened into a sequence of feature vectors. Like the original Transformer, you need to add positional embeddings to the feature vectors.
 
@@ -94,13 +129,9 @@ DETR, *DEtection TRansformer*, is an end-to-end object detection model that comb
 
 3. DETR uses *bipartite matching loss* during training to compare a fixed number of predictions with a fixed set of ground truth labels. If there are fewer ground truth labels in the set of *N* labels, then they're padded with a `no object` class. This type of loss function encourages DETR to find a one-to-one assignment between the predictions and ground truth labels. If either the bounding boxes or class label aren't correct, a loss is incurred. Likewise, if DETR predicts an object that doesn't exist, it is also penalized. This encourages DETR to find other objects in an image instead of just focusing on one maybe really prominent object.
 
-You can see all of this logic implemented in [`DeTRForObjectDetection.forward`].
-
 ### Image segmentation
 
 DETR can also be easily extended for panoptic segmentation by adding a mask head on top of the decoder. Just like how DETR is trained for object detection, for segmentation, DETR is trained to predict the bounding boxes around the *stuff* and *things* in an image. The mask head takes the output from the decoder for each bounding box detected in an image and creates an attention map for each object. The attention maps are passed to a CNN which outputs the mask logits at each pixel. An argmax is used at each logit to predict a class for each pixel, resulting in a final panoptic prediction.
-
-You can see all of this logic implemented in [`DeTRForSegmentation.forward`].
 
 ### Depth estimation
 
@@ -112,4 +143,38 @@ GLPN, *Global-Local Path Network*, is another type of Transformer for depth esti
 
 3. A lightweight decoder takes the last feature map (1/32 scale) from the encoder and upsamples it to 1/16 scale. From here, the feature is passed into a *Selective Feature Fusion (SFF)* module which selects and combines local and global features from an attention map for each feature, and then upsamples it to 1/8th. This process is repeated until the decoded features are the same size as the original image. The output is passed through two convolution layers and then a sigmoid function to predict the depth of each pixel.
 
-You can see all of this logic implemented in [`GLPNForDepthEstimation.forward`].
+## Natural language processing
+
+The Transformer was originally designed for machine translation, and since then it has practically become the default architecture for solving all NLP tasks. Some tasks lend themselves to the Transformer's encoder structure while others are better suited for the decoder. Still other tasks make use of both the Transformer's encoder-decoder structure.
+
+### Text classification
+
+[BERT](model_doc/bert) is an encoder-only model and is the first model to effectively implement bidirectionality which allows BERT to learn richer representations of the text by attending to words before and after.
+
+1. BERT uses [WordPiece](tokenizer_summary#wordpiece) tokenization to generate a token embedding of the text. To tell the difference between a single sentence and a pair of sentences, a special `[SEP]` token is added to differentiate them. A special `[CLS]` token is added to the beginning of every sequence of text. The final output with the `[CLS]` token is used as the input to the classification head for classification tasks. BERT also adds a segment embedding to denote whether a token belongs to the first or second sentence in a pair of sentences.
+
+2. BERT is pretrained with two objectives: masked language modeling and next sentence prediction. In masked language modeling, some percentage of the input tokens are randomly masked and the model needs to predict these. This solves the issue of deep bidirectionality where the model could cheat and see all the words and "predict" the next word. The final hidden states of the predicted mask tokens are passed to a feed-forward network with a softmax over the vocabulary to predict the masked word.
+
+    The second pretraining object is next sentence prediction. The model must predict whether a sentence B is the next sentence after sentence A. Half of the time sentence B is the next sentence and the other half of the time, sentence B is a random sentence. The prediction, whether it is the next sentence or not, is passed to a feed-forward network with a softmax over the two classes (`IsNext` and `NotNext`).
+
+3. The input embeddings are passed through multiple encoder layers to output some final hidden states. To use the pretrained model for classification, you add a sequence classification head on top of the base BERT model. The sequence classification head is just a linear layer that accepts the final hidden states and does a linear transformation to convert them into logits. The cross-entropy loss is then calculated between the logits and taraget to find the most likely label.
+
+### Token classification
+
+To use BERT for token classification tasks like named entity recognition (NER), you add a token classification head on top of the base BERT model. The token classification head is a linear layer that accepts the final hidden states and does a linear transformation to convert them into logits. The cross-entropy loss is then calculated between the logits and each token to find the most likely label.
+
+### Question answering
+
+To use BERT for question answering, you add a span classification head on top of the base BERT model. This is a linear layer that accepts the final hidden states and does a linear transformation to compute the `span` start and end logits corresponding to the answer. The cross-entropy loss is then calculated between the logits and the label position to find the most likely span of text corresponding to the answer.
+
+### Language modeling
+
+GPT2
+
+### Summarization
+
+T5
+
+### Translation
+
+T5
