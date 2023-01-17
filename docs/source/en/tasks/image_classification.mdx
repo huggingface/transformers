@@ -150,19 +150,76 @@ Now create a batch of examples using [`DefaultDataCollator`]. Unlike other data 
 
 <frameworkcontent>
 <tf>
-Create a preprocessing function to resize the images and return the `pixel_values`, which are required inputs to the model.
+
+To avoid overfitting and to make the model more robust, add some data augmentation to the training part of the dataset.
+Here we use Keras preprocessing layers to define the transformations for the training data (includes data augmentation),
+and transformations for the validation data (only center cropping, resizing and normalizing). You can use `tf.image`or
+any other library you prefer.
 
 ```py
->>> def process(examples):
-...     examples.update(image_processor(examples["image"]))
-...     return examples
+>>> from tensorflow import keras
+>>> from tensorflow.keras import layers
+
+>>> size = (image_processor.size["height"], image_processor.size["width"])
+
+>>> train_data_augmentation = keras.Sequential(
+...     [
+...         layers.RandomCrop(size[0], size[1]),
+...         layers.Rescaling(scale=1./127.5, offset=-1),
+...         layers.RandomFlip("horizontal"),
+...         layers.RandomRotation(factor=0.02),
+...         layers.RandomZoom(
+...             height_factor=0.2, width_factor=0.2
+...         ),
+...     ],
+...     name="train_data_augmentation",
+... )
+
+>>> val_data_augmentation = keras.Sequential(
+...     [
+...         layers.CenterCrop(size[0], size[1]),
+...         layers.Rescaling(scale=1./127.5, offset=-1),
+...     ],
+...     name="val_data_augmentation",
+... )
 ```
 
-Apply the preprocessing transformations over the entire dataset using 🤗 Datasets [`~datasets.Dataset.map`] method.
-Set `batched=True` to speed things up by processing multiple elements of the dataset at once:
+Next, create functions to apply appropriate transformations to a batch of images, instead of one image at a time.
 
 ```py
->>> food = food.map(process, batched=True)
+>>> import numpy as np
+>>> import tensorflow as tf
+>>> from PIL import Image
+
+>>> def convert_to_tf_tensor(image: Image):
+...     np_image = np.array(image)
+...     tf_image = tf.convert_to_tensor(np_image)
+...     # `expand_dims()` is used to add a batch dimension since
+...     # the TF augmentation layers operates on batched inputs.
+...     return tf.expand_dims(tf_image, 0)
+
+>>> def preprocess_train(example_batch):
+...     """Apply train_transforms across a batch."""
+...     images = [
+...         train_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
+...     ]
+...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
+...     return example_batch
+
+>>> def preprocess_val(example_batch):
+...     """Apply val_transforms across a batch."""
+...     images = [
+...         val_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
+...     ]
+...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
+...     return example_batch
+```
+
+Use 🤗 Datasets [`~datasets.Dataset.set_transform`] to apply the transformations on the fly:
+
+```py
+food["train"].set_transform(preprocess_train)
+food["test"].set_transform(preprocess_val)
 ```
 
 As a final preprocessing step, create a batch of examples using `DefaultDataCollator`. Unlike other data collators in 🤗 Transformers, the
@@ -291,7 +348,6 @@ Start by defining the hyperparameters, optimizer and learning rate schedule:
 
 ```py
 >>> from transformers import create_optimizer
->>> import tensorflow as tf
 
 >>> batch_size = 16
 >>> num_epochs = 5
