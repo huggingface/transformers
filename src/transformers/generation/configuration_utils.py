@@ -111,8 +111,11 @@ class GenerationConfig(PushToHubMixin):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
             `top_p` or higher are kept for generation.
         typical_p (`float`, *optional*, defaults to 1.0):
-            The amount of probability mass from the original distribution to be considered in typical decoding. If set
-            to 1.0 it takes no effect. See [this paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
+            Local typicality measures how similar the conditional probability of predicting a target token next is to
+            the expected conditional probability of predicting a random token next, given the partial text already
+            generated. If set to float < 1, the smallest set of the most locally typical tokens with probabilities that
+            add up to `typical_p` or higher are kept for generation. See [this
+            paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
