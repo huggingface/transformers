@@ -657,7 +657,6 @@ else:
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
-    _import_structure["models.graphormer"].append("GraphormerTokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
@@ -4002,7 +4001,6 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
-        from .models.graphormer import GraphormerTokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
