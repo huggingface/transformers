@@ -1213,10 +1213,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             # by default use BOS token as decoder_input_ids
             decoder_input_ids = torch.LongTensor([self.decoder_start_token_id]).repeat((batch_size, 1))
 
-        if labels is None:
-            # labels is None, but decoder_input_ids is not None, this is used for inference
-            labels = decoder_input_ids.masked_fill(decoder_input_ids == self.decoder_pad_token_id, -100)
-
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -1224,10 +1220,13 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             encoder_attention_mask=attention_mask,
             labels=labels,
             return_dict=return_dict,
-            reduction="none",
+            reduction="mean",
         )
 
-        decoder_loss = answer_output.loss.mean() if return_dict else answer_output[0].mean()
+        if labels is not None:
+            decoder_loss = answer_output.loss.mean() if return_dict else answer_output[0].mean()
+        else:
+            decoder_loss = None
 
         if not return_dict:
             outputs = (decoder_loss, image_embeds, vision_outputs[0]) + vision_outputs[2:]

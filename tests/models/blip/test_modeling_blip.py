@@ -710,6 +710,10 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            # hardcode labels to be the same as input_ids
+            inputs["labels"] = inputs["input_ids"]
+
             loss = model(**inputs).loss
             loss.backward()
 
@@ -727,6 +731,10 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             model.gradient_checkpointing_enable()
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            # hardcode labels to be the same as input_ids
+            inputs["labels"] = inputs["input_ids"]
+
             loss = model(**inputs).loss
             loss.backward()
 
