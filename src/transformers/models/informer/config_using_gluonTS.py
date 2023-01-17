@@ -224,7 +224,7 @@ class ConvLayer(nn.Module):
             padding=1,
             padding_mode="circular",
         )
-        self.norm = nn.BatchNorm1d(c_in)
+        self.norm = nn.BatchNorm1d(c_in) # Question: why batchnorm here?
         self.activation = nn.ELU()
         self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
