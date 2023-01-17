@@ -41,29 +41,22 @@ class GenerationConfig(PushToHubMixin):
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
         - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
-            `do_sample=False`.
+            `do_sample=False`
         - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0.`
             and `top_k>1`
         - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
-            `do_sample=True`.
+            `do_sample=True`
         - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
-            `do_sample=False`.
+            `do_sample=False`
         - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if
-            `num_beams>1` and `do_sample=True`.
+            `num_beams>1` and `do_sample=True`
         - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if
-            `num_beams>1` and `num_beam_groups>1`.
+            `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
-            `constraints!=None` or `force_words_ids!=None`.
+            `constraints!=None` or `force_words_ids!=None`
 
-    <Tip>
-
-    A generation configuration file can be loaded and saved to disk. Loading and using a generation configuration file
-    does **not** change a model configuration or weights. It only affects the model's behavior at generation time.
-
-    </Tip>
-
-    Most of these parameters are explained in more detail in [this blog
-    post](https://huggingface.co/blog/how-to-generate).
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate'. To learn
+    more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
 
     Arg:
         > Parameters that control the length of the output
