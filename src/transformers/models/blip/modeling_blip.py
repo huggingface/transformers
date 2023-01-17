@@ -1181,8 +1181,10 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         >>> outputs = model(**inputs)
         ```"""
+        if labels is None and decoder_input_ids is None:
+            raise ValueError("Either `decoder_input_ids` or `labels` should be passed during inference.")
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        batch_size = input_ids.shape[0]
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -1209,9 +1211,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             decoder_input_ids = self._shift_right(labels)
             # replace possible -100 values in labels by `pad_token_id`
             labels = labels.masked_fill(labels == self.decoder_pad_token_id, -100)
-        elif decoder_input_ids is None:
-            # by default use BOS token as decoder_input_ids
-            decoder_input_ids = torch.LongTensor([self.decoder_start_token_id]).repeat((batch_size, 1))
 
         answer_output = self.text_decoder(
             input_ids=decoder_input_ids,
