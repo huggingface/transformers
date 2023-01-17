@@ -12,6 +12,8 @@ specific language governing permissions and limitations under the License.
 
 # XLA Integration for TensorFlow Models
 
+[[open-in-colab]]
+
 Accelerated Linear Algebra, dubbed XLA, is a compiler for accelerating the runtime of TensorFlow Models. From the [official documentation](https://www.tensorflow.org/xla):
 
 XLA (Accelerated Linear Algebra) is a domain-specific compiler for linear algebra that can accelerate TensorFlow models with potentially no source code changes.
@@ -72,6 +74,12 @@ And then you can run the following code:
 ```py
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModelForCausalLM
+
+# Will error if the minimal version of Transformers is not installed.
+from transformers.utils import check_min_version
+
+check_min_version("4.21.0")
+
 
 tokenizer = AutoTokenizer.from_pretrained("gpt2", padding_side="left", pad_token="</s>")
 model = TFAutoModelForCausalLM.from_pretrained("gpt2")
