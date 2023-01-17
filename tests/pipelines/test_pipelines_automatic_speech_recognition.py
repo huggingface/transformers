@@ -502,6 +502,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             model="openai/whisper-small",
             return_timestamps=True,
         )
+
         output = pipe(array, chunk_length_s=10)
         self.assertDictEqual(
             output,
@@ -514,7 +515,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             "tight-loan cloth that was the only garment he wore, the "
                             "cut"
                         ),
-                        "timestamp": (5.5, 13.6),
+                        "timestamp": (5.5, 11.94),
                     },
                     {
                         "text": (
@@ -522,15 +523,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                             "overstrained eyes, even the soaring arena around him "
                             "with"
                         ),
-                        "timestamp": (13.6, 22.94),
+                        "timestamp": (11.94, 19.6),
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (22.94, 29.98),
+                        "timestamp": (19.6, 24.98),
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (29.98, 35.980000000000004),
+                        "timestamp": (24.98, 30.98),
                     },
                 ],
                 "text": (
