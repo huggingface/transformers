@@ -19,10 +19,9 @@ import collections.abc
 import inspect
 import unittest
 
+import numpy as np
 from datasets import load_dataset
 from packaging import version
-
-import numpy as np
 
 from transformers import BeitConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
@@ -41,9 +40,7 @@ if is_tf_available():
         TFBeitForSemanticSegmentation,
         TFBeitModel,
     )
-    from transformers.models.beit.modeling_tf_beit import (
-        TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.beit.modeling_tf_beit import TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -136,7 +133,7 @@ class TFBeitModelTester:
         model = TFBeitForMaskedImageModeling(config=config)
         result = model(pixel_values, training=False)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length - 1, self.vocab_size))
-    
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.type_sequence_label_size
         model = TFBeitForImageClassification(config)
@@ -183,9 +180,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (TFBeitModel, TFBeitForImageClassification, TFBeitForSemanticSegmentation)
-        if is_tf_available()
-        else ()
+        (TFBeitModel, TFBeitForImageClassification, TFBeitForSemanticSegmentation) if is_tf_available() else ()
     )
 
     test_pruning = False
@@ -195,9 +190,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFBeitModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=BeitConfig, has_text_modality=False, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=BeitConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -238,7 +231,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)    
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -482,7 +475,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
             if is_vision_available()
             else None
         )
-         
+
     @slow
     def test_inference_masked_image_modeling_head(self):
         model = TFBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
@@ -507,7 +500,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
         )
 
         tf.debugging.assert_near(logits[:3, :3], expected_slice, atol=1e-4)
-    
+
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
         model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
@@ -557,7 +550,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_semantic_segmentation(self):
         model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
-        
+
         feature_extractor = TFBeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
@@ -596,7 +589,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_post_processing_semantic_segmentation(self):
         model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
-        
+
         feature_extractor = TFBeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")

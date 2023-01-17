@@ -71,6 +71,7 @@ TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModelOutputWithPooling with Beit->Data2VecVision
 class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     """
     Class for outputs of [`TFData2VecVisionModel`].
@@ -101,6 +102,7 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     attentions: Tuple[tf.Tensor] | None = None
 
 
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitDropPath with Beit->Data2VecVision
 class TFData2VecVisionDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
@@ -121,6 +123,7 @@ class TFData2VecVisionDropPath(tf.keras.layers.Layer):
         return x
 
 
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitEmbeddings with Beit->Data2VecVision
 class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
@@ -193,6 +196,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPatchEmbeddings with Beit->Data2VecVision
 class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
     """
     Image to Patch Embedding.
@@ -253,15 +257,8 @@ class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
 
         return tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "projection", None) is not None:
-            with tf.name_scope(self.projection.name):
-                self.projection.build([None, None, None, self.num_channels])
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitSelfAttention with Beit->Data2VecVision
 class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
@@ -358,24 +355,8 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
 
         return outputs
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "query", None) is not None:
-            with tf.name_scope(self.query.name):
-                self.query.build([None, None, self.config.hidden_size])
-        if getattr(self, "key", None) is not None:
-            with tf.name_scope(self.key.name):
-                self.key.build([None, None, self.config.hidden_size])
-        if getattr(self, "value", None) is not None:
-            with tf.name_scope(self.value.name):
-                self.value.build([None, None, self.config.hidden_size])
-        if getattr(self, "relative_position_bias", None) is not None:
-            with tf.name_scope(self.relative_position_bias.name):
-                self.relative_position_bias.build(None)
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitSelfOutput with Beit->Data2VecVision
 class TFData2VecVisionSelfOutput(tf.keras.layers.Layer):
     """
     The residual connection is defined in TFData2VecVisionLayer instead of here (as is the case with other models), due
@@ -397,15 +378,8 @@ class TFData2VecVisionSelfOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build([None, None, self.config.hidden_size])
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitAttention with Beit->Data2VecVision
 class TFData2VecVisionAttention(tf.keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
@@ -450,7 +424,7 @@ class TFData2VecVisionAttention(tf.keras.layers.Layer):
                 self.dense_output.build(None)
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with ViT->Data2VecVision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitIntermediate with Beit->Data2VecVision
 class TFData2VecVisionIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
@@ -471,15 +445,8 @@ class TFData2VecVisionIntermediate(tf.keras.layers.Layer):
 
         return hidden_states
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build([None, None, self.config.hidden_size])
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitOutput with Beit->Data2VecVision
 class TFData2VecVisionOutput(tf.keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
@@ -496,15 +463,8 @@ class TFData2VecVisionOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build([None, None, self.config.intermediate_size])
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitLayer with Beit->Data2VecVision
 class TFData2VecVisionLayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -617,8 +577,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         return outputs
 
 
-# Taken and modified from here:
-# https://github.com/leondgarse/keras_cv_attention_models/blob/main/keras_cv_attention_models/beit/beit.py#L28
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitRelativePositionBias with Beit->Data2VecVision
 class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: tuple, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -675,6 +634,7 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
         return tf.transpose(relative_position_bias, [2, 0, 1])
 
 
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitEncoder with Beit->Data2VecVision
 class TFData2VecVisionEncoder(tf.keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
@@ -753,6 +713,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitMainLayer with Beit->Data2VecVision
 class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
     config_class = Data2VecVisionConfig
 
@@ -842,25 +803,8 @@ class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "embeddings", None) is not None:
-            with tf.name_scope(self.embeddings.name):
-                self.embeddings.build(None)
-        if getattr(self, "encoder", None) is not None:
-            with tf.name_scope(self.encoder.name):
-                self.encoder.build(None)
-        if getattr(self, "layernorm", None) is not None:
-            if hasattr(self.layernorm, "name"):
-                with tf.name_scope(self.layernorm.name):
-                    self.layernorm.build((None, self.config.hidden_size))
-        if getattr(self, "pooler", None) is not None:
-            with tf.name_scope(self.pooler.name):
-                self.pooler.build(None)
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPooler with Beit->Data2VecVision
 class TFData2VecVisionPooler(tf.keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
@@ -882,16 +826,8 @@ class TFData2VecVisionPooler(tf.keras.layers.Layer):
 
         return pooled_output
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "layernorm", None) is not None:
-            if hasattr(self.layernorm, "name"):
-                with tf.name_scope(self.layernorm.name):
-                    self.layernorm.build((None, self.config.hidden_size))
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision
 class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -978,6 +914,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1041,6 +978,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification with Beit->Data2VecVision
 class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1106,18 +1044,8 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             attentions=outputs.attentions,
         )
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "data2vec_vision", None) is not None:
-            with tf.name_scope(self.data2vec_vision.name):
-                self.data2vec_vision.build(None)
-        if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build([None, None, self.config.hidden_size])
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitConvModule with Beit->Data2VecVision
 class TFData2VecVisionConvModule(tf.keras.layers.Layer):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
@@ -1260,36 +1188,23 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
         # Gathering from those indices yields the final, correct pooling
         return tf.gather(both_pool, gather_indices, axis=axis)
 
-    def call(self, inputs: tf.Tensor):
-        if self.input_ordering == "NHWC":
-            input_shape = inputs.shape[1:3]
-        else:
-            input_shape = inputs.shape[2:]
+    def call(self, inputs):
+        # Rearrange from NHWC -> NCHW
+        inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
+        # Perform W-pooling
+        inputs = self.w_pool(inputs)
+        # Rearrange NCHW -> NCWH
+        inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
+        # Perform H-pooling
+        inputs = self.h_pool(inputs)
+        # Rearrange from NCWH -> NHWC
+        inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
+        return inputs
 
-        # We break the task down into each possible case
-        # Firstly, if we're resizing down to 1, it's just tf.reduce_mean
-        if self.output_dims[0] == self.output_dims[1] == 1:
-            if self.input_ordering == "NHWC":
-                reduce_dims = [1, 2]
-            else:
-                reduce_dims = [2, 3]
-            return tf.reduce_mean(inputs, axis=reduce_dims, keepdims=True)
-        # Secondly, if we're resizing by an integer factor on both dimensions, we can take a quick shortcut
-        elif input_shape[0] % self.output_dims[0] == 0 and input_shape[1] % self.output_dims[1] == 0:
-            h_resize = int(input_shape[0] // self.output_dims[0])
-            w_resize = int(input_shape[1] // self.output_dims[1])
-            return tf.nn.avg_pool2d(
-                inputs,
-                ksize=(h_resize, w_resize),
-                strides=(h_resize, w_resize),
-                padding="VALID",
-                data_format=self.input_ordering,
-            )
-        else:
-            # Finally, if we can't take the shortcut, we do a 1D pool on each axis. pseudo_1d_pool will take a shortcut
-            # for dimensions where an integer resize is possible. It can also handle upscaling.
-            h_pooled = self.pseudo_1d_pool(inputs, h_pooling=True)
-            return self.pseudo_1d_pool(h_pooled, h_pooling=False)
+    def get_config(self):
+        config = super().get_config()
+        config.update({"mode": self.mode})
+        return config
 
 
 class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
@@ -1341,7 +1256,7 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
                 with tf.name_scope(layer_module.name):
                     layer_module.build(None)
 
-
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitUperHead with Beit->Data2VecVision
 class TFData2VecVisionUperHead(tf.keras.layers.Layer):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
@@ -1547,6 +1462,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation with Beit->Data2VecVision
 class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)

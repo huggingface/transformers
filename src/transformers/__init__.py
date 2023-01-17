@@ -8048,8 +8048,8 @@ if TYPE_CHECKING:
             TFBartPretrainedModel,
         )
         from .models.beit import (
-            TFBeitForMaskedImageModeling,
             TFBeitForImageClassification,
+            TFBeitForMaskedImageModeling,
             TFBeitForSemanticSegmentation,
             TFBeitModel,
             TFBeitPreTrainedModel,

@@ -483,8 +483,8 @@ class TFBartPretrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
-        
-        
+
+
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -521,8 +521,8 @@ class TFBeitPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
-        
-        
+
+
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
