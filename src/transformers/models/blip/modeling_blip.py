@@ -1014,6 +1014,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             encoder_hidden_states=image_embeds,
             labels=labels,
             return_dict=return_dict,
+            reduction="mean",
         )
 
         if not return_dict:
