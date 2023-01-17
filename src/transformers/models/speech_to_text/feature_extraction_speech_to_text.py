@@ -169,7 +169,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For Speech2TextTransoformer models, `attention_mask` should alwys be passed for batched inference, to
+                For Speech2TextTransformer models, `attention_mask` should always be passed for batched inference, to
                 avoid subtle bugs.
 
                 </Tip>

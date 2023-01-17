@@ -249,7 +249,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For WhisperTransoformer models, `attention_mask` should alwys be passed for batched inference, to avoid
+                For Whisper transformers models, `attention_mask` should always be passed for batched inference, to avoid
                 subtle bugs.
 
                 </Tip>
