@@ -132,28 +132,23 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     return loss
 
 
-# refactored from original implementation
-def sigmoid_ce_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
-    """
-    Compute the sigmoid CE Loss, same as Binary Cross Entropy with Logits loss:
-
-    $$ \mathcal{L}_{\text{ce}(x, y) = - \left[ y \cdot \log \sigma(x) + (1 - y) \cdot \log (1 - \sigma(x)) \right] $$
-
+# Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
+def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
+    r"""
     Args:
         inputs (`torch.Tensor`):
-            A tensor representing a mask.
+            A float tensor of arbitrary shape.
         labels (`torch.Tensor`):
             A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
             (0 for the negative class and 1 for the positive class).
-        num_masks (`int`):
-            The number of masks present in the current batch, used for normalization.
 
     Returns:
-        `torch.Tensor`: The computed loss.
+        loss (`torch.Tensor`): The computed loss.
     """
-    loss = nn.functional.binary_cross_entropy_with_logits(inputs, labels, reduction="none")
-    loss = loss.mean(1)
-    loss = loss.sum() / num_masks
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
+    cross_entropy_loss = criterion(inputs, labels)
+
+    loss = cross_entropy_loss.mean(1).sum() / num_masks
     return loss
 
 
@@ -180,124 +175,66 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     return loss
 
 
-# refactored from original implementation
-def pair_wise_sigmoid_ce_loss(inputs: Tensor, labels: Tensor) -> Tensor:
+# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_sigmoid_cross_entropy_loss
+def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     r"""
-    A pair wise version of the ce loss, see `sigmoid_ce_loss` for usage.
+    A pair wise version of the cross entropy loss, see `sigmoid_cross_entropy_loss` for usage.
 
     Args:
         inputs (`torch.Tensor`):
-            A tensor representing a mask
+            A tensor representing a mask.
         labels (`torch.Tensor`):
             A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
             (0 for the negative class and 1 for the positive class).
 
     Returns:
-        `torch.Tensor`: The computed loss between each pairs.
+        loss (`torch.Tensor`): The computed loss between each pairs.
     """
-    hw = inputs.shape[1]
-    pos = nn.functional.binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
-    neg = nn.functional.binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
-    loss = torch.einsum("nc,mc->nm", pos, labels) + torch.einsum("nc,mc->nm", neg, (1 - labels))
-    return loss / hw
+
+    height_and_width = inputs.shape[1]
+
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
+    cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
+    cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
+
+    loss = torch.einsum("nc,mc->nm", cross_entropy_loss_pos, labels) + torch.einsum(
+        "nc,mc->nm", cross_entropy_loss_neg, (1 - labels)
+    )
+    loss = loss / height_and_width
+    return loss
 
 
-def calculate_uncertainty(logits: Tensor) -> Tensor:
+# Copied from transformers.models.mask2former.modeling_mask2former.sample_point
+def sample_point(
+    input_features: torch.Tensor, point_coordinates: torch.Tensor, add_dim=False, **kwargs
+) -> torch.Tensor:
     """
-    We estimate uncerainty as L1 distance between 0.0 and the logit prediction in 'logits' for the
-        foreground class in `classes`.
+    A wrapper around `torch.nn.functional.grid_sample` to support 3D point_coordinates tensors.
 
     Args:
-        logits (`torch.Tensor` of shape `(R, 1, ...)`):
-            Class-specific or class-agnostic, where R is the total number of\ predicted masks in all images and C is
-            the number of foreground classes. The values are logits.
+        input_features (`torch.Tensor` of shape (batch_size, channels, height, width)):
+            A tensor that contains features map on a height * width grid
+        point_coordinates (`torch.Tensor` of shape (batch_size, num_points, 2) or (batch_size, grid_height, grid_width,:
+        2)):
+            A tensor that contains [0, 1] * [0, 1] normalized point coordinates
+        add_dim (`bool`):
+            boolean value to keep track of added dimension
+
     Returns:
-        scores (`torch.Tensor` of shape `(R, 1, ...)`):
-            Contains uncertainty scores with the most uncertain locations having the highest uncertainty score.
+        point_features (`torch.Tensor` of shape (batch_size, channels, num_points) or (batch_size, channels,
+        height_grid, width_grid):
+            A tensor that contains features for points in `point_coordinates`.
     """
-    if not logits.shape[1] == 1:
-        raise ValueError(f"logits shape at dimension 1 must be 1, found {logits.shape[1]}")
-    gt_class_logits = logits.clone()
-    return -(torch.abs(gt_class_logits))
-
-
-def point_sample(input: Tensor, point_coords: Tensor, **kwargs) -> Tensor:
-    """
-    A wrapper around `nn.functional.grid_sample` to support 3D point_coords tensors. Unlike `nn.functional.grid_sample`
-    it assumes `point_coords` to lie inside [0, 1] x [0, 1] square.
-
-    Args:
-        input (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Contains features map on a height x width grid.
-        point_coords (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
-            Contains [0, 1] x [0, 1] normalized point coordinates.
-    Returns:
-        output (`torch.Tensor` of shape `(batch_size, num_channels, points)` or `(batch_size, num_channels,height,
-        width`):
-            Contains features for points in `point_coords`. The features are obtained via bilinear interplation from
-            `input` the same way as `nn.functional.grid_sample`.
-    """
-    add_dim = False
-    if point_coords.dim() == 3:
+    if point_coordinates.dim() == 3:
         add_dim = True
-        point_coords = point_coords.unsqueeze(2)
-    output = nn.functional.grid_sample(input, 2.0 * point_coords - 1.0, **kwargs)
+        point_coordinates = point_coordinates.unsqueeze(2)
 
+    # use nn.function.grid_sample to get features for points in `point_coordinates` via bilinear interpolation
+    point_features = torch.nn.functional.grid_sample(input_features, 2.0 * point_coordinates - 1.0, **kwargs)
     if add_dim:
-        output = output.squeeze(3)
-    return output
+        point_features = point_features.squeeze(3)
 
-
-# Refactored from https://github.com/facebookresearch/detectron2/blob/9f8d35e653674932fbe7a579feee36ed9dc8e8c5/projects/PointRend/point_rend/point_features.py#L63
-def get_uncertain_point_coords_with_randomness(
-    coarse_logits: Tensor,
-    uncertainty_func: Tensor,
-    num_points: int,
-    oversample_ratio: float,
-    importance_sample_ratio: float,
-) -> Tensor:
-    """
-    Sample points in [0, 1] x [0, 1] coordinate space based on their uncertainty. The unceratinties
-        are calculated for each point using 'uncertainty_func' function that takes point's logit prediction as input.
-        See PointRend paper for details.
-
-    Args:
-        coarse_logits (`torch.Tensor` of shape `(batch_size, num_channels, height, width)` or `(batch_size, 1, height, width)`):
-            Class-specific or class-agnostic prediction. uncertainty_func(function that takes a `torch.Tensor` of shape
-            `(batch_size, num_channels, num_points)` or `(batch_size, 1, num_points)` that contains logit predictions
-            for `num_points` points and returns their uncertainties as a `torch.Tensor` of shape `(batch_size, 1,
-            num_points)`.
-        num_points (`int`):
-            The number of points `num_points` to sample.
-        oversample_ratio (`int`):
-            Oversampling parameter.
-        importance_sample_ratio (`float`):
-            Ratio of points that are sampled via importnace sampling.
-    Returns:
-        point_coords (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
-            Contains the coordinates of `num_points` sampled points.
-    """
-    if not oversample_ratio >= 1:
-        raise ValueError(f"oversample ratio must be greater than 1, found value: {oversample_ratio}")
-    if not (importance_sample_ratio <= 1 and importance_sample_ratio >= 0):
-        raise ValueError(f"importance sample ratio must be between 0 and 1, found value: {importance_sample_ratio}")
-    num_boxes = coarse_logits.shape[0]
-    num_sampled = int(num_points * oversample_ratio)
-    point_coords = torch.rand(num_boxes, num_sampled, 2, device=coarse_logits.device)
-    point_logits = point_sample(coarse_logits, point_coords, align_corners=False)
-    point_uncertainties = uncertainty_func(point_logits)
-    num_uncertain_points = int(importance_sample_ratio * num_points)
-    num_random_points = num_points - num_uncertain_points
-
-    # Sample points
-    idx = torch.topk(point_uncertainties[:, 0, :], k=num_uncertain_points, dim=1)[1]
-    shift = num_sampled * torch.arange(num_boxes, dtype=torch.long, device=coarse_logits.device)
-    idx += shift[:, None]
-    point_coords = point_coords.view(-1, 2)[idx.view(-1), :].view(num_boxes, num_uncertain_points, 2)
-    if num_random_points > 0:
-        random_coords = torch.rand(num_boxes, num_random_points, 2, device=coarse_logits.device)
-        point_coords = torch.cat([point_coords, random_coords], dim=1)
-    return point_coords
+    return point_features
 
 
 # Refactored from https://github.com/SHI-Labs/OneFormer/blob/33ebb56ed34f970a30ae103e786c0cb64c653d9a/oneformer/modeling/matcher.py#L93
@@ -376,13 +313,13 @@ class OneFormerHungarianMatcher(nn.Module):
             point_coords = torch.rand(1, self.num_points, 2, device=pred_mask.device)
 
             # get ground truth labels
-            target_mask = point_sample(
+            target_mask = sample_point(
                 target_mask,
                 point_coords.repeat(target_mask.shape[0], 1, 1),
                 align_corners=False,
             ).squeeze(1)
 
-            pred_mask = point_sample(
+            pred_mask = sample_point(
                 pred_mask,
                 point_coords.repeat(pred_mask.shape[0], 1, 1),
                 align_corners=False,
@@ -393,7 +330,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 target_mask = target_mask.float()
 
                 # compute the sigmoid ce loss
-                cost_mask = pair_wise_sigmoid_ce_loss(pred_mask, target_mask)
+                cost_mask = pair_wise_sigmoid_cross_entropy_loss(pred_mask, target_mask)
                 # Compute the dice loss
                 cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
                 # final cost matrix
@@ -599,26 +536,100 @@ class OneFormerLoss(nn.Module):
 
         with torch.no_grad():
             # sample point_coords
-            point_coords = get_uncertain_point_coords_with_randomness(
+            point_coords = self.sample_points_using_uncertainty(
                 pred_masks,
-                calculate_uncertainty,
+                self.calculate_uncertainty,
                 self.num_points,
                 self.oversample_ratio,
                 self.importance_sample_ratio,
             )
             # get ground-truth labels
-            point_labels = point_sample(target_masks, point_coords, align_corners=False).squeeze(1)
+            point_labels = sample_point(target_masks, point_coords, align_corners=False).squeeze(1)
 
-        point_logits = point_sample(pred_masks, point_coords, align_corners=False).squeeze(1)
+        point_logits = sample_point(pred_masks, point_coords, align_corners=False).squeeze(1)
 
         losses = {
-            "loss_mask": sigmoid_ce_loss(point_logits, point_labels, num_masks),
+            "loss_mask": sigmoid_cross_entropy_loss(point_logits, point_labels, num_masks),
             "loss_dice": dice_loss(point_logits, point_labels, num_masks),
         }
 
         del pred_masks
         del target_masks
         return losses
+
+    # Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss.calculate_uncertainty
+    def calculate_uncertainty(self, logits: torch.Tensor) -> torch.Tensor:
+        """
+        In Mask2Former paper, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
+        for the foreground class in `classes`.
+
+        Args:
+            logits (`torch.Tensor`):
+            A tensor of shape (R, 1, ...) for class-specific or class-agnostic, where R is the total number of predicted masks in all images and C is:
+            the number of foreground classes. The values are logits.
+
+        Returns:
+            scores (`torch.Tensor`): A tensor of shape (R, 1, ...) that contains uncertainty scores with the most
+            uncertain locations having the highest uncertainty score.
+        """
+        uncertainty_scores = -(torch.abs(logits))
+        return uncertainty_scores
+
+    # Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss.sample_points_using_uncertainty
+    def sample_points_using_uncertainty(
+        self,
+        logits: torch.Tensor,
+        uncertainty_function,
+        num_points: int,
+        oversample_ratio: int,
+        importance_sample_ratio: float,
+    ) -> torch.Tensor:
+        """
+        This function is meant for sampling points in [0, 1] * [0, 1] coordinate space based on their uncertainty. The
+        uncertainty is calculated for each point using the passed `uncertainty function` that takes points logit
+        prediction as input.
+
+        Args:
+            logits (`float`):
+                Logit predictions for P points.
+            uncertainty_function:
+                A function that takes logit predictions for P points and returns their uncertainties.
+            num_points (`int`):
+                The number of points P to sample.
+            oversample_ratio (`int`):
+                Oversampling parameter.
+            importance_sample_ratio (`float`):
+                Ratio of points that are sampled via importance sampling.
+
+        Returns:
+            point_coordinates (`torch.Tensor`):
+                Coordinates for P sampled points.
+        """
+
+        num_boxes = logits.shape[0]
+        num_points_sampled = int(num_points * oversample_ratio)
+
+        # Get random point coordinates
+        point_coordinates = torch.rand(num_boxes, num_points_sampled, 2, device=logits.device)
+        # Get sampled prediction value for the point coordinates
+        point_logits = sample_point(logits, point_coordinates, align_corners=False)
+        # Calculate the uncertainties based on the sampled prediction values of the points
+        point_uncertainties = uncertainty_function(point_logits)
+
+        num_uncertain_points = int(importance_sample_ratio * num_points)
+        num_random_points = num_points - num_uncertain_points
+
+        idx = torch.topk(point_uncertainties[:, 0, :], k=num_uncertain_points, dim=1)[1]
+        shift = num_points_sampled * torch.arange(num_boxes, dtype=torch.long, device=logits.device)
+        idx += shift[:, None]
+        point_coordinates = point_coordinates.view(-1, 2)[idx.view(-1), :].view(num_boxes, num_uncertain_points, 2)
+
+        if num_random_points > 0:
+            point_coordinates = torch.cat(
+                [point_coordinates, torch.rand(num_boxes, num_random_points, 2, device=logits.device)],
+                dim=1,
+            )
+        return point_coordinates
 
     def _get_predictions_permutation_indices(self, indices):
         # permute predictions following indices
@@ -743,22 +754,26 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
 
 
 @dataclass
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoderOutput with Mask2->One
 class OneFormerPixelDecoderOutput(ModelOutput):
     """
     OneFormer's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
     the mask features and the multiscale features.
 
     Args:
-        multi_scale_features (List of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Multiscale features of scales [1/8, 1/16, 1/32] from the MSDeformAttn based Pixel Decoder.
-        mask_features (`torch.FloatTensor`, of shape `(batch_size, num_channels, height, width)`):
-            1/4 scale features from the last Pixel Decoder Layer.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        multi_scale_features (`tuple(torch.FloatTensor)`):
+            Tuple of multi-scale features of scales [1/8, 1/16, 1/32] and shape `(batch_size, num_channels, height,
+            width)`from the Multi-Scale Deformable Attenntion based Pixel Decoder.
+        mask_features (`torch.FloatTensor`):
+            Tensor of shape `(batch_size, num_channels, height, width)`, 1/4 scale features from the last Pixel Decoder
+            Layer.
+        attentions (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights from pixel decoder.
+            sequence_length)`. Attentions weights from pixel decoder. Returned when `output_attentions=True` is passed
+            or when `config.output_attentions=True`
     """
 
-    multi_scale_features: List[torch.FloatTensor] = None
+    multi_scale_features: Tuple[torch.FloatTensor] = None
     mask_features: torch.FloatTensor = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1477,9 +1492,6 @@ class OneFormerPixelLevelModule(nn.Module):
             decoder_features=decoder_output.multi_scale_features,
             decoder_last_feature=decoder_output.mask_features,
         )
-
-
-# Transformer Decoder Classes #
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrAttention with Detr->OneFormer
@@ -2398,9 +2410,6 @@ class PredictionBlock(nn.Module):
         for layer in self.layers:
             hidden_state = layer(hidden_state)
         return hidden_state
-
-
-# Text Mapper Classes #
 
 
 class OneFormerTextMapperAttention(nn.Module):
