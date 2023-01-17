@@ -40,6 +40,7 @@ from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     is_kenlm_available,
+    is_offline_mode,
     is_pyctcdecode_available,
     is_tf_available,
     is_torch_available,
@@ -398,6 +399,8 @@ def get_supported_tasks() -> List[str]:
 
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
+    if is_offline_mode():
+        raise RuntimeError(f"You cannot infer task automatically within `pipeline` when using offline mode")
     try:
         info = model_info(model, token=use_auth_token)
     except Exception as e:
