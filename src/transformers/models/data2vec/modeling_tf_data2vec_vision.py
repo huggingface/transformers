@@ -75,7 +75,7 @@ TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitModelOutputWithPooling with Beit->Data2VecVision
 class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     """
-    Class for outputs of [`TFData2VecVisionModel`].
+    Class for outputs of [`Data2VecVisionModel`].
 
     Args:
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -88,8 +88,12 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
             `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
             the initial embedding outputs.
+            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
+            the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
@@ -941,7 +945,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         return self.beit.get_input_embeddings()
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1009,7 +1013,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -1087,7 +1091,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
             dilation_rate=dilation,
             name="conv",
         )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
+        self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self.activation = tf.nn.relu
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -1525,7 +1529,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         return loss
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -1543,7 +1547,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         Returns:
         Examples:
         ```python
-        >>> from transformers import AutoImageProcessor, TFData2VecVisionForSemanticSegmentation
+        >>> from transformers import AutoFeatureExtractor, TFData2VecVisionForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 

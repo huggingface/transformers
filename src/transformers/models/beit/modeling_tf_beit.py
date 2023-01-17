@@ -86,8 +86,12 @@ class TFBeitModelOutputWithPooling(TFBaseModelOutputWithPooling):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
             `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
             the initial embedding outputs.
+            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
+            the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
@@ -948,7 +952,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
+        bool_masked_pos: Optional[tf.bool] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1308,9 +1312,11 @@ class TFBeitUperHead(tf.keras.layers.Layer):
 class TFBeitFCNHead(tf.keras.layers.Layer):
     """
     Args:
+    Args:
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
     [FCNNet](https://arxiv.org/abs/1411.4038).
-        config (BeitConfig): Configuration. kernel_size (int): The kernel size for convs in the head. Default: 3.
+        config (BeitConfig): Configuration.
+        kernel_size (int): The kernel size for convs in the head. Default: 3.
         dilation (int): The dilation rate for convs in the head. Default: 1.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """

@@ -44,6 +44,7 @@ if is_tf_available():
 
 if is_vision_available():
     import PIL
+    import PIL
     from PIL import Image
 
     from transformers import BeitImageProcessor
@@ -578,7 +579,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
             "microsoft/beit-base-finetuned-ade-640-640", from_pt=True
         )
 
-        image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
+        feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
@@ -619,7 +620,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
             "microsoft/beit-base-finetuned-ade-640-640", from_pt=True
         )
 
-        image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
+        feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
