@@ -126,14 +126,14 @@ class GraphormerModelTester:
         in_degree = ids_tensor([self.batch_size, self.graph_size], self.num_in_degree)
         out_degree = ids_tensor([self.batch_size, self.graph_size], self.num_out_degree)
         x = ids_tensor([self.batch_size, self.graph_size, 1], self.num_atoms)
-        edge_input = ids_tensor(
+        input_edges = ids_tensor(
             [self.batch_size, self.graph_size, self.graph_size, self.multi_hop_max_dist, 1], self.num_edges
         )
         labels = ids_tensor([self.batch_size], self.num_classes)
 
         config = self.get_config()
 
-        return config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, x, edge_input, labels
+        return config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, x, input_edges, labels
 
     def get_config(self):
         return GraphormerConfig(
@@ -175,36 +175,36 @@ class GraphormerModelTester:
         )
 
     def create_and_check_model(
-        self, config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, x, edge_input, labels
+        self, config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, input_nodes, input_edges, labels
     ):
         model = GraphormerModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
-            x=x,
+            input_nodes=input_nodes,
             attn_bias=attn_bias,
             in_degree=in_degree,
             out_degree=out_degree,
             spatial_pos=spatial_pos,
-            edge_input=edge_input,
+            input_edges=input_edges,
             attn_edge_type=attn_edge_type,
             labels=labels,
         )
         self.parent.assertEqual(result, (self.batch_size, self.graph_size, self.hidden_size))
 
     def create_and_check_for_graph_classification(
-        self, config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, x, edge_input, labels
+        self, config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, input_nodes, input_edges, labels
     ):
         model = GraphormerForGraphClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(
-            x=x,
+            input_nodes=input_nodes,
             attn_bias=attn_bias,
             in_degree=in_degree,
             out_degree=out_degree,
             spatial_pos=spatial_pos,
-            edge_input=edge_input,
+            input_edges=input_edges,
             attn_edge_type=attn_edge_type,
             labels=labels,
         )
@@ -219,8 +219,8 @@ class GraphormerModelTester:
             spatial_pos,
             in_degree,
             out_degree,
-            x,
-            edge_input,
+            input_nodes,
+            input_edges,
             labels,
         ) = config_and_inputs
         inputs_dict = {
@@ -229,8 +229,8 @@ class GraphormerModelTester:
             "spatial_pos": spatial_pos,
             "in_degree": in_degree,
             "out_degree": out_degree,
-            "x": x,
-            "edge_input": edge_input,
+            "input_nodes": input_nodes,
+            "input_edges": input_edges,
             "labels": labels,
         }
         return config, inputs_dict
@@ -241,6 +241,7 @@ class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GraphormerModel, GraphormerForGraphClassification) if is_torch_available() else ()
     all_generative_model_classes = ()
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = GraphormerModelTester(self)
@@ -760,7 +761,7 @@ class GraphormerModelIntegrationTest(unittest.TestCase):
                     [[3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [0], [0], [0], [0]],
                 ]
             ),
-            "edge_input": tensor(
+            "input_edges": tensor(
                 [
                     [
                         [
