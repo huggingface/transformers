@@ -1765,7 +1765,7 @@ class DetaModel(DetaPreTrainedModel):
                     is_level_ordered = (
                         level_ids[keep_inds][None]
                         == torch.arange(len(spatial_shapes), device=level_ids.device)[:, None]
-                    )  # LS
+                    )
                     keep_inds_mask = is_level_ordered & (is_level_ordered.cumsum(1) <= q_per_l)  # LS
                     keep_inds_mask = keep_inds_mask.any(0)  # S
 
@@ -2125,7 +2125,7 @@ class DetaLoss(nn.Module):
     """
     This class computes the losses for `DetaForObjectDetection`. The process happens in two steps: 1) we compute
     hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched
-    ground-truth / prediction (supervise class and box).
+    ground-truth / prediction (supervised class and box).
 
     Args:
         matcher (`DetaHungarianMatcher`):
