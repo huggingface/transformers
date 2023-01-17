@@ -15,6 +15,8 @@
 """ Testing suite for the PyTorch Graphormer model. """
 
 
+import copy
+import inspect
 import unittest
 
 from transformers import GraphormerConfig, is_torch_available
@@ -49,7 +51,7 @@ class GraphormerModelTester:
         init_fn=None,
         max_nodes=512,
         share_input_output_embed=False,
-        num_layers=12,
+        num_hidden_layers=12,
         embedding_dim=768,
         ffn_embedding_dim=768,
         num_attention_heads=32,
@@ -75,6 +77,7 @@ class GraphormerModelTester:
         graph_size=20,
         is_training=True,
     ):
+        self.parent = parent
         self.num_classes = num_classes
         self.num_labels = num_classes
         self.num_atoms = num_atoms
@@ -87,8 +90,7 @@ class GraphormerModelTester:
         self.multi_hop_max_dist = multi_hop_max_dist
         self.spatial_pos_max = spatial_pos_max
         self.max_nodes = max_nodes
-        self.num_layers = num_layers
-        self.num_hidden_layers = num_layers
+        self.num_hidden_layers = num_hidden_layers
         self.embedding_dim = embedding_dim
         self.hidden_size = embedding_dim
         self.ffn_embedding_dim = ffn_embedding_dim
@@ -122,10 +124,10 @@ class GraphormerModelTester:
             [self.batch_size, self.graph_size + 1, self.graph_size + 1], self.num_atoms
         )  # Def not sure here
         attn_edge_type = ids_tensor([self.batch_size, self.graph_size, self.graph_size, 1], self.num_edges)
-        spatial_pos = ids_tensor([self.batch_size, self.graph_size, self.graph_size], self.spatial_pos_max)
+        spatial_pos = ids_tensor([self.batch_size, self.graph_size, self.graph_size], self.num_spatial)
         in_degree = ids_tensor([self.batch_size, self.graph_size], self.num_in_degree)
         out_degree = ids_tensor([self.batch_size, self.graph_size], self.num_out_degree)
-        x = ids_tensor([self.batch_size, self.graph_size, 1], self.num_atoms)
+        input_nodes = ids_tensor([self.batch_size, self.graph_size, 1], self.num_atoms)
         input_edges = ids_tensor(
             [self.batch_size, self.graph_size, self.graph_size, self.multi_hop_max_dist, 1], self.num_edges
         )
@@ -133,7 +135,7 @@ class GraphormerModelTester:
 
         config = self.get_config()
 
-        return config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, x, input_edges, labels
+        return config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, input_nodes, input_edges, labels
 
     def get_config(self):
         return GraphormerConfig(
@@ -147,7 +149,7 @@ class GraphormerModelTester:
             multi_hop_max_dist=self.multi_hop_max_dist,
             spatial_pos_max=self.spatial_pos_max,
             max_nodes=self.max_nodes,
-            num_layers=self.num_layers,
+            num_hidden_layers=self.num_hidden_layers,
             embedding_dim=self.embedding_dim,
             hidden_size=self.embedding_dim,
             ffn_embedding_dim=self.ffn_embedding_dim,
@@ -190,7 +192,9 @@ class GraphormerModelTester:
             attn_edge_type=attn_edge_type,
             labels=labels,
         )
-        self.parent.assertEqual(result, (self.batch_size, self.graph_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.graph_size + 1, self.hidden_size)
+        )
 
     def create_and_check_for_graph_classification(
         self, config, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, input_nodes, input_edges, labels
@@ -208,7 +212,7 @@ class GraphormerModelTester:
             attn_edge_type=attn_edge_type,
             labels=labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -238,17 +242,124 @@ class GraphormerModelTester:
 
 @require_torch
 class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
-
-    all_model_classes = (GraphormerModel, GraphormerForGraphClassification) if is_torch_available() else ()
+    all_model_classes = (GraphormerForGraphClassification, GraphormerModel) if is_torch_available() else ()
     all_generative_model_classes = ()
     test_pruning = False
+    test_head_masking = False
+    test_resize_embeddings = False
+    main_input_name_nodes = "input_nodes"
+    main_input_name_edges = "input_edges"
+    has_attentions = False  # does not output attention
 
     def setUp(self):
         self.model_tester = GraphormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraphormerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GraphormerConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="Graphormer does not use one single inputs_embedding but three")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Graphormer does not implement feed forward chunking")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="Graphormer does not share input and output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    def test_initialization(self):
+        def _config_zero_init(config):
+            configs_no_init = copy.deepcopy(config)
+            for key in configs_no_init.__dict__.keys():
+                if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+                    setattr(configs_no_init, key, 1e-10)
+            return configs_no_init
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    self.assertTrue(
+                        -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            batch_size = self.model_tester.batch_size
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [batch_size, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Always returns hidden_states
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = False
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        outputs = model(**inputs_dict)
+        output = outputs[0]
+
+        hidden_states = outputs.hidden_states[0]
+        hidden_states.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+
+    # Inputs are 'input_nodes' and 'input_edges' not 'input_ids'
+    def test_model_main_input_name(self):
+        for model_class in self.all_model_classes:
+            model_signature = inspect.signature(getattr(model_class, "forward"))
+            # The main input is the name of the argument after `self`
+            observed_main_input_name_nodes = list(model_signature.parameters.keys())[1]
+            observed_main_input_name_edges = list(model_signature.parameters.keys())[2]
+            self.assertEqual(model_class.main_input_name_nodes, observed_main_input_name_nodes)
+            self.assertEqual(model_class.main_input_name_edges, observed_main_input_name_edges)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["input_nodes", "input_edges"]
+            self.assertListEqual(arg_names[:2], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

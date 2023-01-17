@@ -151,7 +151,7 @@ class GraphormerConfig(PretrainedConfig):
         init_fn: Callable = None,
         max_nodes: int = 512,
         share_input_output_embed: bool = False,
-        num_layers: int = 12,
+        num_hidden_layers: int = 12,
         embedding_dim: int = 768,
         ffn_embedding_dim: int = 768,
         num_attention_heads: int = 32,
@@ -189,7 +189,7 @@ class GraphormerConfig(PretrainedConfig):
         self.multi_hop_max_dist = multi_hop_max_dist
         self.spatial_pos_max = spatial_pos_max
         self.max_nodes = max_nodes
-        self.num_layers = num_layers
+        self.num_hidden_layers = num_hidden_layers
         self.embedding_dim = embedding_dim
         self.hidden_size = embedding_dim
         self.ffn_embedding_dim = ffn_embedding_dim

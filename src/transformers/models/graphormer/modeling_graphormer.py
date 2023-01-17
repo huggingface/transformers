@@ -73,7 +73,7 @@ class GraphNodeFeature(nn.Module):
         self.graph_token = nn.Embedding(1, config.hidden_size)
 
         # initializes all embedding parameters
-        self.apply(lambda module: init_params(module, num_layers=config.num_layers))
+        self.apply(lambda module: init_params(module, num_layers=config.num_hidden_layers))
 
     def forward(self, input_nodes, in_degree, out_degree):
         n_graph, n_node = input_nodes.size()[:2]
@@ -116,7 +116,7 @@ class GraphAttnBias(nn.Module):
 
         self.graph_token_virtual_distance = nn.Embedding(1, config.num_attention_heads)
 
-        self.apply(lambda module: init_params(module, num_layers=config.num_layers))
+        self.apply(lambda module: init_params(module, num_layers=config.num_hidden_layers))
 
     def forward(self, input_nodes, attn_bias, spatial_pos, input_edges, attn_edge_type):
         n_graph, n_node = input_nodes.size()[:2]
@@ -482,7 +482,7 @@ class GraphormerGraphEncoder(nn.Module):
             self.layers = LayerDropModuleList(p=self.layerdrop)
         else:
             self.layers = nn.ModuleList([])
-        self.layers.extend([GraphormerGraphEncoderLayer(config) for _ in range(config.num_layers)])
+        self.layers.extend([GraphormerGraphEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         # Apply initialization of model params after building the model
         if config.freeze_embeddings:
@@ -497,11 +497,11 @@ class GraphormerGraphEncoder(nn.Module):
     def forward(
         self,
         input_nodes,
+        input_edges,
         attn_bias,
         in_degree,
         out_degree,
         spatial_pos,
-        input_edges,
         attn_edge_type,
         perturb=None,
         last_state_only: bool = False,
@@ -587,6 +587,8 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "graphormer"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    main_input_name_nodes = "input_nodes"
+    main_input_name_edges = "input_edges"
 
     def normal_(self, data):
         # with FSDP, module params will be on CUDA, so we cast them back to CPU
@@ -673,18 +675,19 @@ class GraphormerModel(GraphormerPreTrainedModel):
     def forward(
         self,
         input_nodes,
+        input_edges,
         attn_bias,
         in_degree,
         out_degree,
         spatial_pos,
-        input_edges,
         attn_edge_type,
         perturb=None,
         masked_tokens=None,
+        return_dict: Optional[bool] = True,
         **unused
     ):
         inner_states, graph_rep = self.graph_encoder(
-            input_nodes, attn_bias, in_degree, out_degree, spatial_pos, input_edges, attn_edge_type, perturb=perturb
+            input_nodes, input_edges, attn_bias, in_degree, out_degree, spatial_pos, attn_edge_type, perturb=perturb
         )
 
         # last inner state, then revert Batch and Graph len
@@ -700,6 +703,8 @@ class GraphormerModel(GraphormerPreTrainedModel):
         if self.share_input_output_embed and hasattr(self.graph_encoder.embed_tokens, "weight"):
             input_nodes = torch.nn.functional.linear(input_nodes, self.graph_encoder.embed_tokens.weight)
 
+        if not return_dict:
+            return (input_nodes, inner_states)
         return BaseModelOutputWithNoAttention(last_hidden_state=input_nodes, hidden_states=inner_states)
 
     def max_nodes(self):
@@ -725,6 +730,7 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         self.embedding_dim = config.embedding_dim
         self.num_classes = config.num_classes
         self.classifier = GraphormerDecoderHead(self.embedding_dim, self.num_classes)
+        self.is_encoder_decoder = True
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -732,17 +738,26 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
     def forward(
         self,
         input_nodes,
+        input_edges,
         attn_bias,
         in_degree,
         out_degree,
         spatial_pos,
-        input_edges,
         attn_edge_type,
         labels: Optional[torch.LongTensor] = None,
+        return_dict: Optional[bool] = True,
+        **unused,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        outputs = self.encoder(
-            input_nodes, attn_bias, in_degree, out_degree, spatial_pos, input_edges, attn_edge_type
-        )[0]
+        encoder_outputs = self.encoder(
+            input_nodes,
+            input_edges,
+            attn_bias,
+            in_degree,
+            out_degree,
+            spatial_pos,
+            attn_edge_type,
+        )
+        outputs, hidden_states = encoder_outputs["last_hidden_state"], encoder_outputs["hidden_states"]
 
         head_outputs = self.classifier(outputs)
         logits = head_outputs[:, 0, :].contiguous()
@@ -760,4 +775,6 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss(reduction="sum")
                 loss = loss_fct(logits[mask], labels[mask])
 
-        return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=None, attentions=None)
+        if not return_dict:
+            return (loss, logits, hidden_states)
+        return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=hidden_states, attentions=None)
