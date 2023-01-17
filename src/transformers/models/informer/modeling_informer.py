@@ -471,7 +471,7 @@ class DecoderLayer(nn.Module):
 
 class InformerDecoder(nn.Module):
     def __init__(self, layers, norm_layer=None):
-        super(Decoder, self).__init__()
+        super(InformerDecoder, self).__init__()
         self.layers = nn.ModuleList(layers)
         self.norm = norm_layer
 
@@ -530,71 +530,70 @@ class InformerModel(InformerPreTrainedModel):
         self.post_init()
 
         # Informer enc-decoder
-        # Attn = ProbAttention if config.attn == "prob" else FullAttention
+        Attn = ProbAttention if config.attn == "prob" else FullAttention
 
         # Encoder
-        # self.encoder = Encoder(
-        #     [
-        #         EncoderLayer( # Eli question: why I need EncoderLayers here?
-        #             AttentionLayer(
-        #                 Attn(
-        #                     mask_flag=False,
-        #                     factor=factor,
-        #                     attention_dropout=dropout,
-        #                     output_attention=False,
-        #                 ),
-        #                 d_model,
-        #                 nhead,
-        #                 mix=False,
-        #             ),
-        #             d_model,
-        #             d_ff=dim_feedforward,
-        #             dropout=dropout,
-        #             activation=activation,
-        #         )
-        #         for l in range(num_encoder_layers)
-        #     ],
-        #     [ConvLayer(d_model) for l in range(num_encoder_layers - 1)]
-        #     if distil
-        #     else None,
-        #     norm_layer=torch.nn.LayerNorm(d_model),
-        # )
-        #
-        # # Masked Decoder
-        # self.decoder = Decoder(
-        #     [
-        #         DecoderLayer(
-        #             AttentionLayer(
-        #                 Attn(
-        #                     mask_flag=True,
-        #                     factor=factor,
-        #                     attention_dropout=dropout,
-        #                     output_attention=False,
-        #                 ),
-        #                 d_model,
-        #                 nhead,
-        #                 mix=True,
-        #             ),
-        #             AttentionLayer(
-        #                 FullAttention(
-        #                     mask_flag=False,
-        #                     factor=factor,
-        #                     attention_dropout=dropout,
-        #                     output_attention=False,
-        #                 ),
-        #                 d_model,
-        #                 nhead,
-        #                 mix=False,
-        #             ),
-        #             d_model,
-        #             d_ff=dim_feedforward,
-        #             dropout=dropout,
-        #             activation=activation,
-        #         )
-        #         for l in range(num_decoder_layers)
-        #     ],
-        #     norm_layer=torch.nn.LayerNorm(d_model),
-        # )
+        self.encoder = InformerEncoder(
+            [
+                EncoderLayer( # Eli question: why I need EncoderLayers here?
+                    AttentionLayer(
+                        Attn(
+                            mask_flag=False,
+                            factor=config.factor,
+                            attention_dropout=config.dropout,
+                            output_attention=False,
+                        ),
+                        config.d_model,
+                        config.nhead,
+                        mix=False,
+                    ),
+                    config.d_model,
+                    d_ff=config.dim_feedforward,
+                    dropout=config.dropout,
+                    activation=config.activation,
+                )
+                for l in range(config.num_encoder_layers)
+            ],
+            [ConvLayer(config.d_model) for l in range(config.num_encoder_layers - 1)]
+            if config.distil else None,
+            norm_layer=torch.nn.LayerNorm(config.d_model),
+        )
+
+        # Masked Decoder
+        self.decoder = InformerDecoder(
+            [
+                DecoderLayer(
+                    AttentionLayer(
+                        Attn(
+                            mask_flag=True,
+                            factor=config.factor,
+                            attention_dropout=config.dropout,
+                            output_attention=False,
+                        ),
+                        config.d_model,
+                        config.nhead,
+                        mix=True,
+                    ),
+                    AttentionLayer(
+                        FullAttention(
+                            mask_flag=False,
+                            factor=config.factor,
+                            attention_dropout=config.dropout,
+                            output_attention=False,
+                        ),
+                        config.d_model,
+                        config.nhead,
+                        mix=False,
+                    ),
+                    config.d_model,
+                    d_ff=config.dim_feedforward,
+                    dropout=config.dropout,
+                    activation=config.activation,
+                )
+                for l in range(config.num_decoder_layers)
+            ],
+            norm_layer=torch.nn.LayerNorm(config.d_model),
+        )
 
     @property
     def _number_of_features(self) -> int:
