@@ -2062,7 +2062,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -2073,13 +2073,13 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     ):
         assert encoder_outputs is not None, "`encoder_outputs` have to be passed for generation."
 
-        if past:
+        if past_key_values:
             decoder_input_ids = decoder_input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -2316,7 +2316,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         use_cache=None,
@@ -2326,14 +2326,14 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
             "head_mask": head_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 

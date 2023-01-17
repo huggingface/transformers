@@ -29,6 +29,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("albert", "AlbertModel"),
+        ("altclip", "AltCLIPModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
@@ -40,6 +41,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bit", "BitModel"),
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
+        ("blip", "BlipModel"),
         ("bloom", "BloomModel"),
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
@@ -75,6 +77,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetModel"),
         ("fsmt", "FSMTModel"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
+        ("git", "GitModel"),
         ("glpn", "GLPNModel"),
         ("gpt-sw3", "GPT2Model"),
         ("gpt2", "GPT2Model"),
@@ -100,6 +103,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("m2m_100", "M2M100Model"),
         ("marian", "MarianModel"),
         ("markuplm", "MarkupLMModel"),
+        ("mask2former", "Mask2FormerModel"),
         ("maskformer", "MaskFormerModel"),
         ("maskformer-swin", "MaskFormerSwinModel"),
         ("mbart", "MBartModel"),
@@ -263,6 +267,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetForMaskedLM"),
         ("fsmt", "FSMTForConditionalGeneration"),
         ("funnel", "FunnelForMaskedLM"),
+        ("git", "GitForCausalLM"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
@@ -328,6 +333,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
+        ("git", "GitForCausalLM"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
@@ -433,6 +439,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2ForSemanticSegmentation"),
         ("mobilevit", "MobileViTForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
+        ("upernet", "UperNetForSemanticSegmentation"),
     ]
 )
 
@@ -448,6 +455,7 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Universal Segmentation mapping
         ("detr", "DetrForSegmentation"),
+        ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
     ]
 )
@@ -874,6 +882,8 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
 _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
+        ("altclip", "AltCLIPModel"),
+        ("blip", "BlipModel"),
         ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
@@ -884,6 +894,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
     [
         # Backbone mapping
         ("bit", "BitBackbone"),
+        ("convnext", "ConvNextBackbone"),
         ("dinat", "DinatBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),

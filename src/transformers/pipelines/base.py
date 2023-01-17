@@ -748,6 +748,7 @@ class Pipeline(_ScikitCompat):
         task: str = "",
         args_parser: ArgumentHandler = None,
         device: Union[int, str, "torch.device"] = -1,
+        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -771,6 +772,7 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device(f"cuda:{device}")
         else:
             self.device = device
+        self.torch_dtype = torch_dtype
         self.binary_output = binary_output
 
         # Special handling
@@ -943,7 +945,7 @@ class Pipeline(_ScikitCompat):
     @abstractmethod
     def preprocess(self, input_: Any, **preprocess_parameters: Dict) -> Dict[str, GenericTensor]:
         """
-        Preprocess will take the `input_` of a specific pipeline and return a dictionnary of everything necessary for
+        Preprocess will take the `input_` of a specific pipeline and return a dictionary of everything necessary for
         `_forward` to run properly. It should contain at least one tensor, but might have arbitrary other items.
         """
         raise NotImplementedError("preprocess not implemented")
@@ -951,7 +953,7 @@ class Pipeline(_ScikitCompat):
     @abstractmethod
     def _forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters: Dict) -> ModelOutput:
         """
-        _forward will receive the prepared dictionnary from `preprocess` and run it on the model. This method might
+        _forward will receive the prepared dictionary from `preprocess` and run it on the model. This method might
         involve the GPU or the CPU and should be agnostic to it. Isolating this function is the reason for `preprocess`
         and `postprocess` to exist, so that the hot path, this method generally can run as fast as possible.
 
@@ -1070,6 +1072,14 @@ class Pipeline(_ScikitCompat):
             )
         elif is_iterable:
             return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
+        elif self.framework == "pt" and isinstance(self, ChunkPipeline):
+            return next(
+                iter(
+                    self.get_iterator(
+                        [inputs], num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+                    )
+                )
+            )
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 

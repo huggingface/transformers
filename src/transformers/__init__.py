@@ -124,6 +124,13 @@ _import_structure = {
     "models": [],
     # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
+    "models.altclip": [
+        "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AltCLIPConfig",
+        "AltCLIPProcessor",
+        "AltCLIPTextConfig",
+        "AltCLIPVisionConfig",
+    ],
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ASTConfig",
@@ -168,6 +175,13 @@ _import_structure = {
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
+    ],
+    "models.blip": [
+        "BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BlipConfig",
+        "BlipProcessor",
+        "BlipTextConfig",
+        "BlipVisionConfig",
     ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
@@ -249,6 +263,7 @@ _import_structure = {
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
@@ -306,6 +321,10 @@ _import_structure = {
         "MarkupLMFeatureExtractor",
         "MarkupLMProcessor",
         "MarkupLMTokenizer",
+    ],
+    "models.mask2former": [
+        "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Mask2FormerConfig",
     ],
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mbart": ["MBartConfig"],
@@ -409,6 +428,7 @@ _import_structure = {
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
     ],
+    "models.upernet": ["UperNetConfig"],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
     "models.vilt": [
@@ -754,6 +774,7 @@ else:
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
+    _import_structure["models.blip"].extend(["BlipImageProcessor"])
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
@@ -878,6 +899,7 @@ else:
             "MaxLengthCriteria",
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
+            "MinNewTokensLengthLogitsProcessor",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PhrasalConstraint",
@@ -911,7 +933,15 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
-
+    _import_structure["models.altclip"].extend(
+        [
+            "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AltCLIPModel",
+            "AltCLIPPreTrainedModel",
+            "AltCLIPTextModel",
+            "AltCLIPVisionModel",
+        ]
+    )
     _import_structure["models.audio_spectrogram_transformer"].extend(
         [
             "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1095,6 +1125,18 @@ else:
             "BlenderbotSmallPreTrainedModel",
         ]
     )
+    _import_structure["models.blip"].extend(
+        [
+            "BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BlipForConditionalGeneration",
+            "BlipForImageTextRetrieval",
+            "BlipForQuestionAnswering",
+            "BlipModel",
+            "BlipPreTrainedModel",
+            "BlipTextModel",
+            "BlipVisionModel",
+        ]
+    )
     _import_structure["models.bloom"].extend(
         [
             "BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1187,6 +1229,7 @@ else:
     _import_structure["models.convnext"].extend(
         [
             "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextBackbone",
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
@@ -1426,6 +1469,15 @@ else:
             "load_tf_weights_in_funnel",
         ]
     )
+    _import_structure["models.git"].extend(
+        [
+            "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GitForCausalLM",
+            "GitModel",
+            "GitPreTrainedModel",
+            "GitVisionModel",
+        ]
+    )
     _import_structure["models.glpn"].extend(
         [
             "GLPN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1660,6 +1712,14 @@ else:
             "MarkupLMPreTrainedModel",
         ]
     )
+    _import_structure["models.mask2former"].extend(
+        [
+            "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Mask2FormerForUniversalSegmentation",
+            "Mask2FormerModel",
+            "Mask2FormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.maskformer"].extend(
         [
             "MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1760,7 +1820,9 @@ else:
             "MPNetPreTrainedModel",
         ]
     )
-    _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.mt5"].extend(
+        ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model", "MT5PreTrainedModel"]
+    )
     _import_structure["models.mvp"].extend(
         [
             "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2209,6 +2271,12 @@ else:
             "UniSpeechSatForXVector",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.upernet"].extend(
+        [
+            "UperNetForSemanticSegmentation",
+            "UperNetPreTrainedModel",
         ]
     )
     _import_structure["models.van"].extend(
@@ -3451,6 +3519,13 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.altclip import (
+        ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AltCLIPConfig,
+        AltCLIPProcessor,
+        AltCLIPTextConfig,
+        AltCLIPVisionConfig,
+    )
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
@@ -3490,6 +3565,13 @@ if TYPE_CHECKING:
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
+    )
+    from .models.blip import (
+        BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BlipConfig,
+        BlipProcessor,
+        BlipTextConfig,
+        BlipVisionConfig,
     )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.byt5 import ByT5Tokenizer
@@ -3567,6 +3649,7 @@ if TYPE_CHECKING:
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
@@ -3624,6 +3707,7 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
+    from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
@@ -3709,6 +3793,7 @@ if TYPE_CHECKING:
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.upernet import UperNetConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import (
@@ -4010,6 +4095,7 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
+        from .models.blip import BlipImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
@@ -4112,6 +4198,7 @@ if TYPE_CHECKING:
             MaxLengthCriteria,
             MaxTimeCriteria,
             MinLengthLogitsProcessor,
+            MinNewTokensLengthLogitsProcessor,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
             PhrasalConstraint,
@@ -4139,6 +4226,13 @@ if TYPE_CHECKING:
             AlbertModel,
             AlbertPreTrainedModel,
             load_tf_weights_in_albert,
+        )
+        from .models.altclip import (
+            ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AltCLIPModel,
+            AltCLIPPreTrainedModel,
+            AltCLIPTextModel,
+            AltCLIPVisionModel,
         )
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4299,6 +4393,16 @@ if TYPE_CHECKING:
             BlenderbotSmallModel,
             BlenderbotSmallPreTrainedModel,
         )
+        from .models.blip import (
+            BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BlipForConditionalGeneration,
+            BlipForImageTextRetrieval,
+            BlipForQuestionAnswering,
+            BlipModel,
+            BlipPreTrainedModel,
+            BlipTextModel,
+            BlipVisionModel,
+        )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
             BloomForCausalLM,
@@ -4374,6 +4478,7 @@ if TYPE_CHECKING:
         )
         from .models.convnext import (
             CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextBackbone,
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,
@@ -4570,6 +4675,13 @@ if TYPE_CHECKING:
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
         )
+        from .models.git import (
+            GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GitForCausalLM,
+            GitModel,
+            GitPreTrainedModel,
+            GitVisionModel,
+        )
         from .models.glpn import (
             GLPN_PRETRAINED_MODEL_ARCHIVE_LIST,
             GLPNForDepthEstimation,
@@ -4758,6 +4870,12 @@ if TYPE_CHECKING:
             MarkupLMModel,
             MarkupLMPreTrainedModel,
         )
+        from .models.mask2former import (
+            MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Mask2FormerForUniversalSegmentation,
+            Mask2FormerModel,
+            Mask2FormerPreTrainedModel,
+        )
         from .models.maskformer import (
             MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             MaskFormerForInstanceSegmentation,
@@ -4835,7 +4953,7 @@ if TYPE_CHECKING:
             MPNetModel,
             MPNetPreTrainedModel,
         )
-        from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model, MT5PreTrainedModel
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             MvpForCausalLM,
@@ -5203,6 +5321,7 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
+        from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
         from .models.van import (
             VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
             VanForImageClassification,

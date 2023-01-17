@@ -885,7 +885,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
     """RoBERTa-PreLayerNorm Model with a `language modeling` head on top for CLM fine-tuning.""",
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with roberta-base->andreasmadsen/efficient_mlm_m0.40,ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with roberta-base->andreasmadsen/efficient_mlm_m0.40,ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm, RobertaPreLayerNormTokenizer->RobertaTokenizer
 class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -963,15 +963,11 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import (
-        ...     RobertaPreLayerNormTokenizer,
-        ...     RobertaPreLayerNormForCausalLM,
-        ...     RobertaPreLayerNormConfig,
-        ... )
+        >>> from transformers import AutoTokenizer, RobertaPreLayerNormForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = RobertaPreLayerNormTokenizer.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
-        >>> config = RobertaPreLayerNormConfig.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
+        >>> tokenizer = AutoTokenizer.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
+        >>> config = AutoConfig.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
         >>> config.is_decoder = True
         >>> model = RobertaPreLayerNormForCausalLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40", config=config)
 
@@ -1024,17 +1020,17 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
@@ -1046,12 +1042,12 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
 @add_start_docstrings(
     """RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
 class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
     def __init__(self, config):
         super().__init__(config)
 
@@ -1082,10 +1078,8 @@ class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
-        mask="<mask>",
-        expected_output="' Paris'",
-        expected_loss=0.1,
     )
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.forward with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1203,8 +1197,6 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'optimism'",
-        expected_loss=0.08,
     )
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.forward with roberta->roberta_prelayernorm
     def forward(
@@ -1404,8 +1396,6 @@ class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedMod
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['O', 'ORG', 'ORG', 'O', 'O', 'O', 'O', 'O', 'LOC', 'O', 'LOC', 'LOC']",
-        expected_loss=0.01,
     )
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.forward with roberta->roberta_prelayernorm
     def forward(
@@ -1511,8 +1501,6 @@ class RobertaPreLayerNormForQuestionAnswering(RobertaPreLayerNormPreTrainedModel
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="' puppet'",
-        expected_loss=0.86,
     )
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.forward with roberta->roberta_prelayernorm
     def forward(

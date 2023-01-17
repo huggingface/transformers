@@ -264,6 +264,9 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
             time_duration=time_duration,
             frequency=frequency,
         )
+        encoder_sequence_length = encoder_inputs["input_features"].shape[2]
+        seq_length = encoder_sequence_length // 2 if self.use_past else seq_length
+
         decoder_inputs = super().generate_dummy_inputs(
             preprocessor.tokenizer, batch_size, seq_length, is_pair, framework
         )

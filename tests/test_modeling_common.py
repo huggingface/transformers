@@ -696,7 +696,9 @@ class ModelTesterMixin:
 
         torch._C._jit_clear_class_registry()
         torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
-        torch.jit._state._clear_class_state()
+        # torch 1.8 has no `_clear_class_state` in `torch.jit._state`
+        if hasattr(torch.jit._state, "_clear_class_state"):
+            torch.jit._state._clear_class_state()
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -3163,6 +3165,27 @@ class ModelUtilsTest(TestCasePlus):
                 ValueError, "The state dictionary of the model you are trying to load is corrupted."
             ):
                 _ = ModelWithHead.from_pretrained(tmp_dir)
+
+    @require_torch_gpu
+    def test_pretrained_low_mem_new_config(self):
+        # Checking for 1 model(the same one which was described in the issue) .
+        model_ids = ["gpt2"]
+
+        for model_id in model_ids:
+            model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path=model_id)
+            model_config.n_layer = 48
+            model_config.n_head = 25
+            model_config.n_embd = 1600
+            model = AutoModelForCausalLM.from_pretrained(
+                pretrained_model_name_or_path=model_id,
+                config=model_config,
+                ignore_mismatched_sizes=True,
+                torch_dtype=torch.float16,
+                low_cpu_mem_usage=True,
+            )
+            model_ref = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id)
+
+            self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
 
 
 @require_torch
