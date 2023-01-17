@@ -3417,6 +3417,7 @@ else:
     )
     _import_structure["models.xlm_roberta"].extend(
         [
+            "FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FlaxXLMRobertaForMaskedLM",
             "FlaxXLMRobertaForMultipleChoice",
             "FlaxXLMRobertaForQuestionAnswering",
@@ -5996,14 +5997,14 @@ if TYPE_CHECKING:
         )
         from .models.xlm_roberta import (
             TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFXLMRobertaForMaskedLM,
             TFXLMRobertaForCausalLM,
+            TFXLMRobertaForMaskedLM,
             TFXLMRobertaForMultipleChoice,
             TFXLMRobertaForQuestionAnswering,
             TFXLMRobertaForSequenceClassification,
             TFXLMRobertaForTokenClassification,
-            TFXLMRobertaPreTrainedModel,
             TFXLMRobertaModel,
+            TFXLMRobertaPreTrainedModel,
         )
         from .models.xlnet import (
             TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6217,14 +6218,14 @@ if TYPE_CHECKING:
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
             FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FlaxXLMRobertaForMaskedLM,
             FlaxXLMRobertaForCausalLM,
+            FlaxXLMRobertaForMaskedLM,
             FlaxXLMRobertaForMultipleChoice,
             FlaxXLMRobertaForQuestionAnswering,
             FlaxXLMRobertaForSequenceClassification,
             FlaxXLMRobertaForTokenClassification,
-            FlaxXLMRobertaPreTrainedModel,
             FlaxXLMRobertaModel,
+            FlaxXLMRobertaPreTrainedModel,
         )
 
 else:
