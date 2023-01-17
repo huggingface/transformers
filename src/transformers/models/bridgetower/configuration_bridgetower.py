@@ -56,6 +56,9 @@ class BridgeTowerVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         remove_last_layer (`bool`, *optional*, defaults to `False`):
             Whether to remove the last layer from the vision encoder.
+        initializer_factor (`float``, *optional*, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
 
     Example:
 
@@ -76,6 +79,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         num_hidden_layers=12,
         patch_size=16,
         image_size=288,
+        initializer_factor=1,
         stop_gradient=False,
         share_layernorm=True,
         remove_last_layer=False,
@@ -86,6 +90,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.patch_size = patch_size
         self.image_size = image_size
+        self.initializer_factor = initializer_factor
         self.stop_gradient = stop_gradient
         self.share_layernorm = share_layernorm
         self.remove_last_layer = remove_last_layer
@@ -140,6 +145,9 @@ class BridgeTowerTextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
             The vocabulary size of the `token_type_ids`.
+        initializer_factor (`float``, *optional*, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -177,6 +185,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
+        initializer_factor=1,
         intermediate_size=3072,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -200,6 +209,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.hidden_act = hidden_act
+        self.initializer_factor = initializer_factor
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -251,6 +261,9 @@ class BridgeTowerConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
+        initializer_factor (`float``, *optional*, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether this is an encoder/decoder model
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -295,6 +308,7 @@ class BridgeTowerConfig(PretrainedConfig):
         head_hidden_scale=2,
         hidden_act="gelu",
         hidden_size=768,
+        initializer_factor=1,
         is_encoder_decoder=False,
         layer_norm_eps=1e-05,
         share_link_tower_layers=False,
@@ -313,6 +327,7 @@ class BridgeTowerConfig(PretrainedConfig):
         self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
+        self.initializer_factor = initializer_factor
         self.is_encoder_decoder = is_encoder_decoder
         self.layer_norm_eps = layer_norm_eps
         self.share_link_tower_layers = share_link_tower_layers

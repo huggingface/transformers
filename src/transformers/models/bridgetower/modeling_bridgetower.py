@@ -319,41 +319,6 @@ class BridgeTowerVisualTransformer(nn.Module):
         return visual_output_post
 
 
-class BridgeTowerVisionModel(nn.Module):
-    config_class = BridgeTowerVisionConfig
-
-    def __init__(self, config):
-        super().__init__()
-        self.num_hidden_layers = config.num_hidden_layers
-        self.hidden_size = config.hidden_size
-        self.patch_size = config.patch_size
-        self.image_size = config.image_size
-        self.model_type = "bridgetower",
-        self.stop_gradient = config.stop_gradient
-        self.share_layernorm = config.share_layernorm
-        self.remove_last_layer = config.remove_last_layer
-
-        vision_heads = config.hidden_size // 64
-        self.visual = BridgeTowerVisualTransformer(
-            patch_size=self.patch_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            heads=vision_heads,
-            image_size=self.image_size,
-            model_type=self.model_type,
-            stop_gradient=self.stop_gradient,
-            share_layernorm=self.share_layernorm,
-            remove_last_layer=self.remove_last_layer
-        )
-
-    @property
-    def dtype(self):
-        return self.visual.conv1.weight.dtype
-
-    def forward(self, image, image_mask=None):
-        return self.visual(image.type(self.dtype), image_mask)
-
-
 class LinkTower(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1028,18 +993,56 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             attn_std = module.visual.transformer.hidden_size**-0.5
             fc_std = (2 * module.visual.transformer.hidden_size) ** -0.5
             for block in module.visual.transformer.resblocks:
-                nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
-                nn.init.normal_(block.attn.out_proj.weight, std=proj_std)
-                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
-                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
-        elif isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * self.config.initializer_factor)
+                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * self.config.initializer_factor)
+                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * self.config.initializer_factor)
+                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * self.config.initializer_factor)
+
+            nn.init.normal_(module.visual.class_embedding, std=attn_std * self.config.initializer_factor)
+            nn.init.normal_(module.visual.positional_embedding, std=attn_std * self.config.initializer_factor)
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=0.05 * self.config.initializer_factor)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
+
+
+class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
+    config_class = BridgeTowerVisionConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_hidden_layers = config.num_hidden_layers
+        self.hidden_size = config.hidden_size
+        self.patch_size = config.patch_size
+        self.image_size = config.image_size
+        self.model_type = "bridgetower",
+        self.stop_gradient = config.stop_gradient
+        self.share_layernorm = config.share_layernorm
+        self.remove_last_layer = config.remove_last_layer
+
+        vision_heads = config.hidden_size // 64
+        self.visual = BridgeTowerVisualTransformer(
+            patch_size=self.patch_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            heads=vision_heads,
+            image_size=self.image_size,
+            model_type=self.model_type,
+            stop_gradient=self.stop_gradient,
+            share_layernorm=self.share_layernorm,
+            remove_last_layer=self.remove_last_layer
+        )
+
+    @property
+    def dtype(self):
+        return self.visual.conv1.weight.dtype
+
+    def forward(self, image, image_mask=None):
+        return self.visual(image.type(self.dtype), image_mask)
 
 
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
@@ -1587,6 +1590,9 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         self.bridgetower = BridgeTowerModel(config)
 
         self.itm_score = BridgeTowerITMHead(config.hidden_size * 2)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)

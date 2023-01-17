@@ -291,12 +291,6 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(
-        reason="""Bridge Tower model currently only supports pretrained model. Thus this test is not needed."""
-    )
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. Thus this test is not applicable.""")
     def test_inputs_embeds(self):
         pass
