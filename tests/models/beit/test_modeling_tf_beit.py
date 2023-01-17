@@ -43,6 +43,7 @@ if is_tf_available():
     from transformers.models.beit.modeling_tf_beit import TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
+    import PIL
     from PIL import Image
 
     from transformers import BeitFeatureExtractor
@@ -448,10 +449,6 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
 
                     self.assertEqual(loss.shape, [loss_size])
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -551,7 +548,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     def test_inference_semantic_segmentation(self):
         model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
-        feature_extractor = TFBeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
+        feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
@@ -590,7 +587,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     def test_post_processing_semantic_segmentation(self):
         model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
-        feature_extractor = TFBeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
+        feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])

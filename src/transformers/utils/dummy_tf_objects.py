@@ -485,17 +485,14 @@ class TFBartPretrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class TFBeitForMaskedImageModeling(metaclass=DummyObject):
+class TFBeitForImageClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
 
-class TFBeitForImageClassification(metaclass=DummyObject):
+class TFBeitForMaskedImageModeling(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

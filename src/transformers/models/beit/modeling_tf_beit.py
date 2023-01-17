@@ -84,13 +84,12 @@ class TFBeitModelOutputWithPooling(TFBaseModelOutputWithPooling):
             will be returned.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
-            `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
+            the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
     """
 
     last_hidden_state: tf.Tensor = None
@@ -345,8 +344,8 @@ class TFBeitSelfAttention(tf.keras.layers.Layer):
 
 class TFBeitSelfOutput(tf.keras.layers.Layer):
     """
-    The residual connection is defined in TFBeitLayer instead of here (as is the case with other models), due
-    to the layernorm applied before each block.
+    The residual connection is defined in TFBeitLayer instead of here (as is the case with other models), due to the
+    layernorm applied before each block.
     """
 
     def __init__(self, config: BeitConfig, **kwargs):
@@ -789,8 +788,8 @@ class TFBeitPreTrainedModel(TFPreTrainedModel):
     )
     def serving(self, inputs):
         """
-        Method used for serving the model.
         Args:
+        Method used for serving the model.
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
@@ -801,11 +800,12 @@ class TFBeitPreTrainedModel(TFPreTrainedModel):
 BEIT_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.).
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
-    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
-    behavior.
+    etc.). This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
+
     <Tip>
+
     TensorFlow models and layers in `transformers` accept two formats as input:
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional argument.
@@ -819,11 +819,12 @@ BEIT_START_DOCSTRING = r"""
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([pixel_values, attention_mask])` or `model([pixel_values, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-    `model({"pixel_values": pixel_values, "token_type_ids": token_type_ids})`
-    Note that when creating models and layers with
-    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
-    about any of this, as you can just pass inputs like you would to any other Python function!
+    `model({"pixel_values": pixel_values, "token_type_ids": token_type_ids})` Note that when creating models and layers
+    with [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to
+    worry about any of this, as you can just pass inputs like you would to any other Python function!
+
     </Tip>
+
     Args:
         config ([`BeitConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -947,6 +948,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
+        bool_masked_pos: Optional[tf.bool] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -964,6 +966,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
 
         outputs = self.beit(
             pixel_values=pixel_values,
+            bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1080,8 +1083,8 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
 class TFBeitConvModule(tf.keras.layers.Layer):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
-    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
-    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU). Based on
+    OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
     def __init__(
@@ -1197,8 +1200,8 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
 
 class TFBeitPyramidPoolingModule(tf.keras.layers.Layer):
     """
-    Pyramid Pooling Module (PPM) used in PSPNet.
     Args:
+    Pyramid Pooling Module (PPM) used in PSPNet.
         pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
             Module.
         channels (int): Channels after modules, before conv_seg.
@@ -1237,8 +1240,8 @@ class TFBeitPyramidPoolingModule(tf.keras.layers.Layer):
 class TFBeitUperHead(tf.keras.layers.Layer):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
-    [UPerNet](https://arxiv.org/abs/1807.10221).
-    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    [UPerNet](https://arxiv.org/abs/1807.10221). Based on OpenMMLab's implementation, found in
+    https://github.com/open-mmlab/mmsegmentation.
     """
 
     def __init__(self, config: BeitConfig, **kwargs) -> None:
@@ -1304,9 +1307,9 @@ class TFBeitUperHead(tf.keras.layers.Layer):
 
 class TFBeitFCNHead(tf.keras.layers.Layer):
     """
+    Args:
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
     [FCNNet](https://arxiv.org/abs/1411.4038).
-    Args:
         config (BeitConfig): Configuration.
         kernel_size (int): The kernel size for convs in the head. Default: 3.
         dilation (int): The dilation rate for convs in the head. Default: 1.
@@ -1450,6 +1453,7 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
         >>> from transformers import AutoFeatureExtractor, TFBeitForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
+
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")

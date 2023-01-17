@@ -65,7 +65,7 @@ Flax), PyTorch, and/or TensorFlow.
 | Audio Spectrogram Transformer |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |          Autoformer           |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |             BART              |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
-|             BEiT              |       ❌       |       ❌       |       ✅        |         ✅         |      ✅      |
+|             BEiT              |       ❌       |       ❌       |       ✅        |         ❌         |      ✅      |
 |             BERT              |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |        Bert Generation        |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            BigBird            |       ✅       |       ✅       |       ✅        |         ❌         |      ✅      |
