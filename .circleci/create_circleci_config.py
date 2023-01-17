@@ -401,6 +401,16 @@ repo_utils_job = CircleCIJob(
     tests_to_run="tests/repo_utils",
 )
 
+doc_test_job = CircleCIJob(
+    "doct_test",
+    install_steps=[
+        "pip install --upgrade pytest",
+        "pip install .[quality,testing]",
+    ],
+    tests_to_run="documentation_tests"
+    
+)
+
 REGULAR_TESTS = [
     torch_and_tf_job,
     torch_and_flax_job,

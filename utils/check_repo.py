@@ -532,6 +532,15 @@ def find_tested_models(test_file):
         return model_tested
 
 
+def find_doc_tested_models(documentation_test_file):
+    """Parse the content of test_file to detect what's in all_model_classes"""
+    # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
+    with open(os.path.join(PATH_TO_TRANSFORMERS, documentation_test_file), "r", encoding="utf-8", newline="\n") as f:
+        content = f.read()
+    all_models = re.findall(r"(?:configuration_|modeling_|tokenization_).*.py",content)
+    # Check with one less parenthesis as well
+    return all_models
+
 def check_models_are_tested(module, test_file):
     """Check models defined in module are tested in test_file."""
     # XxxPreTrainedModel are not tested
@@ -556,6 +565,29 @@ def check_models_are_tested(module, test_file):
             )
     return failures
 
+def check_models_are_doc_tested(module, test_file):
+    """Check models defined in module have their documentation tested in documentation_text.txt."""
+    # XxxPreTrainedModel are not tested
+    defined_models = get_models(module)
+    tested_models = find_doc_tested_models(test_file)
+    if tested_models is None:
+        if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
+            return
+        return [
+            f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "
+            + "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
+            + "`utils/check_repo.py`."
+        ]
+    failures = []
+    for model_name, _ in defined_models:
+        if model_name not in tested_models and model_name not in IGNORE_NON_TESTED:
+            failures.append(
+                f"{model_name} is defined in {module.__name__} but is not tested in "
+                + f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the all_model_classes in that file."
+                + "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
+                + "in the file `utils/check_repo.py`."
+            )
+    return failures
 
 def check_all_models_are_tested():
     """Check all models are properly tested."""

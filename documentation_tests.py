@@ -17,37 +17,39 @@
     The doc precossing function can be run on a list of files and/org
     directories of files. It will recursively check if the files have
     a python code snippet by looking for a ```python or ```py syntax.
-    In the default mode - `remove_new_line==False` the script will
-    add a new line before every python code ending ``` line to make
+    The script will add a new line before every python code ending ``` line to make
     the docstrings ready for pytest doctests.
     However, we don't want to have empty lines displayed in the
-    official documentation which is why the new line command can be
-    reversed by adding the flag `--remove_new_line` which sets
-    `remove_new_line==True`.
+    official documentation which is why the new code is written to a temporary directory
 
-    When debugging the doc tests locally, please make sure to
-    always run:
+    When debugging the doc tests locally, the script should automatically determine which files should
+    be processed based on the modified files. It should also run the tests on the fly and delete the
+    temp file when finished.
 
-    ```python utils/prepare_for_doc_test.py src docs```
+    We will be using the doctest API:
 
-    before running the doc tests:
+    ```python
+    >>>  import doctest
+    >>> flags = doctest.REPORT_NDIFF|doctest.FAIL_FAST
+    >>>  doctest.testfile(
+        "roberta_prelayernorm/modeling_roberta_prelayernorm.py",
+    package = "transformers.models",
+    optionflags=flags)
+    ```
 
-    ```pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"```
-
-    Afterwards you should revert the changes by running
-
-    ```python utils/prepare_for_doc_test.py src docs --remove_new_line```
+    We will just have a pytest wrapper around it:
+    ```python
+    >>> def test_docstring():
+    >>>     doctest_results = doctest.testfile(...)
+    >>>     assert doctest_results.failed == 0
+    ```
 """
+
 
 import argparse
 import os
-
-
-def process_code_block(code, add_new_line=True):
-    if add_new_line:
-        return maybe_append_new_line(code)
-    else:
-        return maybe_remove_new_line(code)
+import tempfile
+import doctest
 
 
 def maybe_append_new_line(code):
@@ -65,27 +67,16 @@ def maybe_append_new_line(code):
 
     return "\n".join(lines)
 
-
-def maybe_remove_new_line(code):
-    """
-    Remove new line if code snippet is a
-    Python code snippet
-    """
-    lines = code.split("\n")
-
-    if lines[0] in ["py", "python"]:
-        # add new line before last line being ```
-        lines = lines[:-2] + lines[-1:]
-
-    return "\n".join(lines)
-
-
-def process_doc_file(code_file, add_new_line=True):
+def process_doc_file(code_file, temp_dir = "temp", add_new_line=True):
     """
     Process given file.
 
     Args:
-        code_file (`str` or `os.PathLike`): The file in which we want to style the docstring.
+        code_file (`str` or `os.PathLike`):
+            The file in which we want to style the docstring.
+        temp_dir (`str` or `os.PathLike`):
+            The temporary directory where we want to write to write the tests. Should probably default
+            to the cache directory.
     """
     with open(code_file, "r", encoding="utf-8", newline="\n") as f:
         code = f.read()
@@ -95,18 +86,16 @@ def process_doc_file(code_file, add_new_line=True):
     if len(splits) % 2 != 1:
         raise ValueError("The number of occurrences of ``` should be an even number.")
 
-    splits = [s if i % 2 == 0 else process_code_block(s, add_new_line=add_new_line) for i, s in enumerate(splits)]
+    splits = [s if i % 2 == 0 else maybe_append_new_line(s) for i, s in enumerate(splits)]
     clean_code = "```".join(splits)
     # fmt: on
 
-    diff = clean_code != code
-    if diff:
-        print(f"Overwriting content of {code_file}.")
-        with open(code_file, "w", encoding="utf-8", newline="\n") as f:
-            f.write(clean_code)
+    # write the code to a temporary file
+    with tempfile.NamedTemporaryFile(code_file, "w", encoding="utf-8", newline="\n") as f:
+        f.write(clean_code)
 
 
-def process_doc_files(*files, add_new_line=True):
+def process_doc_files(*files,  temp_dir = "temp", add_new_line=True):
     """
     Applies doc styling or checks everything is correct in a list of files.
 
@@ -122,27 +111,29 @@ def process_doc_files(*files, add_new_line=True):
         if os.path.isdir(file):
             files = [os.path.join(file, f) for f in os.listdir(file)]
             files = [f for f in files if os.path.isdir(f) or f.endswith(".mdx") or f.endswith(".py")]
-            process_doc_files(*files, add_new_line=add_new_line)
+            process_doc_files(*files,  temp_dir = temp_dir, add_new_line=add_new_line)
         else:
             try:
-                process_doc_file(file, add_new_line=add_new_line)
+                process_doc_file(file, temp_dir = temp_dir,  add_new_line=add_new_line)
             except Exception:
                 print(f"There is a problem in {file}.")
                 raise
 
+def run_doctests(*files, temp_dir="temp"):
+    """
+    Either we run the tests with all the code in the RAM or we run them on the newly written files.
+    Could be good to evaluate performances between the two.
+    """
+    flags = doctest.REPORT_NDIFF|doctest.FAIL_FAST
+    doctest.testfile("roberta_prelayernorm/modeling_roberta_prelayernorm.py",package = "transformers.models",optionflags=flags)
 
-def main(*files, add_new_line=True):
-    process_doc_files(*files, add_new_line=add_new_line)
+def main(*files, temp_dir="temp", add_new_line=True):
+    process_doc_files(*files, temp_dir = temp_dir, add_new_line=add_new_line)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("files", nargs="+", help="The file(s) or folder(s) to restyle.")
-    parser.add_argument(
-        "--remove_new_line",
-        action="store_true",
-        help="Whether to remove new line after each python code block instead of adding one.",
-    )
+    parser.add_argument("files", nargs="+", default="transformers/utils/documentation_tests.txt", help="The file(s) or folder(s) to run the doctests on.")
     args = parser.parse_args()
 
-    main(*args.files, add_new_line=not args.remove_new_line)
+    main(*args.files, temp_dir = "temp")
