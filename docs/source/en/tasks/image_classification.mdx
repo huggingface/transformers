@@ -347,7 +347,7 @@ Pass your `compute_metrics` function to [KerasMetricCallback](./main_classes/ker
 and use the [PushToHubCallback](./main_classes/keras_callbacks#transformers.PushToHubCallback) to upload the model:
 
 ```py
->>> from transformers.keras_callbacks import KerasMetricCallback
+>>> from transformers.keras_callbacks import KerasMetricCallback, PushToHubCallback
 
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset)
 >>> push_to_hub_callback = PushToHubCallback(
