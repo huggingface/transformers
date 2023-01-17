@@ -46,7 +46,7 @@ random_inputs = tf.random.normal((batch_size, input_vector_dim))
 _ = model(random_inputs)
 ```
 
-In order to run the forward pass with an XLA-compiled function, we’d need to:
+In order to run the forward pass with an XLA-compiled function, we’d need to do:
 
 ```py
 xla_fn = tf.function(model, jit_compile=True)
@@ -61,10 +61,10 @@ my_xla_fn = tf.function(model.my_xla_fn, jit_compile=True)
 
 ## Running a TF text generation model with XLA from 🤗 Transformers
 
-To enable XLA-accelerated generation within 🤗 Transformers, you need to have the correct version of `transformers` installed. You can install it by running:
+To enable XLA-accelerated generation within 🤗 Transformers, you need to have a recent version of `transformers` installed. You can install it by running:
 
 ```bash
-pip install transformers>=4.21.0
+pip install transformers --upgrade
 ```
 
 And then you can run the following code:
