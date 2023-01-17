@@ -43,6 +43,8 @@ else:
         "ConstrainedBeamSearchScorer",
     ]
     _import_structure["logits_process"] = [
+        "EpsilonLogitsWarper",
+        "EtaLogitsWarper",
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
         "HammingDiversityLogitsProcessor",
@@ -162,6 +164,8 @@ if TYPE_CHECKING:
         from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .logits_process import (
             EncoderNoRepeatNGramLogitsProcessor,
+            EpsilonLogitsWarper,
+            EtaLogitsWarper,
             ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
