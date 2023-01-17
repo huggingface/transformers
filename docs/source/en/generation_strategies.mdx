@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -72,7 +72,7 @@ producing highly repetitive results.
 You can override any `generation_config` by passing the parameters and their values directly to the [`generate`] method:
 
 ```python
->>> my_model.generate(inputs, num_beams=4, do_sample=True)
+>>> my_model.generate(**inputs, num_beams=4, do_sample=True)
 ```
 Even if the default decoding strategy mostly works for your task, you can still tweak a few things. Some of the
 commonly adjusted parameters include:
@@ -109,10 +109,10 @@ Here, we'll show some of the parameters that control the decoding strategies and
 >>> checkpoint = "distilgpt2"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+>>> inputs = tokenizer(prompt, return_tensors="pt")
 
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
->>> outputs = model.generate(input_ids)
+>>> outputs = model.generate(**inputs)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
 ```
@@ -132,9 +132,9 @@ The two main parameters that enable and control the behavior of contrastive sear
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
 >>> prompt = "Hugging Face Company is"
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+>>> inputs = tokenizer(prompt, return_tensors="pt")
 
->>> outputs = model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
+>>> outputs = model.generate(**inputs, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Hugging Face Company is a family owned and operated business. \
 We pride ourselves on being the best in the business and our customer service is second to none.\
@@ -159,9 +159,9 @@ To enable multinomial sampling set `do_sample=True`.
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
 >>> prompt = "Today was an amazing day because"
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+>>> inputs = tokenizer(prompt, return_tensors="pt")
 
->>> outputs = model.generate(input_ids, do_sample=True, max_new_tokens=100)
+>>> outputs = model.generate(**inputs, do_sample=True, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Today was an amazing day because we are now in the final stages of our trip to New York City which was very tough. \
 It is a difficult schedule and a challenging part of the year but still worth it. I have been taking things easier and \
@@ -185,11 +185,11 @@ To enable this decoding strategy, specify the `num_beams` (aka number of hypothe
 >>> checkpoint = "gpt2-medium"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+>>> inputs = tokenizer(prompt, return_tensors="pt")
 
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
->>> outputs = model.generate(input_ids, num_beams=5, max_new_tokens=50)
+>>> outputs = model.generate(**inputs, num_beams=5, max_new_tokens=50)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['It is astonishing how one can have such a profound impact on the lives of so many people in such a short period of \
 time."\n\nHe added: "I am very proud of the work I have been able to do in the last few years.\n\n"I have']
@@ -207,11 +207,11 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 >>> checkpoint = "t5-small"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+>>> inputs = tokenizer(prompt, return_tensors="pt")
 
 >>> model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
 
->>> outputs = model.generate(input_ids, num_beams=5, do_sample=True)
+>>> outputs = model.generate(**inputs, num_beams=5, do_sample=True)
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'Das Haus ist wunderbar.'
 ```
@@ -243,11 +243,11 @@ The groups are selected to ensure they are distinct enough compared to the other
 >>> efficient way possible."
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+>>> inputs = tokenizer(prompt, return_tensors="pt")
 
 >>> model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
 
->>> outputs = model.generate(input_ids, num_beams=5, num_beam_groups=5, max_new_tokens=30)
+>>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30)
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'The Design Principles are a set of universal design principles that can be applied to any location, climate and culture, and they allow us to design the most efficient and sustainable human habitation and food production systems.'
 ```
