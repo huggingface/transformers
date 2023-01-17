@@ -281,8 +281,6 @@
         title: GPT2
       - local: model_doc/gpt-sw3
         title: GPTSw3
-      - local: model_doc/graphormer
-        title: Graphormer
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -563,6 +561,11 @@
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
+    - isExpanded: false
+      sections:
+      - local: model_doc/graphormer
+        title: Graphormer
+      title: Graph models
     title: Models
   - sections:
     - local: internal/modeling_utils
