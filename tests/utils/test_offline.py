@@ -69,13 +69,7 @@ socket.socket = offline_socket
 
     @require_torch
     def test_offline_mode_no_internet(self):
-
-        # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
-        # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
-        # while running an external program
-
         # python one-liner segments
-
         # this must be loaded before socket.socket is monkey-patched
         load = """
 from transformers import BertConfig, BertModel, BertTokenizer, pipeline
