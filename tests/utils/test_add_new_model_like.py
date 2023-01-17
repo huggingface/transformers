@@ -499,7 +499,7 @@ NEW_BERT_CONSTANT = "value"
 
         test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
         vit_test_files = {
-            "tests/models/vit/test_feature_extraction_vit.py",
+            "tests/models/vit/test_image_processing_vit.py",
             "tests/models/vit/test_modeling_vit.py",
             "tests/models/vit/test_modeling_tf_vit.py",
             "tests/models/vit/test_modeling_flax_vit.py",
@@ -566,7 +566,7 @@ NEW_BERT_CONSTANT = "value"
 
         test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
         vit_test_files = {
-            "tests/models/vit/test_feature_extraction_vit.py",
+            "tests/models/vit/test_image_processing_vit.py",
             "tests/models/vit/test_modeling_vit.py",
         }
         self.assertEqual(test_files, vit_test_files)
@@ -628,7 +628,7 @@ NEW_BERT_CONSTANT = "value"
 
         test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
         vit_test_files = {
-            "tests/models/vit/test_feature_extraction_vit.py",
+            "tests/models/vit/test_image_processing_vit.py",
             "tests/models/vit/test_modeling_tf_vit.py",
             "tests/models/vit/test_modeling_flax_vit.py",
         }
@@ -798,7 +798,7 @@ NEW_BERT_CONSTANT = "value"
 
         test_files = {str(Path(f).relative_to(REPO_PATH)) for f in all_vit_files["test_files"]}
         vit_test_files = {
-            "tests/models/vit/test_feature_extraction_vit.py",
+            "tests/models/vit/test_image_processing_vit.py",
             "tests/models/vit/test_modeling_vit.py",
             "tests/models/vit/test_modeling_tf_vit.py",
             "tests/models/vit/test_modeling_flax_vit.py",
