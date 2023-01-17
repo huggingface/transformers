@@ -32,9 +32,6 @@ Tips:
 
 - MAE (masked auto encoding) is a method for self-supervised pre-training of Vision Transformers (ViTs). The pre-training objective is relatively simple:
 by masking a large portion (75%) of the image patches, the model must reconstruct raw pixel values. One can use [`ViTMAEForPreTraining`] for this purpose.
-- An example Python script that illustrates how to pre-train [`ViTMAEForPreTraining`] from scratch can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-One can easily tweak it for their own use case.
-- A notebook that illustrates how to visualize reconstructed pixel values with [`ViTMAEForPreTraining`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTMAE/ViT_MAE_visualization_demo.ipynb).
 - After pre-training, one "throws away" the decoder used to reconstruct pixels, and one uses the encoder for fine-tuning/linear probing. This means that after
 fine-tuning, one can directly plug in the weights into a [`ViTForImageClassification`].
 - One can use [`ViTImageProcessor`] to prepare images for the model. See the code examples for more info.
@@ -51,6 +48,14 @@ alt="drawing" width="600"/>
 This model was contributed by [nielsr](https://huggingface.co/nielsr). TensorFlow version of the model was contributed by [sayakpaul](https://github.com/sayakpaul) and 
 [ariG23498](https://github.com/ariG23498) (equal contribution). The original code can be found [here](https://github.com/facebookresearch/mae). 
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViTMAE.
+
+- [`ViTMAEForPreTraining`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining), allowing you to pre-train the model from scratch/further pre-train the model on custom data.
+- A notebook that illustrates how to visualize reconstructed pixel values with [`ViTMAEForPreTraining`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTMAE/ViT_MAE_visualization_demo.ipynb).
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## ViTMAEConfig
 

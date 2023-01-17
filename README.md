@@ -91,14 +91,21 @@ In Computer Vision:
 - [Image classification with ViT](https://huggingface.co/google/vit-base-patch16-224)
 - [Object Detection with DETR](https://huggingface.co/facebook/detr-resnet-50)
 - [Semantic Segmentation with SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
-- [Panoptic Segmentation with DETR](https://huggingface.co/facebook/detr-resnet-50-panoptic)
+- [Panoptic Segmentation with MaskFormer](https://huggingface.co/facebook/maskformer-swin-small-coco)
+- [Depth Estimation with DPT](https://huggingface.co/docs/transformers/model_doc/dpt)
+- [Video Classification with VideoMAE](https://huggingface.co/docs/transformers/model_doc/videomae)
 
 In Audio:
 - [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
 - [Keyword Spotting with Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
+- [Audio Classification with Audio Spectrogram Transformer](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
 
 In Multimodal tasks:
+- [Table Question Answering with TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
 - [Visual Question Answering with ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
+- [Zero-shot Image Classification with CLIP](https://huggingface.co/openai/clip-vit-large-patch14)
+- [Document Question Answering with LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
+- [Zero-shot Video Classification with X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
 
 **[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team, is the official demo of this repo’s text generation capabilities.
 
