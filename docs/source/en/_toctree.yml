@@ -109,6 +109,8 @@
       title: Debugging
     - local: hpo_train
       title: Hyperparameter Search using Trainer API
+    - local: tf_xla
+      title: XLA Integration for TensorFlow Models
     title: Performance and scalability
   - sections:
     - local: contributing
