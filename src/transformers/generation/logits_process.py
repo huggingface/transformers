@@ -801,3 +801,67 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
             scores[:, :] = -float("inf")
             scores[:, current_token] = 0
         return scores
+
+
+class WhisperTimeStampLogitsProcessor(LogitsProcessor):
+    r"""
+    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
+    probs to `inf` so that they are sampled at their corresponding index.
+
+    Args:
+        begin_index (`int`, *optional*, defaults to 5 ):
+            This indicates to the processor where the first tokens are generated. This is used to differentiate between
+            the `prompt` tokens and the `generated` tokens. When generating with `WhisperForConditionalGeneration` the
+            `prompt` tokens are the first 4 tokens.
+        eos_token_id (`int`, *optional*, defaults to 50257):
+            The id of the *end-of-sequence* token.
+        no_timestamps_token_id (`int`, *optional*, defaults to 50363):
+            The id of the `"<|notimestamps|>"` token.
+        max_initial_timestamp (`int`, *optional*, defaults to 1):
+            Used to set the maximum value of the initial timestamp. This is used to prevent the model from predicting
+            timestamps that are too far in the future.
+    """
+
+    def __init__(
+        self,
+        begin_index=5,
+        eos_token_id=50257,
+        no_timestamps_token_id=50363,
+        max_initial_timestamp=1,
+    ):
+        self.eos_token_id = eos_token_id
+        self.no_timestamps_token_id = no_timestamps_token_id
+        self.timestamp_begin = no_timestamps_token_id + 1
+        self.begin_index = begin_index
+        self.max_initial_timestamp_index = max_initial_timestamp
+
+    def __call__(self, input_ids, scores):
+        # suppress <|notimestamps|> which is handled by without_timestamps
+        scores[:, self.no_timestamps_token_id] = -float("inf")
+
+        # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
+        for k in range(input_ids.shape[0]):
+            seq = [t for t in input_ids[k, self.begin_index :].tolist()]
+            last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
+            penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
+
+            if last_was_timestamp:
+                if penultimate_was_timestamp:  # has to be non-timestamp
+                    scores[k, self.timestamp_begin :] = -float("inf")
+                else:  # cannot be normal text tokens
+                    scores[k, : self.eos_token_id] = -float("inf")
+
+            # apply the `max_initial_timestamp` option
+            if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
+                last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+                scores[:, last_allowed + 1 :] = -float("inf")
+
+        # if sum of probability over timestamps is above any other token, sample timestamp
+        logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
+        for k in range(input_ids.shape[0]):
+            timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
+            max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
+            if timestamp_logprob > max_text_token_logprob:
+                scores[k, : self.timestamp_begin] = -float("inf")
+
+        return scores

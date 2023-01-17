@@ -20,6 +20,8 @@ import os
 import tempfile
 import unittest
 
+import numpy as np
+
 from transformers import WhisperConfig
 from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property
@@ -44,6 +46,7 @@ if is_torch_available():
         WhisperProcessor,
         set_seed,
     )
+    from transformers.generation.logits_process import WhisperTimeStampLogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
 
 
@@ -1030,7 +1033,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_en_batched_generation(self):
-        torch_device = "cuda"
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
@@ -1067,3 +1069,43 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_tiny_timestamp_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        input_speech = np.concatenate(self._load_datasamples(4))
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
+        )
+        model.config.forced_decoder_ids = [(1, 50259), (2, 50359), (3, 50364)]
+        timestamp_processor = [WhisperTimeStampLogitsProcessor(len(model.config.forced_decoder_ids))]
+        generated_ids = model.generate(input_features, max_length=448, logits_processor=timestamp_processor).to("cpu")
+
+        # fmt: off
+        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404])
+        # fmt: on
+
+        self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
+
+        # fmt: off
+        EXPECTED_TRANSCRIPT = [
+            {
+                'text': " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Layton's work is really Greek after all,",
+                'offsets': [
+                    {'text': ' Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.', 'timestamp': (0.0, 5.62)},
+                    {'text': " Nor is Mr. Quilter's manner less interesting than his matter.", 'timestamp': (5.62, 10.36)},
+                    {'text': ' He tells us that at this festive season of the year,', 'timestamp': (10.36, 14.46)},
+                    {'text': ' with Christmas and roast beef looming before us,', 'timestamp': (14.46, 17.76)},
+                    {'text': ' similes drawn from eating and its results occur most readily to the mind.', 'timestamp': (17.76, 22.8)},
+                    {'text': " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,", 'timestamp': (22.8, 28.82)}
+                ]
+            }
+        ]
+        # fmt: on
+
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
