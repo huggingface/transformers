@@ -20,9 +20,7 @@ def convert_to_single_emb(x, offset: int = 512):
     return x
 
 
-def preprocess_item(item, keep_features=True, task_list=None):
-    task_list = ["y"] if task_list is None else task_list
-
+def preprocess_item(item, keep_features=True):
     if keep_features and "edge_attr" in item.keys():  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
     else:
@@ -62,10 +60,7 @@ def preprocess_item(item, keep_features=True, task_list=None):
     item["out_degree"] = item["in_degree"]  # for undirected graph
     item["input_edges"] = input_edges + 1  # we shift all indices by one for padding
     if "labels" not in item:
-        item["labels"] = {}
-        for task in task_list:
-            if task in item.keys():
-                item["labels"][task] = item[task]
+        item["labels"] = item["y"]
 
     return item
 
