@@ -757,15 +757,15 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     probs to `inf` so that they are sampled at their corresponding index.
 
     Args:
-        begin_index (`int`, *optional*, defaults to `5` ):
+        begin_index (`int`, *optional*, defaults to 5 ):
             This indicates to the processor where the first tokens are generated. This is used to differentiate between
             the `prompt` tokens and the `generated` tokens. When generating with `WhisperForConditionalGeneration` the
             `prompt` tokens are the first 4 tokens.
-        eos_token_id (`int`, *optional*, defaults to `50257`):
+        eos_token_id (`int`, *optional*, defaults to 50257):
             The id of the *end-of-sequence* token.
-        no_timestamps_token_id (`int`, *optional*, defaults to `50363):
+        no_timestamps_token_id (`int`, *optional*, defaults to 50363):
             The id of the `"<|notimestamps|>"` token.
-        max_initial_timestamp (`int`, *optional*, defaults to `1`):
+        max_initial_timestamp (`int`, *optional*, defaults to 1):
             Used to set the maximum value of the initial timestamp. This is used to prevent the model from predicting
             timestamps that are too far in the future.
     """

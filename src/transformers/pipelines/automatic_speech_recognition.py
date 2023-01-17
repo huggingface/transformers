@@ -298,7 +298,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         super().__init__(**kwargs)
         self.feature_extractor = feature_extractor
 
-        if self.model.config.__class__.__name__ == "WhisperConfig":
+        if self.model.config.model_type == "whisper":
             self.type = "seq2seq_whisper"
         elif self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
             self.type = "seq2seq"
@@ -401,7 +401,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             postprocess_params["decoder_kwargs"] = decoder_kwargs
         if return_timestamps is not None:
             postprocess_params["return_timestamps"] = return_timestamps
-            if self.model.config.__class__.__name__ == "WhisperConfig":
+            if self.model.config.model_type == "whisper":
                 # Whisper is highly specific, if we want timestamps, we need to
                 # force whisper to output timestamp tokens, which means we need
                 # to set this variable to prevent `no_timestamp_token` to be

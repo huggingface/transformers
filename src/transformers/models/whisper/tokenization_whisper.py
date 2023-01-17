@@ -491,7 +491,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return normalizer(text)
 
     def _compute_offsets(self, token_ids, time_precision=0.02):
-        """Compute offsets for a given tokenized input"""
+        """
+        Compute offsets for a given tokenized input
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            time_precision (`float`, `optional`, defaults to 0.02):
+                The time ratio to convert from token to time.
+        """
         offsets = []
         token_ids = np.array(token_ids)
         if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
