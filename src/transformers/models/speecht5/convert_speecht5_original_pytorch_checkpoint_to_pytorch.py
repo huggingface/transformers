@@ -27,6 +27,7 @@ from transformers import (
     SpeechT5CTCTokenizer,
     SpeechT5ForCTC,
     SpeechT5ForSpeechToText,
+    SpeechT5ForSpeechToSpeech,
     SpeechT5ForTextToSpeech,
     SpeechT5ProcessorForCTC,
     SpeechT5ProcessorForSpeechToText,
@@ -125,6 +126,13 @@ MAPPING_T2S = {
     **MAPPING_SPEECH_DECODER_PRENET,
     **MAPPING_SPEECH_DECODER_POSTNET,
 }
+MAPPING_S2S = {
+    **MAPPING_SPEECH_ENCODER_PRENET,
+    **MAPPING_ENCODER,
+    **MAPPING_DECODER,
+    **MAPPING_SPEECH_DECODER_PRENET,
+    **MAPPING_SPEECH_DECODER_POSTNET,
+}
 TOP_LEVEL_KEYS = []
 IGNORE_KEYS = [
     "encoder.version",
@@ -154,6 +162,12 @@ IGNORE_KEYS_CTC = IGNORE_KEYS + [
 IGNORE_KEYS_T2S = IGNORE_KEYS + [
     "encoder.proj",
     "speech_encoder_prenet.*",
+    "text_decoder_prenet.*",
+    "text_decoder_postnet.*",
+]
+IGNORE_KEYS_S2S = IGNORE_KEYS + [
+    "encoder.proj",
+    "text_encoder_prenet.*",
     "text_decoder_prenet.*",
     "text_decoder_postnet.*",
 ]
@@ -223,6 +237,10 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
         feature_encoder = None
         MAPPING = MAPPING_T2S
         IGNORE_KEYS = IGNORE_KEYS_T2S
+    elif task == "s2s":
+        feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
+        MAPPING = MAPPING_S2S
+        IGNORE_KEYS = IGNORE_KEYS_S2S
     else:
         raise ValueError(f"Unsupported task: {task}")
 
@@ -361,6 +379,11 @@ def convert_speecht5_checkpoint(
         config.max_length = config.max_speech_positions
         model = SpeechT5ForTextToSpeech(config)
         model_name = "speecht5_tts"
+    elif task == "s2s":
+        config.max_speech_positions = 1876
+        config.max_length = config.max_speech_positions
+        model = SpeechT5ForSpeechToSpeech(config)
+        model_name = "speecht5_vc"
     else:
         raise ValueError(f"Unknown task name: {task}")
 
@@ -374,21 +397,33 @@ def convert_speecht5_checkpoint(
             tokenizer.add_special_tokens({"mask_token": mask_token})
             tokenizer.add_tokens(["<ctc_blank>"])
 
-        if task in ["s2t", "ctc"]:
-            feature_extractor = SpeechT5WaveformFeatureExtractor(
-                feature_size=1,
-                sampling_rate=16000,
-                padding_value=0.0,
-                do_normalize=False,
-                return_attention_mask=True,
-            )
-            processor = processor_class(feature_extractor=feature_extractor, tokenizer=tokenizer)
-            processor.save_pretrained(pytorch_dump_folder_path)
+    if task in ["s2t", "ctc"]:
+        feature_extractor = SpeechT5WaveformFeatureExtractor(
+            feature_size=1,
+            sampling_rate=16000,
+            padding_value=0.0,
+            do_normalize=False,
+            return_attention_mask=True,
+        )
+        processor = processor_class(feature_extractor=feature_extractor, tokenizer=tokenizer)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
-        if task == "t2s":
-            feature_extractor = SpeechT5SpectrogramFeatureExtractor()
-            processor = SpeechT5ProcessorForTextToSpeech(tokenizer=tokenizer, feature_extractor=feature_extractor)
-            processor.save_pretrained(pytorch_dump_folder_path)
+    if task == "t2s":
+        feature_extractor = SpeechT5SpectrogramFeatureExtractor()
+        processor = SpeechT5ProcessorForTextToSpeech(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor.save_pretrained(pytorch_dump_folder_path)
+
+    # if task == "s2s":
+    #     feature_extractor_encoder = SpeechT5WaveformFeatureExtractor(
+    #         feature_size=1,
+    #         sampling_rate=16000,
+    #         padding_value=0.0,
+    #         do_normalize=False,
+    #         return_attention_mask=True,
+    #     )
+    #     feature_extractor_decoder = SpeechT5SpectrogramFeatureExtractor()
+    #     processor = SpeechT5ProcessorForSpeechToSpeech(feature_extractor_encoder, feature_extractor_decoder)
+    #     processor.save_pretrained(pytorch_dump_folder_path)
 
     fairseq_checkpoint = torch.load(checkpoint_path)
     recursively_load_weights(fairseq_checkpoint["model"], model, task)
@@ -408,7 +443,7 @@ if __name__ == "__main__":
         "--task",
         default="s2t",
         type=str,
-        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 't2s'.",
+        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 't2s', 's2s'.",
     )
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--vocab_path", default=None, type=str, help="Path to SentencePiece model")
