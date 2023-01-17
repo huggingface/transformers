@@ -248,6 +248,85 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
+def _generate_speech(
+    model,
+    input_values: torch.FloatTensor,
+    speaker_embeddings: Optional[torch.FloatTensor] = None,
+    threshold: float = 0.5,
+    minlenratio: float = 0.0,
+    maxlenratio: float = 20.0,
+    vocoder: Optional[nn.Module] = None,
+) -> torch.FloatTensor:
+    encoder_attention_mask = torch.ones_like(input_values)
+
+    encoder_out = model.speecht5.encoder(
+        input_values=input_values,
+        attention_mask=encoder_attention_mask,
+        return_dict=True,
+    )
+
+    encoder_last_hidden_state = encoder_out.last_hidden_state
+
+    # downsample encoder attention mask
+    if isinstance(model.speecht5.encoder, SpeechT5EncoderWithSpeechPrenet):
+        encoder_attention_mask = model.speecht5.encoder.prenet._get_feature_vector_attention_mask(
+            encoder_out[0].shape[1], encoder_attention_mask
+        )
+
+    maxlen = int(encoder_last_hidden_state.size(1) * maxlenratio / model.config.reduction_factor)
+    minlen = int(encoder_last_hidden_state.size(1) * minlenratio / model.config.reduction_factor)
+
+    # Start the output sequence with a mel spectrum that is all zeros.
+    output_sequence = encoder_last_hidden_state.new_zeros(1, 1, model.config.num_mel_bins)
+
+    spectrogram = []
+    past_key_values = None
+    idx = 0
+
+    while True:
+        idx += 1
+
+        # Run the decoder prenet on the entire output sequence.
+        decoder_hidden_states = model.speecht5.decoder.prenet(output_sequence, speaker_embeddings)
+
+        # Run the decoder layers on the last element of the prenet output.
+        decoder_out = model.speecht5.decoder.wrapped_decoder(
+            hidden_states=decoder_hidden_states[:, -1:],
+            attention_mask=None,
+            encoder_hidden_states=encoder_last_hidden_state,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=True,
+            return_dict=True,
+        )
+
+        last_decoder_output = decoder_out.last_hidden_state[0, -1]
+        past_key_values = decoder_out.past_key_values
+
+        # Predict the new mel spectrum for this step in the sequence.
+        spectrum = model.speech_decoder_postnet.feat_out(last_decoder_output)
+        spectrum = spectrum.view(model.config.reduction_factor, model.config.num_mel_bins)
+        spectrogram.append(spectrum)
+
+        # Extend the output sequence with the new mel spectrum.
+        output_sequence = torch.cat((output_sequence, spectrum[-1].view(1, 1, model.config.num_mel_bins)), dim=1)
+
+        # Predict the probability that this is the stop token.
+        prob = torch.sigmoid(model.speech_decoder_postnet.prob_out(last_decoder_output))
+
+        # Finished when stop token or maximum length is reached.
+        if idx >= minlen and (int(sum(prob >= threshold)) > 0 or idx >= maxlen):
+            spectrogram = torch.cat(spectrogram, dim=0).unsqueeze(0)
+            spectrogram = model.speech_decoder_postnet.postnet(spectrogram)
+            spectrogram = spectrogram.squeeze(0)
+            break
+
+    if vocoder is not None:
+        return vocoder(spectrogram)
+    else:
+        return spectrogram
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
 class SpeechT5NoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
@@ -2765,68 +2844,15 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             `torch.FloatTensor`: Tensor of shape `(output_sequence_length, config.num_mel_bins)` containing the
             predicted mel spectrogram, or a tensor with shape `(num_frames,)` containing the speech waveform.
         """
-        encoder_attention_mask = torch.ones_like(input_ids)
-
-        encoder_out = self.speecht5.encoder(
-            input_values=input_ids,
-            attention_mask=encoder_attention_mask,
-            return_dict=True,
+        return _generate_speech(
+            self,
+            input_ids,
+            speaker_embeddings,
+            threshold,
+            minlenratio,
+            maxlenratio,
+            vocoder,
         )
-
-        encoder_last_hidden_state = encoder_out.last_hidden_state
-
-        maxlen = int(encoder_last_hidden_state.size(1) * maxlenratio / self.config.reduction_factor)
-        minlen = int(encoder_last_hidden_state.size(1) * minlenratio / self.config.reduction_factor)
-
-        # Start the output sequence with a mel spectrum that is all zeros.
-        output_sequence = encoder_last_hidden_state.new_zeros(1, 1, self.config.num_mel_bins)
-
-        spectrogram = []
-        past_key_values = None
-        idx = 0
-
-        while True:
-            idx += 1
-
-            # Run the decoder prenet on the entire output sequence.
-            decoder_hidden_states = self.speecht5.decoder.prenet(output_sequence, speaker_embeddings)
-
-            # Run the decoder layers on the last element of the prenet output.
-            decoder_out = self.speecht5.decoder.wrapped_decoder(
-                hidden_states=decoder_hidden_states[:, -1:],
-                attention_mask=None,
-                encoder_hidden_states=encoder_last_hidden_state,
-                encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=True,
-                return_dict=True,
-            )
-
-            last_decoder_output = decoder_out.last_hidden_state[0, -1]
-            past_key_values = decoder_out.past_key_values
-
-            # Predict the new mel spectrum for this step in the sequence.
-            spectrum = self.speech_decoder_postnet.feat_out(last_decoder_output)
-            spectrum = spectrum.view(self.config.reduction_factor, self.config.num_mel_bins)
-            spectrogram.append(spectrum)
-
-            # Extend the output sequence with the new mel spectrum.
-            output_sequence = torch.cat((output_sequence, spectrum[-1].view(1, 1, self.config.num_mel_bins)), dim=1)
-
-            # Predict the probability that this is the stop token.
-            prob = torch.sigmoid(self.speech_decoder_postnet.prob_out(last_decoder_output))
-
-            # Finished when stop token or maximum length is reached.
-            if idx >= minlen and (int(sum(prob >= threshold)) > 0 or idx >= maxlen):
-                spectrogram = torch.cat(spectrogram, dim=0).unsqueeze(0)
-                spectrogram = self.speech_decoder_postnet.postnet(spectrogram)
-                spectrogram = spectrogram.squeeze(0)
-                break
-
-        if vocoder is not None:
-            return vocoder(spectrogram)
-        else:
-            return spectrogram
 
 
 @add_start_docstrings(
@@ -3003,74 +3029,15 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             `torch.FloatTensor`: Tensor of shape `(output_sequence_length, config.num_mel_bins)` containing the
             predicted mel spectrogram, or a tensor with shape `(num_frames,)` containing the speech waveform.
         """
-        encoder_attention_mask = torch.ones_like(input_values)
-
-        encoder_out = self.speecht5.encoder(
-            input_values=input_values,
-            attention_mask=encoder_attention_mask,
-            return_dict=True,
+        return _generate_speech(
+            self,
+            input_values,
+            speaker_embeddings,
+            threshold,
+            minlenratio,
+            maxlenratio,
+            vocoder,
         )
-
-        encoder_last_hidden_state = encoder_out.last_hidden_state
-
-        # downsample encoder attention mask
-        if isinstance(self.speecht5.encoder, SpeechT5EncoderWithSpeechPrenet):
-            encoder_attention_mask = self.speecht5.encoder.prenet._get_feature_vector_attention_mask(
-                encoder_out[0].shape[1], encoder_attention_mask
-            )
-
-        maxlen = int(encoder_last_hidden_state.size(1) * maxlenratio / self.config.reduction_factor)
-        minlen = int(encoder_last_hidden_state.size(1) * minlenratio / self.config.reduction_factor)
-
-        # Start the output sequence with a mel spectrum that is all zeros.
-        output_sequence = encoder_last_hidden_state.new_zeros(1, 1, self.config.num_mel_bins)
-
-        spectrogram = []
-        past_key_values = None
-        idx = 0
-
-        while True:
-            idx += 1
-
-            # Run the decoder prenet on the entire output sequence.
-            decoder_hidden_states = self.speecht5.decoder.prenet(output_sequence, speaker_embeddings)
-
-            # Run the decoder layers on the last element of the prenet output.
-            decoder_out = self.speecht5.decoder.wrapped_decoder(
-                hidden_states=decoder_hidden_states[:, -1:],
-                attention_mask=None,
-                encoder_hidden_states=encoder_last_hidden_state,
-                encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
-                use_cache=True,
-                return_dict=True,
-            )
-
-            last_decoder_output = decoder_out.last_hidden_state[0, -1]
-            past_key_values = decoder_out.past_key_values
-
-            # Predict the new mel spectrum for this step in the sequence.
-            spectrum = self.speech_decoder_postnet.feat_out(last_decoder_output)
-            spectrum = spectrum.view(self.config.reduction_factor, self.config.num_mel_bins)
-            spectrogram.append(spectrum)
-
-            # Extend the output sequence with the new mel spectrum.
-            output_sequence = torch.cat((output_sequence, spectrum[-1].view(1, 1, self.config.num_mel_bins)), dim=1)
-
-            # Predict the probability that this is the stop token.
-            prob = torch.sigmoid(self.speech_decoder_postnet.prob_out(last_decoder_output))
-
-            # Finished when stop token or maximum length is reached.
-            if idx >= minlen and (int(sum(prob >= threshold)) > 0 or idx >= maxlen):
-                spectrogram = torch.cat(spectrogram, dim=0).unsqueeze(0)
-                spectrogram = self.speech_decoder_postnet.postnet(spectrogram)
-                spectrogram = spectrogram.squeeze(0)
-                break
-
-        if vocoder is not None:
-            return vocoder(spectrogram)
-        else:
-            return spectrogram
 
 
 HIFIGAN_START_DOCSTRING = r"""
