@@ -124,6 +124,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             outputs = speech_recognizer(audio, return_timestamps=True)
             self.assertIsInstance(outputs["chunks"], list)
             nb_chunks = len(outputs["chunks"])
+            self.assertGreaterThan(nb_chunks, 0)
             self.assertEqual(
                 outputs,
                 {
