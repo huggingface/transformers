@@ -321,7 +321,7 @@ class TypicalLogitsWarper(LogitsWarper):
 
 class EpsilonLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs epsilon, i.e. restricting to tokens with absolute prob > prob_cut_off. Takes the
+    [`LogitsWarper`] that performs epsilon-sampling, i.e. restricting to tokens with `prob >= epsilon`. Takes the
     largest min_tokens_to_keep tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
     Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
 
@@ -364,7 +364,9 @@ class EpsilonLogitsWarper(LogitsWarper):
 
 class EtaLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs eta-sampling. See [Truncation Sampling as Language Model
+    [`LogitsWarper`] that performs eta-sampling, i.e. calculates a dynamic cutoff `eta := min(epsilon, sqrt(epsilon,
+    e^-entropy(probabilities)))` and restricts to tokens with `prob >= eta`. Takes the largest min_tokens_to_keep
+    tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
     Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
 
     Args:
