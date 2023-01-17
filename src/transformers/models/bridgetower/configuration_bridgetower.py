@@ -49,15 +49,13 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in vit's encoder model.
-        init_layernorm_from_vit (`bool`, *optional*, defaults to `False`):
-            Whether to init vit LayerNorm from vit.
+            Number of hidden layers in visual encoder model.
         share_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether vit's LayerNorm layers are shared.
+            Whether LayerNorm layers are shared.
         patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch in vit.
-        vit_remove_last (`bool`, *optional*, defaults to `False`):
-            Whether to remove vit's last layer.
+            The size (resolution) of each patch.
+        remove_last_layer (`bool`, *optional*, defaults to `False`):
+            Whether to remove the last layer from the vision encoder.
 
     Example:
 
@@ -80,8 +78,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         image_size=288,
         stop_gradient=False,
         share_layernorm=True,
-        vit_remove_last=False,
-        init_layernorm_from_vit=False,
+        remove_last_layer=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -91,8 +88,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.stop_gradient = stop_gradient
         self.share_layernorm = share_layernorm
-        self.vit_remove_last = vit_remove_last
-        self.init_layernorm_from_vit = init_layernorm_from_vit
+        self.remove_last_layer = remove_last_layer
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -255,10 +251,6 @@ class BridgeTowerConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        input_image_embed_size (`int`, *optional*, defaults to 768):
-            Embedding size of the input image.
-        input_text_embed_size (`int`, *optional*, defaults to 768):
-            Embedding size of the input text.
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether this is an encoder/decoder model
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -267,12 +259,14 @@ class BridgeTowerConfig(PretrainedConfig):
             Whether the bride/link tower layers are shared.
         link_tower_type (`str`, *optional*, defaults to `"add"`):
             Type of the bridge/link layer.
-        max_text_len (`int`, *optional*, defaults to 50):
-            Maximum text length.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie input and output embeddings.
+        init_layernorm_from_vision_encoder (`bool`, *optional*, defaults to `False`):
+            Whether to init LayerNorm from the vision encoder.
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`BridgeTowerTextConfig`].
         vision_config (`dict`, *optional*):
@@ -301,16 +295,14 @@ class BridgeTowerConfig(PretrainedConfig):
         head_hidden_scale=2,
         hidden_act="gelu",
         hidden_size=768,
-        input_image_embed_size=768,
-        input_text_embed_size=768,
         is_encoder_decoder=False,
         layer_norm_eps=1e-05,
         share_link_tower_layers=False,
         link_tower_type="add",
-        max_text_len=50,
         num_attention_heads=12,
         num_hidden_layers=6,
         tie_word_embeddings=False,
+        init_layernorm_from_vision_encoder=False,
         text_config=None,
         vision_config=None,
         **kwargs
@@ -321,16 +313,14 @@ class BridgeTowerConfig(PretrainedConfig):
         self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
-        self.input_image_embed_size = input_image_embed_size
-        self.input_text_embed_size = input_text_embed_size
         self.is_encoder_decoder = is_encoder_decoder
         self.layer_norm_eps = layer_norm_eps
         self.share_link_tower_layers = share_link_tower_layers
         self.link_tower_type = link_tower_type
-        self.max_text_len = max_text_len
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.tie_word_embeddings = tie_word_embeddings
+        self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
 
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)

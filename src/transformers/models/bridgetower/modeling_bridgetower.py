@@ -190,12 +190,12 @@ class BridgeTowerTransformer(nn.Module):
         attn_mask: torch.Tensor = None,
         model_type: str = "bridgetower",
         stop_gradient: bool = False,
-        vit_remove_last: bool = False,
+        remove_last_layer: bool = False,
     ):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        if vit_remove_last:
+        if remove_last_layer:
             self.resblocks = nn.ModuleList(
                 [BridgeTowerResidualAttention(hidden_size, heads, attn_mask) for _ in range(num_hidden_layers - 1)]
             )
@@ -232,7 +232,7 @@ class BridgeTowerVisualTransformer(nn.Module):
         model_type: str = "bridgetower",
         stop_gradient: bool = False,
         share_layernorm: bool = True,
-        vit_remove_last: bool = False,
+        remove_last_layer: bool = False,
     ):
         super().__init__()
         self.conv1 = nn.Conv2d(
@@ -250,7 +250,7 @@ class BridgeTowerVisualTransformer(nn.Module):
             heads,
             model_type=model_type,
             stop_gradient=stop_gradient,
-            vit_remove_last=vit_remove_last,
+            remove_last_layer=remove_last_layer,
         )
         self.ln_post = BridgeTowerLayerNorm(hidden_size)
         self.model_type = model_type
@@ -322,30 +322,28 @@ class BridgeTowerVisualTransformer(nn.Module):
 class BridgeTowerVisionModel(nn.Module):
     config_class = BridgeTowerVisionConfig
 
-    def __init__(
-        self,
-        num_hidden_layers: Union[Tuple[int, int, int, int], int],
-        hidden_size: int,
-        patch_size: int,
-        image_size=224,
-        model_type="bridgetower",
-        stop_gradient=False,
-        share_layernorm=True,
-        vit_remove_last=False,
-    ):
+    def __init__(self, config):
         super().__init__()
+        self.num_hidden_layers = config.num_hidden_layers
+        self.hidden_size = config.hidden_size
+        self.patch_size = config.patch_size
+        self.image_size = config.image_size
+        self.model_type = "bridgetower",
+        self.stop_gradient = config.stop_gradient
+        self.share_layernorm = config.share_layernorm
+        self.remove_last_layer = config.remove_last_layer
 
-        vision_heads = hidden_size // 64
+        vision_heads = config.hidden_size // 64
         self.visual = BridgeTowerVisualTransformer(
-            patch_size=patch_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
+            patch_size=self.patch_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
             heads=vision_heads,
-            image_size=image_size,
-            model_type=model_type,
-            stop_gradient=stop_gradient,
-            share_layernorm=share_layernorm,
-            vit_remove_last=vit_remove_last,
+            image_size=self.image_size,
+            model_type=self.model_type,
+            stop_gradient=self.stop_gradient,
+            share_layernorm=self.share_layernorm,
+            remove_last_layer=self.remove_last_layer
         )
 
     @property
@@ -1230,38 +1228,30 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
+        vision_config = config.vision_config
+        text_config = config.text_config
 
         if config.share_cross_modal_transformer_layers:
-            self.cross_modal_text_transform = nn.Linear(config.input_text_embed_size, config.hidden_size)
-            self.cross_modal_image_transform = nn.Linear(config.input_image_embed_size, config.hidden_size)
+            self.cross_modal_text_transform = nn.Linear(text_config.hidden_size, config.hidden_size)
+            self.cross_modal_image_transform = nn.Linear(vision_config.hidden_size, config.hidden_size)
         else:
             self.cross_modal_text_transform = nn.ModuleList(
-                [nn.Linear(config.input_text_embed_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
+                [nn.Linear(text_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
             )
             self.cross_modal_image_transform = nn.ModuleList(
-                [nn.Linear(config.input_image_embed_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
+                [nn.Linear(vision_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
             )
 
         self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
 
-        vision_config = config.vision_config
-        self.vit_model = BridgeTowerVisionModel(
-            num_hidden_layers=vision_config.num_hidden_layers,
-            hidden_size=vision_config.hidden_size,
-            patch_size=vision_config.patch_size,
-            image_size=vision_config.image_size,
-            stop_gradient=vision_config.stop_gradient,
-            share_layernorm=vision_config.share_layernorm,
-            vit_remove_last=vision_config.vit_remove_last,
-        )
+        self.vision_model = BridgeTowerVisionModel(vision_config)
 
-        text_config = config.text_config
-        self.text_transformer = BridgeTowerTextModel(text_config)
+        self.text_model = BridgeTowerTextModel(text_config)
 
-        if not vision_config.share_layernorm and vision_config.init_layernorm_from_vit:
-            for ln in self.vit_model.visual.cross_modal_ln_separate:
-                ln.weight.data = self.vit_model.visual.ln_post.weight.data
-                ln.bias.data = self.vit_model.visual.ln_post.bias.data
+        if not vision_config.share_layernorm and config.init_layernorm_from_vision_encoder:
+            for ln in self.vision_model.visual.cross_modal_ln_separate:
+                ln.weight.data = self.vision_model.visual.ln_post.weight.data
+                ln.bias.data = self.vision_model.visual.ln_post.bias.data
 
         self.cross_modal_image_layers = nn.ModuleList(
             [BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)]
@@ -1336,24 +1326,24 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
         input_shape = input_ids.size()
-        text_embeds = self.text_transformer.embeddings(input_ids=input_ids)
+        text_embeds = self.text_model.embeddings(input_ids=input_ids)
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.device)
-        extend_text_masks = self.text_transformer.get_extended_attention_mask(attention_mask, input_shape, self.device)
+        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape, self.device)
 
         # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
-        split_index = len(self.text_transformer.encoder.layer) - self.config.num_hidden_layers + 1
+        split_index = len(self.text_model.encoder.layer) - self.config.num_hidden_layers + 1
 
         # Run the first 'split_index' layers of the textual encoder
-        for layer in self.text_transformer.encoder.layer[:split_index]:
+        for layer in self.text_model.encoder.layer[:split_index]:
             text_embeds = layer(text_embeds, extend_text_masks)[0]
 
-        image_embeds = self.vit_model.visual.forward_pre(pixel_values.type(self.vit_model.dtype))
+        image_embeds = self.vision_model.visual.forward_pre(pixel_values.type(self.vision_model.dtype))
         # Run the first 'split_index' layers of the visual encoder
-        for block in self.vit_model.visual.transformer.resblocks[:split_index]:
+        for block in self.vision_model.visual.transformer.resblocks[:split_index]:
             image_embeds = block(image_embeds)
-        image_embeds_with_ln = self.vit_model.visual.forward_post(image_embeds.type(self.vit_model.dtype))
+        image_embeds_with_ln = self.vision_model.visual.forward_post(image_embeds.type(self.vision_model.dtype))
 
         # first layer is a special case because we don't have the output from the cross-encoder yet
         cross_modal_text = self.cross_modal_text_transform(text_embeds)
@@ -1372,7 +1362,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         pixel_mask = torch.ones(
             (cross_modal_image.size(0), cross_modal_image.size(1)), dtype=torch.long, device=self.device
         )
-        extend_image_masks = self.text_transformer.get_extended_attention_mask(
+        extend_image_masks = self.text_model.get_extended_attention_mask(
             pixel_mask, pixel_mask.size(), self.device
         )
 
@@ -1393,11 +1383,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         #  Each of the top 6 layers of the visual and textual encoders ([split_index:]) is connected to each layer of
         #  the cross-modal encoder via bridge layers, which brings bottom-up alignment and fusion to the cross-modal encoder.
-        for i in range(split_index, len(self.text_transformer.encoder.layer)):
-            text_embeds = self.text_transformer.encoder.layer[i](text_embeds, extend_text_masks)[0]
-            image_embeds = self.vit_model.visual.transformer.resblocks[i](image_embeds).type(self.vit_model.dtype)
+        for i in range(split_index, len(self.text_model.encoder.layer)):
+            text_embeds = self.text_model.encoder.layer[i](text_embeds, extend_text_masks)[0]
+            image_embeds = self.vision_model.visual.transformer.resblocks[i](image_embeds).type(self.vision_model.dtype)
             image_embeds_with_ln = (
-                self.cross_modal_image_transform(self.vit_model.visual.forward_post(image_embeds))
+                self.cross_modal_image_transform(self.vision_model.visual.forward_post(image_embeds))
                 + image_token_type_embeddings
             )
 
