@@ -361,13 +361,13 @@ class ConvLayer(nn.Module):
             padding=1,
             padding_mode="circular",
         )
-        self.norm = nn.BatchNorm1d(c_in)
+        self.norm = nn.BatchNorm1d(c_in) # Eli question: why batchnorm here?
         self.activation = nn.ELU()
         self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         x = self.downConv(x.permute(0, 2, 1))
-        x = self.norm(x)
+        x = self.norm(x) # Eli: why? maybe because the impl...
         x = self.activation(x)
         x = self.maxPool(x)
         x = x.transpose(1, 2)
@@ -535,7 +535,7 @@ class InformerModel(InformerPreTrainedModel):
         # Encoder
         # self.encoder = Encoder(
         #     [
-        #         EncoderLayer(
+        #         EncoderLayer( # Eli question: why I need EncoderLayers here?
         #             AttentionLayer(
         #                 Attn(
         #                     mask_flag=False,
