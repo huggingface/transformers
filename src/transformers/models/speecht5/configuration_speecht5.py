@@ -28,6 +28,7 @@ SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Matthijs/speecht5_asr": "https://huggingface.co/Matthijs/speecht5_asr/resolve/main/config.json",
     "Matthijs/speecht5_ctc": "https://huggingface.co/Matthijs/speecht5_ctc/resolve/main/config.json",
     "Matthijs/speecht5_tts": "https://huggingface.co/Matthijs/speecht5_tts/resolve/main/config.json",
+    "Matthijs/speecht5_vc": "https://huggingface.co/Matthijs/speecht5_vc/resolve/main/config.json",
 }
 
 

@@ -67,6 +67,7 @@ SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Matthijs/speecht5_asr",
     "Matthijs/speecht5_ctc",
     "Matthijs/speecht5_tts",
+    "Matthijs/speecht5_vc",
     # See all SpeechT5 models at https://huggingface.co/models?filter=speecht5
 ]
 
@@ -2942,7 +2943,27 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        TODO
+        >>> from transformers import SpeechT5ProcessorForSpeechToSpeech, SpeechT5ForSpeechToSpeech, SpeechT5HiFiGAN
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> dataset = dataset.sort("id")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> processor = SpeechT5ProcessorForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
+        >>> model = SpeechT5ForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
+        >>> vocoder = SpeechT5HiFiGAN.from_pretrained("Matthijs/speecht5_hifigan")
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+
+        >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
+
+        >>> # generate speech
+        >>> speech = model.generate_speech(inputs["input_values"], speaker_embeddings, vocoder=vocoder)
+        >>> speech.shape
+        torch.Size([77312])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
