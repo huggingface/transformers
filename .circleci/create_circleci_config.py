@@ -359,6 +359,7 @@ exotic_models_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[torch,testing,vision]",
         "pip install torchvision",
+        "pip install scipy",
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
