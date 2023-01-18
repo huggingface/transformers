@@ -58,7 +58,7 @@ class GraphNodeFeature(nn.Module):
     """
 
     def __init__(self, config):
-        super(GraphNodeFeature, self).__init__()
+        super().__init__()
         self.num_heads = config.num_attention_heads
         self.num_atoms = config.num_atoms
 
@@ -97,7 +97,7 @@ class GraphAttnBias(nn.Module):
     """
 
     def __init__(self, config):
-        super(GraphAttnBias, self).__init__()
+        super().__init__()
         self.num_heads = config.num_attention_heads
         self.multi_hop_max_dist = config.multi_hop_max_dist
 
