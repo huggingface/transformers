@@ -160,7 +160,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
+        size (`Dict[str, int]` *optional*, defaults to `288`):
             Resize the shorter side of the input to `size["shortest_edge"]`. The longer side will be limited to under
             `int((1333 / 800) * size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if
             `do_resize` is set to `True`. Can be overridden by the `size` parameter in the `preprocess` method.
@@ -193,8 +193,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
-        image_size (`int`, *optional*, defaults to 288):
-            Size of the image. Defaults to 288. Can be overriden if set with image_size in the configuration.
     """
 
     model_input_names = ["pixel_values"]
@@ -202,7 +200,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Dict[str, int] = 288,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
@@ -212,14 +210,13 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        image_size: int = 288,
         **kwargs
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": image_size}
+        size = size if size is not None else {"shortest_edge": 288}
         size = get_size_dict(size, default_to_square=False)
 
         self.do_resize = do_resize
