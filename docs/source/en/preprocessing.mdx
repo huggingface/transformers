@@ -376,9 +376,9 @@ Note that for resizing, we can get the image size requirements from the `image_p
 width are expected, for others only the `shortest_edge` is defined.
 
 ```py
->>>from torchvision.transforms import RandomResizedCrop, ColorJitter, Compose
+>>> from torchvision.transforms import RandomResizedCrop, ColorJitter, Compose
 
->>>size = (
+>>> size = (
 ...     image_processor.size["shortest_edge"]
 ...     if "shortest_edge" in image_processor.size
 ...     else (image_processor.size["height"], image_processor.size["width"])
