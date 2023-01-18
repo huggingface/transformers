@@ -255,7 +255,9 @@ class FlaxWhisperAttention(nn.Module):
         # and cache the keys and values step by step.
 
         if self.causal and (self.has_variable("cache", "cached_key") or init_cache):
-            key_states, value_states, attention_mask = self._concatenate_to_cache(key_states, value_states, query_states, attention_mask)
+            key_states, value_states, attention_mask = self._concatenate_to_cache(
+                key_states, value_states, query_states, attention_mask
+            )
 
         # Convert the boolean attention mask to an attention bias.
         if attention_mask is not None:

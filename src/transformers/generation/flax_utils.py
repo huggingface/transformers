@@ -187,7 +187,9 @@ class FlaxGenerationMixin:
         # retrieve decoder_start_token_id for encoder-decoder models
         # fall back to bos_token_id if necessary
         decoder_start_token_id = (
-            decoder_start_token_id if decoder_start_token_id is not None else self.generation_config.decoder_start_token_id
+            decoder_start_token_id
+            if decoder_start_token_id is not None
+            else self.generation_config.decoder_start_token_id
         )
         bos_token_id = bos_token_id if bos_token_id is not None else self.generation_config.bos_token_id
         if decoder_start_token_id is not None:
@@ -370,10 +372,12 @@ class FlaxGenerationMixin:
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             warnings.warn(
-                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to"
-                f" {generation_config.max_length} (`generation_config.max_length`). Controlling `max_length` via the"
-                " config is deprecated and `max_length` will be removed from the config in v5 of Transformers -- we"
-                " recommend using `max_new_tokens` to control the maximum length of the generation.",
+                (
+                    "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to"
+                    f" {generation_config.max_length} (`generation_config.max_length`). Controlling `max_length` via"
+                    " the config is deprecated and `max_length` will be removed from the config in v5 of Transformers"
+                    " -- we recommend using `max_new_tokens` to control the maximum length of the generation."
+                ),
                 UserWarning,
             )
         elif has_default_max_length and generation_config.max_new_tokens is not None:
