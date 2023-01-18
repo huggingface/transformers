@@ -14,7 +14,10 @@ import numpy as np
 UNREACHABLE_NODE_DISTANCE = 510 
 
 def floyd_warshall(adjacency_matrix):
-
+    """
+    Applies the Floyd-Warshall algorithm to the adjacency matrix, to compute the 
+    shortest paths distance between all nodes, up to UNREACHABLE_NODE_DISTANCE.
+    """
     (nrows, ncols) = adjacency_matrix.shape
     assert nrows == ncols
     cdef unsigned int n = nrows
@@ -62,6 +65,9 @@ def floyd_warshall(adjacency_matrix):
 
 
 def get_all_edges(path, i, j):
+    """
+    Recursive function to compute all possible paths between two nodes from the graph adjacency matrix.
+    """
     cdef int k = path[i][j]
     if k == -1:
         return []
@@ -70,7 +76,11 @@ def get_all_edges(path, i, j):
 
 
 def gen_edge_input(max_dist, path, edge_feat):
-
+    """
+    Generates the full edge feature and adjacency matrix.
+    Shape: num_nodes * num_nodes * max_distance_between_nodes * num_edge_features
+    Dim 1 is the input node, dim 2 the output node of the edge, dim 3 the depth of the edge, dim 4 the feature
+    """
     (nrows, ncols) = path.shape
     assert nrows == ncols
     cdef unsigned int n = nrows
