@@ -65,6 +65,7 @@ WHISPER_START_DOCSTRING = r"""
     - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
     - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
     - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
+
     Parameters:
         config ([`WhisperConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -99,8 +100,8 @@ WHISPER_INPUTS_DOCSTRING = r"""
             be used by default. If you want to change padding behavior, you should modify to your needs. See diagram 1
             in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
         position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Whisper does not use `position_ids` in the encoder as `input_features` is always the same size and doesn't use
-            masking, but this argument is preserved for compatibility. By default the silence in the input log mel
+            Whisper does not use `position_ids` in the encoder as `input_features` is always the same size and doesn't
+            use masking, but this argument is preserved for compatibility. By default the silence in the input log mel
             spectrogram are ignored.
         decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
