@@ -728,6 +728,8 @@ def is_sudachi_available():
 def is_jumanpp_available():
     return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
 
+def is_cython_available():
+    return importlib.util.find_spec("pyximport") is not None
 
 # docstyle-ignore
 DATASETS_IMPORT_ERROR = """

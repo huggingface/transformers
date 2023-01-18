@@ -6,11 +6,12 @@ from typing import Any, Dict, List, Mapping
 import numpy as np
 import torch
 
-import pyximport
+from ...utils import requires_backends, is_cython_available
 
-
-pyximport.install(setup_args={"include_dirs": np.get_include()})
-from . import algos_graphormer  # noqa E402
+if is_cython_available():
+    import pyximport
+    pyximport.install(setup_args={"include_dirs": np.get_include()})
+    from . import algos_graphormer  # noqa E402
 
 
 def convert_to_single_emb(x, offset: int = 512):
@@ -21,6 +22,8 @@ def convert_to_single_emb(x, offset: int = 512):
 
 
 def preprocess_item(item, keep_features=True):
+    requires_backends(preprocess_item, ["Cython"])
+
     if keep_features and "edge_attr" in item.keys():  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
     else:
