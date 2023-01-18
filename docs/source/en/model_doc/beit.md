@@ -161,7 +161,7 @@ If you're interested in submitting a resource to be included here, please feel f
 
 ## TFBeitForMaskedImageModeling
 
-[[autodoc]] TFBeitForImageClassification
+[[autodoc]] TFBeitForMaskedImageModeling
     - call
 
 ## TFBeitForImageClassification

@@ -948,7 +948,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
-        bool_masked_pos: Optional[tf.bool] = None,
+        bool_masked_pos: Optional[tf.Tensor] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

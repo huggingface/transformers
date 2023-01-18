@@ -181,7 +181,9 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (TFBeitModel, TFBeitForImageClassification, TFBeitForSemanticSegmentation) if is_tf_available() else ()
+        (TFBeitModel, TFBeitForImageClassification, TFBeitForMaskedImageModeling, TFBeitForSemanticSegmentation)
+        if is_tf_available()
+        else ()
     )
 
     test_pruning = False
