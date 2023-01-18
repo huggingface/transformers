@@ -46,9 +46,7 @@ if is_flax_available():
         WhisperFeatureExtractor,
         WhisperProcessor,
     )
-    from transformers.modeling_flax_pytorch_utils import (
-        load_flax_weights_in_pytorch_model,
-    )
+    from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
 
 
 @require_flax
