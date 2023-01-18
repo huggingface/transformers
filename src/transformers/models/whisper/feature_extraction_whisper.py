@@ -173,10 +173,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*):
             Whether to return the attention mask.
-        apply_spec_augment (`bool`, *optional*, defaults to `False`):
-            Whether to apply *SpecAugment* data augmentation to the log-Mel spectrogram features. For reference see
-            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
             procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
@@ -215,7 +211,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        apply_spec_augment=False,
         mask_time_prob=0.0,
         mask_time_length=10,
         mask_time_min_masks=2,
@@ -239,7 +234,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
         # SpecAugment related
-        self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
         self.mask_time_min_masks = mask_time_min_masks
@@ -445,6 +439,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
+        apply_spec_augment: bool = False,
         **kwargs
     ) -> BatchFeature:
         """
@@ -486,6 +481,10 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 pipeline.
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
+            apply_spec_augment (`bool`, *optional*, defaults to `False`):
+                Whether to apply *SpecAugment* data augmentation to the log-Mel spectrogram features. For reference see
+                [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+                Recognition](https://arxiv.org/abs/1904.08779).
         """
 
         if sampling_rate is not None:
@@ -501,7 +500,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        return_attention_mask = return_attention_mask or self.apply_spec_augment
+        return_attention_mask = return_attention_mask or apply_spec_augment
 
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))
@@ -542,7 +541,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         else:
             padded_inputs["input_features"] = input_features
 
-        if self.apply_spec_augment:
+        if apply_spec_augment:
             # todo: input_features to np array
             padded_inputs["input_features"] = np.stack(padded_inputs["input_features"], 0)
 
