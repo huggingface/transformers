@@ -190,15 +190,14 @@ class FlaxWhisperAttention(nn.Module):
         dense = partial(
             nn.Dense,
             self.embed_dim,
-            use_bias=self.bias,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
-        self.q_proj = dense()
+        self.q_proj = dense(use_bias=self.bias)
         self.k_proj = dense(use_bias=False)
-        self.v_proj = dense()
-        self.out_proj = dense()
+        self.v_proj = dense(use_bias=self.bias)
+        self.out_proj = dense(use_bias=self.bias)
 
         if self.causal:
             self.causal_mask = make_causal_mask(
