@@ -216,21 +216,21 @@ class FlaxWhisperAttention(nn.Module):
         is_cross_attention = key_value_states is not None
         batch_size = hidden_states.shape[0]
 
-        q = self.q_proj(hidden_states)
+        query_states = self.q_proj(hidden_states)
 
         if is_cross_attention:
-            k = self.k_proj(key_value_states)
-            v = self.v_proj(key_value_states)
+            key_states = self.k_proj(key_value_states)
+            value_states = self.v_proj(key_value_states)
         else:
-            k = self.k_proj(hidden_states)
-            v = self.v_proj(hidden_states)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
 
-        q = self._split_heads(q)
-        k = self._split_heads(k)
-        v = self._split_heads(v)
+        query_states = self._split_heads(query_states)
+        key_states = self._split_heads(key_states)
+        value_states = self._split_heads(value_states)
 
         if self.causal:
-            query_length, key_length = q.shape[1], k.shape[1]
+            query_length, key_length = query_states.shape[1], key_states.shape[1]
             if self.has_variable("cache", "cached_key"):
                 mask_shift = self.variables["cache"]["cache_index"]
                 max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
@@ -256,7 +256,7 @@ class FlaxWhisperAttention(nn.Module):
         # and cache the keys and values step by step.
 
         if self.causal and (self.has_variable("cache", "cached_key") or init_cache):
-            k, v, attention_mask = self._concatenate_to_cache(k, v, q, attention_mask)
+            key_states, value_states, attention_mask = self._concatenate_to_cache(key_states, value_states, query_states, attention_mask)
 
         # Convert the boolean attention mask to an attention bias.
         if attention_mask is not None:
@@ -274,8 +274,8 @@ class FlaxWhisperAttention(nn.Module):
             dropout_rng = self.make_rng("dropout")
 
         attn_weights = dot_product_attention_weights(
-            q,
-            k,
+            query_states,
+            key_states,
             bias=attention_bias,
             dropout_rng=dropout_rng,
             dropout_rate=self.dropout,
@@ -285,7 +285,7 @@ class FlaxWhisperAttention(nn.Module):
             precision=None,
         )
 
-        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, v)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
 
