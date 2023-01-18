@@ -1219,7 +1219,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Return the current size of the input token embeddings matrix. 
         
-        Use in conjunction with resize_token_embeddings to provide a baseline against which size changes can be 
+        Use in conjunction with `resize_token_embeddings` to provide a baseline against which size changes can be 
         calculated. For example:
         
         ```python
