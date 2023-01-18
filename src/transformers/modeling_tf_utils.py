@@ -1304,6 +1304,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         collate_fn_args: Optional[Dict[str, Any]] = None,
         drop_remainder: Optional[bool] = None,
         prefetch: bool = True,
+        num_workers: int = 0,
     ):
         """
         Wraps a HuggingFace [`~datasets.Dataset`] as a `tf.data.Dataset` with collation and batching. This method is
@@ -1335,6 +1336,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             prefetch (`bool`, defaults to `True`):
                 Whether to add prefetching to the end of the `tf.data` pipeline. This is almost always beneficial for
                 performance, but can be disabled in edge cases.
+            num_workers (`int`, defaults to 0):
+                The number of processes to use for data loading and collation. By default, no additional processes are
+                spawned.
 
 
         Returns:
@@ -1345,6 +1349,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if collate_fn is None:
             if tokenizer is None:
+                logger.warning("No collate_fn or tokenizer for padding was supplied - if all samples are not the same "
+                               "shape, batch loading will fail!")
                 collate_fn = DefaultDataCollator(return_tensors="np")
             else:
                 collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="np")
@@ -1355,42 +1361,38 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             raise TypeError("Dataset argument should be a datasets.Dataset!")
         model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
         model_labels = find_labels(self.__class__)
-        if "cols_to_retain" in list(inspect.signature(dataset._get_output_signature).parameters.keys()):
-            output_signature, _ = dataset._get_output_signature(
-                dataset,
-                batch_size=None,
-                collate_fn=collate_fn,
-                collate_fn_args=collate_fn_args,
-                cols_to_retain=model_inputs,
-            )
-        else:
-            # TODO Matt: This is a workaround for older versions of datasets that are missing the `cols_to_retain`
-            #            argument. We should remove this once the minimum supported version of datasets is > 2.3.2
-            unwanted_columns = [
-                feature
-                for feature in dataset.features
-                if feature not in model_inputs and feature not in ("label_ids", "label")
-            ]
-            dataset = dataset.remove_columns(unwanted_columns)
-            output_signature, _ = dataset._get_output_signature(
-                dataset, batch_size=None, collate_fn=collate_fn, collate_fn_args=collate_fn_args
-            )
+        output_signature, _ = dataset._get_output_signature(
+            dataset,
+            batch_size=None,
+            collate_fn=collate_fn,
+            collate_fn_args=collate_fn_args,
+            cols_to_retain=model_inputs,
+        )
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
         label_cols = [col for col in output_columns if col in model_labels]
 
         if drop_remainder is None:
             drop_remainder = shuffle
-        tf_dataset = dataset.to_tf_dataset(
-            columns=feature_cols,
-            label_cols=label_cols,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            drop_remainder=drop_remainder,
-            collate_fn=collate_fn,
-            collate_fn_args=collate_fn_args,
-            prefetch=prefetch,
-        )
+        to_tf_dataset_parameters = list(dict(inspect.signature(dataset.to_tf_dataset).parameters).keys())
+        to_tf_dataset_kwargs = {
+            "columns": feature_cols,
+            "label_cols": label_cols,
+            "batch_size": batch_size,
+            "shuffle": shuffle,
+            "drop_remainder": drop_remainder,
+            "collate_fn": collate_fn,
+            "collate_fn_args": collate_fn_args,
+            "prefetch": prefetch,
+            "num_workers": num_workers,
+        }
+        # TODO Matt: Since num_workers is a very new parameter, we need to support older versions of datasets
+        #            that don't have it. We should remove this around ~June-July 2023 after a few more releases
+        #            of datasets.
+        if "num_workers" not in to_tf_dataset_parameters:
+            del to_tf_dataset_kwargs["num_workers"]
+        tf_dataset = dataset.to_tf_dataset(**to_tf_dataset_kwargs)
+
         return tf_dataset
 
     def compile(
