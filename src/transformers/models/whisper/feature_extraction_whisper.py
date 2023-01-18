@@ -413,8 +413,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 min_masks=self.mask_time_min_masks,
             )
             mask_time_indices = np.broadcast_to(mask_time_indices[:, None], (batch_size, hidden_size, sequence_length))
-            # mask_time_indices = np.tile(mask_time_indices, (1, hidden_size, 1))
-            # mask_time_indices = np.repeat(mask_time_indices[:, None, :], hidden_size, axis=1)
             input_features[mask_time_indices] = 0
 
         if self.mask_feature_prob > 0:
