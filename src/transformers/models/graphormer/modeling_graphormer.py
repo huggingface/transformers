@@ -170,14 +170,6 @@ class LayerDropModuleList(nn.ModuleList):
                 yield m
 
 
-def init_params(module, num_layers):
-    if isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=0.02 / math.sqrt(num_layers))
-        if module.bias is not None:
-            module.bias.data.zero_()
-    if isinstance(module, nn.Embedding):
-        module.weight.data.normal_(mean=0.0, std=0.02)
-
 
 class GraphormerGraphNodeFeature(nn.Module):
     """
@@ -198,9 +190,6 @@ class GraphormerGraphNodeFeature(nn.Module):
         )
 
         self.graph_token = nn.Embedding(1, config.hidden_size)
-
-        # initializes all embedding parameters
-        self.apply(lambda module: init_params(module, num_layers=config.num_hidden_layers))
 
     def forward(self, input_nodes, in_degree, out_degree):
         n_graph, n_node = input_nodes.size()[:2]
@@ -242,8 +231,6 @@ class GraphormerGraphAttnBias(nn.Module):
         self.spatial_pos_encoder = nn.Embedding(config.num_spatial, config.num_attention_heads, padding_idx=0)
 
         self.graph_token_virtual_distance = nn.Embedding(1, config.num_attention_heads)
-
-        self.apply(lambda module: init_params(module, num_layers=config.num_hidden_layers))
 
     def forward(self, input_nodes, attn_bias, spatial_pos, input_edges, attn_edge_type):
         n_graph, n_node = input_nodes.size()[:2]
@@ -488,9 +475,6 @@ class GraphormerMultiheadAttention(nn.Module):
 class GraphormerGraphEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-
-        if config.init_fn is not None:
-            config.init_fn()
 
         # Initialize parameters
         self.embedding_dim = config.embedding_dim
@@ -740,8 +724,14 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             self.normal_(module.v_proj.weight.data)
 
     def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        """
+        Initialize the weights
+        """
+        if isinstance(module, (nn.Linear)):
+            module.weight.data.normal_(mean=0.0, std=0.02 / self.config_class.num_hidden_layers)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        if isinstance(module, (nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=0.02)
             if module.bias is not None:
                 module.bias.data.zero_()

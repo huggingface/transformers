@@ -58,8 +58,6 @@ class GraphormerConfig(PretrainedConfig):
             collation.
         edge_type (`str`, *optional*, defaults to multihop):
             Type of edge relation chosen.
-        init_fn (`Callable`, *optional*, defaults to None):
-            Custom function to use for initialisation of the GraphormerGraphEncoderLayer if needed.
         max_nodes (`int`, *optional*, defaults to 512):
             Maximum number of nodes which can be parsed for the input graphs.
         share_input_output_embed (`bool`, *optional*, defaults to `False`):
@@ -146,7 +144,6 @@ class GraphormerConfig(PretrainedConfig):
         multi_hop_max_dist: int = 5,  # sometimes is 20
         spatial_pos_max: int = 1024,
         edge_type: str = "multi_hop",
-        init_fn = None,
         max_nodes: int = 512,
         share_input_output_embed: bool = False,
         num_hidden_layers: int = 12,
@@ -207,7 +204,6 @@ class GraphormerConfig(PretrainedConfig):
         self.traceable = traceable
         self.q_noise = q_noise
         self.qn_block_size = qn_block_size
-        self.init_fn = init_fn
 
         # These parameters are here for future extensions
         # atm, the model only supports self attention
