@@ -149,7 +149,7 @@ class BridgeTowerModelTester:
         pixel_values,
         pixel_mask,
     ):
-        bridgeTowerITMHead_output_last_dimension = 2
+        bridgetower_itm_output_last_dimension = 2
 
         model = BridgeTowerForImageAndTextRetrieval(config)
         model.to(torch_device)
@@ -158,7 +158,7 @@ class BridgeTowerModelTester:
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, bridgeTowerITMHead_output_last_dimension))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, bridgetower_itm_output_last_dimension))
 
     def create_and_check_for_masked_language_modeling(
         self,
