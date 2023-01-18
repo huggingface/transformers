@@ -24,7 +24,7 @@ To keep things relatively brief, for each task, we'll provide a high-level overv
 - [GLPN](model_doc/glpn) for depth estimation
 - [BERT](model_doc/bert) for NLP tasks like text classification, token classification and question answering that use an encoder
 - [GPT2](model_doc/gpt2) for NLP tasks like text generation that use a decoder
-- [T5](model_doc/t5) for NLP tasks like summarization and translation that use an encoder-decoder
+- [BART](model_doc/bart) for NLP tasks like summarization and translation that use an encoder-decoder
 
 To use a pretrained model for a downstream task, you only need to add a task-specific head and finetune it on your data.
 
@@ -167,14 +167,48 @@ To use BERT for token classification tasks like named entity recognition (NER), 
 
 To use BERT for question answering, you add a span classification head on top of the base BERT model. This is a linear layer that accepts the final hidden states and does a linear transformation to compute the `span` start and end logits corresponding to the answer. The cross-entropy loss is then calculated between the logits and the label position to find the most likely span of text corresponding to the answer.
 
-### Language modeling
+### Text generation
 
-GPT2
+[GPT-2](model_doc/gpt2) is a decoder-only model pretrained on a large amount of text, and is able to generate convincing text given a prompt and can also complete other NLP tasks like question answering despite not being explicitly trained for them.
+
+1. GPT-2 uses [byte pair encoding (BPE)](tokenizer_summary#bytepair-encoding-bpe) to tokenize words and generate a token embedding. Positional encodings are added to the token embeddings to indicate the position of each token in the sequence. The input embeddings are passed through multiple decoder blocks to output some final hidden state. Within each decoder block, GPT-2 uses a *masked self-attention* layer which means GPT-2 can't attend to future tokens. It is only allowed to attend to tokens on the left. This is different from BERT's [`mask`] token, because in masked self-attention, an attention mask is used to set the score to 0 for future tokens.
+
+2. The output from the decoder is passed to a language modeling head which does a linear transformation to convert the hidden states into logits. The label is simply the next token in the sequence, so to create those, the logits are shifted to the right by one. The cross-entropy loss is then calculated between the shifted logits and the labels to output the next most likely token.
+
+GPT-2's pretraining objective is based entirely on [causal language modeling](glossary#causal-language-modeling), that is, simply predicting the next word in a sequence. This makes GPT-2 especially good at tasks that involve generating text. To use GPT-2 for text generation, call the [`generate`] method to start generating text!
+
+<Tip>
+
+For more information about text generation, check out the [text generation strategies](generation_strategies) guide!
+
+</Tip>
 
 ### Summarization
 
-T5
+[BART](model_doc/bart) is an encoder-decoder Transformer that combines the best of both worlds: the bidirectional encoder of BERT and the decoder of GPT-2.
+
+1. The encoder architecture is very similar to BERT and accepts a token and positional embedding of the text. BART is pretrained by corrupting the input and then reconstructing it with the decoder. Unlike other encoders with specific corruption strategies, BART can apply any type of corruption. Specificially, the *text infilling* strategy works particuarly well. In text infilling, a number of text spans are replaced with a **single** [`mask`] token. This is important because not only does the model have to predict the masked tokens, it also teaches the model to predict the number of missing tokens. The input embeddings and masked spans are passed through the encoder to output some final hidden states, but unlike BERT, BART doesn't add a final feed-forward network at the end to predict a word.
+
+2. The encoder's output are passed to the decoder which must predict the masked tokens from the encoder's output and any uncorrupted tokens. To help it restore the original text, the decoder has *cross-attention* layers that allow each decoder layer to attend to the final hidden state of the encoder. The output from the decoder is passed to a language modeling head which does a linear transformation to convert the hidden states into logits. The cross-entropy loss is then calculated between the logits and the label, which is just the token shifted to the right.
+
+To use BART for summarization, call the [`generate`] method to start summarizing!
+
+<Tip>
+
+For more information about text generation, check out the [text generation strategies](generation_strategies) guide!
+
+</Tip>
 
 ### Translation
 
-T5
+BART can also be used for translation by making a small addition to the architecture. A separate randomly initialized encoder is added to map a source language into an input that BART can decode into the target language. The embeddings from this new encoder is passed to the pretrained encoder instead of the original word embeddings. The source encoder is trained by updating the source encoder, positional embeddings and input embeddings with the cross-entropy loss from the model output. In this first step, the model parameters are frozen and in the second step, all the model parameters are trained together.
+
+BART has since been followed up by mBART, a multilingual version of BART primarily intended for translation and pretrained on many different languages.
+
+To use BART or mBART for translation, call the [`generate`] method to start translating!
+
+<Tip>
+
+For more information about text generation, check out the [text generation strategies](generation_strategies) guide!
+
+</Tip>
