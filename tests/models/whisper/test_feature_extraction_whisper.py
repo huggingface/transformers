@@ -223,3 +223,14 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feaure_extractor = WhisperFeatureExtractor()
         input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+
+    def test_mask_feat(self):
+        input_speech = self._load_datasamples(1)
+        feaure_extractor = WhisperFeatureExtractor(
+            mask_time_prob=0.1, mask_feature_prob=0.1, mask_time_min_masks=1, mask_feature_min_masks=1
+        )
+        input_features = feaure_extractor(input_speech, sampling_rate=16_000, apply_spec_augment=True).input_features
+        # at least feaure_extractor.mask_time_length samples along time should be masked
+        self.assertTrue((input_features[0, 0] == 0).sum() >= feaure_extractor.mask_time_length)
+        # at least feaure_extractor.mask_feature_length samples along feature should be masked
+        self.assertTrue((input_features[0, :, 0] == 0).sum() >= feaure_extractor.mask_feature_length)
