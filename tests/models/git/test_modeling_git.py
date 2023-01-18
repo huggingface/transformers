@@ -411,35 +411,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_causal_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
-
-    def test_training(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-
-            if model_class in [
-                *get_values(MODEL_MAPPING),
-                *get_values(MODEL_FOR_BACKBONE_MAPPING),
-            ]:
-                continue
-
-            print("Model class:", model_class)
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            for k, v in inputs.items():
-                print(k, v.shape)
-            loss = model(**inputs).loss
-            loss.backward()
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in GIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
