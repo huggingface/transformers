@@ -1104,8 +1104,8 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
@@ -1402,6 +1402,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             encoder_attention_mask=extend_text_masks,
         )[0]
 
+        if output_hidden_states:
+            all_hidden_states_cross += ((cross_text_features, cross_image_features),)
+
         link_layer_index = 0
 
         #  Each of the top 6 layers of the visual and textual encoders ([split_index:]) is connected to each layer of
@@ -1444,14 +1447,14 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states_text += (text_embeds,)
                 all_hidden_states_image += (image_embeds,)
-                all_hidden_states_cross += ((cross_text_features, cross_image_features))
+                all_hidden_states_cross += ((cross_text_features, cross_image_features),)
 
         #  Concatenate the cls token of the text and image features to get the final represtation
         text_features, image_features = cross_text_features, cross_image_features
         cls_features = self.get_cls_features(text_features, image_features)
 
         if output_hidden_states:
-            all_hidden_states = (all_hidden_states_text, all_hidden_states_image, all_hidden_states_image)
+            all_hidden_states = (all_hidden_states_text, all_hidden_states_image, all_hidden_states_cross)
 
         if not return_dict:
             return tuple(v for v in [text_features, image_features, cls_features] if v is not None)
@@ -1548,8 +1551,8 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
@@ -1640,8 +1643,8 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
