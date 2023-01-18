@@ -1026,8 +1026,6 @@ class DagsHubCallback(MLflowCallback):
         Environment:
             HF_DAGSHUB_LOG_ARTIFACTS (`str`, *optional*):
                 Whether to save the data and model artifacts for the experiment. Default to `False`.
-            HF_DAGSHUB_DATA_PATH (`str`, *optional*):
-                The path at which the data is present. Default to `None`.
         """
 
         self.model = args[2]
@@ -1047,11 +1045,13 @@ class DagsHubCallback(MLflowCallback):
 
     def on_save(self, args, state, control, **kwargs):
         if self.log_artifacts:
-            if self.data:
-                self.repo.directory(self.paths["artifacts"]).add(file=self.data, path=self.paths["data"])
+            # dataset =
+            # for i in range(len(self.train_dataloader)): # or i, image in enumerate(dataset)
+            #     = dataset[i] # or whatever your dataset returns
+            # self.repo.directory(self.paths["artifacts"]).add(file=self.data, path=self.paths["data"])
 
             torch.save(self.model, self.paths["models"] / "model.pt")
-            state.to_json(self.path["models"])
+            state.to_json(self.path["artifacts"])
 
             self.repo.directory(self.paths["artifacts"]).add(
                 file=self.paths["artifacts"], path=self.paths["artifacts"]
