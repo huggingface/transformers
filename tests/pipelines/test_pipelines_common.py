@@ -29,7 +29,7 @@ from unittest import skipIf
 import datasets
 import numpy as np
 
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
@@ -1023,7 +1023,8 @@ class DynamicPipelineTester(unittest.TestCase):
         model = BertForSequenceClassification(config).eval()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-pipeline", use_auth_token=self._token)
+            create_repo(f"{USER}/test-dynamic-pipeline", token=self._token)
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-pipeline", token=self._token)
 
             vocab_file = os.path.join(tmp_dir, "vocab.txt")
             with open(vocab_file, "w", encoding="utf-8") as vocab_writer:

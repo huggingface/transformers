@@ -43,7 +43,7 @@ from flax import jax_utils
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -298,7 +298,8 @@ def main():
             )
         else:
             repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
+        create_repo(repo_name, exist_ok=True, token=training_args.hub_token)
+        repo = Repository(training_args.output_dir, clone_from=repo_name, token=training_args.hub_token)
 
     # Initialize datasets and pre-processing transforms
     # We use torchvision here for faster pre-processing

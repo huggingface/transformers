@@ -60,7 +60,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -3315,7 +3315,6 @@ class Trainer:
         """
         if not self.is_world_process_zero():
             return
-        use_auth_token = True if self.args.hub_token is None else self.args.hub_token
         if self.args.hub_model_id is None:
             repo_name = Path(self.args.output_dir).absolute().name
         else:
@@ -3323,22 +3322,15 @@ class Trainer:
         if "/" not in repo_name:
             repo_name = get_full_repo_name(repo_name, token=self.args.hub_token)
 
+        # Make sure the repo exists.
+        create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
         try:
-            self.repo = Repository(
-                self.args.output_dir,
-                clone_from=repo_name,
-                use_auth_token=use_auth_token,
-                private=self.args.hub_private_repo,
-            )
+            self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
         except EnvironmentError:
             if self.args.overwrite_output_dir and at_init:
                 # Try again after wiping output_dir
                 shutil.rmtree(self.args.output_dir)
-                self.repo = Repository(
-                    self.args.output_dir,
-                    clone_from=repo_name,
-                    use_auth_token=use_auth_token,
-                )
+                self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
             else:
                 raise
 
