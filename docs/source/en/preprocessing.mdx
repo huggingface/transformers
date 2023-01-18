@@ -434,6 +434,14 @@ Here is what the image looks like after the transforms are applied. The image ha
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/preprocessed_image.png"/>
 </div>
 
+<Tip>
+
+For tasks like object detection, semantic segmentation, instance segmentation, and panoptic segmentation, ImageProcessor
+offers post processing methods. These methods convert model's raw outputs into meaningful predictions such as bounding boxes,
+or segmentation maps.
+
+</Tip>
+
 ### Pad
 In some cases, for instance, when fine-tuning [DETR](./model_doc/detr), the model applies scale augmentation at training
 time. This may cause images of different sizes in a batch. You can use [`~transformers.DetrImageProcessor.pad_and_create_pixel_mask`]
