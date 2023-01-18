@@ -1297,12 +1297,14 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         image_token_type_idx: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
+        output_hidden_states (`bool`, *optional*):
+            If set to `True`, hidden states are returned as a list containing the hidden states of text, image, and cross-modal components respectively. 
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels are currently not supported.
         Returns:
@@ -1326,10 +1328,19 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         >>> outputs.keys()
         odict_keys(['text_features', 'image_features', 'pooler_output'])
         ```"""
+        all_hidden_states_text = () if output_hidden_states else None
+        all_hidden_states_image = () if output_hidden_states else None
+        all_hidden_states_cross = () if output_hidden_states else None
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
         input_shape = input_ids.size()
         text_embeds = self.text_model.embeddings(input_ids=input_ids)
+
+        if output_hidden_states:
+            all_hidden_states_text += (text_embeds,)
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.device)
@@ -1342,10 +1353,19 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         for layer in self.text_model.encoder.layer[:split_index]:
             text_embeds = layer(text_embeds, extend_text_masks)[0]
 
+            if output_hidden_states:
+                all_hidden_states_text += (text_embeds,)
+
         image_embeds = self.vision_model.visual.forward_pre(pixel_values.type(self.vision_model.dtype))
+        if output_hidden_states:
+            all_hidden_states_image += (image_embeds,)
+
         # Run the first 'split_index' layers of the visual encoder
         for block in self.vision_model.visual.transformer.resblocks[:split_index]:
             image_embeds = block(image_embeds)
+            if output_hidden_states:
+                all_hidden_states_image += (image_embeds,)
+
         image_embeds_with_ln = self.vision_model.visual.forward_post(image_embeds.type(self.vision_model.dtype))
 
         # first layer is a special case because we don't have the output from the cross-encoder yet
@@ -1421,9 +1441,17 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
             link_layer_index += 1
 
+            if output_hidden_states:
+                all_hidden_states_text += (text_embeds,)
+                all_hidden_states_image += (image_embeds,)
+                all_hidden_states_cross += ((cross_text_features, cross_image_features))
+
         #  Concatenate the cls token of the text and image features to get the final represtation
         text_features, image_features = cross_text_features, cross_image_features
         cls_features = self.get_cls_features(text_features, image_features)
+
+        if output_hidden_states:
+            all_hidden_states = (all_hidden_states_text, all_hidden_states_image, all_hidden_states_image)
 
         if not return_dict:
             return tuple(v for v in [text_features, image_features, cls_features] if v is not None)
@@ -1432,6 +1460,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             text_features=text_features,
             image_features=image_features,
             pooler_output=cls_features,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
     def get_cls_features(self, text_features, image_features):
@@ -1573,7 +1603,11 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         if not return_dict:
             return tuple(mlm_logits)
 
-        return MaskedLMOutput(logits=mlm_logits)
+        return MaskedLMOutput(
+            logits=mlm_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -1664,6 +1698,6 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         return SequenceClassifierOutput(
             loss=None,
             logits=logits,
-            hidden_states=None,
-            attentions=None,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
