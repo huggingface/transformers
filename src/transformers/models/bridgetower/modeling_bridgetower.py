@@ -1304,7 +1304,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
     ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
         output_hidden_states (`bool`, *optional*):
-            If set to `True`, hidden states are returned as a list containing the hidden states of text, image, and cross-modal components respectively. 
+            If set to `True`, hidden states are returned as a list containing the hidden states of text, image, 
+            and cross-modal components respectively. 
+            i.e. `(hidden_states_text, hidden_states_image, hidden_states_cross_modal)` where each element is a 
+            list of the hidden states of the corresponding modality. `hidden_states_txt/img` are a list of
+            tensors corresponding to unimodal hidden states and `hidden_states_cross_modal` is a list of tuples
+            containing `cross_modal_text_hidden_states` and `cross_modal_image_hidden_states` of each brdige layer. 
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels are currently not supported.
         Returns:
