@@ -24,8 +24,8 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_convnextv2": [
         "CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ConvNeXtV2Config",
-        "ConvNeXtV2OnnxConfig",
+        "ConvNextV2Config",
+        "ConvNextV2OnnxConfig",
     ]
 }
 
@@ -37,16 +37,16 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_convnextv2"] = [
         "CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ConvNeXtV2ForImageClassification",
-        "ConvNeXtV2Model",
-        "ConvNeXtV2PreTrainedModel",
+        "ConvNextV2ForImageClassification",
+        "ConvNextV2Model",
+        "ConvNextV2PreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_convnextv2 import (
         CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ConvNeXtV2Config,
-        ConvNeXtV2OnnxConfig,
+        ConvNextV2Config,
+        ConvNextV2OnnxConfig,
     )
 
     try:
@@ -57,9 +57,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_convnextv2 import (
             CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvNeXtV2ForImageClassification,
-            ConvNeXtV2Model,
-            ConvNeXtV2PreTrainedModel,
+            ConvNextV2ForImageClassification,
+            ConvNextV2Model,
+            ConvNextV2PreTrainedModel,
         )
 
 else:

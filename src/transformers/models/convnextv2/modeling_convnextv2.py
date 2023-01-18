@@ -30,7 +30,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_convnextv2 import ConvNeXtV2Config
+from .configuration_convnextv2 import ConvNextV2Config
 
 
 logger = logging.get_logger(__name__)
@@ -75,7 +75,7 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNeXtV2
-class ConvNeXtV2DropPath(nn.Module):
+class ConvNextV2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -90,7 +90,7 @@ class ConvNeXtV2DropPath(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->ConvNeXtV2
-class ConvNeXtV2LayerNorm(nn.Module):
+class ConvNextV2LayerNorm(nn.Module):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -121,7 +121,7 @@ class ConvNeXtV2LayerNorm(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->ConvNeXtV2
-class ConvNeXtV2Embeddings(nn.Module):
+class ConvNextV2Embeddings(nn.Module):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
@@ -131,7 +131,7 @@ class ConvNeXtV2Embeddings(nn.Module):
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
         )
-        self.layernorm = ConvNeXtV2LayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+        self.layernorm = ConvNextV2LayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
         self.num_channels = config.num_channels
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -161,7 +161,7 @@ class GRN(nn.Module):
         return self.gamma * (x * Nx) + self.beta + x
 
 
-class ConvNeXtV2Layer(nn.Module):
+class ConvNextV2Layer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
@@ -170,7 +170,7 @@ class ConvNeXtV2Layer(nn.Module):
     The authors used (2) as they find it slightly faster in PyTorch.
 
     Args:
-        config ([`ConvNeXtV2Config`]): Model configuration class.
+        config ([`ConvNextV2Config`]): Model configuration class.
         dim (`int`): Number of input channels.
         drop_path (`float`): Stochastic depth rate. Default: 0.0.
     """
@@ -178,12 +178,12 @@ class ConvNeXtV2Layer(nn.Module):
     def __init__(self, config, dim, drop_path=0):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.layernorm = ConvNeXtV2LayerNorm(dim, eps=1e-6)
+        self.layernorm = ConvNextV2LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
         self.grn = GRN(4 * dim)
         self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.drop_path = ConvNeXtV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = ConvNextV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         input = hidden_states
@@ -201,7 +201,7 @@ class ConvNeXtV2Layer(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNext->ConvNeXtV2,ConvNeXT->ConvNeXtV2
-class ConvNeXtV2Stage(nn.Module):
+class ConvNextV2Stage(nn.Module):
     """ConvNeXtV2 stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
@@ -217,14 +217,14 @@ class ConvNeXtV2Stage(nn.Module):
 
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = nn.Sequential(
-                ConvNeXtV2LayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
+                ConvNextV2LayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
                 nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
             )
         else:
             self.downsampling_layer = nn.Identity()
         drop_path_rates = drop_path_rates or [0.0] * depth
         self.layers = nn.Sequential(
-            *[ConvNeXtV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+            *[ConvNextV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -234,7 +234,7 @@ class ConvNeXtV2Stage(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->ConvNeXtV2
-class ConvNeXtV2Encoder(nn.Module):
+class ConvNextV2Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.stages = nn.ModuleList()
@@ -244,7 +244,7 @@ class ConvNeXtV2Encoder(nn.Module):
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
-            stage = ConvNeXtV2Stage(
+            stage = ConvNextV2Stage(
                 config,
                 in_channels=prev_chs,
                 out_channels=out_chs,
@@ -282,13 +282,13 @@ class ConvNeXtV2Encoder(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNeXtV2,convnext->convnextv2
-class ConvNeXtV2PreTrainedModel(PreTrainedModel):
+class ConvNextV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ConvNeXtV2Config
+    config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -306,7 +306,7 @@ class ConvNeXtV2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvNeXtV2Model):
+        if isinstance(module, ConvNextV2Model):
             module.gradient_checkpointing = value
 
 
@@ -340,13 +340,13 @@ CONVNEXTV2_INPUTS_DOCSTRING = r"""
     CONVNEXTV2_START_DOCSTRING,
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2,ConvNext->ConvNeXtV2
-class ConvNeXtV2Model(ConvNeXtV2PreTrainedModel):
+class ConvNextV2Model(ConvNextV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ConvNeXtV2Embeddings(config)
-        self.encoder = ConvNeXtV2Encoder(config)
+        self.embeddings = ConvNextV2Embeddings(config)
+        self.encoder = ConvNextV2Encoder(config)
 
         # final layernorm layer
         self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
@@ -408,12 +408,12 @@ class ConvNeXtV2Model(ConvNeXtV2PreTrainedModel):
     CONVNEXTV2_START_DOCSTRING,
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNeXtV2,convnext->convnextv2
-class ConvNeXtV2ForImageClassification(ConvNeXtV2PreTrainedModel):
+class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.convnextv2 = ConvNeXtV2Model(config)
+        self.convnextv2 = ConvNextV2Model(config)
 
         # Classifier head
         self.classifier = (

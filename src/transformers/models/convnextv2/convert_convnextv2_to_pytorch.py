@@ -26,7 +26,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import hf_hub_download
-from transformers import ConvNextFeatureExtractor, ConvNeXtV2Config, ConvNeXtV2ForImageClassification
+from transformers import ConvNextFeatureExtractor, ConvNextV2Config, ConvNextV2ForImageClassification
 from transformers.utils import logging
 
 
@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_convnextv2_config(checkpoint_url):
-    config = ConvNeXtV2Config()
+    config = ConvNextV2Config()
 
     if "atto" in checkpoint_url:
         depths = [2, 2, 6, 2]
@@ -150,7 +150,7 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         state_dict[key] = val
 
     # load HuggingFace model
-    model = ConvNeXtV2ForImageClassification(config)
+    model = ConvNextV2ForImageClassification(config)
     model.load_state_dict(state_dict)
     model.eval()
 
