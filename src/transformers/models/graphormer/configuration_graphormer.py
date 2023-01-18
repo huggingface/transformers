@@ -14,8 +14,6 @@
 # limitations under the License.
 """ Graphormer model configuration"""
 
-from typing import Callable
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -148,7 +146,7 @@ class GraphormerConfig(PretrainedConfig):
         multi_hop_max_dist: int = 5,  # sometimes is 20
         spatial_pos_max: int = 1024,
         edge_type: str = "multi_hop",
-        init_fn: Callable = None,
+        init_fn = None,
         max_nodes: int = 512,
         share_input_output_embed: bool = False,
         num_hidden_layers: int = 12,
