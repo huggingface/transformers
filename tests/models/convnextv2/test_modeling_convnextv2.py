@@ -237,11 +237,11 @@ def prepare_img():
 class ConvNeXtV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("IMvision12/ConvNeXt-V2") if is_vision_available() else None
+        return AutoFeatureExtractor.from_pretrained("facebook/convnextv2-base-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ConvNeXtV2ForImageClassification.from_pretrained("IMvision12/ConvNeXt-V2").to(torch_device)
+        model = ConvNeXtV2ForImageClassification.from_pretrained("facebook/convnextv2-base-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

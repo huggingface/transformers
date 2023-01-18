@@ -40,15 +40,15 @@ _CONFIG_FOR_DOC = "ConvNeXtV2Config"
 _FEAT_EXTRACTOR_FOR_DOC = "ConvNextImageProcessor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "IMvision12/ConvNeXt-V2"
+_CHECKPOINT_FOR_DOC = "facebook/convnextv2-tiny-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "IMvision12/ConvNeXt-V2"
+_IMAGE_CLASS_CHECKPOINT = "facebook/convnextv2-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "IMvision12/ConvNeXt-V2",
+    "facebook/convnextv2-tiny-224",
     # See all ConvNeXtV2 models at https://huggingface.co/models?filter=convnextv2
 ]
 
@@ -154,12 +154,13 @@ class GRN(nn.Module):
         self.beta = nn.Parameter(torch.zeros(1, 1, 1, dim))
 
     def forward(self, x):
+        # Gx : A vector which will store aggregated spatial feature maps
+        # Nx : response normalization, done using standard di-visive normalization
         Gx = torch.norm(x, p=2, dim=(1, 2), keepdim=True)
         Nx = Gx / (Gx.mean(dim=-1, keepdim=True) + 1e-6)
         return self.gamma * (x * Nx) + self.beta + x
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayer with ConvNext->ConvNeXtV2
 class ConvNeXtV2Layer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 

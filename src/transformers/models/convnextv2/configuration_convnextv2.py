@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "IMvision12/ConvNeXt-V2": "https://huggingface.co/IMvision12/ConvNeXt-V2/resolve/main/config.json",
+    "facebook/ConvNeXt-V2": "https://huggingface.co/facebook/convnextv2-tiny-224/resolve/main/config.json",
 }
 
 
@@ -36,7 +36,7 @@ class ConvNeXtV2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ConvNeXtV2Model`]. It is used to instantiate an
     ConvNeXtV2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ConvNeXtV2
-    [IMvision12/ConvNeXt-V2](https://huggingface.co/IMvision12/ConvNeXt-V2) architecture.
+    [facebook/ConvNeXt-V2](https://huggingface.co/facebook/convnextv2-tiny-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
