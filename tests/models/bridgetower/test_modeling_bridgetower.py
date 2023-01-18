@@ -117,8 +117,8 @@ class BridgeTowerModelTester:
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             tie_word_embeddings=self.tie_word_embeddings,
-            output_hidden_states=self.output_hidden_states,
             init_layernorm_from_vision_encoder=self.init_layernorm_from_vision_encoder,
+            output_hidden_states=self.output_hidden_states,
         )
 
     def create_and_check_model(
