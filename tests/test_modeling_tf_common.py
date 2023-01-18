@@ -2266,6 +2266,7 @@ class UtilsFunctionsTest(unittest.TestCase):
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
+    @slow
     def test_save_pretrained_signatures(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
