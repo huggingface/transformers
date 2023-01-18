@@ -1389,21 +1389,29 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             pixel_mask, pixel_mask.size(), self.device
         )
 
-        cross_text_features = self.cross_modal_text_layers[0](
+        layer_outputs_text = self.cross_modal_text_layers[0](
             cross_modal_text,
             cross_modal_image,
             attention_mask=extend_text_masks,
             encoder_attention_mask=extend_image_masks,
-        )[0]
-        cross_image_features = self.cross_modal_image_layers[0](
+            output_attentions=output_attentions,
+        )
+        cross_text_features = layer_outputs_text[0]
+        
+        layer_outputs_image = self.cross_modal_image_layers[0](
             cross_modal_image,
             cross_modal_text,
             attention_mask=extend_image_masks,
             encoder_attention_mask=extend_text_masks,
-        )[0]
+            output_attentions=output_attentions,
+        )
+        cross_image_features = layer_outputs_image[0]
 
         if output_hidden_states:
             all_hidden_states_cross += ((cross_text_features, cross_image_features),)
+
+        if output_attentions:
+            all_self_attentions += ((layer_outputs_text[1], layer_outputs_image[1]),)
 
         link_layer_index = 0
 
@@ -1429,18 +1437,23 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             cross_image_features_ = image_link_tower(image_embeds_with_ln, cross_image_features, extend_image_masks)
 
             # Cross-modal encoder via bridge layers of textual and visual encoders
-            cross_text_features = self.cross_modal_text_layers[link_layer_index + 1](
+            layer_outputs_text = self.cross_modal_text_layers[link_layer_index + 1](
                 cross_text_features_,
                 cross_image_features_,
                 attention_mask=extend_text_masks,
                 encoder_attention_mask=extend_image_masks,
-            )[0]
-            cross_image_features = self.cross_modal_image_layers[link_layer_index + 1](
+                output_attentions=output_attentions,
+            )
+            cross_text_features = layer_outputs_text[0]
+
+            layer_outputs_image = self.cross_modal_image_layers[link_layer_index + 1](
                 cross_image_features_,
                 cross_text_features_,
                 attention_mask=extend_image_masks,
                 encoder_attention_mask=extend_text_masks,
-            )[0]
+                output_attentions=output_attentions,
+            )
+            cross_image_features = layer_outputs_image[0]
 
             link_layer_index += 1
 
@@ -1448,6 +1461,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 all_hidden_states_text += (text_embeds,)
                 all_hidden_states_image += (image_embeds,)
                 all_hidden_states_cross += ((cross_text_features, cross_image_features),)
+
+            if output_attentions:
+                all_self_attentions += ((layer_outputs_text[1], layer_outputs_image[1]),)
 
         #  Concatenate the cls token of the text and image features to get the final represtation
         text_features, image_features = cross_text_features, cross_image_features
