@@ -44,7 +44,8 @@ GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def quant_noise(module, p, block_size):
     """
-    From: https://github.com/facebookresearch/fairseq/blob/dd0079bde7f678b0cd0715cbd0ae68d661b7226d/fairseq/modules/quant_noise.py
+    From:
+    https://github.com/facebookresearch/fairseq/blob/dd0079bde7f678b0cd0715cbd0ae68d661b7226d/fairseq/modules/quant_noise.py
 
     Wraps modules and applies quantization noise to the weights for subsequent quantization with Iterative Product
     Quantization as described in "Training with Quantization Noise for Extreme Model Compression"
@@ -135,7 +136,8 @@ def quant_noise(module, p, block_size):
 
 class LayerDropModuleList(nn.ModuleList):
     """
-    From: https://github.com/facebookresearch/fairseq/blob/dd0079bde7f678b0cd0715cbd0ae68d661b7226d/fairseq/modules/layer_drop.py
+    From:
+    https://github.com/facebookresearch/fairseq/blob/dd0079bde7f678b0cd0715cbd0ae68d661b7226d/fairseq/modules/layer_drop.py
     A LayerDrop implementation based on [`torch.nn.ModuleList`]. LayerDrop as described in
     https://arxiv.org/abs/1909.11556.
 
