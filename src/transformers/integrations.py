@@ -119,6 +119,10 @@ def is_mlflow_available():
     return importlib.util.find_spec("mlflow") is not None
 
 
+def is_dagshub_available():
+    return importlib.util.find_spec("dagshub") is not None
+
+
 def is_fairscale_available():
     return importlib.util.find_spec("fairscale") is not None
 
@@ -522,6 +526,8 @@ def get_available_reporting_integrations():
         integrations.append("azure_ml")
     if is_comet_available():
         integrations.append("comet_ml")
+    if is_dagshub_available():
+        integrations.append("dagshub")
     if is_mlflow_available():
         integrations.append("mlflow")
     if is_neptune_available():
@@ -1004,6 +1010,48 @@ class MLflowCallback(TrainerCallback):
             self._ml_flow.end_run()
 
 
+class DagsHubCallback(MLflowCallback):
+    def __init__(self):
+        super().__init__()
+        if not is_dagshub_available():
+            raise RuntimeError("DagsHubCallback requires dagshub to be installed. Run `pip install dagshub`.")
+        from dagshub.upload import Repo
+
+        self.Repo = Repo
+
+    def setup(self, *args, **kwargs):
+        """
+        Setup the DagsHub's Logging integration.
+
+        Environment:
+            HF_DAGSHUB_LOG_ARTIFACTS (`str`, *optional*):
+                Whether to save the data and model artifacts for the experiment. Default to `False`.
+        """
+
+        self.model = args[3]
+        self.log_artifacts = os.getenv("HF_DAGSHUB_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self.remote = os.getenv("MLFLOW_TRACKING_URI", input("Please input a remote url."))
+        self.repo = self.Repo(
+            owner=self.remote.split(os.sep)[-2],
+            name=self.remote.split(os.sep)[-1].split(".")[-1],
+            branch=os.getenv("BRANCH") or "main",
+        )
+        self.paths = {"artifacts": Path("artifacts"), "models": Path("models"), "data": Path("data")}
+
+        super().setup(*args, **kwargs)
+
+    def on_save(self, args, state, control, **kwargs):
+        if self.log_artifacts:
+            torch.save(self.model, self.paths["models"] / "model.pt")
+
+            self.repo.directory(self.paths["artifacts"]).add(
+                file=self.paths["artifacts"], path=self.paths["artifacts"]
+            )
+            self.repo.directory(self.paths["artifacts"]).commit("updated artifacts", versioning="dvc", force=True)
+
+            # TODO: add data
+
+
 class NeptuneMissingConfiguration(Exception):
     def __init__(self):
         super().__init__(
@@ -1420,6 +1468,7 @@ INTEGRATION_TO_CALLBACK = {
     "wandb": WandbCallback,
     "codecarbon": CodeCarbonCallback,
     "clearml": ClearMLCallback,
+    "dagshub": DagsHubCallback,
 }
 
 
