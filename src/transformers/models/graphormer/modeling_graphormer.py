@@ -179,7 +179,7 @@ def init_params(module, num_layers):
         module.weight.data.normal_(mean=0.0, std=0.02)
 
 
-class GraphNodeFeature(nn.Module):
+class GraphormerGraphNodeFeature(nn.Module):
     """
     Compute node features for each node in the graph.
     """
@@ -218,7 +218,7 @@ class GraphNodeFeature(nn.Module):
         return graph_node_feature
 
 
-class GraphAttnBias(nn.Module):
+class GraphormerGraphAttnBias(nn.Module):
     """
     Compute attention bias for each head.
     """
@@ -295,7 +295,7 @@ class GraphAttnBias(nn.Module):
         return graph_attn_bias
 
 
-class MultiheadAttention(nn.Module):
+class GraphormerMultiheadAttention(nn.Module):
     """Multi-headed attention.
 
     See "Attention Is All You Need" for more details.
@@ -506,7 +506,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
 
         # Initialize blocks
         self.activation_fn = ACT2FN[config.activation_fn]
-        self.self_attn = MultiheadAttention(config)
+        self.self_attn = GraphormerMultiheadAttention(config)
 
         # layer norm associated with the self attention layer
         self.self_attn_layer_norm = nn.LayerNorm(self.embedding_dim)
@@ -583,8 +583,8 @@ class GraphormerGraphEncoder(nn.Module):
         self.apply_graphormer_init = config.apply_graphormer_init
         self.traceable = config.traceable
 
-        self.graph_node_feature = GraphNodeFeature(config)
-        self.graph_attn_bias = GraphAttnBias(config)
+        self.graph_node_feature = GraphormerGraphNodeFeature(config)
+        self.graph_attn_bias = GraphormerGraphAttnBias(config)
 
         self.embed_scale = config.embed_scale
 
@@ -734,7 +734,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             self.normal_(module.weight.data)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        if isinstance(module, MultiheadAttention):
+        if isinstance(module, GraphormerMultiheadAttention):
             self.normal_(module.q_proj.weight.data)
             self.normal_(module.k_proj.weight.data)
             self.normal_(module.v_proj.weight.data)
@@ -749,7 +749,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=0.02)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MultiheadAttention):
+        elif isinstance(module, GraphormerMultiheadAttention):
             module.q_proj.weight.data.normal_(mean=0.0, std=0.02)
             module.k_proj.weight.data.normal_(mean=0.0, std=0.02)
             module.v_proj.weight.data.normal_(mean=0.0, std=0.02)
