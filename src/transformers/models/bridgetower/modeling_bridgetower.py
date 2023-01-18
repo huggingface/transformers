@@ -23,8 +23,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.modeling_utils import PreTrainedModel, apply_chunking_to_forward
-
 from ...activations import ACT2FN, QuickGELUActivation
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -33,6 +31,7 @@ from ...modeling_outputs import (
     ModelOutput,
     SequenceClassifierOutput,
 )
+from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
@@ -138,22 +137,22 @@ class BridgeTowerLayerNorm(nn.LayerNorm):
 
 
 class BridgeTowerResidualAttention(nn.Module):
-    def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
+    def __init__(self, config):
         super().__init__()
 
-        self.attn = nn.MultiheadAttention(d_model, n_head)
-        self.ln_1 = BridgeTowerLayerNorm(d_model)
+        self.attn = nn.MultiheadAttention(config.hidden_size, config.hidden_size // 64)
+        self.ln_1 = BridgeTowerLayerNorm(config.hidden_size)
         self.mlp = nn.ModuleDict(
             OrderedDict(
                 [
-                    ("c_fc", nn.Linear(d_model, d_model * 4)),
+                    ("c_fc", nn.Linear(config.hidden_size, config.hidden_size * 4)),
                     ("gelu", QuickGELUActivation()),
-                    ("c_proj", nn.Linear(d_model * 4, d_model)),
+                    ("c_proj", nn.Linear(config.hidden_size * 4, config.hidden_size)),
                 ]
             )
         )
-        self.ln_2 = BridgeTowerLayerNorm(d_model)
-        self.attn_mask = attn_mask
+        self.ln_2 = BridgeTowerLayerNorm(config.hidden_size)
+        self.attn_mask = None
 
     def attention(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor):
         if attention_mask is not None:
@@ -182,81 +181,54 @@ class BridgeTowerResidualAttention(nn.Module):
 
 
 class BridgeTowerTransformer(nn.Module):
-    def __init__(
-        self,
-        hidden_size: int,
-        num_hidden_layers: int,
-        heads: int,
-        attn_mask: torch.Tensor = None,
-        model_type: str = "bridgetower",
-        stop_gradient: bool = False,
-        remove_last_layer: bool = False,
-    ):
+    def __init__(self, config):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        if remove_last_layer:
+
+        if config.remove_last_layer:
             self.resblocks = nn.ModuleList(
-                [BridgeTowerResidualAttention(hidden_size, heads, attn_mask) for _ in range(num_hidden_layers - 1)]
+                [BridgeTowerResidualAttention(config) for _ in range(config.num_hidden_layers - 1)]
             )
         else:
             self.resblocks = nn.ModuleList(
-                [BridgeTowerResidualAttention(hidden_size, heads, attn_mask) for _ in range(num_hidden_layers)]
+                [BridgeTowerResidualAttention(config) for _ in range(config.num_hidden_layers)]
             )
-        self.model_type = model_type
-        self.stop_gradient = stop_gradient
+        self.stop_gradient = config.stop_gradient
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor = None):
         hidden_states = []
         for block in self.resblocks:
             hidden_state = block(hidden_state, attention_mask)
-            if self.model_type == "bridgetower":
-                if self.stop_gradient:
-                    hidden_states.append(hidden_state.detach())
-                else:
-                    hidden_states.append(hidden_state)
-        if self.model_type == "bridgetower":
-            return hidden_states
-        else:
-            return hidden_state
+            if self.stop_gradient:
+                hidden_states.append(hidden_state.detach())
+            else:
+                hidden_states.append(hidden_state)
+        return hidden_states
 
 
 class BridgeTowerVisualTransformer(nn.Module):
-    def __init__(
-        self,
-        patch_size: int,
-        hidden_size: int,
-        num_hidden_layers: int,
-        heads: int,
-        image_size: int,
-        model_type: str = "bridgetower",
-        stop_gradient: bool = False,
-        share_layernorm: bool = True,
-        remove_last_layer: bool = False,
-    ):
+    def __init__(self, config):
         super().__init__()
+
         self.conv1 = nn.Conv2d(
-            in_channels=3, out_channels=hidden_size, kernel_size=patch_size, stride=patch_size, bias=False
+            in_channels=3,
+            out_channels=config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+            bias=False,
         )
-
-        scale = hidden_size**-0.5
-        self.class_embedding = nn.Parameter(scale * torch.randn(hidden_size))
-        self.positional_embedding = nn.Parameter(scale * torch.randn((image_size // patch_size) ** 2 + 1, hidden_size))
-        self.ln_pre = BridgeTowerLayerNorm(hidden_size)
-
-        self.transformer = BridgeTowerTransformer(
-            hidden_size,
-            num_hidden_layers,
-            heads,
-            model_type=model_type,
-            stop_gradient=stop_gradient,
-            remove_last_layer=remove_last_layer,
+        scale = config.hidden_size**-0.5
+        self.class_embedding = nn.Parameter(scale * torch.randn(config.hidden_size))
+        self.positional_embedding = nn.Parameter(
+            scale * torch.randn((config.image_size // config.patch_size) ** 2 + 1, config.hidden_size)
         )
-        self.ln_post = BridgeTowerLayerNorm(hidden_size)
-        self.model_type = model_type
-        self.share_layernorm = share_layernorm
-        if not share_layernorm:
-            self.ln_separate = nn.ModuleList([BridgeTowerLayerNorm(hidden_size) for _ in range(num_hidden_layers)])
+        self.ln_pre = BridgeTowerLayerNorm(config.hidden_size)
+        self.transformer = BridgeTowerTransformer(config)
+        self.ln_post = BridgeTowerLayerNorm(config.hidden_size)
+        self.share_layernorm = config.share_layernorm
+        if not config.share_layernorm:
+            self.ln_separate = nn.ModuleList(
+                [BridgeTowerLayerNorm(config.hidden_size) for _ in range(config.num_hidden_layers)]
+            )
 
     def forward(self, hidden_state: torch.Tensor, attention_mask):
         # shape = [*, hidden_size, grid, grid]
@@ -319,7 +291,7 @@ class BridgeTowerVisualTransformer(nn.Module):
         return visual_output_post
 
 
-class LinkTower(nn.Module):
+class BridgeTowerLinkTower(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.link_tower_type = config.link_tower_type
@@ -654,6 +626,12 @@ class BridgeTowerBertCrossLayer(nn.Module):
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
+    @property
+    def device(
+        self,
+    ):
+        return self.attention.self.query.weight.device
+
 
 class BridgeTowerTextLayer(nn.Module):
     def __init__(self, config):
@@ -739,6 +717,12 @@ class BridgeTowerTextLayer(nn.Module):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
+
+    @property
+    def device(
+        self,
+    ):
+        return self.attention.self.query.weight.device
 
 
 class BridgeTowerTextEncoder(nn.Module):
@@ -1015,27 +999,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.num_hidden_layers = config.num_hidden_layers
-        self.hidden_size = config.hidden_size
-        self.patch_size = config.patch_size
-        self.image_size = config.image_size
-        self.model_type = ("bridgetower",)
-        self.stop_gradient = config.stop_gradient
-        self.share_layernorm = config.share_layernorm
-        self.remove_last_layer = config.remove_last_layer
-
-        vision_heads = config.hidden_size // 64
-        self.visual = BridgeTowerVisualTransformer(
-            patch_size=self.patch_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            heads=vision_heads,
-            image_size=self.image_size,
-            model_type=self.model_type,
-            stop_gradient=self.stop_gradient,
-            share_layernorm=self.share_layernorm,
-            remove_last_layer=self.remove_last_layer,
-        )
+        self.visual = BridgeTowerVisualTransformer(config)
 
     @property
     def dtype(self):
@@ -1272,14 +1236,14 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size)
 
         if config.share_link_tower_layers:
-            self.cross_modal_text_link_tower = LinkTower(config)
-            self.cross_modal_image_link_tower = LinkTower(config)
+            self.cross_modal_text_link_tower = BridgeTowerLinkTower(config)
+            self.cross_modal_image_link_tower = BridgeTowerLinkTower(config)
         else:
             self.cross_modal_text_link_tower = nn.ModuleList(
-                [LinkTower(config) for _ in range(config.num_hidden_layers - 1)]
+                [BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)]
             )
             self.cross_modal_image_link_tower = nn.ModuleList(
-                [LinkTower(config) for _ in range(config.num_hidden_layers - 1)]
+                [BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)]
             )
 
         self.post_init()
@@ -1352,8 +1316,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             all_hidden_states_text += (text_embeds,)
 
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.device)
-        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape, self.device)
+            attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.text_model.encoder.layer[0].device)
+        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape).to(
+            self.text_model.encoder.layer[0].device
+        )
 
         # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
         split_index = len(self.text_model.encoder.layer) - self.config.num_hidden_layers + 1
@@ -1379,22 +1345,29 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         # first layer is a special case because we don't have the output from the cross-encoder yet
         cross_modal_text = self.cross_modal_text_transform(text_embeds)
-        text_token_type_embeddings = self.token_type_embeddings(torch.zeros(1).long().to(self.device)).expand_as(
-            cross_modal_text
-        )
+
+        text_token_type_embeddings = self.token_type_embeddings(
+            torch.zeros(1, dtype=torch.long, device=self.token_type_embeddings.weight.device)
+        ).expand_as(cross_modal_text)
+
         cross_modal_text = self.cross_modal_text_layernorm(cross_modal_text + text_token_type_embeddings)
 
         image_embeds_with_ln = self.cross_modal_image_transform(image_embeds_with_ln)
         image_token_type_embeddings = self.token_type_embeddings(
-            torch.zeros(1).long().to(self.device).fill_(image_token_type_idx)
+            torch.full((1,), image_token_type_idx, dtype=torch.long, device=self.token_type_embeddings.weight.device)
         ).expand_as(image_embeds_with_ln)
+
         image_embeds_with_ln = image_embeds_with_ln + image_token_type_embeddings
         cross_modal_image = self.cross_modal_image_layernorm(image_embeds_with_ln)
 
         pixel_mask = torch.ones(
-            (cross_modal_image.size(0), cross_modal_image.size(1)), dtype=torch.long, device=self.device
+            (cross_modal_image.size(0), cross_modal_image.size(1)),
+            dtype=torch.long,
+            device=self.cross_modal_text_layers[0].device,
         )
-        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size(), self.device)
+        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size()).to(
+            self.cross_modal_text_layers[0].device
+        )
 
         layer_outputs_text = self.cross_modal_text_layers[0](
             cross_modal_text,
