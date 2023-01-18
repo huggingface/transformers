@@ -1011,6 +1011,10 @@ class MLflowCallback(TrainerCallback):
 
 
 class DagsHubCallback(MLflowCallback):
+    """
+    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/).
+    """
+
     def __init__(self):
         super().__init__()
         if not is_dagshub_available():
@@ -1048,7 +1052,7 @@ class DagsHubCallback(MLflowCallback):
 
         super().setup(*args, **kwargs)
 
-    def on_save(self, args, state, control, **kwargs):
+    def on_train_end(self, args, state, control, **kwargs):
         if self.log_artifacts:
             # dataset =
             # for i in range(len(self.train_dataloader)): # or i, image in enumerate(dataset)
@@ -1056,7 +1060,7 @@ class DagsHubCallback(MLflowCallback):
             # self.repo.directory(self.paths["artifacts"]).add(file=self.data, path=self.paths["data"])
 
             torch.save(self.model, self.paths["models"] / "model.pt")
-            state.save_to_json(self.path["artifacts"])
+            state.save_to_json(self.paths["artifacts"])
 
             self.repo.directory(self.paths["artifacts"]).add(
                 file=self.paths["artifacts"], path=self.paths["artifacts"]
