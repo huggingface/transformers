@@ -1027,13 +1027,13 @@ class DagsHubCallback(MLflowCallback):
             HF_DAGSHUB_LOG_ARTIFACTS (`str`, *optional*):
                 Whether to save the data and model artifacts for the experiment. Default to `False`.
             HF_DAGSHUB_DATA_PATH (`str`, *optional*):
-                The path at which the data is present. Default to `False`.
+                The path at which the data is present. Default to `None`.
         """
 
         self.model = args[2]
         self.log_artifacts = os.getenv("HF_DAGSHUB_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         if self.log_artifacts:
-            self.data = os.getenv("HF_DAGSHUB_DATA_PATH", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+            self.data = os.getenv("HF_DAGSHUB_DATA_PATH")
         self.remote = os.getenv("MLFLOW_TRACKING_URI") or input("Please input a remote url.")
         self.repo = self.Repo(
             owner=self.remote.split(os.sep)[-2],
