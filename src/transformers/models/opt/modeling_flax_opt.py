@@ -105,6 +105,7 @@ OPT_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->OPT
 class FlaxOPTAttention(nn.Module):
     config: OPTConfig
     embed_dim: int
