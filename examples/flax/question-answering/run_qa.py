@@ -467,8 +467,8 @@ def main():
             )
         else:
             repo_name = training_args.hub_model_id
-        create_repo(repo_name, exist_ok=True)
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
+        create_repo(repo_name, exist_ok=True, token=training_args.hub_token)
+        repo = Repository(training_args.output_dir, clone_from=repo_name, token=training_args.hub_token)
 
     # region Load Data
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
