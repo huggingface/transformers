@@ -15,8 +15,6 @@
 
 import inspect
 
-import numpy as np
-
 import jax
 import jax.lax as lax
 import jax.numpy as jnp
@@ -329,7 +327,7 @@ class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
         # Converts the dictionary of format {index: token} containing the tokens to be forced to an array, where the
         # index of the array corresponds to the index of the token to be forced, for XLA compatibility.
         # Indexes without forced tokens will have a negative value.
-        force_token_array = np.ones((max(force_token_map.keys()) + 1), dtype=np.int32) * -1
+        force_token_array = jnp.ones((max(force_token_map.keys()) + 1), dtype=jnp.int32) * -1
         for index, token in force_token_map.items():
             force_token_array[index] = token
         self.force_token_array = jnp.array(force_token_array)
