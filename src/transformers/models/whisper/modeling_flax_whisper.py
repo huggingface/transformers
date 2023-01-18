@@ -818,7 +818,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
-        input_features = jnp.zeros(input_shape)
+        input_features = jnp.zeros(input_shape, dtype="f4")
         input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)
 
         decoder_input_ids = jnp.zeros((input_shape[0], 1), dtype="i4")
