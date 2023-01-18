@@ -1152,6 +1152,16 @@ class FlaxXGLMPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class FlaxXLMRobertaForCausalLM(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxXLMRobertaForMaskedLM(metaclass=DummyObject):
     _backends = ["flax"]
 
@@ -1188,6 +1198,13 @@ class FlaxXLMRobertaForTokenClassification(metaclass=DummyObject):
 
 
 class FlaxXLMRobertaModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxXLMRobertaPreTrainedModel(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):

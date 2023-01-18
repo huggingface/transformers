@@ -180,6 +180,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
         ("xglm", "TFXGLMForCausalLM"),
         ("xlm", "TFXLMWithLMHeadModel"),
+        ("xlm-roberta", "TFXLMRobertaForCausalLM"),
         ("xlnet", "TFXLNetLMHeadModel"),
     ]
 )

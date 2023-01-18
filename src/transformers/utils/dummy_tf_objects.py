@@ -2646,6 +2646,13 @@ class TFXLMWithLMHeadModel(metaclass=DummyObject):
 TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class TFXLMRobertaForCausalLM(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFXLMRobertaForMaskedLM(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -2682,6 +2689,13 @@ class TFXLMRobertaForTokenClassification(metaclass=DummyObject):
 
 
 class TFXLMRobertaModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFXLMRobertaPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

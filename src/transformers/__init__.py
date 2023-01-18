@@ -3165,12 +3165,14 @@ else:
     _import_structure["models.xlm_roberta"].extend(
         [
             "TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFXLMRobertaForCausalLM",
             "TFXLMRobertaForMaskedLM",
             "TFXLMRobertaForMultipleChoice",
             "TFXLMRobertaForQuestionAnswering",
             "TFXLMRobertaForSequenceClassification",
             "TFXLMRobertaForTokenClassification",
             "TFXLMRobertaModel",
+            "TFXLMRobertaPreTrainedModel",
         ]
     )
     _import_structure["models.xlnet"].extend(
@@ -3447,12 +3449,15 @@ else:
     )
     _import_structure["models.xlm_roberta"].extend(
         [
+            "FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FlaxXLMRobertaForMaskedLM",
             "FlaxXLMRobertaForMultipleChoice",
             "FlaxXLMRobertaForQuestionAnswering",
             "FlaxXLMRobertaForSequenceClassification",
             "FlaxXLMRobertaForTokenClassification",
             "FlaxXLMRobertaModel",
+            "FlaxXLMRobertaForCausalLM",
+            "FlaxXLMRobertaPreTrainedModel",
         ]
     )
 
@@ -6046,12 +6051,14 @@ if TYPE_CHECKING:
         )
         from .models.xlm_roberta import (
             TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFXLMRobertaForCausalLM,
             TFXLMRobertaForMaskedLM,
             TFXLMRobertaForMultipleChoice,
             TFXLMRobertaForQuestionAnswering,
             TFXLMRobertaForSequenceClassification,
             TFXLMRobertaForTokenClassification,
             TFXLMRobertaModel,
+            TFXLMRobertaPreTrainedModel,
         )
         from .models.xlnet import (
             TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6264,12 +6271,15 @@ if TYPE_CHECKING:
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
+            FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlaxXLMRobertaForCausalLM,
             FlaxXLMRobertaForMaskedLM,
             FlaxXLMRobertaForMultipleChoice,
             FlaxXLMRobertaForQuestionAnswering,
             FlaxXLMRobertaForSequenceClassification,
             FlaxXLMRobertaForTokenClassification,
             FlaxXLMRobertaModel,
+            FlaxXLMRobertaPreTrainedModel,
         )
 
 else:
