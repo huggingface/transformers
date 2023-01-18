@@ -1060,7 +1060,7 @@ class DagsHubCallback(MLflowCallback):
             # self.repo.directory(self.paths["artifacts"]).add(file=self.data, path=self.paths["data"])
 
             torch.save(self.model, self.paths["models"] / "model.pt")
-            state.save_to_json(self.paths["artifacts"])
+            state.save_to_json(self.paths["artifacts"] / "state.json")
 
             self.repo.directory(self.paths["artifacts"]).add(
                 file=self.paths["artifacts"], path=self.paths["artifacts"]
