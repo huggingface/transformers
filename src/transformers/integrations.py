@@ -1026,10 +1026,14 @@ class DagsHubCallback(MLflowCallback):
         Environment:
             HF_DAGSHUB_LOG_ARTIFACTS (`str`, *optional*):
                 Whether to save the data and model artifacts for the experiment. Default to `False`.
+            HF_DAGSHUB_DATA_PATH (`str`, *optional*):
+                The path at which the data is present. Default to `False`.
         """
 
         self.model = args[2]
         self.log_artifacts = os.getenv("HF_DAGSHUB_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        if self.log_artifacts:
+            self.data = os.getenv("HF_DAGSHUB_DATA_PATH", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self.remote = os.getenv("MLFLOW_TRACKING_URI") or input("Please input a remote url.")
         self.repo = self.Repo(
             owner=self.remote.split(os.sep)[-2],
@@ -1037,19 +1041,22 @@ class DagsHubCallback(MLflowCallback):
             branch=os.getenv("BRANCH") or "main",
         )
         self.paths = {"artifacts": Path("artifacts"), "models": Path("models"), "data": Path("data")}
+        Path(self.paths["artifacts"]).mkdir(parents=True, exist_ok=True)
 
         super().setup(*args, **kwargs)
 
     def on_save(self, args, state, control, **kwargs):
         if self.log_artifacts:
+            if self.data:
+                self.repo.directory(self.paths["artifacts"]).add(file=self.data, path=self.paths["data"])
+
             torch.save(self.model, self.paths["models"] / "model.pt")
+            state.to_json(self.path["models"])
 
             self.repo.directory(self.paths["artifacts"]).add(
                 file=self.paths["artifacts"], path=self.paths["artifacts"]
             )
             self.repo.directory(self.paths["artifacts"]).commit("updated artifacts", versioning="dvc", force=True)
-
-            # TODO: add data
 
 
 class NeptuneMissingConfiguration(Exception):
