@@ -619,6 +619,10 @@ class BridgeTowerBertCrossLayer(nn.Module):
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
+    @property
+    def device(self,):
+        return self.attention.self.query.weight.device
+
 
 class BridgeTowerTextLayer(nn.Module):
     def __init__(self, config):
@@ -704,6 +708,10 @@ class BridgeTowerTextLayer(nn.Module):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
+
+    @property
+    def device(self,):
+        return self.attention.self.query.weight.device
 
 
 class BridgeTowerTextEncoder(nn.Module):
@@ -1297,8 +1305,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             all_hidden_states_text += (text_embeds,)
 
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.device)
-        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape, self.device)
+            attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.text_model.encoder.layer[0].device)
+        extend_text_masks = self.text_model.get_extended_attention_mask(
+            attention_mask, input_shape
+        ).to(self.text_model.encoder.layer[0].device)
 
         # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
         split_index = len(self.text_model.encoder.layer) - self.config.num_hidden_layers + 1
@@ -1325,28 +1335,37 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         # first layer is a special case because we don't have the output from the cross-encoder yet
         cross_modal_text = self.cross_modal_text_transform(text_embeds)
 
-        #TODO: split 
-        text_token_type_embeddings = self.token_type_embeddings(torch.zeros(1).long().to(self.device)).expand_as(
-            cross_modal_text
-        )
+        text_token_type_embeddings = self.token_type_embeddings(
+            torch.zeros(
+                1, 
+                dtype=torch.long, 
+                device=self.token_type_embeddings.weight.device
+            )
+        ).expand_as(cross_modal_text)
 
         cross_modal_text = self.cross_modal_text_layernorm(cross_modal_text + text_token_type_embeddings)
 
         image_embeds_with_ln = self.cross_modal_image_transform(image_embeds_with_ln)
         image_token_type_embeddings = self.token_type_embeddings(
-            torch.full((1,), image_token_type_idx, dtype=torch.long,
-            device=self.token_type_embeddings.weight.device)
+            torch.full(
+                (1,), 
+                image_token_type_idx, 
+                dtype=torch.long,
+                device=self.token_type_embeddings.weight.device
+            )
         ).expand_as(image_embeds_with_ln)
 
         image_embeds_with_ln = image_embeds_with_ln + image_token_type_embeddings
         cross_modal_image = self.cross_modal_image_layernorm(image_embeds_with_ln)
 
-        #TODO: change self.device?
         pixel_mask = torch.ones(
             (cross_modal_image.size(0), cross_modal_image.size(1)),
-            dtype=torch.long, device=self.device
+            dtype=torch.long, 
+            device=self.cross_modal_text_layers[0].device
         )
-        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size(), self.device)
+        extend_image_masks = self.text_model.get_extended_attention_mask(
+            pixel_mask, pixel_mask.size()
+        ).to(self.cross_modal_text_layers[0].device)
 
         layer_outputs_text = self.cross_modal_text_layers[0](
             cross_modal_text,
