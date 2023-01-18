@@ -726,11 +726,8 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         """
         Initialize the weights
         """
-        if isinstance(module, (nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=0.02 / self.config_class.num_hidden_layers)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        if isinstance(module, (nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # We might be missing part of the Linear init, dependant on the layer num
             module.weight.data.normal_(mean=0.0, std=0.02)
             if module.bias is not None:
                 module.bias.data.zero_()

@@ -383,6 +383,7 @@ class GraphormerModelIntegrationTest(unittest.TestCase):
         model = GraphormerForGraphClassification.from_pretrained("graphormer-base-pcqm4mv2")
 
         # Actual real graph data from the MUTAG dataset
+        # fmt: off
         model_input = {
             "attn_bias": tensor(
                 [
@@ -470,6 +471,7 @@ class GraphormerModelIntegrationTest(unittest.TestCase):
                     ],
                 ]
             ),
+            # fmt: on
             "spatial_pos": tensor(
                 [
                     [
