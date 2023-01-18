@@ -17,6 +17,8 @@ import json
 import os
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
+
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -487,6 +489,91 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
+
+    def _compute_offsets(self, token_ids, time_precision=0.02):
+        """
+        Compute offsets for a given tokenized input
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            time_precision (`float`, `optional`, defaults to 0.02):
+                The time ratio to convert from token to time.
+        """
+        offsets = []
+        token_ids = np.array(token_ids)
+        if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
+            raise ValueError("Can only process a single input at a time")
+        timestamp_begin = self.all_special_ids[-1] + 1
+        timestamp_tokens = token_ids >= timestamp_begin
+
+        consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+        if consecutive.shape[0] == 0 and timestamp_tokens.sum() <= 1:
+            # either there are no timestamps or there are no consecutive ones
+            return []
+        elif np.where(timestamp_tokens)[0][-1] + 1 not in consecutive:
+            # we add the final timestamp if it is not already in the list
+            consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
+
+        last_slice = np.where(timestamp_tokens)[0][0]
+        for current_slice in consecutive:
+            sliced_tokens = token_ids[last_slice:current_slice]
+            if len(sliced_tokens) > 1:
+                start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
+                end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+                offsets.append(
+                    {
+                        "text": self._decode(sliced_tokens),
+                        "timestamp": (
+                            start_timestamp_position * time_precision,
+                            end_timestamp_position * time_precision,
+                        ),
+                    }
+                )
+            last_slice = current_slice
+
+        return offsets
+
+    def decode(
+        self,
+        token_ids,
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        output_offsets: bool = False,
+        time_precision=0.02,
+        **kwargs
+    ) -> str:
+        """
+        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
+        tokens and clean up tokenization spaces.
+
+        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+                Whether or not to clean up the tokenization spaces.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            `str`: The decoded sentence.
+        """
+        text = super().decode(
+            token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+        # retrieve offsets
+        if output_offsets:
+            offsets = None
+            offsets = self._compute_offsets(token_ids, time_precision=time_precision)
+            return {"text": text, "offsets": offsets}
+        return text
 
     def _decode(
         self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs

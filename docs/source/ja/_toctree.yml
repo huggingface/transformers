@@ -1,0 +1,4 @@
+- sections:
+  - sections:
+    - local: multilingual
+      title: 推論のための多言語モデル
