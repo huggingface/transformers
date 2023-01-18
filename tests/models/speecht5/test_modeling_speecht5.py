@@ -48,17 +48,19 @@ if is_torch_available():
 
     from transformers import (
         SpeechT5ForCTC,
+        SpeechT5ForSpeechToSpeech,
         SpeechT5ForSpeechToText,
         SpeechT5ForTextToSpeech,
         SpeechT5HiFiGAN,
         SpeechT5Model,
         SpeechT5ProcessorForCTC,
+        SpeechT5ProcessorForSpeechToSpeech,
         SpeechT5ProcessorForSpeechToText,
         SpeechT5ProcessorForTextToSpeech,
     )
 
 
-def prepare_speech_to_text_inputs_dict(
+def prepare_inputs_dict(
     config,
     input_ids=None,
     input_values=None,
@@ -128,7 +130,7 @@ class SpeechT5ModelTester:
         decoder_attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
-        inputs_dict = prepare_speech_to_text_inputs_dict(
+        inputs_dict = prepare_inputs_dict(
             config,
             input_values=input_values,
             decoder_input_values=decoder_input_values,
@@ -280,7 +282,7 @@ class SpeechT5ForSpeechToTextTester:
         decoder_attention_mask = random_attention_mask([self.batch_size, self.decoder_seq_length])
 
         config = self.get_config()
-        inputs_dict = prepare_speech_to_text_inputs_dict(
+        inputs_dict = prepare_inputs_dict(
             config,
             input_values=input_values,
             decoder_input_ids=decoder_input_ids,
@@ -1160,7 +1162,7 @@ class SpeechT5ForTextToSpeechTester:
         decoder_attention_mask = random_attention_mask([self.batch_size, self.decoder_seq_length])
 
         config = self.get_config()
-        inputs_dict = prepare_speech_to_text_inputs_dict(
+        inputs_dict = prepare_inputs_dict(
             config,
             input_ids=input_ids,
             decoder_input_values=decoder_input_values,
@@ -1341,7 +1343,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     def default_processor(self):
         return SpeechT5ProcessorForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
 
-    def test_generation_librispeech(self):
+    def test_generation(self):
         model = SpeechT5ForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
         model.to(torch_device)
         processor = self.default_processor
@@ -1351,6 +1353,434 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
         generated_speech = model.generate_speech(input_ids)
         self.assertEqual(generated_speech.shape, (1800, model.config.num_mel_bins))
+
+
+@require_torch
+class SpeechT5ForSpeechToSpeechTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        encoder_seq_length=1024,  # speech is longer
+        decoder_seq_length=1024,
+        is_training=False,
+        hidden_size=24,
+        num_hidden_layers=4,
+        num_attention_heads=2,
+        intermediate_size=4,
+        conv_dim=(32, 32, 32),
+        conv_stride=(4, 4, 4),
+        conv_kernel=(8, 8, 8),
+        conv_bias=False,
+        num_conv_pos_embeddings=16,
+        num_conv_pos_embedding_groups=2,
+        vocab_size=81,
+        num_mel_bins=20,
+        reduction_factor=2,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.encoder_seq_length = encoder_seq_length
+        self.decoder_seq_length = decoder_seq_length
+        self.is_training = is_training
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.conv_dim = conv_dim
+        self.conv_stride = conv_stride
+        self.conv_kernel = conv_kernel
+        self.conv_bias = conv_bias
+        self.num_conv_pos_embeddings = num_conv_pos_embeddings
+        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+        self.vocab_size = vocab_size
+        self.num_mel_bins = num_mel_bins
+        self.reduction_factor = reduction_factor
+
+    def prepare_config_and_inputs(self):
+        input_values = floats_tensor([self.batch_size, self.encoder_seq_length], scale=1.0)
+        attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
+
+        decoder_input_values = floats_tensor([self.batch_size, self.decoder_seq_length, self.num_mel_bins], scale=1.0)
+        decoder_attention_mask = random_attention_mask([self.batch_size, self.decoder_seq_length])
+
+        config = self.get_config()
+        inputs_dict = prepare_inputs_dict(
+            config,
+            input_values=input_values,
+            decoder_input_values=decoder_input_values,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
+    def get_config(self):
+        return SpeechT5Config(
+            hidden_size=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            conv_dim=self.conv_dim,
+            conv_stride=self.conv_stride,
+            conv_kernel=self.conv_kernel,
+            conv_bias=self.conv_bias,
+            num_conv_pos_embeddings=self.num_conv_pos_embeddings,
+            num_conv_pos_embedding_groups=self.num_conv_pos_embedding_groups,
+            vocab_size=self.vocab_size,
+            num_mel_bins=self.num_mel_bins,
+            reduction_factor=self.reduction_factor,
+        )
+
+    def create_and_check_model_forward(self, config, inputs_dict):
+        model = SpeechT5ForSpeechToSpeech(config=config).to(torch_device).eval()
+
+        input_values = inputs_dict["input_values"]
+        attention_mask = inputs_dict["attention_mask"]
+        decoder_input_values = inputs_dict["decoder_input_values"]
+
+        result = model(input_values, attention_mask=attention_mask, decoder_input_values=decoder_input_values)
+        self.parent.assertEqual(
+            result.spectrogram.shape,
+            (self.batch_size, self.decoder_seq_length * self.reduction_factor, self.num_mel_bins),
+        )
+
+
+@require_torch
+class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
+    all_generative_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
+    is_encoder_decoder = True
+    test_pruning = False
+    test_headmasking = False
+    test_resize_embeddings = False
+
+    input_name = "input_values"
+
+    def setUp(self):
+        self.model_tester = SpeechT5ForSpeechToSpeechTester(self)
+        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_save_load_strict(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+            self.assertEqual(info["missing_keys"], [])
+
+    def test_model_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    def test_decoder_model_past_with_large_inputs(self):
+        pass
+
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    def test_determinism(self):
+        pass
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            subsampled_encoder_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                encoder_seq_length
+            )
+            subsampled_encoder_key_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                encoder_key_length
+            )
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+            )
+            out_len = len(outputs)
+
+            correct_outlen = 5
+
+            # loss is at first position
+            if "labels" in inputs_dict:
+                correct_outlen += 1  # loss is added to beginning
+            if "past_key_values" in outputs:
+                correct_outlen += 1  # past_key_values have been returned
+
+            self.assertEqual(out_len, correct_outlen)
+
+            # decoder attentions
+            decoder_attentions = outputs.decoder_attentions
+            self.assertIsInstance(decoder_attentions, (list, tuple))
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+            )
+
+            # cross attentions
+            cross_attentions = outputs.cross_attentions
+            self.assertIsInstance(cross_attentions, (list, tuple))
+            self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(cross_attentions[0].shape[-3:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
+            )
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 2
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+            )
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "input_values",
+                "attention_mask",
+                "decoder_input_values",
+                "decoder_attention_mask",
+            ]
+            expected_arg_names.extend(
+                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                else ["encoder_outputs"]
+            )
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+            else:
+                seq_length = self.model_tester.seq_length
+
+            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(seq_length)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [subsampled_seq_length, self.model_tester.hidden_size],
+            )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "feature_projection.projection.weight",
+                    "feature_projection.projection.bias",
+                ]
+                if param.requires_grad:
+                    if any([x in name for x in uniform_init_parms]):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    # this model has no inputs_embeds
+    def test_inputs_embeds(self):
+        pass
+
+    # this model has no input embeddings
+    def test_model_common_attributes(self):
+        pass
+
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    def test_model_outputs_equivalence(self):
+        pass
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        pass
+
+    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    def test_save_load(self):
+        pass
+
+    @slow
+    def test_torchscript_output_attentions(self):
+        # disabled because this model doesn't have decoder_input_ids
+        pass
+
+    @slow
+    def test_torchscript_output_hidden_state(self):
+        # disabled because this model doesn't have decoder_input_ids
+        pass
+
+    @slow
+    def test_torchscript_simple(self):
+        # disabled because this model doesn't have decoder_input_ids
+        pass
+
+    # training is not supported yet
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "weight_g") and module.weight_g is not None:
+            module.weight_g.data.fill_(3)
+        if hasattr(module, "weight_v") and module.weight_v is not None:
+            module.weight_v.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
+        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+            module.masked_spec_embed.data.fill_(3)
+
+
+@require_torch
+@require_torchaudio
+@require_sentencepiece
+@require_tokenizers
+@slow
+class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return SpeechT5ProcessorForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
+
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    def test_generation_librispeech(self):
+        model = SpeechT5ForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
+        model.to(torch_device)
+        processor = self.default_processor
+
+        input_speech = self._load_datasamples(1)
+        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+
+        speaker_embeddings = torch.zeros((1, 512))
+        generated_speech = model.generate_speech(input_values, speaker_embeddings=speaker_embeddings)
+
+        self.assertEqual(generated_speech.shape[1], model.config.num_mel_bins)
+        self.assertGreaterEqual(generated_speech.shape[0], 300)
+        self.assertLessEqual(generated_speech.shape[0], 310)
 
 
 class SpeechT5HiFiGANTester:

@@ -3050,6 +3050,9 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             `torch.FloatTensor`: Tensor of shape `(output_sequence_length, config.num_mel_bins)` containing the
             predicted mel spectrogram, or a tensor with shape `(num_frames,)` containing the speech waveform.
         """
+        if speaker_embeddings is None:
+            speaker_embeddings = torch.zeros((1, 512))
+
         return _generate_speech(
             self,
             input_values,
