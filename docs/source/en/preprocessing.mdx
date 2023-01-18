@@ -444,8 +444,8 @@ or segmentation maps.
 
 ### Pad
 In some cases, for instance, when fine-tuning [DETR](./model_doc/detr), the model applies scale augmentation at training
-time. This may cause images of different sizes in a batch. You can use [`~transformers.DetrImageProcessor.pad_and_create_pixel_mask`]
-from [`~transformers.DetrImageProcessor`] and define a custom `collate_fn` to batch images together.
+time. This may cause images of different sizes in a batch. You can use [`DetrImageProcessor.pad_and_create_pixel_mask`]
+from [`DetrImageProcessor`] and define a custom `collate_fn` to batch images together.
 
 ```py
 >>> def collate_fn(batch):
