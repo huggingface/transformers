@@ -21,7 +21,7 @@ import unittest
 
 import transformers
 from transformers import WhisperConfig, is_flax_available, is_torch_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
@@ -37,7 +37,6 @@ if is_flax_available():
     import numpy as np
 
     import jax
-    import jax.numpy as jnp
     from flax.core.frozen_dict import unfreeze
     from flax.traverse_util import flatten_dict
     from transformers import (
@@ -48,12 +47,8 @@ if is_flax_available():
         WhisperProcessor,
     )
     from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
-
-if is_torch_available():
-    import torch
 
 
 @require_flax
