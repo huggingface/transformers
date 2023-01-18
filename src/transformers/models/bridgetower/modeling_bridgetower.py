@@ -183,14 +183,15 @@ class BridgeTowerResidualAttention(nn.Module):
 class BridgeTowerTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
-
+        self.hidden_size = config.hidden_size
+        self.num_hidden_layers = config.num_hidden_layers
         if config.remove_last_layer:
             self.resblocks = nn.ModuleList(
-                [BridgeTowerResidualAttention(config) for _ in range(config.num_hidden_layers - 1)]
+                [BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers - 1)]
             )
         else:
             self.resblocks = nn.ModuleList(
-                [BridgeTowerResidualAttention(config) for _ in range(config.num_hidden_layers)]
+                [BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers)]
             )
         self.stop_gradient = config.stop_gradient
 
