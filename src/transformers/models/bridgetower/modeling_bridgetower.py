@@ -758,7 +758,7 @@ class BridgeTowerTextEncoder(nn.Module):
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
@@ -1019,7 +1019,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
         self.hidden_size = config.hidden_size
         self.patch_size = config.patch_size
         self.image_size = config.image_size
-        self.model_type = "bridgetower",
+        self.model_type = ("bridgetower",)
         self.stop_gradient = config.stop_gradient
         self.share_layernorm = config.share_layernorm
         self.remove_last_layer = config.remove_last_layer
@@ -1034,7 +1034,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
             model_type=self.model_type,
             stop_gradient=self.stop_gradient,
             share_layernorm=self.share_layernorm,
-            remove_last_layer=self.remove_last_layer
+            remove_last_layer=self.remove_last_layer,
         )
 
     @property
@@ -1104,8 +1104,8 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
@@ -1297,19 +1297,19 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         image_token_type_idx: Optional[int] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
         output_hidden_states (`bool`, *optional*):
-            If set to `True`, hidden states are returned as a list containing the hidden states of text, image, 
-            and cross-modal components respectively. 
-            i.e. `(hidden_states_text, hidden_states_image, hidden_states_cross_modal)` where each element is a 
-            list of the hidden states of the corresponding modality. `hidden_states_txt/img` are a list of
-            tensors corresponding to unimodal hidden states and `hidden_states_cross_modal` is a list of tuples
-            containing `cross_modal_text_hidden_states` and `cross_modal_image_hidden_states` of each brdige layer. 
+            If set to `True`, hidden states are returned as a list containing the hidden states of text, image, and
+            cross-modal components respectively. i.e. `(hidden_states_text, hidden_states_image,
+            hidden_states_cross_modal)` where each element is a list of the hidden states of the corresponding
+            modality. `hidden_states_txt/img` are a list of tensors corresponding to unimodal hidden states and
+            `hidden_states_cross_modal` is a list of tuples containing `cross_modal_text_hidden_states` and
+            `cross_modal_image_hidden_states` of each brdige layer.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels are currently not supported.
         Returns:
@@ -1333,6 +1333,10 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         >>> outputs.keys()
         odict_keys(['text_features', 'image_features', 'pooler_output'])
         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         all_hidden_states_text = () if output_hidden_states else None
         all_hidden_states_image = () if output_hidden_states else None
         all_hidden_states_cross = () if output_hidden_states else None
@@ -1390,9 +1394,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         pixel_mask = torch.ones(
             (cross_modal_image.size(0), cross_modal_image.size(1)), dtype=torch.long, device=self.device
         )
-        extend_image_masks = self.text_model.get_extended_attention_mask(
-            pixel_mask, pixel_mask.size(), self.device
-        )
+        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size(), self.device)
 
         layer_outputs_text = self.cross_modal_text_layers[0](
             cross_modal_text,
@@ -1402,7 +1404,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             output_attentions=output_attentions,
         )
         cross_text_features = layer_outputs_text[0]
-        
+
         layer_outputs_image = self.cross_modal_image_layers[0](
             cross_modal_image,
             cross_modal_text,
@@ -1424,7 +1426,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         #  the cross-modal encoder via bridge layers, which brings bottom-up alignment and fusion to the cross-modal encoder.
         for i in range(split_index, len(self.text_model.encoder.layer)):
             text_embeds = self.text_model.encoder.layer[i](text_embeds, extend_text_masks)[0]
-            image_embeds = self.vision_model.visual.transformer.resblocks[i](image_embeds).type(self.vision_model.dtype)
+            image_embeds = self.vision_model.visual.transformer.resblocks[i](image_embeds).type(
+                self.vision_model.dtype
+            )
             image_embeds_with_ln = (
                 self.cross_modal_image_transform(self.vision_model.visual.forward_post(image_embeds))
                 + image_token_type_embeddings
@@ -1572,8 +1576,8 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
@@ -1664,8 +1668,8 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:

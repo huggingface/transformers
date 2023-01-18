@@ -51,20 +51,19 @@ class BridgeTowerModelTester:
         head_hidden_scale=2,
         hidden_act="gelu",
         hidden_size=768,
-        image_size=288,
-        input_image_embed_size=768,
-        input_text_embed_size=768,
+        initializer_factor=1,
         is_encoder_decoder=False,
         layer_norm_eps=1e-05,
         share_link_tower_layers=False,
         link_tower_type="add",
-        max_text_len=50,
-        mlp_ratio=4,
         num_attention_heads=12,
         num_hidden_layers=6,
         tie_word_embeddings=False,
+        init_layernorm_from_vision_encoder=False,
         text_config=None,
         vision_config=None,
+        image_size=288,
+        output_hidden_states=False,
     ):
         self.parent = parent
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
@@ -72,23 +71,24 @@ class BridgeTowerModelTester:
         self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
-        self.image_size = image_size
-        self.input_image_embed_size = input_image_embed_size
-        self.input_text_embed_size = input_text_embed_size
+        self.initializer_factor = initializer_factor
         self.is_encoder_decoder = is_encoder_decoder
         self.layer_norm_eps = layer_norm_eps
         self.share_link_tower_layers = share_link_tower_layers
         self.link_tower_type = link_tower_type
-        self.max_text_len = max_text_len
-        self.mlp_ratio = mlp_ratio
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.tie_word_embeddings = tie_word_embeddings
+        self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
         self.vocab_size = 50265
         self.num_channels = 3
         self.seq_length = 4
+        self.num_image_features = 325
         self.batch_size = 1
         self.is_training = False
+        self.image_size = image_size
+        self.expected_num_hidden_layers = 32
+        self.output_hidden_states = output_hidden_states
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -108,18 +108,17 @@ class BridgeTowerModelTester:
             head_hidden_scale=self.head_hidden_scale,
             hidden_act=self.hidden_act,
             hidden_size=self.hidden_size,
+            initializer_factor=self.initializer_factor,
             image_size=self.image_size,
-            input_image_embed_size=self.input_image_embed_size,
-            input_text_embed_size=self.input_text_embed_size,
             is_encoder_decoder=self.is_encoder_decoder,
             layer_norm_eps=self.layer_norm_eps,
             share_link_tower_layers=self.share_link_tower_layers,
             link_tower_type=self.link_tower_type,
-            max_text_len=self.max_text_len,
-            mlp_ratio=self.mlp_ratio,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             tie_word_embeddings=self.tie_word_embeddings,
+            output_hidden_states=self.output_hidden_states,
+            init_layernorm_from_vision_encoder=self.init_layernorm_from_vision_encoder,
         )
 
     def create_and_check_model(
@@ -136,8 +135,10 @@ class BridgeTowerModelTester:
 
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values)
-        self.parent.assertEqual(result["text_feats"].shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result["image_feats"].shape, (self.batch_size, 325, self.hidden_size))
+        self.parent.assertEqual(result["text_features"].shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result["image_features"].shape, (self.batch_size, self.num_image_features, self.hidden_size)
+        )
         self.parent.assertEqual(result["pooler_output"].shape, (self.batch_size, 2 * self.hidden_size))
 
     def create_and_check_for_image_and_text_retrieval(
@@ -231,6 +232,7 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
             model = BridgeTowerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    # Override as extracting meaningful tensor from output is different for BridgeTower
     def test_save_load(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -258,34 +260,90 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    def test_determinism(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
+    # Override as `hidden states output` is different for BridgeTower
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+
             with torch.no_grad():
-                first = model(**input_dict)
-                second = model(**input_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            out_1 = self.extract_output(first, model_class.__name__).cpu().numpy()
-            out_2 = self.extract_output(second, model_class.__name__).cpu().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
+            hidden_states_text, hidden_states_vision, hidden_states_cross = (
+                outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            )
 
-    @unittest.skip(
-        reason="""Bridge Tower model currently does not output hidden states. So this test is not applicable."""
-    )
-    def test_hidden_states_output(self):
-        pass
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(
+                sum((len(hidden_states_text), len(hidden_states_vision), len(hidden_states_cross))),
+                expected_num_layers,
+            )
 
-    @unittest.skip(
-        reason="""Bridge Tower model currently does not output hidden states. So this test is not applicable."""
-    )
+            seq_length = self.model_tester.seq_length
+            num_image_features = self.model_tester.num_image_features
+
+            self.assertListEqual(
+                list(hidden_states_text[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
+            self.assertListEqual(
+                list(hidden_states_vision[0].shape),
+                [num_image_features, 1, self.model_tester.hidden_size],
+            )
+            self.assertListEqual(
+                list(hidden_states_cross[0][0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
+            self.assertListEqual(
+                list(hidden_states_cross[0][1].shape[-2:]),
+                [num_image_features, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    # Override as `hidden states output` is different for BridgeTower
     def test_retain_grad_hidden_states_attentions(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+
+        # Encoder-/Decoder-only models
+        hidden_states = outputs.hidden_states[0][0]
+        hidden_states.retain_grad()
+
+        if self.has_attentions:
+            attentions = outputs.attentions[0][0]
+            attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+
+        if self.has_attentions:
+            self.assertIsNotNone(attentions.grad)
 
     @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. So this test is not applicable.""")
     def test_model_common_attributes(self):
