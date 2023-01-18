@@ -6,10 +6,12 @@ from typing import Any, Dict, List, Mapping
 import numpy as np
 import torch
 
-from ...utils import requires_backends, is_cython_available
+from ...utils import is_cython_available, requires_backends
+
 
 if is_cython_available():
     import pyximport
+
     pyximport.install(setup_args={"include_dirs": np.get_include()})
     from . import algos_graphormer  # noqa E402
 

@@ -76,7 +76,7 @@ def quant_noise(module, p, block_size):
 
     # 2D matrix
     if not is_conv:
-        if module.weight.size(1) % block_size != 0: 
+        if module.weight.size(1) % block_size != 0:
             raise AssertionError("Input features must be a multiple of block sizes")
 
     # 4D matrix
@@ -168,7 +168,6 @@ class LayerDropModuleList(nn.ModuleList):
         for i, m in enumerate(super().__iter__()):
             if not self.training or (dropout_probs[i] > self.p):
                 yield m
-
 
 
 class GraphormerGraphNodeFeature(nn.Module):
