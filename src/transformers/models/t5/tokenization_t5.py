@@ -214,7 +214,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def get_sentinel_tokens(self):
         return list(
-            set(filter(lambda x: bool(re.search("<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
+            set(filter(lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
         )
 
     def get_sentinel_token_ids(self):

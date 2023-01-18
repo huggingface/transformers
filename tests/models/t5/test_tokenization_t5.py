@@ -386,7 +386,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         sentinel_tokens = tokenizer.get_sentinel_tokens()
         self.assertEquals(len(sentinel_tokens), 10)
         self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
-        self.assertTrue([re.search("<extra_id_\d+>", token) is not None for token in sentinel_tokens])
+        self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
     def test_get_sentinel_token_ids(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
@@ -397,7 +397,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         sentinel_tokens = tokenizer.get_sentinel_tokens()
         self.assertEquals(len(sentinel_tokens), 10)
         self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
-        self.assertTrue([re.search("<extra_id_\d+>", token) is not None for token in sentinel_tokens])
+        self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
     def test_get_sentinel_token_ids_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
