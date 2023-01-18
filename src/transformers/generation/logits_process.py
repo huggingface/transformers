@@ -138,7 +138,6 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: int):
-
         for arg_name, arg_value in [
             ("prompt_length_to_skip", prompt_length_to_skip),
             ("min_new_tokens", min_new_tokens),
@@ -152,7 +151,6 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         if new_tokens_length < self.min_new_tokens:
             scores[:, self.eos_token_id] = -float("inf")
@@ -262,12 +260,11 @@ class TopKLogitsWarper(LogitsWarper):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
-        self.top_k = top_k
+        self.top_k = max(top_k, min_tokens_to_keep)
         self.filter_value = filter_value
-        self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.size(-1))  # Safety check
+        top_k = min(self.top_k, scores.size(-1))  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < torch.topk(scores, top_k)[0][..., -1, None]
         scores = scores.masked_fill(indices_to_remove, self.filter_value)
@@ -298,7 +295,6 @@ class TypicalLogitsWarper(LogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-
         # calculate entropy
         normalized = torch.nn.functional.log_softmax(scores, dim=-1)
         p = torch.exp(normalized)
@@ -318,6 +314,90 @@ class TypicalLogitsWarper(LogitsWarper):
             # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
             sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+
+        scores = scores.masked_fill(indices_to_remove, self.filter_value)
+        return scores
+
+
+class EpsilonLogitsWarper(LogitsWarper):
+    r"""
+    [`LogitsWarper`] that performs epsilon-sampling, i.e. restricting to tokens with `prob >= epsilon`. Takes the
+    largest min_tokens_to_keep tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
+    Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
+
+    Args:
+        epsilon (`float`):
+            If set to > 0, only the most tokens with probabilities `epsilon` or higher are kept for generation.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
+    def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        epsilon = float(epsilon)
+        if epsilon <= 0 or epsilon >= 1:
+            raise ValueError(f"`epsilon_cutoff` has to be a float > 0 and < 1, but is {epsilon}")
+
+        min_tokens_to_keep = int(min_tokens_to_keep)
+        if min_tokens_to_keep < 1:
+            raise ValueError(
+                f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
+            )
+
+        self.epsilon = epsilon
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # Determine which indices to remove
+        probabilities = scores.softmax(dim=-1)
+        indices_to_remove = probabilities < self.epsilon
+
+        # Keep the words with the 'min_tokens_to_keep'-highest probabilities
+        top_k = min(self.min_tokens_to_keep, scores.size(-1))  # Safety check
+        indices_to_remove = indices_to_remove & (scores < torch.topk(scores, top_k)[0][..., -1, None])
+
+        scores = scores.masked_fill(indices_to_remove, self.filter_value)
+        return scores
+
+
+class EtaLogitsWarper(LogitsWarper):
+    r"""
+    [`LogitsWarper`] that performs eta-sampling, i.e. calculates a dynamic cutoff `eta := min(epsilon, sqrt(epsilon,
+    e^-entropy(probabilities)))` and restricts to tokens with `prob >= eta`. Takes the largest min_tokens_to_keep
+    tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
+    Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
+
+    Args:
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered."""
+
+    def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        epsilon = float(epsilon)
+        if epsilon <= 0 or epsilon >= 1:
+            raise ValueError(f"`eta_cutoff` has to be a float > 0 and < 1, but is {epsilon}")
+
+        min_tokens_to_keep = int(min_tokens_to_keep)
+        if min_tokens_to_keep < 1:
+            raise ValueError(
+                f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
+            )
+
+        self.epsilon = torch.tensor(epsilon)
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # Calculate the adaptive cutoff
+        probabilities = scores.softmax(dim=-1)
+        entropy = torch.distributions.Categorical(probs=probabilities).entropy()
+        eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
+        indices_to_remove = probabilities < eta
+
+        # Keep the words with the 'min_tokens_to_keep'-highest probabilities
+        top_k = min(self.min_tokens_to_keep, scores.size(-1))  # Safety check
+        indices_to_remove = indices_to_remove & (scores < torch.topk(scores, top_k)[0][..., -1, None])
 
         scores = scores.masked_fill(indices_to_remove, self.filter_value)
         return scores
@@ -439,7 +519,6 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
-
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
             raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
         if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
@@ -801,4 +880,68 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
         if current_token is not None:
             scores[:, :] = -float("inf")
             scores[:, current_token] = 0
+        return scores
+
+
+class WhisperTimeStampLogitsProcessor(LogitsProcessor):
+    r"""
+    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
+    probs to `inf` so that they are sampled at their corresponding index.
+
+    Args:
+        begin_index (`int`, *optional*, defaults to 5 ):
+            This indicates to the processor where the first tokens are generated. This is used to differentiate between
+            the `prompt` tokens and the `generated` tokens. When generating with `WhisperForConditionalGeneration` the
+            `prompt` tokens are the first 4 tokens.
+        eos_token_id (`int`, *optional*, defaults to 50257):
+            The id of the *end-of-sequence* token.
+        no_timestamps_token_id (`int`, *optional*, defaults to 50363):
+            The id of the `"<|notimestamps|>"` token.
+        max_initial_timestamp (`int`, *optional*, defaults to 1):
+            Used to set the maximum value of the initial timestamp. This is used to prevent the model from predicting
+            timestamps that are too far in the future.
+    """
+
+    def __init__(
+        self,
+        begin_index=5,
+        eos_token_id=50257,
+        no_timestamps_token_id=50363,
+        max_initial_timestamp=1,
+    ):
+        self.eos_token_id = eos_token_id
+        self.no_timestamps_token_id = no_timestamps_token_id
+        self.timestamp_begin = no_timestamps_token_id + 1
+        self.begin_index = begin_index
+        self.max_initial_timestamp_index = max_initial_timestamp
+
+    def __call__(self, input_ids, scores):
+        # suppress <|notimestamps|> which is handled by without_timestamps
+        scores[:, self.no_timestamps_token_id] = -float("inf")
+
+        # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
+        for k in range(input_ids.shape[0]):
+            seq = [t for t in input_ids[k, self.begin_index :].tolist()]
+            last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
+            penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
+
+            if last_was_timestamp:
+                if penultimate_was_timestamp:  # has to be non-timestamp
+                    scores[k, self.timestamp_begin :] = -float("inf")
+                else:  # cannot be normal text tokens
+                    scores[k, : self.eos_token_id] = -float("inf")
+
+            # apply the `max_initial_timestamp` option
+            if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
+                last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+                scores[:, last_allowed + 1 :] = -float("inf")
+
+        # if sum of probability over timestamps is above any other token, sample timestamp
+        logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
+        for k in range(input_ids.shape[0]):
+            timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
+            max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
+            if timestamp_logprob > max_text_token_logprob:
+                scores[k, : self.timestamp_begin] = -float("inf")
+
         return scores
