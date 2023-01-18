@@ -83,6 +83,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_neuroncore_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -498,6 +499,15 @@ def require_torch_tpu(test_case):
     Decorator marking a test that requires a TPU (in PyTorch).
     """
     return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
+
+
+def require_torch_neuroncore(test_case):
+    """
+    Decorator marking a test that requires NeuronCore (in PyTorch).
+    """
+    return unittest.skipUnless(is_torch_neuroncore_available(check_device=False), "test requires PyTorch NeuronCore")(
+        test_case
+    )
 
 
 if is_torch_available():
