@@ -1666,21 +1666,16 @@ class DetaModel(DetaPreTrainedModel):
             query_embeds = self.query_position_embeddings.weight
 
         # Prepare encoder inputs (by flattening)
-        source_flatten = []
-        mask_flatten = []
+        spatial_shapes = [(source.shape[2:]) for source in sources]
+        source_flatten = [source.flatten(2).transpose(1, 2) for source in sources]
+        mask_flatten = [mask.flatten(1) for mask in masks]
+
         lvl_pos_embed_flatten = []
-        spatial_shapes = []
-        for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
-            batch_size, num_channels, height, width = source.shape
-            spatial_shape = (height, width)
-            spatial_shapes.append(spatial_shape)
-            source = source.flatten(2).transpose(1, 2)
-            mask = mask.flatten(1)
+        for level, pos_embed in enumerate(position_embeddings_list):
             pos_embed = pos_embed.flatten(2).transpose(1, 2)
             lvl_pos_embed = pos_embed + self.level_embed[level].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
-            source_flatten.append(source)
-            mask_flatten.append(mask)
+
         source_flatten = torch.cat(source_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
