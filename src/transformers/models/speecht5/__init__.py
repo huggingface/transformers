@@ -122,8 +122,8 @@ if TYPE_CHECKING:
         from .modeling_speecht5 import (
             SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
             SpeechT5ForCTC,
-            SpeechT5ForSpeechToText,
             SpeechT5ForSpeechToSpeech,
+            SpeechT5ForSpeechToText,
             SpeechT5ForTextToSpeech,
             SpeechT5HiFiGAN,
             SpeechT5Model,

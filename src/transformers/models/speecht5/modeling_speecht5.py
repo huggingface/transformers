@@ -3022,17 +3022,17 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         vocoder: Optional[nn.Module] = None,
     ) -> torch.FloatTensor:
         r"""
-        Converts a raw speech waveform into a sequence of mel spectrograms, which are subsequently turned back
-        into a speech waveform using a vocoder.
+        Converts a raw speech waveform into a sequence of mel spectrograms, which are subsequently turned back into a
+        speech waveform using a vocoder.
 
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Float values of input raw speech waveform. The `batch_size` should be 1 currently.
 
-                Values can be obtained by loading a *.flac* or *.wav* audio file
-                into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-                soundfile*). To prepare the array into `input_values`, the [`SpeechT5ProcessorForSpeechToSpeech`] should be
-                used for padding and conversion into a tensor of type `torch.FloatTensor`. See
+                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `List[float]` or
+                a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install soundfile*). To prepare the array
+                into `input_values`, the [`SpeechT5ProcessorForSpeechToSpeech`] should be used for padding and
+                conversion into a tensor of type `torch.FloatTensor`. See
                 [`SpeechT5ProcessorForSpeechToSpeech.__call__`] for details.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.

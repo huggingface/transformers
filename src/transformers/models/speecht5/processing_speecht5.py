@@ -202,10 +202,12 @@ class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
 
 class SpeechT5ProcessorForSpeechToSpeech(ProcessorMixin):
     r"""
-    Constructs a SpeechT5 processor which wraps a waveform feature extractor and spectrogram feature extractor into a single processor.
+    Constructs a SpeechT5 processor which wraps a waveform feature extractor and spectrogram feature extractor into a
+    single processor.
 
     [`SpeechT5ProcessorForSpeechToSpeech`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and
-    [`SpeechT5SpectrogramFeatureExtractor`]. See the docstring of [`~SpeechT5ProcessorForSpeechToSpeech.__call__`] for more information.
+    [`SpeechT5SpectrogramFeatureExtractor`]. See the docstring of [`~SpeechT5ProcessorForSpeechToSpeech.__call__`] for
+    more information.
 
     Args:
         feature_extractor_encoder (`SpeechT5WaveformFeatureExtractor`):
@@ -243,9 +245,13 @@ class SpeechT5ProcessorForSpeechToSpeech(ProcessorMixin):
             raise ValueError("You need to specify either an `encoder_audio` or `decoder_audio` input to process.")
 
         if encoder_audio is not None:
-            encoder_inputs = self.feature_extractor_encoder(encoder_audio, *args, sampling_rate=sampling_rate, **kwargs)
+            encoder_inputs = self.feature_extractor_encoder(
+                encoder_audio, *args, sampling_rate=sampling_rate, **kwargs
+            )
         if decoder_audio is not None:
-            decoder_inputs = self.feature_extractor_decoder(decoder_audio, *args, sampling_rate=sampling_rate, **kwargs)
+            decoder_inputs = self.feature_extractor_decoder(
+                decoder_audio, *args, sampling_rate=sampling_rate, **kwargs
+            )
 
         if decoder_audio is None:
             return encoder_inputs
