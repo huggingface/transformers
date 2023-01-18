@@ -46,6 +46,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_neuroncore_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
@@ -59,6 +60,17 @@ if is_torch_available():
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+if is_torch_neuroncore_available(check_device=False):
+    # torchrun support
+    # https://github.com/pytorch/xla/pull/3609
+    if os.environ.get("TORCHELASTIC_RUN_ID"):
+        import torch_xla.distributed.xla_backend as xbn
+
+        if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+            torch.distributed.init_process_group(backend="xla")
+            if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+                raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
 if is_sagemaker_mp_enabled():
