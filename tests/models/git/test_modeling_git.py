@@ -30,14 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        MODEL_FOR_BACKBONE_MAPPING,
-        MODEL_FOR_CAUSAL_LM_MAPPING,
-        MODEL_MAPPING,
-        GitForCausalLM,
-        GitModel,
-        GitVisionModel,
-    )
+    from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, GitForCausalLM, GitModel, GitVisionModel
     from transformers.models.git.modeling_git import GIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
