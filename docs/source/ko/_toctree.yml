@@ -1,6 +1,8 @@
 - sections:
   - local: index
     title: 🤗 Transformers
+  - local: installation
+    title: 설치방법
   title: 시작하기
 - sections:
   - local: in_translation
