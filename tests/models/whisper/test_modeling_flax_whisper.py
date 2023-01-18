@@ -255,7 +255,7 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
-   
+
     # overwrite because of `input_features`
     @is_pt_flax_cross_test
     def test_save_load_bf16_to_base_pt(self):
