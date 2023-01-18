@@ -1038,8 +1038,13 @@ class DagsHubCallback(MLflowCallback):
             name=self.remote.split(os.sep)[-1].split(".")[-1],
             branch=os.getenv("BRANCH") or "main",
         )
-        self.paths = {"artifacts": Path("artifacts"), "models": Path("artifacts") / "models", "data": Path("artifacts") / "data"}
-        for path in self.paths.values(): Path(path).mkdir(parents=True, exist_ok=True)
+        self.paths = {
+            "artifacts": Path("artifacts"),
+            "models": Path("artifacts") / "models",
+            "data": Path("artifacts") / "data",
+        }
+        for path in self.paths.values():
+            Path(path).mkdir(parents=True, exist_ok=True)
 
         super().setup(*args, **kwargs)
 
@@ -1051,7 +1056,7 @@ class DagsHubCallback(MLflowCallback):
             # self.repo.directory(self.paths["artifacts"]).add(file=self.data, path=self.paths["data"])
 
             torch.save(self.model, self.paths["models"] / "model.pt")
-            state.to_json(self.path["artifacts"])
+            state.save_to_json(self.path["artifacts"])
 
             self.repo.directory(self.paths["artifacts"]).add(
                 file=self.paths["artifacts"], path=self.paths["artifacts"]
