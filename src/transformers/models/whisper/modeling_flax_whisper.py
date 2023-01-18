@@ -99,7 +99,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
             be used by default. If you want to change padding behavior, you should modify to your needs. See diagram 1
             in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
         position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Whisper does not use position_ids in the encoder as input_features is always the same size and doesn't use
+            Whisper does not use `position_ids` in the encoder as `input_features` is always the same size and doesn't use
             masking, but this argument is preserved for compatibility. By default the silence in the input log mel
             spectrogram are ignored.
         decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -818,7 +818,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
-        input_features = jnp.zeros(input_shape)
+        input_features = jnp.zeros(input_shape, dtype="f4")
         input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)
 
         decoder_input_ids = jnp.zeros((input_shape[0], 1), dtype="i4")
