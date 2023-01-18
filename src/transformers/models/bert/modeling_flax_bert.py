@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from functools import partial
 from typing import Callable, Optional, Tuple
 
 import numpy as np
@@ -23,8 +23,8 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
-from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
+from flax.linen.partitioning import remat, scan_with_axes
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
@@ -56,8 +56,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
-
-remat = nn_partitioning.remat
 
 
 @flax.struct.dataclass
@@ -493,6 +491,7 @@ class FlaxBertOutput(nn.Module):
 class FlaxBertLayer(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    use_scan: bool = False
 
     def setup(self):
         self.attention = FlaxBertAttention(self.config, causal=self.config.is_decoder, dtype=self.dtype)
@@ -512,6 +511,9 @@ class FlaxBertLayer(nn.Module):
         deterministic: bool = True,
         output_attentions: bool = False,
     ):
+        if self.use_scan:
+            hidden_states = hidden_states[0]
+
         # Self Attention
         attention_outputs = self.attention(
             hidden_states,
@@ -544,6 +546,10 @@ class FlaxBertLayer(nn.Module):
             outputs += (attention_outputs[1],)
             if encoder_hidden_states is not None:
                 outputs += (cross_attention_outputs[1],)
+
+        if self.use_scan:
+            outputs = (outputs, None)
+
         return outputs
 
 
@@ -551,19 +557,11 @@ class FlaxBertLayerCollection(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
-    def setup(self):
-        if self.gradient_checkpointing:
-            FlaxBertCheckpointLayer = remat(FlaxBertLayer, static_argnums=(5, 6, 7))
-            self.layers = [
-                FlaxBertCheckpointLayer(self.config, name=str(i), dtype=self.dtype)
-                for i in range(self.config.num_hidden_layers)
-            ]
-        else:
-            self.layers = [
-                FlaxBertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
-            ]
-
+    # TODO(sanchit-gandhi): re-write as a `setup`
+    # TODO(sanchit-gandhi): re-introduce gradient checkpointing -> removed for PR iterating
+    @nn.compact
     def __call__(
         self,
         hidden_states,
@@ -583,37 +581,65 @@ class FlaxBertLayerCollection(nn.Module):
 
         # Check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            if head_mask.shape[0] != (len(self.layers)):
+            if head_mask.shape[0] != self.config.num_hidden_layers:
                 raise ValueError(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for                  "
+                    f"The head_mask should be specified for {self.config.num_hidden_layers} layers, but it is for "
                     f"       {head_mask.shape[0]}."
                 )
 
-        for i, layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+        if self.use_scan:
+            # since all Bert layers are the same, we use scan_with_axes directly
+            assert not output_attentions, "cannot use `scan` with `output_attentions` set to `True`"
+            assert not output_hidden_states, "cannot use `scan` with `output_hidden_states` set to `True`"
 
-            layer_outputs = layer(
+            hidden_states = (hidden_states,)
+            # lax.scan over the entries of head_mask -> ensure it is of required dim
+            head_mask = [None for i in range(self.config.num_hidden_layers)] if head_mask is None else head_mask
+
+            hidden_states, _ = scan_with_axes(
+                FlaxBertLayer,
+                variable_axes={"params": 0, "cache": 0},
+                split_rngs={"params": True, "dropout": True},
+                in_axes=(nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast),
+                length=self.config.num_hidden_layers,
+            )(self.config, dtype=self.dtype, use_scan=True, name="FlaxScanLayers")(
                 hidden_states,
                 attention_mask,
-                head_mask[i] if head_mask is not None else None,
+                head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 init_cache,
                 deterministic,
                 output_attentions,
             )
+            hidden_states = hidden_states[0]
 
-            hidden_states = layer_outputs[0]
+        else:
+            for layer_number in range(self.config.num_hidden_layers):
+                if output_hidden_states:
+                    all_hidden_states += (hidden_states,)
 
-            if output_attentions:
-                all_attentions += (layer_outputs[1],)
+                layer_outputs = FlaxBertLayer(self.config, dtype=self.dtype, use_scan=False, name=str(layer_number))(
+                    hidden_states,
+                    attention_mask,
+                    head_mask[layer_number] if head_mask is not None else None,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    init_cache,
+                    deterministic,
+                    output_attentions,
+                )
 
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+                hidden_states = layer_outputs[0]
 
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
+                if output_attentions:
+                    all_attentions += (layer_outputs[1],)
+
+                    if encoder_hidden_states is not None:
+                        all_cross_attentions += (layer_outputs[2],)
+
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
 
         outputs = (hidden_states, all_hidden_states, all_attentions, all_cross_attentions)
 
@@ -632,12 +658,14 @@ class FlaxBertEncoder(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.layer = FlaxBertLayerCollection(
             self.config,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
 
     def __call__(
@@ -776,12 +804,15 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
+        # Can only use_scan=True in init if loading scanned weights -> need to handle use_scan=True and unrolled weights
+        use_scan: bool = False,
         **kwargs
     ):
         module = self.module_class(
             config=config,
             dtype=dtype,
             gradient_checkpointing=gradient_checkpointing,
+            use_scan=use_scan,
             **kwargs,
         )
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -792,6 +823,44 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
             dtype=self.dtype,
             gradient_checkpointing=True,
         )
+
+    def scan_enable(self):
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            use_scan=True,
+        )
+        init_fn = partial(self.init_weights, input_shape=self.input_shape)
+        params_shape_tree = jax.eval_shape(init_fn, self.key)
+
+        # get the shape of the parameters
+        self._params_shape_tree = params_shape_tree
+
+        # save required_params as set
+        self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
+
+        # initialize the parameters
+        if self._is_initialized:
+            self.params = self.convert_unroll_to_scan(self.params)
+
+    def scan_disable(self):
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            use_scan=False,
+        )
+        init_fn = partial(self.init_weights, input_shape=self.input_shape)
+        params_shape_tree = jax.eval_shape(init_fn, self.key)
+
+        # get the shape of the parameters
+        self._params_shape_tree = params_shape_tree
+
+        # save required_params as set
+        self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
+
+        # initialize the parameters
+        if self._is_initialized:
+            self.params = self.convert_scan_to_unroll(self.params)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -958,6 +1027,7 @@ class FlaxBertModule(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     add_pooling_layer: bool = True
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.embeddings = FlaxBertEmbeddings(self.config, dtype=self.dtype)
@@ -965,6 +1035,7 @@ class FlaxBertModule(nn.Module):
             self.config,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         self.pooler = FlaxBertPooler(self.config, dtype=self.dtype)
 
@@ -1041,12 +1112,14 @@ class FlaxBertForPreTrainingModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.bert = FlaxBertModule(
             config=self.config,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         self.cls = FlaxBertPreTrainingHeads(config=self.config, dtype=self.dtype)
 
@@ -1142,6 +1215,7 @@ class FlaxBertForMaskedLMModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.bert = FlaxBertModule(
@@ -1149,6 +1223,7 @@ class FlaxBertForMaskedLMModule(nn.Module):
             add_pooling_layer=False,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
@@ -1210,12 +1285,14 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.bert = FlaxBertModule(
             config=self.config,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         self.cls = FlaxBertOnlyNSPHead(dtype=self.dtype)
 
@@ -1302,12 +1379,14 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.bert = FlaxBertModule(
             config=self.config,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         classifier_dropout = (
             self.config.classifier_dropout
@@ -1383,12 +1462,14 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.bert = FlaxBertModule(
             config=self.config,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
@@ -1463,6 +1544,7 @@ class FlaxBertForTokenClassificationModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.bert = FlaxBertModule(
@@ -1470,6 +1552,7 @@ class FlaxBertForTokenClassificationModule(nn.Module):
             dtype=self.dtype,
             add_pooling_layer=False,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         classifier_dropout = (
             self.config.classifier_dropout
@@ -1538,6 +1621,7 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.bert = FlaxBertModule(
@@ -1545,6 +1629,7 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
             dtype=self.dtype,
             add_pooling_layer=False,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
@@ -1615,6 +1700,7 @@ class FlaxBertForCausalLMModule(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32
     gradient_checkpointing: bool = False
+    use_scan: bool = False
 
     def setup(self):
         self.bert = FlaxBertModule(
@@ -1622,6 +1708,7 @@ class FlaxBertForCausalLMModule(nn.Module):
             add_pooling_layer=False,
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
+            use_scan=self.use_scan,
         )
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
