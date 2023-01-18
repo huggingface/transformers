@@ -1038,7 +1038,7 @@ class DagsHubCallback(MLflowCallback):
             name=self.remote.split(os.sep)[-1].split(".")[-1],
             branch=os.getenv("BRANCH") or "main",
         )
-        self.paths = {"artifacts": Path("artifacts"), "models": Path("models"), "data": Path("data")}
+        self.paths = {"artifacts": Path("artifacts"), "models": Path("artifacts") / "models", "data": Path("artifacts") / "data"}
         Path(self.paths["artifacts"]).mkdir(parents=True, exist_ok=True)
 
         super().setup(*args, **kwargs)
