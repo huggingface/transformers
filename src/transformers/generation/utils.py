@@ -962,10 +962,11 @@ class GenerationMixin:
             beam_indices = torch.arange(scores[0].shape[0]).view(-1, 1)
             beam_indices = beam_indices.expand(-1, len(scores))
 
-        # 2. reshape scores as [vocab_size, batch_size, # generation steps]
+        # 2. reshape scores as [batch_size, vocab_size, # generation steps]
         # with # generation steps being seq_len - input_length
         scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
-        scores = scores.reshape(sequences.shape[0], self.config.vocab_size, -1).transpose(0, 1)
+        breakpoint()
+        scores = scores.reshape(sequences.shape[0], self.config.vocab_size, -1)
 
         # 3. cut beam_indices to longest beam length
         beam_indices_mask = beam_indices < 0
@@ -982,7 +983,7 @@ class GenerationMixin:
         indices = sequences[:, cut_idx:]
 
         # 6. Compute scores
-        transition_scores = scores.gather(0, indices[None, :, :]).squeeze(0)
+        transition_scores = scores.gather(1, indices[:, None, :])
 
         # 7. Mask out transition_scores of beams that stopped early
         transition_scores[beam_indices_mask] = 0
