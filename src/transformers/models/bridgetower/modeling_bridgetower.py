@@ -32,7 +32,6 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
-
 from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
@@ -211,17 +210,25 @@ class BridgeTowerVisualTransformer(nn.Module):
         super().__init__()
 
         self.conv1 = nn.Conv2d(
-            in_channels=3, out_channels=config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size, bias=False
+            in_channels=3,
+            out_channels=config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+            bias=False,
         )
         scale = config.hidden_size**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(config.hidden_size))
-        self.positional_embedding = nn.Parameter(scale * torch.randn((config.image_size // config.patch_size) ** 2 + 1, config.hidden_size))
+        self.positional_embedding = nn.Parameter(
+            scale * torch.randn((config.image_size // config.patch_size) ** 2 + 1, config.hidden_size)
+        )
         self.ln_pre = BridgeTowerLayerNorm(config.hidden_size)
         self.transformer = BridgeTowerTransformer(config)
         self.ln_post = BridgeTowerLayerNorm(config.hidden_size)
         self.share_layernorm = config.share_layernorm
         if not config.share_layernorm:
-            self.ln_separate = nn.ModuleList([BridgeTowerLayerNorm(config.hidden_size) for _ in range(config.num_hidden_layers)])
+            self.ln_separate = nn.ModuleList(
+                [BridgeTowerLayerNorm(config.hidden_size) for _ in range(config.num_hidden_layers)]
+            )
 
     def forward(self, hidden_state: torch.Tensor, attention_mask):
         # shape = [*, hidden_size, grid, grid]
@@ -620,7 +627,9 @@ class BridgeTowerBertCrossLayer(nn.Module):
         return layer_output
 
     @property
-    def device(self,):
+    def device(
+        self,
+    ):
         return self.attention.self.query.weight.device
 
 
@@ -710,7 +719,9 @@ class BridgeTowerTextLayer(nn.Module):
         return layer_output
 
     @property
-    def device(self,):
+    def device(
+        self,
+    ):
         return self.attention.self.query.weight.device
 
 
@@ -1306,9 +1317,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.text_model.encoder.layer[0].device)
-        extend_text_masks = self.text_model.get_extended_attention_mask(
-            attention_mask, input_shape
-        ).to(self.text_model.encoder.layer[0].device)
+        extend_text_masks = self.text_model.get_extended_attention_mask(attention_mask, input_shape).to(
+            self.text_model.encoder.layer[0].device
+        )
 
         # The split_index determines how many layers of the uni-modal encoder are applied before the cross-modal encoder
         split_index = len(self.text_model.encoder.layer) - self.config.num_hidden_layers + 1
@@ -1336,23 +1347,14 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         cross_modal_text = self.cross_modal_text_transform(text_embeds)
 
         text_token_type_embeddings = self.token_type_embeddings(
-            torch.zeros(
-                1, 
-                dtype=torch.long, 
-                device=self.token_type_embeddings.weight.device
-            )
+            torch.zeros(1, dtype=torch.long, device=self.token_type_embeddings.weight.device)
         ).expand_as(cross_modal_text)
 
         cross_modal_text = self.cross_modal_text_layernorm(cross_modal_text + text_token_type_embeddings)
 
         image_embeds_with_ln = self.cross_modal_image_transform(image_embeds_with_ln)
         image_token_type_embeddings = self.token_type_embeddings(
-            torch.full(
-                (1,), 
-                image_token_type_idx, 
-                dtype=torch.long,
-                device=self.token_type_embeddings.weight.device
-            )
+            torch.full((1,), image_token_type_idx, dtype=torch.long, device=self.token_type_embeddings.weight.device)
         ).expand_as(image_embeds_with_ln)
 
         image_embeds_with_ln = image_embeds_with_ln + image_token_type_embeddings
@@ -1360,12 +1362,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
 
         pixel_mask = torch.ones(
             (cross_modal_image.size(0), cross_modal_image.size(1)),
-            dtype=torch.long, 
-            device=self.cross_modal_text_layers[0].device
+            dtype=torch.long,
+            device=self.cross_modal_text_layers[0].device,
         )
-        extend_image_masks = self.text_model.get_extended_attention_mask(
-            pixel_mask, pixel_mask.size()
-        ).to(self.cross_modal_text_layers[0].device)
+        extend_image_masks = self.text_model.get_extended_attention_mask(pixel_mask, pixel_mask.size()).to(
+            self.cross_modal_text_layers[0].device
+        )
 
         layer_outputs_text = self.cross_modal_text_layers[0](
             cross_modal_text,
