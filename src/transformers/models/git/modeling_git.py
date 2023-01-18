@@ -1267,7 +1267,8 @@ class GitModel(GitPreTrainedModel):
         # Repeat visual features to match embedding batch size.
         # Embedding batch size could be greater than visual features when beam search is used in generation.
         projected_visual_features = projected_visual_features.repeat(
-            embedding_output.size(0) // projected_visual_features.size(0), 1, 1)
+            embedding_output.size(0) // projected_visual_features.size(0), 1, 1
+        )
 
         # concatenate patch token and text token embeddings
         hidden_states = torch.cat((projected_visual_features, embedding_output), dim=1)
