@@ -264,7 +264,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ...     "{checkpoint}", num_labels=num_labels, problem_type="multi_label_classification"
     ... )
 
-    >>> labels = torch.nn.functional.one_hot(torch.tensor(predicted_class_ids), num_classes=num_labels).to(torch.float)
+    >>> labels = torch.sum(torch.nn.functional.one_hot(predicted_class_ids.clone(), num_classes=num_labels), dim=1).to(torch.float)
     >>> loss = model(**inputs, labels=labels).loss
     ```
 """
