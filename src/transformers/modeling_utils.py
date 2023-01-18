@@ -1222,7 +1222,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Use in conjunction with resize_token_embeddings to provide a baseline against which size changes can be 
         calculated. For example:
         
-        ```
+        ```python
         # add 1 new embedding
         current_embeddings_size = my_xformer.get_token_embeddings_size()
         new_embeddings_size = current_embeddings_size + 1
