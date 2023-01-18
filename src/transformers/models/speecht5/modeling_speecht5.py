@@ -1353,7 +1353,7 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (SpeechT5Encoder, SpeechT5Decoder)):
+        if isinstance(module, (SpeechT5Encoder, SpeechT5Decoder, SpeechT5FeatureEncoder)):
             module.gradient_checkpointing = value
 
 
