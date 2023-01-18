@@ -30,7 +30,7 @@ if is_torch_available():
 class OneFormerProcessor(ProcessorMixin):
     r"""
     Constructs an OneFormer processor which wraps [`OneFormerImageProcessor`] and
-    [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single processor that interits both the image processor and
+    [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into a single processor that inherits both the image processor and
     tokenizer functionalities.
 
     Args:

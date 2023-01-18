@@ -1266,7 +1266,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         )
 
 
-# Modified from from transformers.models.detr.modeling_deformable_detr.DeformableDetrModel with DeformableDetrModel->OneFormerPixelDecoder
+# Modified from from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoder with Mask2->One
 class OneFormerPixelDecoder(nn.Module):
     def __init__(self, config: OneFormerConfig, feature_channels):
         super().__init__()
@@ -1469,11 +1469,13 @@ class OneFormerPixelDecoder(nn.Module):
         )
 
 
+# Modified from from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelLevelModule with Mask2->One
 class OneFormerPixelLevelModule(nn.Module):
     def __init__(self, config: OneFormerConfig):
         """
-        It runs the input image through a backbone and a pixel decoder, returning mask_features and
-        multi_scale_features to be fed into the transformer decoder.
+        Pixel Level Module proposed in [Masked-attention Mask Transformer for Universal Image
+        Segmentation](https://arxiv.org/abs/2112.01527). It runs the input image through a backbone and a pixel
+        decoder, generating multi-scale feature maps and pixel embeddings.
 
         Args:
             config ([`OneFormerConfig`]):
@@ -2984,6 +2986,10 @@ class OneFormerModel(OneFormerPreTrainedModel):
         return output
 
 
+@add_start_docstrings(
+    "OneFormer Model for instance, semantic and panoptic image segmentation.",
+    ONEFORMER_START_DOCSTRING,
+)
 class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
     main_input_name = ["pixel_values", "task_inputs"]
 
@@ -3155,7 +3161,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs: OneFormerModelOutput = self.model(
+        outputs = self.model(
             pixel_values=pixel_values,
             task_inputs=task_inputs,
             text_inputs=text_inputs,
