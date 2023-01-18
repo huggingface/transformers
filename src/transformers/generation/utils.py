@@ -928,36 +928,61 @@ class GenerationMixin:
         self,
         sequences: torch.Tensor,
         scores: Tuple[torch.Tensor],
-        beam_indices: torch.Tensor,
-        eos_token_id: Union[int, List[int]] = None,
-    ):
-        """compute the transition probabilities of sequences given generation
-        scores and beam indices"""
+        beam_indices: Optional[torch.Tensor] = None,
+        renormalize_logits: bool = True,
+    ) -> torch.Tensor:
+        """
+        Computes the transition scores of sequences given the generation scores (and beam indices, if beam search was
+        used). This is a convenient method to quicky obtain the scores of the selected tokens at generation time.
 
-        # 1. reshape scores as [vocab_size * batch_size, # generation steps]
-        # with batch_size being 2 * vocab_size and # generation steps being
-        # seq_len - input_length
+        Parameters:
+            sequences (`torch.LongTensor`):
+                The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
+                shorter if all batches finished early due to the `eos_token_id`.
+            scores (`tuple(torch.FloatTensor)`):
+                Beam transition scores for each vocabulary token at each generation step. Beam transition scores
+                consisting of log probabilities of tokens conditioned on log softmax of previously generated tokens in
+                this beam. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each
+                generated token), with each tensor of shape `(batch_size*num_beams*num_return_sequences,
+                config.vocab_size)`.
+            beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*):
+                Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
+                `(batch_size*num_return_sequences, input_ids.shape[-1])`. Only required if a `num_beams>1` at
+                generate-time.
+            renormalize_logits (`bool`, *optional*, defaults to `True`):
+                Whether to renormalize the logits (which, due to legacy, may be unnormalized).
+
+        Return:
+            `torch.Tensor`: A `torch.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)` containing
+                the transition scores
+        """
+        # 1. In abcense of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
+        # to a beam search approach were the first (and only) beam was always selected
+        if beam_indices is None:
+            beam_indices = torch.arange(scores[0].shape[0]).view(-1, 1)
+            beam_indices = beam_indices.expand(-1, len(scores))
+
+        # 2. reshape scores as [vocab_size, batch_size, # generation steps]
+        # with # generation steps being seq_len - input_length
         scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
+        scores = scores.reshape(sequences.shape[0], self.config.vocab_size, -1).transpose(0, 1)
 
-        # 2. cut beam_indices to longest beam length
+        # 3. cut beam_indices to longest beam length
         beam_indices_mask = beam_indices < 0
         max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
         beam_indices = beam_indices[:, :max_beam_length]
         beam_indices_mask = beam_indices_mask[:, :max_beam_length]
 
-        # 3. Set indices of beams that finished early to 0
+        # 4. Set indices of beams that finished early to 0
         # such indices will be masked correctly afterwards
         beam_indices[beam_indices_mask] = 0
 
-        # 4. multiply beam_indices with vocab size to gather correctly from scores
-        beam_sequence_indices = beam_indices * self.config.vocab_size
-
         # 5. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
-        indices = sequences[:, cut_idx:] + beam_sequence_indices
+        indices = sequences[:, cut_idx:]
 
         # 6. Compute scores
-        transition_scores = scores.gather(0, indices)
+        transition_scores = scores.gather(0, indices[None, :, :]).squeeze(0)
 
         # 7. Mask out transition_scores of beams that stopped early
         transition_scores[beam_indices_mask] = 0
