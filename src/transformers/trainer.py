@@ -244,7 +244,7 @@ class Trainer:
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
         tokenizer ([`PreTrainedTokenizerBase`], *optional*):
-            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
+            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
@@ -1044,10 +1044,14 @@ class Trainer:
 
                     manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
 
+                    skipped = 0
                     for module in opt_model.modules():
                         if isinstance(module, nn.Embedding):
+                            skipped += sum(dict((p.data_ptr(), p.numel()) for p in module.parameters()).values())
+                            print(f"skipped {module}: {skipped/2**20}M params")
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.debug(f"bitsandbytes: will optimize {module} in fp32")
+                    print(f"skipped: {skipped/2**20}M params")
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
@@ -1309,8 +1313,9 @@ class Trainer:
 
         if not training:
             model.eval()
+            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
             # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
-            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False)
+            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
         else:
             if not model.training:
                 model.train()

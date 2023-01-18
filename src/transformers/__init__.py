@@ -322,6 +322,10 @@ _import_structure = {
         "MarkupLMProcessor",
         "MarkupLMTokenizer",
     ],
+    "models.mask2former": [
+        "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Mask2FormerConfig",
+    ],
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
@@ -424,6 +428,7 @@ _import_structure = {
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
     ],
+    "models.upernet": ["UperNetConfig"],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
     "models.vilt": [
@@ -1224,6 +1229,7 @@ else:
     _import_structure["models.convnext"].extend(
         [
             "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextBackbone",
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
@@ -1704,6 +1710,14 @@ else:
             "MarkupLMForTokenClassification",
             "MarkupLMModel",
             "MarkupLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mask2former"].extend(
+        [
+            "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Mask2FormerForUniversalSegmentation",
+            "Mask2FormerModel",
+            "Mask2FormerPreTrainedModel",
         ]
     )
     _import_structure["models.maskformer"].extend(
@@ -2257,6 +2271,12 @@ else:
             "UniSpeechSatForXVector",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.upernet"].extend(
+        [
+            "UperNetForSemanticSegmentation",
+            "UperNetPreTrainedModel",
         ]
     )
     _import_structure["models.van"].extend(
@@ -3133,12 +3153,14 @@ else:
     _import_structure["models.xlm_roberta"].extend(
         [
             "TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFXLMRobertaForCausalLM",
             "TFXLMRobertaForMaskedLM",
             "TFXLMRobertaForMultipleChoice",
             "TFXLMRobertaForQuestionAnswering",
             "TFXLMRobertaForSequenceClassification",
             "TFXLMRobertaForTokenClassification",
             "TFXLMRobertaModel",
+            "TFXLMRobertaPreTrainedModel",
         ]
     )
     _import_structure["models.xlnet"].extend(
@@ -3424,12 +3446,15 @@ else:
     )
     _import_structure["models.xlm_roberta"].extend(
         [
+            "FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FlaxXLMRobertaForMaskedLM",
             "FlaxXLMRobertaForMultipleChoice",
             "FlaxXLMRobertaForQuestionAnswering",
             "FlaxXLMRobertaForSequenceClassification",
             "FlaxXLMRobertaForTokenClassification",
             "FlaxXLMRobertaModel",
+            "FlaxXLMRobertaForCausalLM",
+            "FlaxXLMRobertaPreTrainedModel",
         ]
     )
 
@@ -3696,6 +3721,7 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
+    from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
@@ -3781,6 +3807,7 @@ if TYPE_CHECKING:
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.upernet import UperNetConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import (
@@ -4465,6 +4492,7 @@ if TYPE_CHECKING:
         )
         from .models.convnext import (
             CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextBackbone,
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,
@@ -4855,6 +4883,12 @@ if TYPE_CHECKING:
             MarkupLMForTokenClassification,
             MarkupLMModel,
             MarkupLMPreTrainedModel,
+        )
+        from .models.mask2former import (
+            MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Mask2FormerForUniversalSegmentation,
+            Mask2FormerModel,
+            Mask2FormerPreTrainedModel,
         )
         from .models.maskformer import (
             MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5301,6 +5335,7 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
+        from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
         from .models.van import (
             VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
             VanForImageClassification,
@@ -6001,12 +6036,14 @@ if TYPE_CHECKING:
         )
         from .models.xlm_roberta import (
             TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFXLMRobertaForCausalLM,
             TFXLMRobertaForMaskedLM,
             TFXLMRobertaForMultipleChoice,
             TFXLMRobertaForQuestionAnswering,
             TFXLMRobertaForSequenceClassification,
             TFXLMRobertaForTokenClassification,
             TFXLMRobertaModel,
+            TFXLMRobertaPreTrainedModel,
         )
         from .models.xlnet import (
             TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6222,12 +6259,15 @@ if TYPE_CHECKING:
         from .models.whisper import FlaxWhisperForConditionalGeneration, FlaxWhisperModel, FlaxWhisperPreTrainedModel
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
+            FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlaxXLMRobertaForCausalLM,
             FlaxXLMRobertaForMaskedLM,
             FlaxXLMRobertaForMultipleChoice,
             FlaxXLMRobertaForQuestionAnswering,
             FlaxXLMRobertaForSequenceClassification,
             FlaxXLMRobertaForTokenClassification,
             FlaxXLMRobertaModel,
+            FlaxXLMRobertaPreTrainedModel,
         )
 
 else:
