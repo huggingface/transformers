@@ -35,11 +35,13 @@ Audio classification is a task that labels audio data from a predefined set of c
 >>> from transformers import pipeline
 
 >>> classifier = pipeline(task="audio-classification", model="superb/hubert-base-superb-er")
->>> classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
-[{'score': 0.453214168548584, 'label': 'hap'},
- {'score': 0.3622128367424011, 'label': 'sad'},
- {'score': 0.09430035948753357, 'label': 'neu'},
- {'score': 0.09027273952960968, 'label': 'ang'}]
+>>> preds = classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+>>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
+>>> preds
+[{'score': 0.4532, 'label': 'hap'},
+ {'score': 0.3622, 'label': 'sad'},
+ {'score': 0.0943, 'label': 'neu'},
+ {'score': 0.0903, 'label': 'ang'}]
 ```
 
 ### Automatic speech recognition
@@ -78,14 +80,17 @@ Image classification labels an entire image from a predefined set of classes. Li
 >>> from transformers import pipeline
 
 >>> classifier = pipeline(task="image-classification")
->>> classifier("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
-[{'score': 0.44030314683914185, 'label': 'lynx, catamount'},
- {'score': 0.034334052354097366,
+>>> preds = classifier(
+...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+... )
+>>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
+>>> preds
+[{'score': 0.4403, 'label': 'lynx, catamount'},
+ {'score': 0.0343,
   'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'},
- {'score': 0.03214803338050842,
-  'label': 'snow leopard, ounce, Panthera uncia'},
- {'score': 0.02353905513882637, 'label': 'Egyptian cat'},
- {'score': 0.02303415723145008, 'label': 'tiger cat'}]
+ {'score': 0.0321, 'label': 'snow leopard, ounce, Panthera uncia'},
+ {'score': 0.0235, 'label': 'Egyptian cat'},
+ {'score': 0.023, 'label': 'tiger cat'}]
 ```
 
 ### Object detection
@@ -100,8 +105,12 @@ Unlike image classification, object detection identifies multiple objects within
 >>> from transformers import pipeline
 
 >>> detector = pipeline(task="object-detection")
->>> detector("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
-[{'score': 0.9865359663963318,
+>>> preds = detector(
+...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+... )
+>>> preds = [{"score": round(pred["score"], 4), "label": pred["label"], "box": pred["box"]} for pred in preds]
+>>> preds
+[{'score': 0.9865,
   'label': 'cat',
   'box': {'xmin': 178, 'ymin': 154, 'xmax': 882, 'ymax': 598}}]
 ```
@@ -119,16 +128,20 @@ Segmentation tasks are helpful in self-driving vehicles to create a pixel-level 
 >>> from transformers import pipeline
 
 >>> segmenter = pipeline(task="image-segmentation")
->>> segmenter("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
-[{'score': 0.985624,
+>>> preds = segmenter(
+...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+... )
+>>> preds = [{"score": round(pred["score"], 4), "label": pred["label"], "mask": pred["mask"]} for pred in preds]
+>>> preds
+[{'score': 0.9856,
   'label': 'LABEL_184',
-  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F86A0511670>},
- {'score': 0.997607,
+  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F83A8477A30>},
+ {'score': 0.9976,
   'label': 'snow',
-  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F869FA06E50>},
- {'score': 0.996198,
+  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F83A8412670>},
+ {'score': 0.9962,
   'label': 'cat',
-  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F869FA06EE0>}]
+  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F83A8423EB0>}]
 ```
 
 ### Depth estimation
@@ -144,17 +157,9 @@ There are two approaches to depth estimation:
 >>> from transformers import pipeline
 
 >>> depth_estimator = pipeline(task="depth-estimation")
->>> depth_estimator(
+>>> preds = depth_estimator(
 ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 ... )
-{'predicted_depth': tensor([[[ 0.7767,  0.8142,  0.8237,  ...,  2.3059,  2.3640,  2.3277],
-          [ 0.7804,  0.7871,  0.7867,  ...,  2.3352,  2.3321,  2.3274],
-          [ 0.8325,  0.8111,  0.8201,  ...,  2.3517,  2.3468,  2.3560],
-          ...,
-          [26.3857, 26.4508, 26.4320,  ..., 17.5526, 17.5197, 17.4585],
-          [26.5173, 26.4958, 26.5483,  ..., 17.4694, 17.4372, 17.4503],
-          [26.5566, 26.5902, 26.5746,  ..., 17.5171, 17.5151, 17.4472]]]),
- 'depth': <PIL.Image.Image image mode=L size=960x686 at 0x7F74110A3EB0>}
 ```
 
 ## Natural language processing
@@ -172,8 +177,10 @@ Like classification tasks in any modality, text classification labels a sequence
 >>> from transformers import pipeline
 
 >>> classifier = pipeline(task="sentiment-analysis")
->>> classifier("Hugging Face is the best thing since sliced bread!")
-[{'label': 'POSITIVE', 'score': 0.9990912675857544}]
+>>> preds = classifier("Hugging Face is the best thing since sliced bread!")
+>>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
+>>> preds
+[{'score': 0.9991, 'label': 'POSITIVE'}]
 ```
 
 ### Token classification
@@ -189,8 +196,61 @@ Two common types of token classification are:
 >>> from transformers import pipeline
 
 >>> classifier = pipeline(task="ner")
->>> classifier("Hugging Face is a French company based in New York City.")
-[{'entity': 'I-ORG', 'score': 0.9967675, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2}, {'entity': 'I-ORG', 'score': 0.9293027, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7}, {'entity': 'I-ORG', 'score': 0.9763208, 'index': 3, 'word': 'Face', 'start': 8, 'end': 12}, {'entity': 'I-MISC', 'score': 0.99828726, 'index': 6, 'word': 'French', 'start': 18, 'end': 24}, {'entity': 'I-LOC', 'score': 0.99896204, 'index': 10, 'word': 'New', 'start': 42, 'end': 45}, {'entity': 'I-LOC', 'score': 0.9986792, 'index': 11, 'word': 'York', 'start': 46, 'end': 50}, {'entity': 'I-LOC', 'score': 0.9992418, 'index': 12, 'word': 'City', 'start': 51, 'end': 55}]
+>>> preds = classifier("Hugging Face is a French company based in New York City.")
+>>> preds = [
+...     {
+...         "entity": pred["entity"],
+...         "score": round(pred["score"], 4),
+...         "index": pred["index"],
+...         "word": pred["word"],
+...         "start": pred["start"],
+...         "end": pred["end"],
+...     }
+...     for pred in preds
+... ]
+>>> preds
+[{'entity': 'I-ORG',
+  'score': 0.9968,
+  'index': 1,
+  'word': 'Hu',
+  'start': 0,
+  'end': 2},
+ {'entity': 'I-ORG',
+  'score': 0.9293,
+  'index': 2,
+  'word': '##gging',
+  'start': 2,
+  'end': 7},
+ {'entity': 'I-ORG',
+  'score': 0.9763,
+  'index': 3,
+  'word': 'Face',
+  'start': 8,
+  'end': 12},
+ {'entity': 'I-MISC',
+  'score': 0.9983,
+  'index': 6,
+  'word': 'French',
+  'start': 18,
+  'end': 24},
+ {'entity': 'I-LOC',
+  'score': 0.999,
+  'index': 10,
+  'word': 'New',
+  'start': 42,
+  'end': 45},
+ {'entity': 'I-LOC',
+  'score': 0.9987,
+  'index': 11,
+  'word': 'York',
+  'start': 46,
+  'end': 50},
+ {'entity': 'I-LOC',
+  'score': 0.9992,
+  'index': 12,
+  'word': 'City',
+  'start': 51,
+  'end': 55}]
 ```
 
 ### Question answering
@@ -207,11 +267,31 @@ There are two common types of question answering:
 >>> from transformers import pipeline
 
 >>> question_answerer = pipeline(task="question-answering")
->>> question_answerer(
+>>> preds = question_answerer(
 ...     question="What is the name of the repository?",
 ...     context="The name of the repository is huggingface/transformers",
 ... )
-{'score': 0.9327335953712463, 'start': 30, 'end': 54, 'answer': 'huggingface/transformers'}
+>>> preds = [
+...     {"score": round(preds["score"], 4), "start": preds["start"], "end": preds["end"], "answer": preds["answer"]}
+...     for pred in preds
+... ]
+>>> preds
+[{'score': 0.9327,
+  'start': 30,
+  'end': 54,
+  'answer': 'huggingface/transformers'},
+ {'score': 0.9327,
+  'start': 30,
+  'end': 54,
+  'answer': 'huggingface/transformers'},
+ {'score': 0.9327,
+  'start': 30,
+  'end': 54,
+  'answer': 'huggingface/transformers'},
+ {'score': 0.9327,
+  'start': 30,
+  'end': 54,
+  'answer': 'huggingface/transformers'}]
 ```
 
 ### Summarization
@@ -269,8 +349,18 @@ There are two types of language modeling:
     ```py
     >>> text = "Hugging Face is a community-based open-source <mask> for machine learning."
     >>> fill_mask = pipeline(task="fill-mask")
-    >>> fill_mask(text, top_k=1)
-    [{'score': 0.22355437278747559,
+    >>> preds = fill_mask(text, top_k=1)
+    >>> preds = [
+    ...     {
+    ...         "score": round(pred["score"], 4),
+    ...         "token": pred["token"],
+    ...         "token_str": pred["token_str"],
+    ...         "sequence": pred["sequence"],
+    ...     }
+    ...     for pred in preds
+    ... ]
+    >>> preds
+    [{'score': 0.2236,
       'token': 1761,
       'token_str': ' platform',
       'sequence': 'Hugging Face is a community-based open-source platform for machine learning.'}]
