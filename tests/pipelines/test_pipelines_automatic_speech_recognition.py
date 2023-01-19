@@ -298,7 +298,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             model="openai/whisper-tiny",
             chunk_length_s=8,
             stride_length_s=1,
-            device=0,
         )
         data = load_dataset(
             "librispeech_asr",
