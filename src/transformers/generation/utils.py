@@ -929,7 +929,7 @@ class GenerationMixin:
         sequences: torch.Tensor,
         scores: Tuple[torch.Tensor],
         beam_indices: Optional[torch.Tensor] = None,
-        normalize_logits: bool = True,
+        normalize_logits: bool = False,
     ) -> torch.Tensor:
         """
         Computes the transition scores of sequences given the generation scores (and beam indices, if beam search was
@@ -949,7 +949,7 @@ class GenerationMixin:
                 `(batch_size*num_return_sequences, input_ids.shape[-1])`. Only required if a `num_beams>1` at
                 generate-time.
             normalize_logits (`bool`, *optional*, defaults to `True`):
-                Whether to normalize the logits (which, due to legacy, may be unnormalized).
+                Whether to normalize the logits (which, for legacy reasons, may be unnormalized).
 
         Return:
             `torch.Tensor`: A `torch.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)` containing
@@ -968,7 +968,9 @@ class GenerationMixin:
 
         >>> # Example 1: Print the scores for each token generated with Greedy Search
         >>> outputs = model.generate(**inputs, max_new_tokens=5, return_dict_in_generate=True, output_scores=True)
-        >>> transition_scores = model.compute_transition_beam_scores(outputs.sequences, outputs.scores)
+        >>> transition_scores = model.compute_transition_beam_scores(
+        ...     outputs.sequences, outputs.scores, normalize_logits=True
+        ... )
         >>> input_length = inputs.input_ids.shape[1]
         >>> generated_tokens = outputs.sequences[:, input_length:]
         >>> for tok, score in zip(generated_tokens[0], transition_scores[0]):
@@ -1003,7 +1005,7 @@ class GenerationMixin:
         # 1. In abcense of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
         # to a beam search approach were the first (and only) beam was always selected
         if beam_indices is None:
-            beam_indices = torch.arange(scores[0].shape[0]).view(-1, 1)
+            beam_indices = torch.arange(scores[0].shape[0]).view(-1, 1).to(sequences.device)
             beam_indices = beam_indices.expand(-1, len(scores))
 
         # 2. reshape scores as [batch_size*vocab_size, # generation steps] with # generation steps being
@@ -1012,7 +1014,7 @@ class GenerationMixin:
 
         # 3. Optionally normalize the logits
         if normalize_logits:
-            scores = scores.reshape(sequences.shape[0], self.config.vocab_size, -1)
+            scores = scores.reshape(-1, self.config.vocab_size, scores.shape[-1])
             scores = torch.nn.functional.log_softmax(scores, dim=1)
             scores = scores.reshape(-1, scores.shape[-1])
 

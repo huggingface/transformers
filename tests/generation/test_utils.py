@@ -17,6 +17,8 @@
 import inspect
 import unittest
 
+import numpy as np
+
 from transformers import is_torch_available, pipeline
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -2498,7 +2500,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(
             input_ids=input_ids,
-            max_new_tokens=10,
+            max_new_tokens=5,
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=None,
             return_dict_in_generate=True,
@@ -2506,7 +2508,44 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         transition_scores = model.compute_transition_beam_scores(outputs.sequences, outputs.scores)
-        breakpoint()
+        expected_scores = np.array(
+            [
+                [0.3596273, 0.39646253, 0.46157718, 0.4594633, 0.44866616],
+                [0.34934354, 0.4935004, 0.6373219, 0.5173545, 0.57517034],
+            ]
+        )
+        self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
+
+    def test_transition_scores_greedy_search_normalized(self):
+        articles = [
+            "Justin Timberlake",
+            "Michael Phelps",
+        ]
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
+        outputs = model.generate(
+            input_ids=input_ids,
+            max_new_tokens=5,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        transition_scores = model.compute_transition_beam_scores(
+            outputs.sequences, outputs.scores, normalize_logits=True
+        )
+        expected_scores = np.array(
+            [
+                [-6.5532393, -6.5158753, -6.451863, -6.4527144, -6.459402],
+                [-6.5685124, -6.4277077, -6.282607, -6.399295, -6.340927],
+            ]
+        )
+        self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
 
     def test_transition_scores_beam_search_encoder_decoder(self):
         articles = [
