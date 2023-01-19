@@ -960,7 +960,7 @@ class DetaImageProcessor(BaseImageProcessor):
     def post_process_object_detection(
         self,
         outputs,
-        threshold,
+        threshold: float = 0.5,
         target_sizes: Union[TensorType, List[Tuple]] = None,
         nms_threshold: float = 0.7,
     ):
@@ -971,7 +971,7 @@ class DetaImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
-            threshold (`float`):
+            threshold (`float`, *optional*, defaults to 0.5):
                 Score threshold to keep object detection predictions.
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
