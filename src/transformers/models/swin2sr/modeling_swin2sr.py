@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Swin2SRConfig"
-_IMAGE_PROCESSOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
@@ -897,7 +896,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -51,7 +51,6 @@ _CHECKPOINT_FOR_DOC = "facebook/flava-full"
 
 # Codebook docstring
 _CHECKPOINT_FOR_CODEBOOK_DOC = "facebook/flava-image-codebook"
-_IMAGE_PROCESSOR_FOR_DOC = "FlavaImageProcessor"
 _CONFIG_CLASS_FOR_IMAGE_MODEL_DOC = "FlavaImageConfig"
 _CONFIG_CLASS_FOR_TEXT_MODEL_DOC = "FlavaTextConfig"
 _CONFIG_CLASS_FOR_MULTIMODAL_MODEL_DOC = "FlavaMultimodalConfig"
@@ -926,7 +925,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FLAVA_IMAGE_INPUTS_DOCSTRING.format("batch_size, image_num_patches"))
     @add_code_sample_docstrings(
-        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_CLASS_FOR_IMAGE_MODEL_DOC,

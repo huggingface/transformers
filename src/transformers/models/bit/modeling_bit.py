@@ -46,7 +46,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "BitConfig"
-_IMAGE_PROCESSOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "google/bit-50"
@@ -723,7 +722,6 @@ class BitModel(BitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -782,7 +780,6 @@ class BitForImageClassification(BitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
