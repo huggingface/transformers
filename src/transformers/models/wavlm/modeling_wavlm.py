@@ -1398,7 +1398,6 @@ class WavLMForCTC(WavLMPreTrainedModel):
     """,
     WAVLM_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->WavLM, wav2vec2->wavlm, WAV_2_VEC_2->WAVLM
 class WavLMForSequenceClassification(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1417,6 +1416,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_extractor
     def freeze_feature_extractor(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
@@ -1429,6 +1429,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         )
         self.freeze_feature_encoder()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_encoder with wav2vec2->wavlm
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1436,6 +1437,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         """
         self.wavlm.feature_extractor._freeze_parameters()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_base_model with wav2vec2->wavlm
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
@@ -1451,6 +1453,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->WavLM, wav2vec2->wavlm
     def forward(
         self,
         input_values: Optional[torch.Tensor],
