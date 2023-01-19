@@ -156,9 +156,9 @@ class LayerDropModuleList(nn.ModuleList):
         x = layer(x)
     ```
 
-        Args:
-            p (float): probability of dropping out each layer
-            modules (iterable, optional): an iterable of modules to add
+    Args:
+        p (float): probability of dropping out each layer
+        modules (iterable, optional): an iterable of modules to add
     """
 
     def __init__(self, p, modules=None):
