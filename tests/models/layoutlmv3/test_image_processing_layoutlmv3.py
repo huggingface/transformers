@@ -21,7 +21,8 @@ import numpy as np
 from transformers.testing_utils import require_pytesseract, require_torch
 from transformers.utils import is_pytesseract_available, is_torch_available
 
-from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_image_processing_common import prepare_image_inputs
 
 
 if is_torch_available():
@@ -63,7 +64,7 @@ class LayoutLMv3FeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_pytesseract
-class LayoutLMv3FeatureExtractionTest(ImageProcessingSavingTestMixin, unittest.TestCase):
+class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     feature_extraction_class = LayoutLMv3FeatureExtractor if is_pytesseract_available() else None
 
