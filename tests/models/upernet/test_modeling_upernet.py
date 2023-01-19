@@ -272,7 +272,7 @@ def prepare_img():
 class UperNetModelIntegrationTest(unittest.TestCase):
     def test_inference_swin_backbone(self):
         processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-swin-tiny")
-        model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-swin-tiny")
+        model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-swin-tiny").to(torch_device)
 
         image = prepare_img()
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
@@ -290,7 +290,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
 
     def test_inference_convnext_backbone(self):
         processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-convnext-tiny")
-        model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-tiny")
+        model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-tiny").to(torch_device)
 
         image = prepare_img()
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
