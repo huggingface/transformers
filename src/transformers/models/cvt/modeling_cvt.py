@@ -451,11 +451,7 @@ class CvtStage(nn.Module):
         self.config = config
         self.stage = stage
         if self.config.cls_token[self.stage]:
-            self.cls_token = nn.Parameter(
-                nn.init.trunc_normal_(
-                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=config.initializer_range
-                )
-            )
+            self.cls_token = nn.Parameter(torch.randn(1, 1, self.config.embed_dim[-1]))
 
         self.embedding = CvtEmbeddings(
             patch_size=config.patch_sizes[self.stage],
@@ -557,6 +553,11 @@ class CvtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, CvtStage):
+            if self.config.cls_token[module.stage]:
+                module.cls_token.data = nn.init.trunc_normal_(
+                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=self.config.initializer_range
+                )
 
 
 CVT_START_DOCSTRING = r"""
