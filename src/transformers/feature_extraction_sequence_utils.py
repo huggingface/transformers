@@ -34,7 +34,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         feature_size (`int`):
             The feature dimension of the extracted features.
         sampling_rate (`int`):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`):
             The value that is used to fill the padding values / vectors.
     """

@@ -44,7 +44,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, defaults to 80):
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         num_mel_bins (`int`, defaults to 80):
             Number of Mel-frequency bins.
         padding_value (`float`, defaults to 0.0):
