@@ -48,7 +48,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 # General docstring
 _CONFIG_FOR_DOC = "WavLMConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
@@ -57,12 +56,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
 _CTC_EXPECTED_LOSS = 12.51
-
-# Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-wavlm"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'no'"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
-_SEQ_CLASS_EXPECTED_LOSS = 0.7  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
 
 # Frame class docstring
 _FRAME_CLASS_CHECKPOINT = "microsoft/wavlm-base-plus-sd"
@@ -1212,7 +1205,6 @@ class WavLMModel(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1320,7 +1312,6 @@ class WavLMForCTC(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1455,13 +1446,10 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1578,7 +1566,6 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_FRAME_CLASS_CHECKPOINT,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1761,7 +1748,6 @@ class WavLMForXVector(WavLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_XVECTOR_CHECKPOINT,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
