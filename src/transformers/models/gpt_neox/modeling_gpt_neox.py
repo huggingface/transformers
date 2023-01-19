@@ -36,9 +36,9 @@ from .configuration_gpt_neox import GPTNeoXConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "gpt-neox-20b"
+_CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
+_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
 _CONFIG_FOR_DOC = "GPTNeoXConfig"
-_TOKENIZER_FOR_DOC = "GPTNeoXTokenizerFast"
 
 GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-neox-20b",
@@ -435,8 +435,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
