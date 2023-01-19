@@ -103,6 +103,7 @@ from .import_utils import (
     is_bitsandbytes_available,
     is_bs4_available,
     is_coloredlogs_available,
+    is_cython_available,
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
