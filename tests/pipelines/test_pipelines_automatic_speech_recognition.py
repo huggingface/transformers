@@ -299,13 +299,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             chunk_length_s=8,
             stride_length_s=1,
         )
-        data = load_dataset("librispeech_asr", "clean", split="test")
+        data = load_dataset("librispeech_asr", "clean", split="test", streaming=True)
+        sample = next(iter(data))
+        pipe.model.config.forced_decoder_ids = pipe.tokenizer.get_decoder_prompt_ids(language="en", task="transcribe")
 
-        pipe.model.config.forced_decoder_ids = pipe.tokenizer.get_decoder_prompt_ids(language="fr", task="transcribe")
-
-        res = pipe(data[0]["audio"]["array"], return_timestamps=True)
+        res = pipe(sample["audio"]["array"])
         self.assertEqual(res, {"text": " Conquered returned to its place amidst the tents."})
-        res = pipe(data[0]["audio"]["array"], return_timestamps=True)
+        res = pipe(sample["audio"]["array"], return_timestamps=True)
         self.assertEqual(
             res,
             {
