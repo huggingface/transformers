@@ -53,7 +53,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, defaults to 80):
             The feature dimension of the extracted features. This is the number of mel_frequency
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
         hop_length (`int`, defaults to 10):

@@ -44,7 +44,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features.
         sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of Mel-frequency bins.
         max_length (`int`, *optional*, defaults to 1024):
