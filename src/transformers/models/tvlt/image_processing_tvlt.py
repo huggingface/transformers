@@ -17,7 +17,6 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -38,10 +37,6 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import logging
-
-
-if is_vision_available():
-    import PIL
 
 
 logger = logging.get_logger(__name__)
@@ -121,13 +116,14 @@ class TvltImageProcessor(BaseImageProcessor):
         "pixel_masks_mixed",
         "pixel_mask_pos_perm",
     ]
+    random_generator = np.random.default_rng(seed=1)
 
     def __init__(
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
         patch_size: int = 16,
-        num_frames: int = 16,
+        num_frames: int = 8,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
@@ -299,7 +295,7 @@ class TvltImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        visual_inputs: ImageInput,
+        videos: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -310,17 +306,17 @@ class TvltImageProcessor(BaseImageProcessor):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
         is_mixed: bool = False,
         mask_pixel: bool = False,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
         **kwargs,
-    ) -> PIL.Image.Image:
+    ) -> BatchFeature:
         """
         Preprocess an videos or image or batch of videos or images.
 
         Args:
-            visual_inputs (`ImageInput`):
+            videos (`ImageInput`):
                 Images or videos to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
@@ -343,6 +339,10 @@ class TvltImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
+            is_mixed (`bool`, *optional*):
+                If the input video has negative samples.
+            mask_pixel (`bool`, *optional*):
+                Whether or not to mask input videos or images for MAE task.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -355,10 +355,6 @@ class TvltImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                     - Unset: Use the inferred channel dimension format of the input image.
-            is_mixed (`bool`, *optional*):
-                If the input video has negative samples.
-            mask_pixel (`bool`, *optional*):
-                Whether or not to mask input videos or images for MAE task.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -390,30 +386,31 @@ class TvltImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
+        patch_size = self.patch_size
 
-        if not valid_images(visual_inputs):
+        if not valid_images(videos):
             raise ValueError(
                 "Invalid image or video type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        visual_inputs = make_batched(visual_inputs)
+        videos = make_batched(videos)
 
         # Check number of frames is fewer than maximum frames
-        for visual_input in visual_inputs:
-            assert (
-                len(visual_input) <= self.num_frames
-            ), f"number of frames must not be greater than {self.num_frames}."
+        for video in videos:
+            if len(video) > self.num_frames:
+                raise ValueError(f"number of frames must not be greater than {self.num_frames}.")
 
-        max_num_frames = max([len(visual_input) for visual_input in visual_inputs])
+        max_num_frames = max([len(video) for video in videos])
         num_patches_per_image = (size["shortest_edge"] // patch_size) ** 2
-        visual_masks = np.array([
-            len(visual_input) * num_patches_per_image * [1]
-            + (max_num_frames - len(visual_input)) * num_patches_per_image * [0]
-            for visual_input in visual_inputs
-        ])
+        video_masks = np.array(
+            [
+                len(video) * num_patches_per_image * [1] + (max_num_frames - len(video)) * num_patches_per_image * [0]
+                for video in videos
+            ]
+        )
 
-        visual_inputs = [
+        videos = [
             [
                 self._preprocess_image(
                     image=img,
@@ -429,22 +426,22 @@ class TvltImageProcessor(BaseImageProcessor):
                     image_std=image_std,
                     data_format=data_format,
                 )
-                for img in visual_input
+                for img in video
             ]
-            for visual_input in visual_inputs
+            for video in videos
         ]
 
         # If videos contain both positive/negative, use mixed key for video-audio matching task
         if is_mixed:
-            data = {"pixel_values_mixed": visual_inputs, "pixel_masks_mixed": visual_masks}
+            data = {"pixel_values_mixed": videos, "pixel_masks_mixed": video_masks}
         else:
-            data = {"pixel_values": visual_inputs, "pixel_masks": visual_masks}
+            data = {"pixel_values": videos, "pixel_masks": video_masks}
 
         # return masking tensor
         if mask_pixel:
-            batch_size = len(visual_inputs)
+            batch_size = len(videos)
             max_patch_len = num_patches_per_image * max_num_frames
-            noise = np.random.rand(batch_size, max_patch_len)  # noise in [0, 1]
+            noise = self.random_generator.random((batch_size, max_patch_len))  # noise in [0, 1]
             # sort noise for each sample
             ids_shuffle = np.argsort(noise, axis=1)  # ascend: small is keep, large is remove
             data.update({"pixel_mask_position_permutation": ids_shuffle})

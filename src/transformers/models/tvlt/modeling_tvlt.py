@@ -445,6 +445,7 @@ class TvltSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -497,6 +498,7 @@ class TvltIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -909,9 +911,8 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         self.task_matching = config.task_matching
         self.task_mae = config.task_mae
-        assert (
-            self.task_matching or self.task_mae
-        ) is True, "Must set at least one of matching task and MAE task to true"
+        if not (self.task_matching or self.task_mae):
+            raise ValueError("Must set at least one of matching task and MAE task to true")
 
         self.tvlt = TvltModel(config)
 

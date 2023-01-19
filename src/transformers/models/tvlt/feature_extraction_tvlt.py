@@ -58,6 +58,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
     """
 
     model_input_names = ["audio_values", "audio_masks", "audio_mask_pos_perm"]
+    random_generator = np.random.default_rng(seed=1)
 
     def __init__(
         self,
@@ -352,7 +353,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
                     .view(batch_size, max_patch_len)
                 )  # noise in [0, 1]
             elif self.masking_type == "patch-level":
-                noise = torch.rand(batch_size, max_patch_len)  # noise in [0, 1]
+                noise = self.random_generator.random(batch_size, max_patch_len)  # noise in [0, 1]
             # sort noise for each sample
             ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
             data.update({"audio_mask_position_permutation": ids_shuffle})

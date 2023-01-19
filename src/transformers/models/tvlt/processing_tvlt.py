@@ -44,9 +44,9 @@ class TvltProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        visual_inputs=None,
-        audio_inputs=None,
-        visual_inputs_mixed=None,
+        images=None,
+        audio=None,
+        images_mixed=None,
         sampling_rate=None,
         mask_audio=False,
         mask_pixel=False,
@@ -54,33 +54,33 @@ class TvltProcessor(ProcessorMixin):
         **kwargs
     ):
         """
-        Forwards the `visual_inputs` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`] and the
-        `audio_inputs` argument to TvltFeatureExtractor's [`~TvltFeatureExtractor.__call__`]. Please refer to the
-        docstring of the above two methods for more information.
+        Forwards the `images` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`] and the `audio`
+        argument to TvltFeatureExtractor's [`~TvltFeatureExtractor.__call__`]. Please refer to the docstring of the
+        above two methods for more information.
         """
 
-        if visual_inputs is None and audio_inputs is None:
-            raise ValueError("You need to specify either an `visual_inputs` or `audio_inputs` input to process.")
+        if images is None and audio is None:
+            raise ValueError("You need to specify either an `images` or `audio` input to process.")
 
-        if visual_inputs is not None:
-            visual_inputs_dict = self.image_processor(visual_inputs, mask_pixel=mask_pixel, *args, **kwargs)
-            visual_inputs_mixed_dict = None
-        if visual_inputs_mixed is not None:
-            visual_inputs_mixed_dict = self.image_processor(visual_inputs_mixed, is_mixed=True, *args, **kwargs)
-        if audio_inputs is not None:
-            audio_inputs_dict = self.feature_extractor(
-                audio_inputs, *args, sampling_rate=sampling_rate, mask_audio=mask_audio, **kwargs
+        if images is not None:
+            images_dict = self.image_processor(images, mask_pixel=mask_pixel, *args, **kwargs)
+            images_mixed_dict = None
+        if images_mixed is not None:
+            images_mixed_dict = self.image_processor(images_mixed, is_mixed=True, *args, **kwargs)
+        if audio is not None:
+            audio_dict = self.feature_extractor(
+                audio, *args, sampling_rate=sampling_rate, mask_audio=mask_audio, **kwargs
             )
 
-        if audio_inputs is None:
-            output_dict = visual_inputs_dict
-        elif visual_inputs is None:
-            output_dict = audio_inputs_dict
+        if audio is None:
+            output_dict = images_dict
+        elif images is None:
+            output_dict = audio_dict
             return output_dict
         else:
-            output_dict = dict(visual_inputs_dict.items() + audio_inputs.items())
-        if visual_inputs_mixed_dict is not None:
-            output_dict.update(visual_inputs_mixed_dict)
+            output_dict = dict(images_dict.items() + audio.items())
+        if images_mixed_dict is not None:
+            output_dict.update(images_mixed_dict)
         return output_dict
 
     @property
