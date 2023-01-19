@@ -25,6 +25,8 @@ def convert_to_single_emb(x, offset: int = 512):
 
 def preprocess_item(item, keep_features=True):
     requires_backends(preprocess_item, ["Cython"])
+    if not is_cython_available():
+        raise ImportError("Graphormer preprocessing needs Cython (pyximport)")
 
     if keep_features and "edge_attr" in item.keys():  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
@@ -72,7 +74,9 @@ def preprocess_item(item, keep_features=True):
 
 class GraphormerDataCollator:
     def __init__(self, spatial_pos_max=20, on_the_fly_processing=False):
-        # self.tokenizer = tokenizer
+        if not is_cython_available():
+            raise ImportError("Graphormer preprocessing needs Cython (pyximport)")
+
         self.spatial_pos_max = spatial_pos_max
         self.on_the_fly_processing = on_the_fly_processing
 
