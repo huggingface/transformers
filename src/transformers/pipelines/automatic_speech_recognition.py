@@ -508,7 +508,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
                 if self.type == "seq2seq":
-                    raise ValueError("Stride is only usable with CTC models, try removing it")
+                    raise ValueError("Stride is only usable with CTC models, try removing it !")
 
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
