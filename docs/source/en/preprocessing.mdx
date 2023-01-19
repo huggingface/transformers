@@ -329,7 +329,7 @@ include but are not limited to resizing, normalizing, color channel correction, 
 Image preprocessing often follows some form of image augmentation. Both image preprocessing and image augmentation
 transform image data, but they serve different purposes:
 
-* Image augmentation alters images in a way that can help prevent overfitting and increase the robustness of the model. You can get creative in how you augment your data.
+* Image augmentation alters images in a way that can help prevent overfitting and increase the robustness of the model. You can get creative in how you augment your data - adjust brightness and colors, crop, rotate, resize, zoom, etc. However, be mindful not to change the meaning of the images with your augmentations.
 * Image preprocessing guarantees that the images match the model’s expected input format. When fine-tuning a computer vision model, images must be preprocessed exactly as when the model was initially trained.
 
 You can use any library you like for image augmentation. For image preprocessing, use the `ImageProcessor` associated with the model.
@@ -443,6 +443,7 @@ or segmentation maps.
 </Tip>
 
 ### Pad
+
 In some cases, for instance, when fine-tuning [DETR](./model_doc/detr), the model applies scale augmentation at training
 time. This may cause images to be different sizes in a batch. You can use [`DetrImageProcessor.pad_and_create_pixel_mask`]
 from [`DetrImageProcessor`] and define a custom `collate_fn` to batch images together.
