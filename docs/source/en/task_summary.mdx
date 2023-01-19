@@ -267,7 +267,7 @@ There are two types of language modeling:
 * masked: the model's objective is to predict a masked token in a sequence with full access to the tokens in the sequence
     
     ```py
-    >>> text = "Hugging Face is a <mask> company based in New York City."
+    >>> text = "Hugging Face is a community-based open-source <mask> for machine learning."
     >>> fill_mask = pipeline(task="fill-mask")
     >>> fill_mask(text, top_k=1)
     [{'score': 0.22355437278747559,
