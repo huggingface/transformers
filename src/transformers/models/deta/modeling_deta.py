@@ -1770,7 +1770,6 @@ class DetaModel(DetaPreTrainedModel):
                         pad_inds = (~keep_inds_mask).nonzero()[:num_to_add]
                         keep_inds_mask[pad_inds] = True
 
-                    # index
                     keep_inds_topk = keep_inds[keep_inds_mask]
                     topk_proposals.append(keep_inds_topk)
                 topk_proposals = torch.stack(topk_proposals)
