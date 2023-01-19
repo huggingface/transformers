@@ -25,12 +25,29 @@ from pathlib import Path
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
-from transformers.testing_utils import TOKEN, USER, check_json_file_has_correct_format, get_tests_dir, is_staging_test
+from transformers.testing_utils import (
+    TOKEN,
+    USER,
+    check_json_file_has_correct_format,
+    get_tests_dir,
+    is_staging_test,
+    require_torch,
+    require_vision,
+)
+from transformers.utils import is_torch_available, is_vision_available
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
 from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402
+
+
+if is_torch_available():
+    import numpy as np
+    import torch
+
+if is_vision_available():
+    from PIL import Image
 
 
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = get_tests_dir("fixtures")
