@@ -124,6 +124,8 @@ src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/nat/configuration_nat.py
 src/transformers/models/nat/modeling_nat.py
 src/transformers/models/nezha/configuration_nezha.py
+src/transformers/models/oneformer/configuration_oneformer.py
+src/transformers/models/oneformer/modeling_oneformer.py
 src/transformers/models/openai/configuration_openai.py
 src/transformers/models/opt/configuration_opt.py
 src/transformers/models/opt/modeling_opt.py
