@@ -127,6 +127,9 @@ class GenerationConfig(PushToHubMixin):
         repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+        encoder_repetition_penalty (`float`, *optional*, defaults to 1.0):
+            The paramater for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
+            original input. 1.0 means no penalty.
         length_penalty (`float`, *optional*, defaults to 1.0):
             Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
             the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
@@ -239,6 +242,7 @@ class GenerationConfig(PushToHubMixin):
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
         self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
+        self.encoder_repetition_penalty = kwargs.pop("encoder_repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
