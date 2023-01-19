@@ -51,6 +51,7 @@ from .utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_cython_available,
     is_decord_available,
     is_detectron2_available,
     is_faiss_available,
@@ -709,6 +710,13 @@ def require_jumanpp(test_case):
     Decorator marking a test that requires jumanpp
     """
     return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
+
+
+def require_cython(test_case):
+    """
+    Decorator marking a test that requires jumanpp
+    """
+    return unittest.skipUnless(is_cython_available(), "test requires cython")(test_case)
 
 
 def get_gpu_count():
