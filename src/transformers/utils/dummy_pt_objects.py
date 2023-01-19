@@ -2865,6 +2865,30 @@ class GPTJPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GraphormerForGraphClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GraphormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GraphormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

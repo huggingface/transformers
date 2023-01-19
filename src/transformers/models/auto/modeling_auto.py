@@ -85,6 +85,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt_neox", "GPTNeoXModel"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseModel"),
         ("gptj", "GPTJModel"),
+        ("graphormer", "GraphormerModel"),
         ("groupvit", "GroupViTModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
