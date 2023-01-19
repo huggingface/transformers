@@ -141,7 +141,7 @@ class LayerDropModuleList(nn.ModuleList):
     A LayerDrop implementation based on [`torch.nn.ModuleList`]. LayerDrop as described in
     https://arxiv.org/abs/1909.11556.
 
-    We refresh the choice of which layers to drop every time we iterate over the LayerDropModuleList instance. 
+    We refresh the choice of which layers to drop every time we iterate over the LayerDropModuleList instance.
     During evaluation we always iterate over all layers.
 
     Usage:
