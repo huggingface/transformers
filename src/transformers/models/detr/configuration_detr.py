@@ -23,7 +23,6 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
-from ..resnet import ResNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -46,7 +45,7 @@ class DetrConfig(PretrainedConfig):
 
     Args:
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether or not to use the timm library as the backbone. If set to `False`, will use the [`AutoBackbone`]
+            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False`.
@@ -184,7 +183,7 @@ class DetrConfig(PretrainedConfig):
         if not use_timm_backbone:
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = ResNetConfig(out_features=["stage2", "stage3", "stage4"])
+                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage2", "stage3", "stage4"])
             elif isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
