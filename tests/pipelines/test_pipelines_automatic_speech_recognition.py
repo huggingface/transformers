@@ -299,12 +299,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             chunk_length_s=8,
             stride_length_s=1,
         )
-        data = load_dataset(
-            "librispeech_asr",
-            "clean",
-            split="test",
-            cache_dir="/home/arthur_huggingface_co/.cache/huggingface/datasets",
-        )
+        data = load_dataset("librispeech_asr", "clean", split="test")
 
         pipe.model.config.forced_decoder_ids = pipe.tokenizer.get_decoder_prompt_ids(language="fr", task="transcribe")
 
