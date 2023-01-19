@@ -958,7 +958,11 @@ class DetaImageProcessor(BaseImageProcessor):
         return encoded_inputs
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
+        self,
+        outputs,
+        threshold,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+        nms_threshold: float = 0.7,
     ):
         """
         Converts the output of [`DetaForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -967,11 +971,13 @@ class DetaImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
-            threshold (`float`, *optional*):
+            threshold (`float`):
                 Score threshold to keep object detection predictions.
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            nms_threshold (`float`, *optional*, defaults to 0.7):
+                NMS threshold.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
@@ -1018,13 +1024,17 @@ class DetaImageProcessor(BaseImageProcessor):
             score = score[pre_topk]
             lbls = lbls[pre_topk]
 
-            # TODO support custom threshold
-            keep_inds = batched_nms(box, score, lbls, 0.7)[:100]
+            # apply NMS
+            keep_inds = batched_nms(box, score, lbls, nms_threshold)[:100]
+            score = score[keep_inds]
+            lbls = lbls[keep_inds]
+            boxes = boxes[keep_inds]
+
             results.append(
                 {
-                    "scores": score[keep_inds],
-                    "labels": lbls[keep_inds],
-                    "boxes": box[keep_inds],
+                    "scores": score[score > threshold],
+                    "labels": lbls[score > threshold],
+                    "boxes": box[score > threshold],
                 }
             )
 
