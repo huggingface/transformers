@@ -2468,7 +2468,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             transformer_decoder_hidden_states = outputs.transformer_decoder_hidden_states
 
         output_auxiliary_logits = (
-            self.config.use_auxiliary_loss if output_auxiliary_logits is None else output_auxiliary_logits
+            self.config.output_auxiliary_logits if output_auxiliary_logits is None else output_auxiliary_logits
         )
         if not output_auxiliary_logits:
             auxiliary_logits = None
