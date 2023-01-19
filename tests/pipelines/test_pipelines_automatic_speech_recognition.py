@@ -344,7 +344,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             },
         )
         merge = _find_timestamp_sequence(
-            [[previous_sequence, (3000, 0, 0)], [next_sequences_1, (3000, 750, 0)]],
+            [[previous_sequence, (480_000, 0, 0)], [next_sequences_1, (480_000, 120_000, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
@@ -381,7 +381,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # fmt: on
         # {'text': ' of spectators, retrievality is not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
         merge = _find_timestamp_sequence(
-            [[previous_sequence, (3000, 0, 0)], [next_sequences_2, (3000, 750, 0)]],
+            [[previous_sequence, (480_000, 0, 0)], [next_sequences_2, (480_000, 120_000, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
@@ -417,7 +417,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # fmt: on
         # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
         merge = _find_timestamp_sequence(
-            [[previous_sequence, (3000, 0, 0)], [next_sequences_3, (3000, 750, 0)]],
+            [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 120_000, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
@@ -447,11 +447,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # last case is when the sequence is not in the first next predicted start and end of timestamp
         # fmt: off
         next_sequences_3 = [
-            [50364, 2812, 9836, 14783, 390, 51492, 406, 3163, 1953, 466, 13, 50634, 50634, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50934]
+            [50364, 2812, 9836, 14783, 390, 406, 3163, 1953, 466, 13, 50634, 50634, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50934]
         ]
         # fmt: on
         merge = _find_timestamp_sequence(
-            [[previous_sequence, (3000, 0, 0)], [next_sequences_3, (3000, 750, 0)]],
+            [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 167_000, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
@@ -459,7 +459,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # fmt: off
         self.assertEqual(
             merge,
-            [51492, 406, 3163, 1953, 466, 13, 53112, 53112, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 53332],
+            [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51912]
         )
         # fmt: on
         self.assertEqual(
@@ -473,7 +473,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                     {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (24.96, 29.36),
+                        "timestamp": (24.96, 30.96),
                     },
                 ],
             },
