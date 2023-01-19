@@ -924,7 +924,7 @@ class GenerationMixin:
         default_list.extend(custom_list)
         return default_list
 
-    def compute_transition_beam_scores(
+    def compute_transition_scores(
         self,
         sequences: torch.Tensor,
         scores: Tuple[torch.Tensor],
@@ -968,7 +968,7 @@ class GenerationMixin:
 
         >>> # Example 1: Print the scores for each token generated with Greedy Search
         >>> outputs = model.generate(**inputs, max_new_tokens=5, return_dict_in_generate=True, output_scores=True)
-        >>> transition_scores = model.compute_transition_beam_scores(
+        >>> transition_scores = model.compute_transition_scores(
         ...     outputs.sequences, outputs.scores, normalize_logits=True
         ... )
         >>> input_length = inputs.input_ids.shape[1]
@@ -991,7 +991,7 @@ class GenerationMixin:
         ...     return_dict_in_generate=True,
         ...     output_scores=True,
         ... )
-        >>> transition_scores = model.compute_transition_beam_scores(
+        >>> transition_scores = model.compute_transition_scores(
         ...     outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False
         ... )
         >>> # If you sum the generated tokens' scores and apply the length penalty, you'll get the sequence scores.
