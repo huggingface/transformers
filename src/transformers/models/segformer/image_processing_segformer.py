@@ -122,8 +122,8 @@ class SegformerImageProcessor(BaseImageProcessor):
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
-        is created using from_dict and kwargs e.g. `SegformerImageProcessor.from_pretrained(checkpoint,
+        Overrides the `from_dict` method from the base class to make sure `do_reduce_labels` is updated if image
+        processor is created using from_dict and kwargs e.g. `SegformerImageProcessor.from_pretrained(checkpoint,
         reduce_labels=True)`
         """
         image_processor_dict = image_processor_dict.copy()
