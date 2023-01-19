@@ -23,8 +23,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "snap-research/efficientformer-l1": (
-        "https://huggingface.co/snap-research/efficientformer-l1/resolve/main/config.json"
+    "snap-research/efficientformer-l1-300": (
+        "https://huggingface.co/snap-research/efficientformer-l1-300/resolve/main/config.json"
     ),
 }
 

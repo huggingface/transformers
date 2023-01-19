@@ -142,10 +142,11 @@ def convert_efficientformer_checkpoint(
 
     # prepare image
     image = prepare_img()
-    image_size = 224
+    image_size = 256
+    crop_size = 224
     processor = EfficientFormerImageProcessor(
         size={"shortest_edge": image_size},
-        crop_size={"height": image_size, "width": image_size},
+        crop_size={"height": crop_size, "width": crop_size},
         resample=pillow_resamplings["bicubic"],
     )
     pixel_values = processor(images=image, return_tensors="pt").pixel_values
@@ -154,7 +155,7 @@ def convert_efficientformer_checkpoint(
     image_transforms = Compose(
         [
             Resize(image_size, interpolation=pillow_resamplings["bicubic"]),
-            CenterCrop(image_size),
+            CenterCrop(crop_size),
             ToTensor(),
             Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
         ]
@@ -170,19 +171,19 @@ def convert_efficientformer_checkpoint(
 
     if "l1" in model_name:
         expected_logits = torch.Tensor(
-            [-0.1464, 0.6383, -0.9990, 0.2989, 0.6212, 0.2271, -0.5734, 0.0676, -0.9517, -1.6891]
+            [-0.1312, 0.4353, -1.0499, -0.5124, 0.4183, -0.6793, -1.3777, -0.0893, -0.7358, -2.4328]
         )
         assert torch.allclose(logits[0, :10], expected_logits, atol=1e-3)
         assert logits.shape == expected_shape
     elif "l3" in model_name:
         expected_logits = torch.Tensor(
-            [-1.2776, -1.0806, -1.0127, -0.3779, -0.4981, -0.4043, -0.9484, -0.2823, 0.1894, -0.2498]
+            [-1.3150, -1.5456, -1.2556, -0.8496, -0.7127, -0.7897, -0.9728, -0.3052, 0.3751, -0.3127]
         )
         assert torch.allclose(logits[0, :10], expected_logits, atol=1e-3)
         assert logits.shape == expected_shape
     elif "l7" in model_name:
         expected_logits = torch.Tensor(
-            [-1.2137, -1.3781, -0.6700, -0.9551, -0.1888, -0.8147, -0.7939, -0.0544, -0.3307, 0.0831]
+            [-1.0283, -1.4131, -0.5644, -1.3115, -0.5785, -1.2049, -0.7528, 0.1992, -0.3822, -0.0878]
         )
         assert logits.shape == expected_shape
     else:
@@ -195,7 +196,7 @@ def convert_efficientformer_checkpoint(
     model.save_pretrained(pytorch_dump_path)
     print(f"Checkpoint successfuly converted. Model saved at {pytorch_dump_path}")
     processor.save_pretrained(pytorch_dump_path)
-    print(f"Feature extractor successfuly saved at {pytorch_dump_path}")
+    print(f"Processor successfuly saved at {pytorch_dump_path}")
 
     if push_to_hub:
         print("Pushing model to the hub...")

@@ -418,14 +418,14 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            EfficientFormerImageProcessor.from_pretrained("snap-research/efficientformer-l1")
+            EfficientFormerImageProcessor.from_pretrained("snap-research/efficientformer-l1-300")
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = EfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1").to(
+        model = EfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1-300").to(
             torch_device
         )
 
@@ -438,20 +438,16 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1000))
-        self.assertEqual(outputs.logits[0].shape, expected_shape)
-        self.assertEqual(outputs.logits[1].shape, expected_shape)
+        expected_shape = (1, 1000)
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice_1 = torch.tensor([-0.8568, 0.3356, -0.1594]).to(torch_device)
-        expected_slice_2 = torch.tensor([-1.4141, 1.7621, 0.5935]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0][:3], expected_slice_1, atol=1e-4))
-        self.assertTrue(torch.allclose(outputs.logits[1][:3], expected_slice_2, atol=1e-4))
+        expected_slice = torch.tensor([-0.0555, 0.4825, -0.0852]).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0][:3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_image_classification_head_with_teacher(self):
         model = EfficientFormerForImageClassificationWithTeacher.from_pretrained(
-            "snap-research/efficientformer-l1"
+            "snap-research/efficientformer-l1-300"
         ).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
@@ -463,12 +459,8 @@ class EfficientFormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1000))
-        self.assertEqual(outputs.logits[0].shape, expected_shape)
-        self.assertEqual(outputs.logits[1].shape, expected_shape)
+        expected_shape = (1, 1000)
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice_1 = torch.tensor([-0.8568, 0.3356, -0.1594]).to(torch_device)
-        expected_slice_2 = torch.tensor([-1.4141, 1.7621, 0.5935]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0][:3], expected_slice_1, atol=1e-4))
-        self.assertTrue(torch.allclose(outputs.logits[1][:3], expected_slice_2, atol=1e-4))
+        expected_slice = torch.tensor([-0.1312, 0.4353, -1.0499]).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0][:3], expected_slice, atol=1e-4))

@@ -43,16 +43,16 @@ _CONFIG_FOR_DOC = "EfficientFormerConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "EfficientFormerImageProcessor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "efficientformer-l1"
+_CHECKPOINT_FOR_DOC = "efficientformer-l1-300"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1"
+_IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1-300"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/efficientformer-l1",
+    "huggingface/efficientformer-l1-300",
     # See all EfficientFormer models at https://huggingface.co/models?filter=efficientformer
 ]
 
@@ -767,7 +767,6 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, EfficientFormerForImageClassificationWithTeacherOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.efficientformer(
             pixel_values,
             output_attentions=output_attentions,
