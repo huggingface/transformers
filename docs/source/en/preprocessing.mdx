@@ -332,7 +332,7 @@ transform image data, but they serve different purposes:
 * Image augmentation alters images in a way that can help prevent overfitting and increase the robustness of the model. You can get creative in how you augment your data.
 * Image preprocessing guarantees that the images match the model’s expected input format. When fine-tuning a computer vision model, images must be preprocessed exactly as when the model was initially trained.
 
-You can use any library you like for image augmentation. For image preprocessing, use `ImageProcessor` associated with the model.
+You can use any library you like for image augmentation. For image preprocessing, use the `ImageProcessor` associated with the model.
 
 </Tip>
 
@@ -388,7 +388,7 @@ width are expected, for others only the `shortest_edge` is defined.
 ```
 
 2. The model accepts [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values)
-as its input. ImageProcessor can take care of normalizing the images, and generating appropriate tensors.
+as its input. `ImageProcessor` can take care of normalizing the images, and generating appropriate tensors.
 Create a function that combines image augmentation and image preprocessing for a batch of images and generates `pixel_values`:
 
 ```py
@@ -402,7 +402,7 @@ Create a function that combines image augmentation and image preprocessing for a
 
 In the example above we set `do_resize=False` because we have already resized the images in the image augmentation transformation,
 and leveraged the `size` attribute from the appropriate `image_processor`. If you do not resize images during image augmentation,
-leave this parameter out. By default, ImageProcessor will handle the resizing.
+leave this parameter out. By default, `ImageProcessor` will handle the resizing.
 
 If you wish to normalize images as a part of the augmentation transformation, use the `image_processor.image_mean`,
 and `image_processor.image_std` values.
@@ -436,7 +436,7 @@ Here is what the image looks like after the transforms are applied. The image ha
 
 <Tip>
 
-For tasks like object detection, semantic segmentation, instance segmentation, and panoptic segmentation, ImageProcessor
+For tasks like object detection, semantic segmentation, instance segmentation, and panoptic segmentation, `ImageProcessor`
 offers post processing methods. These methods convert model's raw outputs into meaningful predictions such as bounding boxes,
 or segmentation maps.
 
@@ -444,7 +444,7 @@ or segmentation maps.
 
 ### Pad
 In some cases, for instance, when fine-tuning [DETR](./model_doc/detr), the model applies scale augmentation at training
-time. This may cause images of different sizes in a batch. You can use [`DetrImageProcessor.pad_and_create_pixel_mask`]
+time. This may cause images to be different sizes in a batch. You can use [`DetrImageProcessor.pad_and_create_pixel_mask`]
 from [`DetrImageProcessor`] and define a custom `collate_fn` to batch images together.
 
 ```py
