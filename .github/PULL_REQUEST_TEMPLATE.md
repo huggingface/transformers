@@ -54,7 +54,7 @@ Library:
 
 Integrations:
 
-- deepspeed: @stas00
+- deepspeed: HF Trainer: @stas00, Accelerate: @pacman100
 - ray/raytune: @richardliaw, @amogkam
 
 Documentation: @sgugger, @stevhliu and @MKhalusova
