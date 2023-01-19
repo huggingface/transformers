@@ -123,6 +123,7 @@ from . import (
     nezha,
     nllb,
     nystromformer,
+    oneformer,
     openai,
     opt,
     owlvit,
