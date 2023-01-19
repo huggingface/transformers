@@ -21,8 +21,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
-from ...test_image_processing_common import prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -81,7 +80,7 @@ class LevitFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class LevitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class LevitFeatureExtractionTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     feature_extraction_class = LevitFeatureExtractor if is_vision_available() else None
 

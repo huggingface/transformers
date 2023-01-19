@@ -355,6 +355,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
     "image_processing_utils.py": ["test_image_processing_common.py", "utils/test_image_processing_utils.py"],
     "image_transforms.py": "test_image_transforms.py",
+    "image_processing_utils.py": ["test_image_processing_common.py", "utils/test_image_processing_utils.py"],
     "utils/generic.py": ["utils/test_file_utils.py", "utils/test_model_output.py", "utils/test_generic.py"],
     "utils/hub.py": "utils/test_hub_utils.py",
     "modelcard.py": "utils/test_model_card.py",

@@ -21,7 +21,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_image_processing_common import ImageProcessingSavingTestMixin
 
 
 if is_torch_available():
@@ -113,7 +113,7 @@ class ChineseCLIPFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ChineseCLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ChineseCLIPFeatureExtractionTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     feature_extraction_class = ChineseCLIPFeatureExtractor if is_vision_available() else None
 
@@ -246,7 +246,7 @@ class ChineseCLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
 
 @require_torch
 @require_vision
-class ChineseCLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ChineseCLIPFeatureExtractionTestFourChannels(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     feature_extraction_class = ChineseCLIPFeatureExtractor if is_vision_available() else None
 

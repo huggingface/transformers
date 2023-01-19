@@ -20,8 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
-from ...test_image_processing_common import prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -78,7 +77,7 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class PoolFormerFeatureExtractionTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     feature_extraction_class = PoolFormerFeatureExtractor if is_vision_available() else None
 
