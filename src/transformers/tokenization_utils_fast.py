@@ -346,7 +346,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 The stride to use when handling overflow.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
         """
         _truncation = self._tokenizer.truncation
         _padding = self._tokenizer.padding
