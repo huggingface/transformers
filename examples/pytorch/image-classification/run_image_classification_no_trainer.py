@@ -41,13 +41,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from huggingface_hub import Repository, create_repo
-from transformers import (
-    AutoConfig,
-    AutoFeatureExtractor,
-    AutoModelForImageClassification,
-    SchedulerType,
-    get_scheduler,
-)
+from transformers import AutoConfig, AutoImageProcessor, AutoModelForImageClassification, SchedulerType, get_scheduler
 from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 
@@ -294,7 +288,7 @@ def main():
     label2id = {label: str(i) for i, label in enumerate(labels)}
     id2label = {str(i): label for i, label in enumerate(labels)}
 
-    # Load pretrained model and feature extractor
+    # Load pretrained model and image processor
     #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
@@ -305,7 +299,7 @@ def main():
         label2id=label2id,
         finetuning_task="image-classification",
     )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
+    image_processor = AutoImageProcessor.from_pretrained(args.model_name_or_path)
     model = AutoModelForImageClassification.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
@@ -316,11 +310,11 @@ def main():
     # Preprocessing the datasets
 
     # Define torchvision transforms to be applied to each image.
-    if "shortest_edge" in feature_extractor.size:
-        size = feature_extractor.size["shortest_edge"]
+    if "shortest_edge" in image_processor.size:
+        size = image_processor.size["shortest_edge"]
     else:
-        size = (feature_extractor.size["height"], feature_extractor.size["width"])
-    normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+        size = (image_processor.size["height"], image_processor.size["width"])
+    normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
     train_transforms = Compose(
         [
             RandomResizedCrop(size),
@@ -505,7 +499,7 @@ def main():
                             save_function=accelerator.save,
                         )
                         if accelerator.is_main_process:
-                            feature_extractor.save_pretrained(args.output_dir)
+                            image_processor.save_pretrained(args.output_dir)
                             repo.push_to_hub(
                                 commit_message=f"Training in progress {completed_steps} steps",
                                 blocking=False,
@@ -547,7 +541,7 @@ def main():
                 args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
             )
             if accelerator.is_main_process:
-                feature_extractor.save_pretrained(args.output_dir)
+                image_processor.save_pretrained(args.output_dir)
                 repo.push_to_hub(
                     commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
@@ -568,7 +562,7 @@ def main():
             args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
         )
         if accelerator.is_main_process:
-            feature_extractor.save_pretrained(args.output_dir)
+            image_processor.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
