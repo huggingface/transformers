@@ -432,12 +432,15 @@ class TFGenerationMixin:
 
     The class exposes [`~generation.TFGenerationMixin.generate`], which can be used for:
         - *greedy decoding* by calling [`~generation.TFGenerationMixin.greedy_search`] if `num_beams=1` and
-          `do_sample=False`.
+          `do_sample=False`
         - *contrastive search* by calling [`~generation.TFGenerationMixin.contrastive_search`] if `penalty_alpha>0` and
           `top_k>1`
         - *multinomial sampling* by calling [`~generation.TFGenerationMixin.sample`] if `num_beams=1` and
-          `do_sample=True`.
-        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`.
+          `do_sample=True`
+        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`
+
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
+    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     _seed_generator = None
@@ -541,8 +544,8 @@ class TFGenerationMixin:
         model's default generation configuration. You can override any `generation_config` by passing the corresponding
         parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
-        For a complete overview of generate, check the [following
-        guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -585,69 +588,7 @@ class TFGenerationMixin:
                     - [`~generation.TFBeamSearchEncoderDecoderOutput`],
                     - [`~generation.TFBeamSampleEncoderDecoderOutput`]
 
-        Examples:
-
-        Greedy decoding, using the default generation configuration and ad hoc modifications:
-
-        ```python
-        >>> from transformers import AutoTokenizer, TFAutoModelForCausalLM
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
-
-        >>> prompt = "Today I believe we can finally"
-        >>> input_ids = tokenizer(prompt, return_tensors="tf").input_ids
-
-        >>> # Generate up to 30 tokens
-        >>> outputs = model.generate(input_ids, do_sample=False, max_length=30)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get to the point where we can make a difference in the lives of the people of the United States of America.\n']
-        ```
-
-        Multinomial sampling, modifying an existing generation configuration:
-
-        ```python
-        >>> from transformers import AutoTokenizer, TFAutoModelForCausalLM, GenerationConfig
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
-
-        >>> prompt = "Today I believe we can finally"
-        >>> input_ids = tokenizer(prompt, return_tensors="tf").input_ids
-
-        >>> # Sample up to 30 tokens
-        >>> generation_config = GenerationConfig.from_pretrained("gpt2")
-        >>> generation_config.max_length = 30
-        >>> generation_config.do_sample = True
-        >>> outputs = model.generate(input_ids, generation_config=generation_config, seed=[0, 0])
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["Today I believe we can finally start taking a bold stand against climate change and climate change mitigation efforts such as President Obama's climate ban and President Trump's"]
-        ```
-
-        Beam-search decoding, using a freshly initialized generation configuration:
-
-        ```python
-        >>> from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM, GenerationConfig
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-        >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-
-        >>> sentence = "Paris is one of the densest populated areas in Europe."
-        >>> input_ids = tokenizer(sentence, return_tensors="tf").input_ids
-
-        >>> generation_config = GenerationConfig(
-        ...     max_length=64,
-        ...     num_beams=5,
-        ...     bos_token_id=0,
-        ...     eos_token_id=0,
-        ...     decoder_start_token_id=58100,
-        ...     pad_token_id=58100,
-        ...     bad_words_ids=[[58100]],
-        ... )
-        >>> outputs = model.generate(input_ids, generation_config=generation_config)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
-        ```"""
+        """
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
@@ -702,11 +643,11 @@ class TFGenerationMixin:
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
-            logger.warning(
-                f"Setting `pad_token_id` to {generation_config.eos_token_id} (first `eos_token_id`) to generate"
-                " sequence"
-            )
-            generation_config.pad_token_id = generation_config.eos_token_id
+            eos_token_id = generation_config.eos_token_id
+            if isinstance(eos_token_id, list):
+                eos_token_id = eos_token_id[0]
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            generation_config.pad_token_id = eos_token_id
 
         use_xla = not tf.executing_eagerly()
         if use_xla and not self.supports_xla_generation:
@@ -1074,20 +1015,20 @@ class TFGenerationMixin:
 
     @staticmethod
     def _extract_past_from_model_output(outputs: ModelOutput):
-        past = None
+        past_key_values = None
         if "past_key_values" in outputs:
-            past = outputs.past_key_values
+            past_key_values = outputs.past_key_values
         elif "mems" in outputs:
-            past = outputs.mems
+            past_key_values = outputs.mems
         elif "past_buckets_states" in outputs:
-            past = outputs.past_buckets_states
-        return past
+            past_key_values = outputs.past_buckets_states
+        return past_key_values
 
     def _update_model_kwargs_for_generation(
         self, outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
     ) -> Dict[str, Any]:
-        # update past
-        model_kwargs["past"] = self._extract_past_from_model_output(outputs)
+        # update past_key_values
+        model_kwargs["past_key_values"] = self._extract_past_from_model_output(outputs)
 
         # update attention mask
         if not is_encoder_decoder:
@@ -1112,7 +1053,7 @@ class TFGenerationMixin:
         def _initialize_attention(model_kwargs, num_padding_values, is_encoder_decoder):
             """initializes the appropriate attention mask -- encoder-decoder models use `decoder_attention_mask`"""
             if is_encoder_decoder:
-                # One 1 for decoder_start_token_id, 0s for the currently-unfilled locations in the past tensor,
+                # One 1 for decoder_start_token_id, 0s for the currently-unfilled locations in the past_key_values tensor,
                 # 1s for the actual input_ids
                 decoder_attention_mask = tf.concat(
                     [
@@ -1125,7 +1066,7 @@ class TFGenerationMixin:
                 mask = {"decoder_attention_mask": decoder_attention_mask}
             else:
                 attention_mask = model_kwargs.pop("attention_mask")
-                # 0s for the currently-unfilled locations in the past tensor, 1s for the actual input_ids
+                # 0s for the currently-unfilled locations in the past_key_values tensor, 1s for the actual input_ids
                 attention_mask = tf.concat(
                     [
                         attention_mask,
@@ -1154,32 +1095,32 @@ class TFGenerationMixin:
                 mask = {"attention_mask": attention_mask}
             return mask
 
-        def _initialize_past(past, num_padding_values, batch_axis):
-            """initialize past with zeros -- the structure depends on `batch_axis`"""
+        def _initialize_past(past_key_values, num_padding_values, batch_axis):
+            """initialize past_key_values with zeros -- the structure depends on `batch_axis`"""
             if batch_axis == 0:
                 padding_values = tf.constant([[0, 0], [0, 0], [0, num_padding_values], [0, 0]], dtype=tf.int32)
                 new_past = ()
-                for past_layer in past:
+                for past_layer in past_key_values:
                     new_past_layer = list(past_layer)
                     for i in range(len(new_past_layer[:2])):
                         new_past_layer[i] = tf.pad(past_layer[i], padding_values)
                     new_past += (tuple(new_past_layer),)
             else:
                 padding_values = tf.scatter_nd(indices=[[3, 1]], updates=[num_padding_values], shape=(5, 2))
-                new_past = list(past)
-                for i in range(len(past)):
-                    new_past[i] = tf.pad(past[i], padding_values)
+                new_past = list(past_key_values)
+                for i in range(len(past_key_values)):
+                    new_past[i] = tf.pad(past_key_values[i], padding_values)
             return new_past
 
-        def _update_past(past, new_past_index, batch_axis):
+        def _update_past(past_key_values, new_past_index, batch_axis):
             if batch_axis == 0:
                 slice_start_base = tf.constant([0, 0, 1, 0])
                 new_past = ()
-                for past_layer in past:
+                for past_layer in past_key_values:
                     new_past_layer = list(past_layer)
                     for i in range(len(new_past_layer[:2])):
                         update_slice = past_layer[i][:, :, -1:]
-                        # Write the last slice to the first open location in the padded past array
+                        # Write the last slice to the first open location in the padded past_key_values array
                         # and then truncate the last slice off the array
                         new_past_layer[i] = dynamic_update_slice(
                             past_layer[i][:, :, :-1], update_slice, slice_start_base * new_past_index
@@ -1187,41 +1128,42 @@ class TFGenerationMixin:
                     new_past += (tuple(new_past_layer),)
             else:
                 slice_start_base = tf.constant([0, 0, 0, 1, 0])
-                new_past = [None for _ in range(len(past))]
-                for i in range(len(past)):
-                    update_slice = past[i][:, :, :, -1:]
-                    # Write the last slice to the first open location in the padded past array
+                new_past = [None for _ in range(len(past_key_values))]
+                for i in range(len(past_key_values)):
+                    update_slice = past_key_values[i][:, :, :, -1:]
+                    # Write the last slice to the first open location in the padded past_key_values array
                     # and then truncate the last slice off the array
                     new_past[i] = dynamic_update_slice(
-                        past[i][:, :, :, :-1], update_slice, slice_start_base * new_past_index
+                        past_key_values[i][:, :, :, :-1], update_slice, slice_start_base * new_past_index
                     )
             return new_past
 
-        past = self._extract_past_from_model_output(model_outputs)
-        if past is None:
+        past_key_values = self._extract_past_from_model_output(model_outputs)
+        if past_key_values is None:
             raise ValueError(
-                f"No known past variable found in model outputs (model outputs keys: {list(model_outputs.keys())})"
+                "No known `past_key_values variable` found in model outputs (model outputs keys:"
+                f" {list(model_outputs.keys())})"
             )
-        is_past_initialized = model_kwargs.pop("past", None) is not None
+        is_past_initialized = model_kwargs.pop("past_key_values", None) is not None
 
         if not is_past_initialized:
-            # The padded version of `past` has a length of `max_length - 1`, as `past` holds information relative to
-            # previous autoregressive generation steps (step 0 has no past, step 1 has 1 past value, ..., the last step
-            # has `max_length - 1` past values).
+            # The padded version of `past_key_values` has a length of `max_length - 1`, as `past_key_values` holds information relative to
+            # previous autoregressive generation steps (step 0 has no past_key_values, step 1 has 1 past_key_values value, ..., the last step
+            # has `max_length - 1` past_key_values values).
             num_padding_values = max_length - cur_len - 1
             mask = _initialize_attention(model_kwargs, num_padding_values, is_encoder_decoder)
-            new_past = _initialize_past(past, num_padding_values, batch_axis)
+            new_past = _initialize_past(past_key_values, num_padding_values, batch_axis)
         else:
-            # The new index of past to be filled corresponds to the current length of the sequence, with two
-            # subtractions: -1 because past holds information regarding previous generation steps (read comment above)
+            # The new index of past_key_values to be filled corresponds to the current length of the sequence, with two
+            # subtractions: -1 because past_key_values holds information regarding previous generation steps (read comment above)
             # and -1 again because in an array the index is the length of the array minus 1.
             new_past_index = cur_len - 2
             mask = _update_attention(model_kwargs, new_past_index, is_encoder_decoder)
-            new_past = _update_past(past, new_past_index, batch_axis)
+            new_past = _update_past(past_key_values, new_past_index, batch_axis)
 
-        # sets the updated variables (mask and past)
+        # sets the updated variables (mask and past_key_values)
         model_kwargs.update(mask)
-        model_kwargs["past"] = tuple(new_past)
+        model_kwargs["past_key_values"] = tuple(new_past)
 
         return model_kwargs
 
@@ -1362,7 +1304,7 @@ class TFGenerationMixin:
         >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
-        >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
         >>> input_ids = tokenizer(input_prompt, return_tensors="tf").input_ids
@@ -1370,7 +1312,7 @@ class TFGenerationMixin:
         >>> # instantiate logits processors
         >>> logits_processor = TFLogitsProcessorList(
         ...     [
-        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.generation_config.eos_token_id),
         ...     ]
         ... )
 
@@ -1403,7 +1345,7 @@ class TFGenerationMixin:
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
         cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
-        # some models, like XLNet, need more than the last token in the presence of past
+        # some models, like XLNet, need more than the last token in the presence of past_key_values
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
         # 2. init `attentions`, `hidden_states`, and `scores` tuples
@@ -1429,7 +1371,7 @@ class TFGenerationMixin:
         # define condition fn
         def greedy_search_body_fn(generated, finished_sequences, cur_len, model_kwargs):
             """state update fn."""
-            if model_kwargs.get("past") is None or needs_full_input:
+            if model_kwargs.get("past_key_values") is None or needs_full_input:
                 input_ids = generated[:, :cur_len]
             else:
                 input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
@@ -1492,15 +1434,15 @@ class TFGenerationMixin:
                 model_kwargs = self._update_model_kwargs_for_generation(
                     model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                 )
-                # if we don't cache past key values we need the whole input
-                if model_kwargs.get("past", None) is None:
-                    # let's throw out `past` since we don't want `None` tensors
-                    model_kwargs.pop("past", None)
+                # if we don't cache past_key_values key values we need the whole input
+                if model_kwargs.get("past_key_values", None) is None:
+                    # let's throw out `past_key_values` since we don't want `None` tensors
+                    model_kwargs.pop("past_key_values", None)
 
             return generated, finished_sequences, cur_len, model_kwargs
 
         # 5. run generation
-        # 1st generation step has to be run before to initialize `past`
+        # 1st generation step has to be run before to initialize `past_key_values`
         generated, finished_sequences, cur_len, model_kwargs = greedy_search_body_fn(
             generated, finished_sequences, cur_len, model_kwargs
         )
@@ -1629,7 +1571,7 @@ class TFGenerationMixin:
         >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
-        >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
         >>> input_ids = tokenizer(input_prompt, return_tensors="tf").input_ids
@@ -1637,7 +1579,7 @@ class TFGenerationMixin:
         >>> # instantiate logits processors
         >>> logits_processor = TFLogitsProcessorList(
         ...     [
-        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.generation_config.eos_token_id),
         ...     ]
         ... )
         >>> # instantiate logits processors
@@ -1680,7 +1622,7 @@ class TFGenerationMixin:
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
         cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
-        # some models, like XLNet, need more than the last token in the presence of past
+        # some models, like XLNet, need more than the last token in the presence of past_key_values
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
         # 2. init `attentions`, `hidden_states`, and `scores` tuples
@@ -1702,7 +1644,7 @@ class TFGenerationMixin:
             return ~tf.reduce_all(finished_sequences)
 
         def sample_body_fn(generated, finished_sequences, cur_len, model_kwargs):
-            if model_kwargs.get("past") is None or needs_full_input:
+            if model_kwargs.get("past_key_values") is None or needs_full_input:
                 input_ids = generated[:, :cur_len]
             else:
                 input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
@@ -1775,15 +1717,15 @@ class TFGenerationMixin:
                 model_kwargs = self._update_model_kwargs_for_generation(
                     model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                 )
-                # if we don't cache past key values we need the whole input
-                if model_kwargs.get("past", None) is None:
-                    # let's throw out `past` since we don't want `None` tensors
-                    model_kwargs.pop("past", None)
+                # if we don't cache past_key_values key values we need the whole input
+                if model_kwargs.get("past_key_values", None) is None:
+                    # let's throw out `past_key_values` since we don't want `None` tensors
+                    model_kwargs.pop("past_key_values", None)
 
             return generated, finished_sequences, cur_len, model_kwargs
 
         # 5. run generation
-        # 1st generation step has to be run before to initialize `past`
+        # 1st generation step has to be run before to initialize `past_key_values`
         generated, finished_sequences, cur_len, model_kwargs = sample_body_fn(
             generated, finished_sequences, cur_len, model_kwargs
         )
@@ -1947,7 +1889,7 @@ class TFGenerationMixin:
         >>> num_beams = 3
         >>> # define decoder start token ids
         >>> input_ids = tf.ones((1, num_beams, 1), dtype=tf.int32)
-        >>> input_ids = input_ids * model.config.decoder_start_token_id
+        >>> input_ids = input_ids * model.generation_config.decoder_start_token_id
 
         >>> # add encoder_outputs to model keyword arguments
         >>> encoder_outputs = model.get_encoder()(encoder_input_ids, return_dict=True)
@@ -1958,7 +1900,7 @@ class TFGenerationMixin:
 
         >>> # instantiate logits processors
         >>> logits_processor = TFLogitsProcessorList(
-        ...     [TFMinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)]
+        ...     [TFMinLengthLogitsProcessor(5, eos_token_id=model.generation_config.eos_token_id)]
         ... )
 
         >>> outputs = model.beam_search(input_ids, logits_processor=logits_processor, **model_kwargs)
@@ -2012,7 +1954,7 @@ class TFGenerationMixin:
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
         cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
-        # some models, like XLNet, need more than the last token in the presence of past
+        # some models, like XLNet, need more than the last token in the presence of past_key_values
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
         # 2. init `attentions`, `hidden_states`, and `scores` tuples
@@ -2092,7 +2034,7 @@ class TFGenerationMixin:
             seen so far
             """
             # 1. Forward current tokens
-            if model_kwargs.get("past") is None or needs_full_input:
+            if model_kwargs.get("past_key_values") is None or needs_full_input:
                 input_ids = running_sequences[:, :, :cur_len]
             else:
                 input_ids = tf.expand_dims(running_sequences[:, :, cur_len - 1], -1)
@@ -2248,10 +2190,10 @@ class TFGenerationMixin:
                     model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                 )
 
-                # if we don't cache past key values we need the whole input
-                if model_kwargs.get("past", None) is None:
-                    # let's throw out `past` since we don't want `None` tensors
-                    model_kwargs.pop("past", None)
+                # if we don't cache past_key_values key values we need the whole input
+                if model_kwargs.get("past_key_values", None) is None:
+                    # let's throw out `past_key_values` since we don't want `None` tensors
+                    model_kwargs.pop("past_key_values", None)
 
             return (
                 cur_len,
@@ -2264,7 +2206,7 @@ class TFGenerationMixin:
             )
 
         # 5. run generation
-        # 1st generation step has to be run before to initialize `past` (if active)
+        # 1st generation step has to be run before to initialize `past_key_values` (if active)
         (
             cur_len,
             running_sequences,
@@ -2436,6 +2378,8 @@ class TFGenerationMixin:
             else self.generation_config.return_dict_in_generate
         )
         use_cache = True  # In contrastive search, we always use cache
+        model_kwargs.pop("use_cache", None)
+
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
@@ -2472,7 +2416,7 @@ class TFGenerationMixin:
 
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
-            if model_kwargs.get("past") is None:
+            if model_kwargs.get("past_key_values") is None:
 
                 # prepare inputs
                 model_inputs = self.prepare_inputs_for_generation(
@@ -2520,13 +2464,16 @@ class TFGenerationMixin:
                     expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
                 )
 
-                past = model_kwargs.get("past")
-                if past is None:
+                past_key_values = model_kwargs.get("past_key_values")
+                if past_key_values is None:
                     raise ValueError(
                         f"{self.__class__.__name__} does not support caching and therefore **can't** be used "
                         "for contrastive search."
                     )
-                elif not isinstance(past[0], (tuple, tf.Tensor)) or past[0][0].shape[0] != batch_size:
+                elif (
+                    not isinstance(past_key_values[0], (tuple, tf.Tensor))
+                    or past_key_values[0][0].shape[0] != batch_size
+                ):
                     raise ValueError(
                         f"{self.__class__.__name__} does not have a standard cache format and therefore **can't** be "
                         "used for contrastive search without further modifications."
@@ -2562,8 +2509,8 @@ class TFGenerationMixin:
                     decoder_hidden_states.append(outputs.hidden_states)
 
             # Replicates the new past_key_values to match the `top_k` candidates
-            model_kwargs["past"] = tf.nest.map_structure(
-                lambda tensor: tf.repeat(tensor, top_k, axis=cache_batch_axis), model_kwargs["past"]
+            model_kwargs["past_key_values"] = tf.nest.map_structure(
+                lambda tensor: tf.repeat(tensor, top_k, axis=cache_batch_axis), model_kwargs["past_key_values"]
             )
 
             # compute the candidate tokens by the language model and collects their hidden_states
@@ -2676,7 +2623,7 @@ class TFGenerationMixin:
             return generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
 
         # 5. run generation
-        # 1st generation step has to be run before to initialize `past`
+        # 1st generation step has to be run before to initialize `past_key_values`
         generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables = contrastive_search_body_fn(
             generated, finished_sequences, cur_len, model_kwargs, None
         )

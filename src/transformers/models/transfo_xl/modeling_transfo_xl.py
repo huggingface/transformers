@@ -1150,12 +1150,12 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         else:
             return self.crit.out_layers[-1]
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **model_kwargs):
         inputs = {}
 
         # if past is defined in model kwargs then use it for faster decoding
-        if past:
-            inputs["mems"] = past
+        if past_key_values:
+            inputs["mems"] = past_key_values
             inputs["input_ids"] = input_ids[:, -1].unsqueeze(-1)
         else:
             inputs["input_ids"] = input_ids
