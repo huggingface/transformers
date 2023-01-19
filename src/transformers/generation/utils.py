@@ -39,6 +39,7 @@ from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScor
 from .configuration_utils import GenerationConfig
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
+    EncoderRepetitionPenaltyLogitsProcessor,
     EpsilonLogitsWarper,
     EtaLogitsWarper,
     ExponentialDecayLengthPenalty,
@@ -797,6 +798,15 @@ class GenerationMixin:
                     diversity_penalty=generation_config.diversity_penalty,
                     num_beams=generation_config.num_beams,
                     num_beam_groups=generation_config.num_beam_groups,
+                )
+            )
+        if (
+            generation_config.encoder_repetition_penalty is not None
+            and generation_config.encoder_repetition_penalty != 1.0
+        ):
+            processors.append(
+                EncoderRepetitionPenaltyLogitsProcessor(
+                    penalty=generation_config.encoder_repetition_penalty, encoder_input_ids=encoder_input_ids
                 )
             )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
