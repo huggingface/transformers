@@ -1002,8 +1002,8 @@ class GenerationMixin:
         >>> print(np.allclose(outputs.sequences_scores, reconstructed_scores))
         True
         ```"""
-        # 1. In abcense of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
-        # to a beam search approach were the first (and only) beam was always selected
+        # 1. In absence of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
+        # to a beam search approach were the first (and only) beam is always selected
         if beam_indices is None:
             beam_indices = torch.arange(scores[0].shape[0]).view(-1, 1).to(sequences.device)
             beam_indices = beam_indices.expand(-1, len(scores))
@@ -1012,7 +1012,7 @@ class GenerationMixin:
         # seq_len - input_length
         scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
 
-        # 3. Optionally normalize the logits
+        # 3. Optionally normalize the logits (across the vocab dimension)
         if normalize_logits:
             scores = scores.reshape(-1, self.config.vocab_size, scores.shape[-1])
             scores = torch.nn.functional.log_softmax(scores, dim=1)

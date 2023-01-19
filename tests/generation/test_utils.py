@@ -2488,10 +2488,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(output_sequences_no_mask.tolist(), output_sequences_with_mask.tolist())
 
     def test_transition_scores_greedy_search(self):
-        articles = [
-            "Justin Timberlake",
-            "Michael Phelps",
-        ]
+        articles = ["Justin Timberlake", "Michael Phelps"]
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -2517,10 +2514,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
 
     def test_transition_scores_greedy_search_normalized(self):
-        articles = [
-            "Justin Timberlake",
-            "Michael Phelps",
-        ]
+        articles = ["Justin Timberlake", "Michael Phelps"]
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         tokenizer.pad_token = tokenizer.eos_token
 
