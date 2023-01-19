@@ -1,4 +1,8 @@
 - sections:
+  - local: index
+    title: 🤗 Transformers
+  title: はじめに
+- sections:
   - sections:
     - local: multilingual
       title: 推論のための多言語モデル
