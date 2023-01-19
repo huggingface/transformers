@@ -23,7 +23,7 @@ from huggingface_hub import hf_hub_download
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -155,7 +155,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class OneFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
     image_processing_class = OneFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
     # only for test_feat_extracttion_common.test_feat_extract_to_json_string
     feature_extraction_class = image_processing_class
