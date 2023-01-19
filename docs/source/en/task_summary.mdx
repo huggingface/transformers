@@ -34,8 +34,12 @@ Audio classification is a task that labels audio data from a predefined set of c
 ```py
 >>> from transformers import pipeline
 
->>> classifier = pipeline(task="audio-classification")
->>> classifier("path/to/audio/file.mp3")
+>>> classifier = pipeline(task="audio-classification", model="superb/hubert-base-superb-er")
+>>> classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+[{'score': 0.453214168548584, 'label': 'hap'},
+ {'score': 0.3622128367424011, 'label': 'sad'},
+ {'score': 0.09430035948753357, 'label': 'neu'},
+ {'score': 0.09027273952960968, 'label': 'ang'}]
 ```
 
 ### Automatic speech recognition
@@ -47,8 +51,9 @@ But one of the key challenges Transformer architectures have helped with is in l
 ```py
 >>> from transformers import pipeline
 
->>> transcriber = pipeline(task="automatic-speech-recognition")
->>> transcriber("path/to/audio/file.mp3")
+>>> transcriber = pipeline(task="automatic-speech-recognition", model="openai/whisper-small")
+>>> transcriber("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+{'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
 ## Computer vision
@@ -73,7 +78,14 @@ Image classification labels an entire image from a predefined set of classes. Li
 >>> from transformers import pipeline
 
 >>> classifier = pipeline(task="image-classification")
->>> classifier("path/to/image/file.jpg")
+>>> classifier("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+[{'score': 0.44030314683914185, 'label': 'lynx, catamount'},
+ {'score': 0.034334052354097366,
+  'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'},
+ {'score': 0.03214803338050842,
+  'label': 'snow leopard, ounce, Panthera uncia'},
+ {'score': 0.02353905513882637, 'label': 'Egyptian cat'},
+ {'score': 0.02303415723145008, 'label': 'tiger cat'}]
 ```
 
 ### Object detection
@@ -88,7 +100,10 @@ Unlike image classification, object detection identifies multiple objects within
 >>> from transformers import pipeline
 
 >>> detector = pipeline(task="object-detection")
->>> detector("path/to/image/file.jpg")
+>>> detector("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+[{'score': 0.9865359663963318,
+  'label': 'cat',
+  'box': {'xmin': 178, 'ymin': 154, 'xmax': 882, 'ymax': 598}}]
 ```
 
 ### Image segmentation
@@ -104,7 +119,16 @@ Segmentation tasks are helpful in self-driving vehicles to create a pixel-level 
 >>> from transformers import pipeline
 
 >>> segmenter = pipeline(task="image-segmentation")
->>> segmenter("path/to/image/file.jpg")
+>>> segmenter("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+[{'score': 0.985624,
+  'label': 'LABEL_184',
+  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F86A0511670>},
+ {'score': 0.997607,
+  'label': 'snow',
+  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F869FA06E50>},
+ {'score': 0.996198,
+  'label': 'cat',
+  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F869FA06EE0>}]
 ```
 
 ### Depth estimation
@@ -120,7 +144,17 @@ There are two approaches to depth estimation:
 >>> from transformers import pipeline
 
 >>> depth_estimator = pipeline(task="depth-estimation")
->>> depth_estimator("path/to/image/file.jpg")
+>>> depth_estimator(
+...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+... )
+{'predicted_depth': tensor([[[ 0.7767,  0.8142,  0.8237,  ...,  2.3059,  2.3640,  2.3277],
+          [ 0.7804,  0.7871,  0.7867,  ...,  2.3352,  2.3321,  2.3274],
+          [ 0.8325,  0.8111,  0.8201,  ...,  2.3517,  2.3468,  2.3560],
+          ...,
+          [26.3857, 26.4508, 26.4320,  ..., 17.5526, 17.5197, 17.4585],
+          [26.5173, 26.4958, 26.5483,  ..., 17.4694, 17.4372, 17.4503],
+          [26.5566, 26.5902, 26.5746,  ..., 17.5171, 17.5151, 17.4472]]]),
+ 'depth': <PIL.Image.Image image mode=L size=960x686 at 0x7F74110A3EB0>}
 ```
 
 ## Natural language processing
@@ -139,6 +173,7 @@ Like classification tasks in any modality, text classification labels a sequence
 
 >>> classifier = pipeline(task="sentiment-analysis")
 >>> classifier("Hugging Face is the best thing since sliced bread!")
+[{'label': 'POSITIVE', 'score': 0.9990912675857544}]
 ```
 
 ### Token classification
@@ -155,6 +190,7 @@ Two common types of token classification are:
 
 >>> classifier = pipeline(task="ner")
 >>> classifier("Hugging Face is a French company based in New York City.")
+[{'entity': 'I-ORG', 'score': 0.9967675, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2}, {'entity': 'I-ORG', 'score': 0.9293027, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7}, {'entity': 'I-ORG', 'score': 0.9763208, 'index': 3, 'word': 'Face', 'start': 8, 'end': 12}, {'entity': 'I-MISC', 'score': 0.99828726, 'index': 6, 'word': 'French', 'start': 18, 'end': 24}, {'entity': 'I-LOC', 'score': 0.99896204, 'index': 10, 'word': 'New', 'start': 42, 'end': 45}, {'entity': 'I-LOC', 'score': 0.9986792, 'index': 11, 'word': 'York', 'start': 46, 'end': 50}, {'entity': 'I-LOC', 'score': 0.9992418, 'index': 12, 'word': 'City', 'start': 51, 'end': 55}]
 ```
 
 ### Question answering
@@ -175,6 +211,7 @@ There are two common types of question answering:
 ...     question="What is the name of the repository?",
 ...     context="The name of the repository is huggingface/transformers",
 ... )
+{'score': 0.9327335953712463, 'start': 30, 'end': 54, 'answer': 'huggingface/transformers'}
 ```
 
 ### Summarization
@@ -191,8 +228,9 @@ Like question answering, there are two types of summarization:
 
 >>> summarizer = pipeline(task="summarization")
 >>> summarizer(
-...     "Hugging Face is a French company based in New York City. Its headquarters are in DUMBO, therefore very close to the Manhattan Bridge which is visible from the window."
+...     "In this work, we presented the Transformer, the first sequence transduction model based entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention. For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers. On both WMT 2014 English-to-German and WMT 2014 English-to-French translation tasks, we achieve a new state of the art. In the former task our best model outperforms even all previously reported ensembles."
 ... )
+[{'summary_text': ' The Transformer is the first sequence transduction model based entirely on attention . It replaces the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention . For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers .'}]
 ```
 
 ### Translation
@@ -205,8 +243,9 @@ In the early days, translation models were mostly monolingual, but recently, the
 >>> from transformers import pipeline
 
 >>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
->>> translator = pipeline(task="translation")
+>>> translator = pipeline(task="translation", model="t5-small")
 >>> translator(text)
+[{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
 ```
 
 ### Language modeling
@@ -220,9 +259,9 @@ There are two types of language modeling:
     ```py
     >>> from transformers import pipeline
 
-    >>> prompt = "Hugging Face is a"
-    >>> text_generator = pipeline(task="text-generation")
-    >>> text_generator(prompt)
+    >>> prompt = "Hugging Face is a community-based open-source platform for machine learning."
+    >>> generator = pipeline(task="text-generation")
+    >>> generator(prompt)  # doctest: +SKIP
     ```
 
 * masked: the model's objective is to predict a masked token in a sequence with full access to the tokens in the sequence
@@ -230,7 +269,11 @@ There are two types of language modeling:
     ```py
     >>> text = "Hugging Face is a <mask> company based in New York City."
     >>> fill_mask = pipeline(task="fill-mask")
-    >>> fill_mask(text, top_k=3)
+    >>> fill_mask(text, top_k=1)
+    [{'score': 0.22355437278747559,
+      'token': 1761,
+      'token_str': ' platform',
+      'sequence': 'Hugging Face is a community-based open-source platform for machine learning.'}]
     ```
 
 Hopefully, this page has given you some more background information about all the types of tasks in each modality and the practical importance of each one. In the next [section](tasks_explained), you'll learn **how** 🤗 Transformers work to solve these tasks.
