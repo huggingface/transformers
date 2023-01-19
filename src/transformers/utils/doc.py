@@ -1094,7 +1094,9 @@ def add_code_sample_docstrings(
             qa_target_end_index=qa_target_end_index,
             expected_output=expected_output,
             expected_loss=expected_loss,
-            true="{true}",
+            real_checkpoint=real_checkpoint,
+            fake_checkpoint=checkpoint,
+            true="{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
         )
 
         if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
@@ -1132,10 +1134,7 @@ def add_code_sample_docstrings(
             code_sample, expected_output=expected_output, expected_loss=expected_loss
         )
         if real_checkpoint is not None:
-            intro = FAKE_MODEL_DISCLAIMER.format(
-                real_checkpoint=real_checkpoint, fake_checkpoint=checkpoint, true="{true}"
-            )
-            code_sample = intro + code_sample
+            code_sample = FAKE_MODEL_DISCLAIMER + code_sample
         func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
