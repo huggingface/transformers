@@ -1028,7 +1028,7 @@ class DetaImageProcessor(BaseImageProcessor):
             keep_inds = batched_nms(box, score, lbls, nms_threshold)[:100]
             score = score[keep_inds]
             lbls = lbls[keep_inds]
-            boxes = boxes[keep_inds]
+            box = box[keep_inds]
 
             results.append(
                 {
