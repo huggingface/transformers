@@ -108,7 +108,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
             time -= stride_left + stride_right
             offset = int((time / feature_extractor.sampling_rate) / time_precision)
             overlap_time = int((stride_left / feature_extractor.sampling_rate) / time_precision)
-            # relevant timestamps are the ones that are in the overlapping part
+            # relevant timestamps are in the overlapping part
             relevant_timestamp = np.where(sequence[consecutive] >= timestamp_begin + overlap_time)[0]
             if relevant_timestamp.shape[0] > 0:
                 relevant_timestamp = (
