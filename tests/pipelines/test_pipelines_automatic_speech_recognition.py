@@ -292,6 +292,35 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
     @require_torch
+    def test_return_timestamps_in_preprocess(self):
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            chunk_length_s=8,
+            stride_length_s=1,
+            device=0,
+        )
+        data = load_dataset(
+            "librispeech_asr",
+            "clean",
+            split="test",
+            cache_dir="/home/arthur_huggingface_co/.cache/huggingface/datasets",
+        )
+
+        pipe.model.config.forced_decoder_ids = pipe.tokenizer.get_decoder_prompt_ids(language="fr", task="transcribe")
+
+        res = pipe(data[0]["audio"]["array"], return_timestamps=True)
+        self.assertEqual(res, {"text": " Conquered returned to its place amidst the tents."})
+        res = pipe(data[0]["audio"]["array"], return_timestamps=True)
+        self.assertEqual(
+            res,
+            {
+                "text": " Conquered returned to its place amidst the tents.",
+                "chunks": [{"text": " Conquered returned to its place amidst the tents.", "timestamp": (0.0, 3.36)}],
+            },
+        )
+
+    @require_torch
     @slow
     def test_torch_whisper(self):
         speech_recognizer = pipeline(
