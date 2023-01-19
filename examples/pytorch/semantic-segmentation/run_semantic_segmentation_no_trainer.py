@@ -39,7 +39,7 @@ from accelerate.utils import set_seed
 from huggingface_hub import Repository, create_repo, hf_hub_download
 from transformers import (
     AutoConfig,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForSemanticSegmentation,
     SchedulerType,
     default_data_collator,
@@ -397,20 +397,20 @@ def main():
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
-    # Load pretrained model and feature extractor
+    # Load pretrained model and image processor
     config = AutoConfig.from_pretrained(args.model_name_or_path, id2label=id2label, label2id=label2id)
-    feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
+    image_processor = AutoImageProcessor.from_pretrained(args.model_name_or_path)
     model = AutoModelForSemanticSegmentation.from_pretrained(args.model_name_or_path, config=config)
 
     # Preprocessing the datasets
     # Define torchvision transforms to be applied to each image + target.
     # Not that straightforward in torchvision: https://github.com/pytorch/vision/issues/9
     # Currently based on official torchvision references: https://github.com/pytorch/vision/blob/main/references/segmentation/transforms.py
-    if "shortest_edge" in feature_extractor.size:
+    if "shortest_edge" in image_processor.size:
         # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
-        size = (feature_extractor.size["shortest_edge"], feature_extractor.size["shortest_edge"])
+        size = (image_processor.size["shortest_edge"], image_processor.size["shortest_edge"])
     else:
-        size = (feature_extractor.size["height"], feature_extractor.size["width"])
+        size = (image_processor.size["height"], image_processor.size["width"])
     train_transforms = Compose(
         [
             ReduceLabels() if args.reduce_labels else Identity(),
@@ -418,7 +418,7 @@ def main():
             RandomHorizontalFlip(flip_prob=0.5),
             PILToTensor(),
             ConvertImageDtype(torch.float),
-            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
+            Normalize(mean=image_processor.image_mean, std=image_processor.image_std),
         ]
     )
     # Define torchvision transform to be applied to each image.
@@ -429,7 +429,7 @@ def main():
             Resize(size=size),
             PILToTensor(),
             ConvertImageDtype(torch.float),
-            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
+            Normalize(mean=image_processor.image_mean, std=image_processor.image_std),
         ]
     )
 
@@ -602,7 +602,7 @@ def main():
                             save_function=accelerator.save,
                         )
                         if accelerator.is_main_process:
-                            feature_extractor.save_pretrained(args.output_dir)
+                            image_processor.save_pretrained(args.output_dir)
                             repo.push_to_hub(
                                 commit_message=f"Training in progress {completed_steps} steps",
                                 blocking=False,
@@ -657,7 +657,7 @@ def main():
                 args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
             )
             if accelerator.is_main_process:
-                feature_extractor.save_pretrained(args.output_dir)
+                image_processor.save_pretrained(args.output_dir)
                 repo.push_to_hub(
                     commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
@@ -678,7 +678,7 @@ def main():
             args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
         )
         if accelerator.is_main_process:
-            feature_extractor.save_pretrained(args.output_dir)
+            image_processor.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
