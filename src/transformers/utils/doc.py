@@ -146,6 +146,17 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
     return result
 
 
+FAKE_MODEL_DISCLAIMER = """
+    <Tip warning={true}>
+
+    This example uses a random model as the real ones are all very big. To get proper results, you should use
+    {real_checkpoint} instead of {fake_checkpoint}. If you get out-of-memory when loading that checkpoint, you can try
+    adding `device_map="auto"` in the `from_pretrained` call.
+
+    </Tip>
+"""
+
+
 PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example:
 
@@ -1058,6 +1069,7 @@ def add_code_sample_docstrings(
     modality=None,
     expected_output=None,
     expected_loss=None,
+    real_checkpoint=None,
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1082,6 +1094,9 @@ def add_code_sample_docstrings(
             qa_target_end_index=qa_target_end_index,
             expected_output=expected_output,
             expected_loss=expected_loss,
+            real_checkpoint=real_checkpoint,
+            fake_checkpoint=checkpoint,
+            true="{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
         )
 
         if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
@@ -1118,6 +1133,8 @@ def add_code_sample_docstrings(
         code_sample = filter_outputs_from_example(
             code_sample, expected_output=expected_output, expected_loss=expected_loss
         )
+        if real_checkpoint is not None:
+            code_sample = FAKE_MODEL_DISCLAIMER + code_sample
         func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
