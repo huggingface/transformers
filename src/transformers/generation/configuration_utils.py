@@ -41,29 +41,22 @@ class GenerationConfig(PushToHubMixin):
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
         - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
-            `do_sample=False`.
+            `do_sample=False`
         - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0.`
             and `top_k>1`
         - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
-            `do_sample=True`.
+            `do_sample=True`
         - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
-            `do_sample=False`.
+            `do_sample=False`
         - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if
-            `num_beams>1` and `do_sample=True`.
+            `num_beams>1` and `do_sample=True`
         - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if
-            `num_beams>1` and `num_beam_groups>1`.
+            `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
-            `constraints!=None` or `force_words_ids!=None`.
+            `constraints!=None` or `force_words_ids!=None`
 
-    <Tip>
-
-    A generation configuration file can be loaded and saved to disk. Loading and using a generation configuration file
-    does **not** change a model configuration or weights. It only affects the model's behavior at generation time.
-
-    </Tip>
-
-    Most of these parameters are explained in more detail in [this blog
-    post](https://huggingface.co/blog/how-to-generate).
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate'. To learn
+    more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
 
     Arg:
         > Parameters that control the length of the output
@@ -75,7 +68,11 @@ class GenerationConfig(PushToHubMixin):
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         min_length (`int`, *optional*, defaults to 0):
-            The minimum length of the sequence to be generated.
+            The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
+            `min_new_tokens`. In general, prefer the use of `min_new_tokens`, which ignores the number of tokens in the
+            prompt.
+        min_new_tokens (`int`, *optional*):
+            The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         early_stopping (`bool`, *optional*, defaults to `False`):
             Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
         max_time(`float`, *optional*):
@@ -107,8 +104,23 @@ class GenerationConfig(PushToHubMixin):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
             `top_p` or higher are kept for generation.
         typical_p (`float`, *optional*, defaults to 1.0):
-            The amount of probability mass from the original distribution to be considered in typical decoding. If set
-            to 1.0 it takes no effect. See [this paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
+            Local typicality measures how similar the conditional probability of predicting a target token next is to
+            the expected conditional probability of predicting a random token next, given the partial text already
+            generated. If set to float < 1, the smallest set of the most locally typical tokens with probabilities that
+            add up to `typical_p` or higher are kept for generation. See [this
+            paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
+        epsilon_cutoff (`float`, *optional*, defaults to 0.0):
+            If set to float strictly between 0 and 1, only tokens with a conditional probability greater than
+            `epsilon_cutoff` will be sampled. In the paper, suggested values range from 3e-4 to 9e-4, depending on the
+            size of the model. See [Truncation Sampling as Language Model
+            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+        eta_cutoff (`float`, *optional*, defaults to 0.0):
+            Eta sampling is a hybrid of locally typical sampling and epsilon sampling. If set to float strictly between
+            0 and 1, a token is only considered if it is greater than either `eta_cutoff` or `sqrt(eta_cutoff) *
+            exp(-entropy(softmax(next_token_logits)))`. The latter term is intuitively the expected next token
+            probability, scaled by `sqrt(eta_cutoff)`. In the paper, suggested values range from 3e-4 to 2e-3,
+            depending on the size of the model. See [Truncation Sampling as Language Model
+            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
@@ -142,8 +154,9 @@ class GenerationConfig(PushToHubMixin):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
             language token.
-        forced_eos_token_id (`int`, *optional*, defaults to `model.config.forced_eos_token_id`):
-            The id of the token to force as the last generated token when `max_length` is reached.
+        forced_eos_token_id (`Union[int, List[int]]`, *optional*, defaults to `model.config.forced_eos_token_id`):
+            The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
+            list to set multiple *end-of-sequence* tokens.
         remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
             Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
@@ -152,10 +165,10 @@ class GenerationConfig(PushToHubMixin):
             generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
             penalty starts and `decay_factor` represents the factor of exponential decay
         suppress_tokens  (`List[int]`, *optional*):
-            A list of tokens that will be supressed at generation. The `SupressTokens` logit processor will set their
+            A list of tokens that will be suppressed at generation. The `SupressTokens` logit processor will set their
             log probs to `-inf` so that they are not sampled.
         begin_suppress_tokens  (`List[int]`, *optional*):
-            A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens` logit
+            A list of tokens that will be suppressed at the beginning of the generation. The `SupressBeginTokens` logit
             processor will set their log probs to `-inf` so that they are not sampled.
         forced_decoder_ids (`List[List[int]]`, *optional*):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
@@ -183,8 +196,8 @@ class GenerationConfig(PushToHubMixin):
             The id of the *padding* token.
         bos_token_id (`int`, *optional*):
             The id of the *beginning-of-sequence* token.
-        eos_token_id (`int`, *optional*):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`, *optional*):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
         > Generation parameters exclusive to encoder-decoder models
 
@@ -206,6 +219,7 @@ class GenerationConfig(PushToHubMixin):
         self.max_length = kwargs.pop("max_length", 20)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
         self.min_length = kwargs.pop("min_length", 0)
+        self.min_new_tokens = kwargs.pop("min_new_tokens", None)
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.max_time = kwargs.pop("max_time", None)
 
@@ -221,6 +235,8 @@ class GenerationConfig(PushToHubMixin):
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.typical_p = kwargs.pop("typical_p", 1.0)
+        self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", 0.0)
+        self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
         self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)

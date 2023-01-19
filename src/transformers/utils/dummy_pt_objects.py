@@ -199,6 +199,13 @@ class MinLengthLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MinNewTokensLengthLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class NoBadWordsLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -348,6 +355,37 @@ class AlbertPreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_albert(*args, **kwargs):
     requires_backends(load_tf_weights_in_albert, ["torch"])
+
+
+ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class AltCLIPModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AltCLIPPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AltCLIPTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AltCLIPVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1538,6 +1576,13 @@ def load_tf_weights_in_convbert(*args, **kwargs):
 CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class ConvNextBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ConvNextForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -2581,6 +2626,37 @@ def load_tf_weights_in_funnel(*args, **kwargs):
     requires_backends(load_tf_weights_in_funnel, ["torch"])
 
 
+GIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GitForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GitModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GitPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GitVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 GLPN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3492,6 +3568,30 @@ class MarkupLMPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Mask2FormerForUniversalSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Mask2FormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Mask2FormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3934,6 +4034,13 @@ class MT5Model(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MT5PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 MVP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -4129,6 +4236,30 @@ class NystromformerModel(metaclass=DummyObject):
 
 
 class NystromformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class OneFormerForUniversalSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OneFormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OneFormerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -5784,6 +5915,20 @@ class UniSpeechSatModel(metaclass=DummyObject):
 
 
 class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UperNetForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UperNetPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

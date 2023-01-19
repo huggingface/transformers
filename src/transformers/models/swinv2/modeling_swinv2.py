@@ -718,8 +718,12 @@ class Swinv2Layer(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.set_shift_and_window_size(input_dimensions)
+        if not always_partition:
+            self.set_shift_and_window_size(input_dimensions)
+        else:
+            pass
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
@@ -808,13 +812,16 @@ class Swinv2Stage(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(
+                hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -868,6 +875,7 @@ class Swinv2Encoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, Swinv2EncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -897,7 +905,9 @@ class Swinv2Encoder(nn.Module):
                     create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+                )
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]

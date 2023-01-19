@@ -54,12 +54,14 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("donut-swin", "DonutImageProcessor"),
         ("dpt", "DPTImageProcessor"),
         ("flava", "FlavaImageProcessor"),
+        ("git", ("CLIPImageProcessor", "VideoMAEImageProcessor")),
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
         ("layoutlmv2", "LayoutLMv2ImageProcessor"),
         ("layoutlmv3", "LayoutLMv3ImageProcessor"),
         ("levit", "LevitImageProcessor"),
+        ("mask2former", "MaskFormerImageProcessor"),
         ("maskformer", "MaskFormerImageProcessor"),
         ("mobilenet_v1", "MobileNetV1ImageProcessor"),
         ("mobilenet_v2", "MobileNetV2ImageProcessor"),
@@ -67,6 +69,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTImageProcessor"),
         ("mobilevit", "MobileViTImageProcessor"),
         ("nat", "ViTImageProcessor"),
+        ("oneformer", "OneFormerImageProcessor"),
         ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
         ("poolformer", "PoolFormerImageProcessor"),
@@ -78,6 +81,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("swinv2", "ViTImageProcessor"),
         ("table-transformer", "DetrImageProcessor"),
         ("timesformer", "VideoMAEImageProcessor"),
+        ("upernet", "SegformerImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
         ("vilt", "ViltImageProcessor"),
@@ -351,6 +355,7 @@ class AutoImageProcessor:
                 image_processor_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
+                image_processor_class.register_for_auto_class()
             else:
                 image_processor_class = image_processor_class_from_name(image_processor_class)
 

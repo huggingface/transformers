@@ -30,6 +30,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("albert", "AlbertConfig"),
+        ("altclip", "AltCLIPConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
@@ -77,6 +78,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetConfig"),
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
+        ("git", "GitConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
         ("gpt2", "GPT2Config"),
@@ -102,6 +104,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("m2m_100", "M2M100Config"),
         ("marian", "MarianConfig"),
         ("markuplm", "MarkupLMConfig"),
+        ("mask2former", "Mask2FormerConfig"),
         ("maskformer", "MaskFormerConfig"),
         ("maskformer-swin", "MaskFormerSwinConfig"),
         ("mbart", "MBartConfig"),
@@ -117,6 +120,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("nat", "NatConfig"),
         ("nezha", "NezhaConfig"),
         ("nystromformer", "NystromformerConfig"),
+        ("oneformer", "OneFormerConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
         ("opt", "OPTConfig"),
         ("owlvit", "OwlViTConfig"),
@@ -160,6 +164,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("trocr", "TrOCRConfig"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
+        ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
@@ -190,6 +195,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -234,6 +240,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("git", "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt_neo", "GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -257,6 +264,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("lxmert", "LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("m2m_100", "M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("markuplm", "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mask2former", "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mbart", "MBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mctct", "MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -269,6 +277,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("nat", "NAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nezha", "NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("oneformer", "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("opt", "OPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("owlvit", "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -307,6 +316,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("upernet", "UPERNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("videomae", "VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -333,6 +343,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("albert", "ALBERT"),
+        ("altclip", "AltCLIP"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
@@ -390,6 +401,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("fnet", "FNet"),
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),
+        ("git", "GIT"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),
         ("gpt2", "OpenAI GPT-2"),
@@ -417,6 +429,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("m2m_100", "M2M100"),
         ("marian", "Marian"),
         ("markuplm", "MarkupLM"),
+        ("mask2former", "Mask2Former"),
         ("maskformer", "MaskFormer"),
         ("maskformer-swin", "MaskFormerSwin"),
         ("mbart", "mBART"),
@@ -436,6 +449,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("nezha", "Nezha"),
         ("nllb", "NLLB"),
         ("nystromformer", "Nyströmformer"),
+        ("oneformer", "OneFormer"),
         ("openai-gpt", "OpenAI GPT"),
         ("opt", "OPT"),
         ("owlvit", "OWL-ViT"),
@@ -483,6 +497,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ul2", "UL2"),
         ("unispeech", "UniSpeech"),
         ("unispeech-sat", "UniSpeechSat"),
+        ("upernet", "UPerNet"),
         ("van", "VAN"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
@@ -847,6 +862,7 @@ class AutoConfig:
             config_class = get_class_from_dynamic_module(
                 pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
             )
+            config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]

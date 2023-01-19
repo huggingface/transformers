@@ -819,11 +819,15 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         loss = None
         with torch.no_grad():
             # calculate the labels to be predicted
-            # first, unnormalize the frames
-            device = pixel_values.device
-            mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device)[None, None, :, None, None]
-            std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device)[None, None, :, None, None]
-            frames = pixel_values * std + mean  # in [0, 1]
+            if self.config.num_channels != 3:
+                # Can't unnormalize with default means/stds
+                frames = pixel_values
+            else:
+                # first, unnormalize the frames
+                device = pixel_values.device
+                mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device)[None, None, :, None, None]
+                std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device)[None, None, :, None, None]
+                frames = pixel_values * std + mean  # in [0, 1]
 
             batch_size, time, num_channels, height, width = frames.shape
             tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
@@ -859,6 +863,10 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
                     tubelet_size * patch_size * patch_size * num_channels,
                 )
             else:
+                if self.config.num_channels != 3:
+                    raise ValueError(
+                        "Can't unnormalize non-RGB images. Consider setting config.norm_pix_loss to False."
+                    )
                 # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
                 frames = frames.view(
                     batch_size,
@@ -898,8 +906,8 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
 
 @add_start_docstrings(
-    """VideoMAE Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.""",
+    """VideoMAE Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
+    states of all tokens) e.g. for ImageNet.""",
     VIDEOMAE_START_DOCSTRING,
 )
 class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):

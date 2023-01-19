@@ -40,7 +40,7 @@ from .configuration_mctct import MCTCTConfig
 
 logger = logging.get_logger(__name__)
 
-if not is_torch_less_than_1_9:
+if is_torch_less_than_1_9:
     logger.warning(
         f"You are using torch=={torch.__version__}, but torch>=1.9.0 is required to use MCTCTModel. Please upgrade"
         " torch."
