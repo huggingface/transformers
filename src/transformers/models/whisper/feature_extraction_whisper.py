@@ -43,7 +43,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, defaults to 80):
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         hop_length (`int`, defaults to 160):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, defaults to 30):
