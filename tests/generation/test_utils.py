@@ -2485,6 +2485,29 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_sequences_no_mask.tolist(), output_sequences_with_mask.tolist())
 
+    def test_transition_scores_greedy_search(self):
+        articles = [
+            "Justin Timberlake",
+            "Michael Phelps",
+        ]
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
+        outputs = model.generate(
+            input_ids=input_ids,
+            max_new_tokens=10,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        transition_scores = model.compute_transition_beam_scores(outputs.sequences, outputs.scores)
+        breakpoint()
+
     def test_transition_scores_beam_search_encoder_decoder(self):
         articles = [
             "Justin Timberlake and Jessica Biel, welcome to parenthood.",
