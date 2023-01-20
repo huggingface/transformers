@@ -1480,9 +1480,7 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = ConditionalDetrConvEncoder(
-            config.backbone, config.dilation, config.use_pretrained_backbone, config.num_channels
-        )
+        backbone = ConditionalDetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = ConditionalDetrConvModel(backbone, position_embeddings)
 
