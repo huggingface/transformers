@@ -149,8 +149,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
-        self.type_vocab_sizes = config.type_vocab_sizes
+        self.config = config
         self.number_of_token_type_embeddings = len(config.type_vocab_sizes)
         self.reset_position_index_per_cell = config.reset_position_index_per_cell
         self.hidden_size = config.hidden_size
@@ -163,7 +162,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.config.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
@@ -173,7 +172,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
                 shape=[self.max_position_embeddings, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
-        for i, type_vocab_size in enumerate(self.type_vocab_sizes):
+        for i, type_vocab_size in enumerate(self.config.type_vocab_sizes):
             with tf.name_scope(f"token_type_embeddings_{i}"):
                 setattr(
                     self,
@@ -220,9 +219,9 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
             if self.reset_position_index_per_cell:
 
                 # shape (batch_size, seq_len)
-                col_index = IndexMap(token_type_ids[:, :, 1], self.type_vocab_sizes[1], batch_dims=1)
+                col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
                 # shape (batch_size, seq_len)
-                row_index = IndexMap(token_type_ids[:, :, 2], self.type_vocab_sizes[2], batch_dims=1)
+                row_index = IndexMap(token_type_ids[:, :, 2], self.config.type_vocab_sizes[2], batch_dims=1)
                 # shape (batch_size, seq_len)
                 full_index = ProductIndexMap(col_index, row_index)
                 # shape (max_rows * max_columns,). First absolute position for every cell
@@ -238,10 +237,10 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -687,7 +686,7 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
 
         self.transform = TFTapasPredictionHeadTransform(config, name="transform")
@@ -697,7 +696,7 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape: tf.TensorShape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
 
@@ -713,14 +712,14 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states

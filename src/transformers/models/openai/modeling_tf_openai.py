@@ -202,7 +202,6 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.return_dict = config.use_return_dict
         self.num_hidden_layers = config.n_layer
-        self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
         self.n_positions = config.n_positions
         self.initializer_range = config.initializer_range
@@ -302,10 +301,10 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = self.tokens_embed(input_ids, mode="embedding")
@@ -316,10 +315,10 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 token_type_ids,
-                tf.cast(self.vocab_size, dtype=token_type_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=token_type_ids.dtype),
                 message=(
                     "token_type_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(token_type_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(token_type_ids)} >= {self.config.vocab_size})"
                 ),
             )
             token_type_embeds = self.tokens_embed(token_type_ids, mode="embedding")

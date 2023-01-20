@@ -402,13 +402,13 @@ class TFXLNetLayer(tf.keras.layers.Layer):
 class TFXLNetLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
+        self.config = config
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
 
     def get_output_embeddings(self):
@@ -423,7 +423,7 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")

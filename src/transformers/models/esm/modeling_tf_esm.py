@@ -202,7 +202,7 @@ class TFEsmEmbeddings(Layer):
         self.padding_idx = config.pad_token_id
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
-        self.vocab_size = config.vocab_size
+        self.config = config
 
     def call(
         self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -219,10 +219,10 @@ class TFEsmEmbeddings(Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = self.word_embeddings(input_ids)
@@ -1222,13 +1222,13 @@ class TFEsmLMHead(Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="decoder",
         )
-        self.vocab_size = config.vocab_size
+        self.config = config
 
     def build(self, input_shape):
         super().build(input_shape)
         # Separate bias to match the PT model and allow weight cross-loading to work
         # Put it in the build so it gets the right name when adding it as a weight
-        self.bias = self.add_weight("bias", shape=(self.vocab_size,), initializer="zeros", trainable=True)
+        self.bias = self.add_weight("bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
 
     def get_bias(self):
         return {"bias": self.bias}

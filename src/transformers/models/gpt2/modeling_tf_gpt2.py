@@ -314,7 +314,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
 
         self.num_hidden_layers = config.n_layer
-        self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
         self.n_positions = config.n_positions
         self.initializer_range = config.initializer_range
@@ -449,7 +448,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
                 tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = self.wte(input_ids, mode="embedding")

@@ -586,7 +586,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
 class TFCTRLLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
+        self.config = config
         # CTRL has numerical issues in XLA generate
         self.supports_xla_generation = False
 
@@ -595,7 +595,7 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
 
     def get_output_embeddings(self):
@@ -610,7 +610,7 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
