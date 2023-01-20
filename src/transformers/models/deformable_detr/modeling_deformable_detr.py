@@ -28,7 +28,6 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2FN
-from ..auto import AutoBackbone
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -44,6 +43,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
+from ..auto import AutoBackbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 

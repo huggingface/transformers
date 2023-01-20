@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Deformable DETR model configuration"""
 
-from ..auto import CONFIG_MAPPING
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -42,7 +42,8 @@ class DeformableDetrConfig(PretrainedConfig):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which case it will default to `ResNetConfig()`.
+            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
+            case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 300):
@@ -93,7 +94,8 @@ class DeformableDetrConfig(PretrainedConfig):
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use pretrained weights for the backbone. Only supported when `use_timm_backbone` = `True`.
         dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when `use_timm_backbone` = `True`.
+            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
+            `use_timm_backbone` = `True`.
         class_cost (`float`, *optional*, defaults to 1):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
