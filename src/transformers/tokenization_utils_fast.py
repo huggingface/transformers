@@ -165,12 +165,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added_vocab = dict((tok, index) for tok, index in full_vocab.items() if tok not in base_vocab)
         return added_vocab
 
-    def __len__(self) -> int:
-        """
-        Size of the full vocabulary with the added tokens.
-        """
-        return self._tokenizer.get_vocab_size(with_added_tokens=True)
-
     @property
     def backend_tokenizer(self) -> TokenizerFast:
         """
