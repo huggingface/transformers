@@ -74,15 +74,7 @@ def prepare_image_inputs(image_processor_tester, equal_resolution=False, numpify
                 min_resolution = max(image_processor_tester.size_divisor, min_resolution)
             width, height = np.random.choice(np.arange(min_resolution, image_processor_tester.max_resolution), 2)
         image_inputs.append(
-            np.random.randint(
-                255,
-                size=(
-                    image_processor_tester.num_channels,
-                    width,
-                    height,
-                ),
-                dtype=np.uint8,
-            )
+            np.random.randint(255, size=(image_processor_tester.num_channels, width, height), dtype=np.uint8)
         )
 
     if not numpify and not torchify:
