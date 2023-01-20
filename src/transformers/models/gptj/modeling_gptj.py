@@ -904,7 +904,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="ydshieh/tiny-random-gptj-for-sequence-classification",
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
         real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
