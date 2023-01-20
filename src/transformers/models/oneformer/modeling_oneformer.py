@@ -2917,7 +2917,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> class_predictions = outputs.transformer_decoder_class_predictions
 
         >>> f"👉 Mask Predictions Shape: {list(mask_predictions.shape)}, Class Predictions Shape: {list(class_predictions.shape)}"
-        '👉 Mask Predictions Shape: [1, 150, 128, 176], Class Predictions Shape: [1, 150, 151]'
+        '👉 Mask Predictions Shape: [1, 150, 128, 171], Class Predictions Shape: [1, 150, 151]'
         ```"""
 
         if pixel_values is None:
