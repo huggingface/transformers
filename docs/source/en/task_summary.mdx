@@ -84,13 +84,12 @@ Image classification labels an entire image from a predefined set of classes. Li
 ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 ... )
 >>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
->>> preds
-[{'score': 0.4403, 'label': 'lynx, catamount'},
- {'score': 0.0343,
-  'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'},
- {'score': 0.0321, 'label': 'snow leopard, ounce, Panthera uncia'},
- {'score': 0.0235, 'label': 'Egyptian cat'},
- {'score': 0.023, 'label': 'tiger cat'}]
+>>> print(*preds, sep='\n')
+{'score': 0.4403, 'label': 'lynx, catamount'}
+{'score': 0.0343, 'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'}
+{'score': 0.0321, 'label': 'snow leopard, ounce, Panthera uncia'}
+{'score': 0.0235, 'label': 'Egyptian cat'}
+{'score': 0.023, 'label': 'tiger cat'}
 ```
 
 ### Object detection
@@ -131,17 +130,11 @@ Segmentation tasks are helpful in self-driving vehicles to create a pixel-level 
 >>> preds = segmenter(
 ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 ... )
->>> preds = [{"score": round(pred["score"], 4), "label": pred["label"], "mask": pred["mask"]} for pred in preds]
+>>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
 >>> preds
-[{'score': 0.9856,
-  'label': 'LABEL_184',
-  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F83A8477A30>},
- {'score': 0.9976,
-  'label': 'snow',
-  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F83A8412670>},
- {'score': 0.9962,
-  'label': 'cat',
-  'mask': <PIL.Image.Image image mode=L size=960x686 at 0x7F83A8423EB0>}]
+[{'score': 0.9856, 'label': 'LABEL_184'},
+ {'score': 0.9976, 'label': 'snow'},
+ {'score': 0.9962, 'label': 'cat'}]
 ```
 
 ### Depth estimation
@@ -208,49 +201,14 @@ Two common types of token classification are:
 ...     }
 ...     for pred in preds
 ... ]
->>> preds
-[{'entity': 'I-ORG',
-  'score': 0.9968,
-  'index': 1,
-  'word': 'Hu',
-  'start': 0,
-  'end': 2},
- {'entity': 'I-ORG',
-  'score': 0.9293,
-  'index': 2,
-  'word': '##gging',
-  'start': 2,
-  'end': 7},
- {'entity': 'I-ORG',
-  'score': 0.9763,
-  'index': 3,
-  'word': 'Face',
-  'start': 8,
-  'end': 12},
- {'entity': 'I-MISC',
-  'score': 0.9983,
-  'index': 6,
-  'word': 'French',
-  'start': 18,
-  'end': 24},
- {'entity': 'I-LOC',
-  'score': 0.999,
-  'index': 10,
-  'word': 'New',
-  'start': 42,
-  'end': 45},
- {'entity': 'I-LOC',
-  'score': 0.9987,
-  'index': 11,
-  'word': 'York',
-  'start': 46,
-  'end': 50},
- {'entity': 'I-LOC',
-  'score': 0.9992,
-  'index': 12,
-  'word': 'City',
-  'start': 51,
-  'end': 55}]
+>>> print(*preds, sep='\n')
+{'entity': 'I-ORG', 'score': 0.9968, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2}
+{'entity': 'I-ORG', 'score': 0.9293, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7}
+{'entity': 'I-ORG', 'score': 0.9763, 'index': 3, 'word': 'Face', 'start': 8, 'end': 12}
+{'entity': 'I-MISC', 'score': 0.9983, 'index': 6, 'word': 'French', 'start': 18, 'end': 24}
+{'entity': 'I-LOC', 'score': 0.999, 'index': 10, 'word': 'New', 'start': 42, 'end': 45}
+{'entity': 'I-LOC', 'score': 0.9987, 'index': 11, 'word': 'York', 'start': 46, 'end': 50}
+{'entity': 'I-LOC', 'score': 0.9992, 'index': 12, 'word': 'City', 'start': 51, 'end': 55}
 ```
 
 ### Question answering
@@ -271,27 +229,8 @@ There are two common types of question answering:
 ...     question="What is the name of the repository?",
 ...     context="The name of the repository is huggingface/transformers",
 ... )
->>> preds = [
-...     {"score": round(preds["score"], 4), "start": preds["start"], "end": preds["end"], "answer": preds["answer"]}
-...     for pred in preds
-... ]
->>> preds
-[{'score': 0.9327,
-  'start': 30,
-  'end': 54,
-  'answer': 'huggingface/transformers'},
- {'score': 0.9327,
-  'start': 30,
-  'end': 54,
-  'answer': 'huggingface/transformers'},
- {'score': 0.9327,
-  'start': 30,
-  'end': 54,
-  'answer': 'huggingface/transformers'},
- {'score': 0.9327,
-  'start': 30,
-  'end': 54,
-  'answer': 'huggingface/transformers'}]
+>>> print(f"score: {round(preds['score'], 4)}, start: {preds['start']}, end: {preds['end']}, answer: {preds['answer']}")
+score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 ```
 
 ### Summarization
