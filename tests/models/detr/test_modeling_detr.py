@@ -155,7 +155,7 @@ class DetrModelTester:
 
     def create_and_check_no_timm_backbone(self, config, pixel_values, pixel_mask, labels):
         config.use_timm_backbone = False
-        config.backbone_config = ResNetConfig(out_features=["stage2", "stage3", "stage4"])
+        config.backbone_config = ResNetConfig()
         model = DetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
