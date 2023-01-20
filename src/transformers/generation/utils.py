@@ -940,15 +940,15 @@ class GenerationMixin:
                 The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
                 shorter if all batches finished early due to the `eos_token_id`.
             scores (`tuple(torch.FloatTensor)`):
-                Beam transition scores for each vocabulary token at each generation step. Beam transition scores
-                consisting of log probabilities of tokens conditioned on log softmax of previously generated tokens in
-                this beam. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each
+                Transition scores for each vocabulary token at each generation step. Beam transition scores
+                consisting of log probabilities of tokens conditioned on log softmax of previously generated tokens
+                Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each
                 generated token), with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
             beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*):
                 Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
                 `(batch_size*num_return_sequences, input_ids.shape[-1])`. Only required if a `num_beams>1` at
                 generate-time.
-            normalize_logits (`bool`, *optional*, defaults to `True`):
+            normalize_logits (`bool`, *optional*, defaults to `False`):
                 Whether to normalize the logits (which, for legacy reasons, may be unnormalized).
 
         Return:
