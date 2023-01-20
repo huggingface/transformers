@@ -1355,6 +1355,7 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
             Labels for computing the audiovisual loss. Indices should be in `[0, ..., num_classes-1]` where num_classes
             refers to the number of classes in audiovisual tasks.
+
         Return:
 
         Examples:
