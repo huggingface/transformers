@@ -30,6 +30,8 @@ GPT2MQA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bigcode/santacoder": "https://huggingface.co/bigcode/santacoder/resolve/main/config.json",
 }
 
+MULTI_HEAD = "multihead"
+MULTI_QUERY = "multiquery"
 
 class GPT2MQAConfig(PretrainedConfig):
     """
@@ -109,6 +111,8 @@ class GPT2MQAConfig(PretrainedConfig):
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
+        attention_head_type (`str`, *optional*, defaults to `"multiquery"`):
+            Whether to use multiquery or multihead attention. Alternatively one can set `"multihead"`,
 
     Example:
 
@@ -159,6 +163,7 @@ class GPT2MQAConfig(PretrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        attention_head_type=MULTI_QUERY,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -182,6 +187,7 @@ class GPT2MQAConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.attention_head_type = attention_head_type
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
