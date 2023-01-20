@@ -849,8 +849,8 @@ def pipeline(
                             BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*"
                         )
                         alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
-                        allow_regex = [language_model_glob, alphabet_filename]
-                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_regex=allow_regex)
+                        allow_patterns = [language_model_glob, alphabet_filename]
+                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_patterns=allow_patterns)
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:
