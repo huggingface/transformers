@@ -850,11 +850,11 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*): Contains precomputed key and value
-            hidden states of the attention blocks. Can be used to speed up decoding. If `past_key_values` are used, the
-            user can optionally input only the last `decoder_input_ids` (those that don't have their past key value
-            states given to this model) of shape `(batch_size, 1)` instead of all `decoder_input_ids` of shape
-            `(batch_size, sequence_length)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*):
+            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
