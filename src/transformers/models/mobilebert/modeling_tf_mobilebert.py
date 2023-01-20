@@ -166,9 +166,8 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
 
         self.trigram_input = config.trigram_input
         self.embedding_size = config.embedding_size
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
-        self.type_vocab_size = config.type_vocab_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
         self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
@@ -184,14 +183,14 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.embedding_size],
+                shape=[self.config.vocab_size, self.embedding_size],
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.type_vocab_size, self.hidden_size],
+                shape=[self.config.type_vocab_size, self.hidden_size],
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
@@ -218,10 +217,10 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -658,13 +657,12 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.transform = TFMobileBertPredictionHeadTransform(config, name="transform")
-        self.vocab_size = config.vocab_size
         self.config = config
 
     def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
         self.dense = self.add_weight(
-            shape=(self.config.hidden_size - self.config.embedding_size, self.vocab_size),
+            shape=(self.config.hidden_size - self.config.embedding_size, self.config.vocab_size),
             initializer="zeros",
             trainable=True,
             name="dense/weight",
@@ -682,14 +680,14 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value):
         self.decoder = value
-        self.vocab_size = shape_list(value)[0]
+        self.config.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         return {"bias": self.bias}
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
