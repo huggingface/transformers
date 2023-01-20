@@ -79,9 +79,9 @@ class TvltImageProcessor(BaseImageProcessor):
             Size of the output image after resizing. The shortest edge of the image will be resized to
             `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
             `size` in the `preprocess` method.
-        patch_size (`int` *optional*, defaults to `16`):
+        patch_size (`int` *optional*, defaults to 16):
             The patch size of image patch embedding.
-        num_frames (`int` *optional*, defaults to `8`):
+        num_frames (`int` *optional*, defaults to 8):
             The maximum number of video frames.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
