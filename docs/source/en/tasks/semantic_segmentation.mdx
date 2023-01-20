@@ -456,6 +456,8 @@ Load an image for inference:
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
 </div>
 
+<frameworkcontent>
+<pt>
 The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for image segmentation with your model, and pass your image to it:
 
 ```py
@@ -520,10 +522,50 @@ Next, rescale the logits to the original image size:
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
 
-To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) that maps each class to their RGB values. Then you can combine and plot your image and the predicted segmentation map:
+</pt>
+</frameworkcontent>
+
+<frameworkcontent>
+<tf>
+Load an image processor to preprocess the image and return the input as TensorFlow tensors:
+
+```py
+>>> from transformers import AutoImageProcessor
+
+>>> image_processor = AutoImageProcessor.from_pretrained("MariaK/scene_segmentation")
+>>> inputs = image_processor(image, return_tensors="tf")
+```
+
+Pass your input to the model and return the `logits`:
+
+```py
+>>> from transformers import TFAutoModelForSemanticSegmentation
+
+>>> model = TFAutoModelForSemanticSegmentation.from_pretrained("MariaK/scene_segmentation")
+>>> logits = model(**inputs).logits
+```
+
+Next, rescale the logits to the original image size and apply argmax on the class dimension:
+```py
+>>> logits = tf.transpose(logits, [0, 2, 3, 1])
+
+>>> upsampled_logits = tf.image.resize(
+...     logits,
+...     # We reverse the shape of `image` because `image.size` returns width and height.
+...     image.size[::-1]
+... )
+
+>>> pred_seg = tf.math.argmax(upsampled_logits, axis=-1)[0]
+```
+
+</tf>
+</frameworkcontent>
+
+To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) as `ade_palette()` that maps each class to their RGB values. Then you can combine and plot your image and the predicted segmentation map:
 
 ```py
 >>> import matplotlib.pyplot as plt
+>>> import numpy as np
 
 >>> color_seg = np.zeros((pred_seg.shape[0], pred_seg.shape[1], 3), dtype=np.uint8)
 >>> palette = np.array(ade_palette())
