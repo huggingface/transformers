@@ -681,6 +681,8 @@ class CLIPTextTransformer(nn.Module):
         self.embeddings = CLIPTextEmbeddings(config)
         self.encoder = CLIPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
+        # For now, assume that the below value is the eos token id as the config's eos_token_id isn't guaranteed to be correct
+        self.eos_token_id = self.config.vocab_size-1
 
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
@@ -734,12 +736,12 @@ class CLIPTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        # text_embeds.shape = [batch_size, sequence_length, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
+        # Fixed according to https://github.com/huggingface/transformers/issues/21029 where clip doesn't always refer to the eos token
         pooled_output = last_hidden_state[
             torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            (input_ids.to(dtype=torch.int, device=last_hidden_state.device)== self.config.vocab_size-1).nonzero(as_tuple=True)[-1][0],
+            (input_ids.to(dtype=torch.int, device=last_hidden_state.device)== self.eos_token_id).nonzero(as_tuple=True)[-1][0],
         ]
 
         if not return_dict:
