@@ -157,14 +157,18 @@ class DonutProcessor(ProcessorMixin):
         if added_vocab is None:
             added_vocab = self.tokenizer.get_added_vocab()
 
-        if end_of_sequence := re.search(r"</s>$", tokens):
+        end_of_sequence = re.search(r"</s>$", tokens)
+        if end_of_sequence:
             tokens = self._white_out_str(tokens, end_of_sequence.span())
 
         remaining_tokens = tokens
         out = {}
         processed_token = False  # Whether we processed any tokens at all
 
-        while next_open_token := re.search(r"^\s*<s_(?P<group_key>.*?)-(?P<obj_type>.*?)>", remaining_tokens):
+        while True:
+            next_open_token = re.search(r"^\s*<s_(?P<group_key>.*?)-(?P<obj_type>.*?)>", remaining_tokens)
+            if not next_open_token:
+                break
             processed_token = True
             # if we have dict object at this level, we add them to out one by one
             remaining_tokens = self._white_out_str(remaining_tokens, next_open_token.span())
@@ -307,7 +311,10 @@ class DonutProcessor(ProcessorMixin):
     def _get_list_item_indices(self, text: str):
         # remove everything between open and close tags to make sure we don't pick up on lists nested further down
         stripped_text = text
-        while open_tag := re.search(r"<s_(?P<group_key>.*?)-(?P<obj_type>.*?)>", stripped_text):
+        while True:
+            open_tag = re.search(r"<s_(?P<group_key>.*?)-(?P<obj_type>.*?)>", stripped_text)
+            if not open_tag:
+                break
             # white-out any group we come across at this level, so we can check for remaining separating tokens at this
             # level
             stripped_text = self._white_out_str(stripped_text, open_tag.span())
