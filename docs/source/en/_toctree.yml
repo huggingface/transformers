@@ -420,6 +420,8 @@
         title: DiT
       - local: model_doc/dpt
         title: DPT
+      - local: model_doc/efficientformer
+        title: EfficientFormer
       - local: model_doc/glpn
         title: GLPN
       - local: model_doc/imagegpt
