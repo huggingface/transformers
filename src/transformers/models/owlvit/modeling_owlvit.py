@@ -204,7 +204,7 @@ class OwlViTObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~OwlViTFeatureExtractor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         text_embeds (`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
@@ -248,12 +248,12 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
         target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual target image in the batch
-            (disregarding possible padding). You can use [`~OwlViTFeatureExtractor.post_process_object_detection`] to
+            (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual query image in the batch
-            (disregarding possible padding). You can use [`~OwlViTFeatureExtractor.post_process_object_detection`] to
+            (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
             Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
