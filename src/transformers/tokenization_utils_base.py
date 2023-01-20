@@ -1578,6 +1578,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f" special_tokens={self.special_tokens_map_extended})"
         )
 
+    def __len__(self) -> int:
+        raise NotImplementedError()
+
     def get_vocab(self) -> Dict[str, int]:
         """
         Returns the vocabulary as a dictionary of token to index.
