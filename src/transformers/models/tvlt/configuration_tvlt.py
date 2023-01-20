@@ -83,9 +83,9 @@ class TvltConfig(PretrainedConfig):
             Number of hidden layers in the decoder.
         decoder_intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
-        pixel_mask_ratio (`float`, *optional*, defaults to `0.75`):
+        pixel_mask_ratio (`float`, *optional*, defaults to 0.75):
             Pixel patch masking ratio.
-        audio_mask_ratio (`float`, *optional*, defaults to `0.15`):
+        audio_mask_ratio (`float`, *optional*, defaults to 0.15):
             Audio patch masking ratio.
         task_matching (`bool`, *optional*, defaults to `True`):
             Whether to use vision audio matching task in pretraining.
