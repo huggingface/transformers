@@ -547,28 +547,16 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         segmentation_map: "np.ndarray",
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
-        do_reduce_labels: bool = False,
+        reduce_labels: bool = False,
         **kwargs
     ):
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in v4.27. "
-                "Please use `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            if do_reduce_labels is not None:
-                raise ValueError(
-                    "Cannot specify both `reduce_labels` and `do_reduce_labels`. Please use `do_reduce_labels`."
-                )
-            do_reduce_labels = kwargs.pop("reduce_labels")
-
-        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+        reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         return convert_segmentation_map_to_binary_masks(
             segmentation_map=segmentation_map,
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             ignore_index=ignore_index,
-            reduce_labels=do_reduce_labels,
+            reduce_labels=reduce_labels,
         )
 
     def __call__(self, images, segmentation_maps=None, **kwargs) -> BatchFeature:
@@ -830,7 +818,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         segmentation_maps: ImageInput = None,
         instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
         ignore_index: Optional[int] = None,
-        do_reduce_labels: bool = False,
+        reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ):
@@ -885,19 +873,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             warnings.warn(
                 "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
             )
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` argument has been deprecated and will be removed in v4.27. Use `do_reduce_labels`"
-                " instead.",
-            )
-            if do_reduce_labels is not None:
-                raise ValueError(
-                    "Cannot set both `reduce_labels` and `do_reduce_labels`. Please use `do_reduce_labels` instead."
-                )
-            do_reduce_labels = kwargs["reduce_labels"]
-
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
+        reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
@@ -915,7 +892,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
                 masks, classes = self.convert_segmentation_map_to_binary_masks(
-                    segmentation_map, instance_id, ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
+                    segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
                 )
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
