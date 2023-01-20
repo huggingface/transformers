@@ -286,7 +286,7 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
-extras["torchvision"] = deps_list("torchvision")
+extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("decord")
@@ -333,7 +333,7 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
-    + extras["torchvision"]
+    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
@@ -354,7 +354,7 @@ extras["dev-torch"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
-    + extras["torchvision"]
+    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]
