@@ -1262,6 +1262,7 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
             Labels for computing the question answering loss. Indices should be in `[0, ..., num_answer_choices-1]`
             where num_answer_choices refers to the number of answer choices in question answering.
+
         Return:
 
         Examples:
