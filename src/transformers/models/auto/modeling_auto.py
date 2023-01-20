@@ -69,6 +69,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("donut-swin", "DonutSwinModel"),
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
+        ("efficientformer", "EfficientFormerModel"),
         ("electra", "ElectraModel"),
         ("ernie", "ErnieModel"),
         ("esm", "EsmModel"),
@@ -397,6 +398,13 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("dinat", "DinatForImageClassification"),
+        (
+            "efficientformer",
+            (
+                "EfficientFormerForImageClassification",
+                "EfficientFormerForImageClassificationWithTeacher",
+            ),
+        ),
         ("imagegpt", "ImageGPTForImageClassification"),
         ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
         ("mobilenet_v1", "MobileNetV1ForImageClassification"),
