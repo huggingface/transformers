@@ -2151,9 +2151,9 @@ class DetaLoss(nn.Module):
         self.assign_second_stage = assign_second_stage
 
         if self.assign_first_stage:
-            self.stg1_assigner = Stage1Assigner()
+            self.stg1_assigner = DetaStage1Assigner()
         if self.assign_second_stage:
-            self.stg2_assigner = Stage2Assigner(num_queries)
+            self.stg2_assigner = DetaStage2Assigner(num_queries)
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_labels
     def loss_labels(self, outputs, targets, indices, num_boxes):
@@ -2506,7 +2506,7 @@ def nonzero_tuple(x):
 
 
 # from https://github.com/facebookresearch/detectron2/blob/9921a2caa585d4fa66c4b534b6fab6e74d89b582/detectron2/modeling/matcher.py#L9
-class Matcher(object):
+class DetaMatcher(object):
     """
     This class assigns to each predicted "element" (e.g., a box) a ground-truth element. Each predicted element will
     have exactly zero or one matches; each ground-truth element may be matched to zero or more predicted elements.
@@ -2670,13 +2670,13 @@ def sample_topk_per_gt(pr_inds, gt_inds, iou, k):
 
 
 # modified from https://github.com/facebookresearch/detectron2/blob/cbbc1ce26473cb2a5cc8f58e8ada9ae14cb41052/detectron2/modeling/roi_heads/roi_heads.py#L123
-class Stage2Assigner(nn.Module):
+class DetaStage2Assigner(nn.Module):
     def __init__(self, num_queries, max_k=4):
         super().__init__()
         self.positive_fraction = 0.25
         self.bg_label = 400  # number > 91 to filter out later
         self.batch_size_per_image = num_queries
-        self.proposal_matcher = Matcher(thresholds=[0.6], labels=[0, 1], allow_low_quality_matches=True)
+        self.proposal_matcher = DetaMatcher(thresholds=[0.6], labels=[0, 1], allow_low_quality_matches=True)
         self.k = max_k
 
     def _sample_proposals(self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor):
@@ -2749,7 +2749,7 @@ class Stage2Assigner(nn.Module):
 
 
 # modified from https://github.com/facebookresearch/detectron2/blob/cbbc1ce26473cb2a5cc8f58e8ada9ae14cb41052/detectron2/modeling/proposal_generator/rpn.py#L181
-class Stage1Assigner(nn.Module):
+class DetaStage1Assigner(nn.Module):
     def __init__(self, t_low=0.3, t_high=0.7, max_k=4):
         super().__init__()
         self.positive_fraction = 0.5
@@ -2757,7 +2757,9 @@ class Stage1Assigner(nn.Module):
         self.k = max_k
         self.t_low = t_low
         self.t_high = t_high
-        self.anchor_matcher = Matcher(thresholds=[t_low, t_high], labels=[0, -1, 1], allow_low_quality_matches=True)
+        self.anchor_matcher = DetaMatcher(
+            thresholds=[t_low, t_high], labels=[0, -1, 1], allow_low_quality_matches=True
+        )
 
     def _subsample_labels(self, label):
         """
