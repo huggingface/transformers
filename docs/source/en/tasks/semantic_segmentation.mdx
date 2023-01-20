@@ -94,6 +94,7 @@ The next step is to load a SegFormer image processor to prepare the images and a
 
 ```py
 >>> from transformers import AutoImageProcessor
+
 >>> checkpoint = "nvidia/mit-b0"
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, reduce_labels=True)
 ```
@@ -143,10 +144,11 @@ In this guide, you'll use `tf.image` to randomly change the color properties of 
 library you like.
 Define two separate transformation functions:
 - training data transformations that include image augmentation
-- validation data transformations that only transposes the images, since computer vision models in transformers expect channels-first layout
+- validation data transformations that only transpose the images, since computer vision models in transformers expect channels-first layout
 
 ```py
 >>> import tensorflow as tf
+
 
 >>> def aug_transforms(image):
 ...     image = tf.keras.utils.img_to_array(image)
@@ -156,6 +158,7 @@ Define two separate transformation functions:
 ...     image = tf.image.random_hue(image, 0.1)
 ...     image = tf.transpose(image, (2, 0, 1))
 ...     return image
+
 
 >>> def transforms(image):
 ...     image = tf.keras.utils.img_to_array(image)
@@ -173,6 +176,7 @@ annotations to `labels`. `ImageProcessor` also takes care of resizing and normal
 ...     labels = [x for x in example_batch["annotation"]]
 ...     inputs = image_processor(images, labels)
 ...     return inputs
+
 
 >>> def val_transforms(example_batch):
 ...     images = [transforms(x.convert("RGB")) for x in example_batch["image"]]
@@ -262,9 +266,7 @@ logits first, and then reshaped to match the size of the labels before you can c
 ...     per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
 ...     per_category_iou = metrics.pop("per_category_iou").tolist()
 
-...     metrics.update(
-...         {f"accuracy_{id2label[i]}": v for i, v in enumerate(per_category_accuracy)}
-...     )
+...     metrics.update({f"accuracy_{id2label[i]}": v for i, v in enumerate(per_category_accuracy)})
 ...     metrics.update({f"iou_{id2label[i]}": v for i, v in enumerate(per_category_iou)})
 ...     return {"val_" + k: v for k, v in metrics.items()}
 ```
@@ -288,9 +290,7 @@ You're ready to start training your model now! Load SegFormer with [`AutoModelFo
 ```py
 >>> from transformers import AutoModelForSemanticSegmentation, TrainingArguments, Trainer
 
->>> model = AutoModelForSemanticSegmentation.from_pretrained(
-...     checkpoint, id2label=id2label, label2id=label2id
-... )
+>>> model = AutoModelForSemanticSegmentation.from_pretrained(checkpoint, id2label=id2label, label2id=label2id)
 ```
 
 At this point, only three steps remain:
@@ -396,14 +396,14 @@ Convert your datasets to the `tf.data.Dataset` format using the [`~datasets.Data
 ...     columns=["pixel_values", "label"],
 ...     shuffle=True,
 ...     batch_size=batch_size,
-...     collate_fn=data_collator
+...     collate_fn=data_collator,
 ... )
 
 >>> tf_eval_dataset = test_ds.to_tf_dataset(
 ...     columns=["pixel_values", "label"],
 ...     shuffle=True,
 ...     batch_size=batch_size,
-...     collate_fn=data_collator
+...     collate_fn=data_collator,
 ... )
 ```
 
@@ -414,12 +414,11 @@ and use the [PushToHubCallback](./main_classes/keras_callbacks#transformers.Push
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback, PushToHubCallback
 
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset, batch_size=batch_size, label_cols=["labels"])
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="scene_segmentation",
-...     tokenizer=image_processor
+>>> metric_callback = KerasMetricCallback(
+...     metric_fn=compute_metrics, eval_dataset=tf_eval_dataset, batch_size=batch_size, label_cols=["labels"]
 ... )
+
+>>> push_to_hub_callback = PushToHubCallback(output_dir="scene_segmentation", tokenizer=image_processor)
 
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
@@ -552,7 +551,7 @@ Next, rescale the logits to the original image size and apply argmax on the clas
 >>> upsampled_logits = tf.image.resize(
 ...     logits,
 ...     # We reverse the shape of `image` because `image.size` returns width and height.
-...     image.size[::-1]
+...     image.size[::-1],
 ... )
 
 >>> pred_seg = tf.math.argmax(upsampled_logits, axis=-1)[0]
