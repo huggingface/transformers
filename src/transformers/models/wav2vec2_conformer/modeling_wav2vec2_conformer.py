@@ -1511,7 +1511,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         >>> model = model.train()
         >>> loss = model(
         ...     input_values, mask_time_indices=mask_time_indices, sampled_negative_indices=sampled_negative_indices
-        ... ).loss
+        >>> ).loss
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

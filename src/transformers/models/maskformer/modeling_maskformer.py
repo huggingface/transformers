@@ -1763,7 +1763,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> # you can pass them to image_processor for postprocessing
         >>> predicted_semantic_map = image_processor.post_process_semantic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]
+        >>> )[0]
 
         >>> # we refer to the demo notebooks for visualization (see "Resources" section in the MaskFormer docs)
         >>> list(predicted_semantic_map.shape)

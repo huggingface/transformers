@@ -134,7 +134,7 @@ images) and `labels` (which are the `input_ids` of the encoded target sequence).
 >>> labels = tokenizer(
 ...     "an image of two cats chilling on a couch",
 ...     return_tensors="pt",
-... ).input_ids
+>>> ).input_ids
 
 >>> # the forward function automatically creates the correct decoder_input_ids
 >>> loss = model(pixel_values=pixel_values, labels=labels).loss

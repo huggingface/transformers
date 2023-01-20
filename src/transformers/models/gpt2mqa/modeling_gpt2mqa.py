@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2021 The OpenAI Team Authors and HuggingFace Inc. team.
+# Copyright 2023 The OpenAI Team Authors and HuggingFace Inc. team.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch OpenAI ImageGPT model."""
+"""PyTorch GPT2MQA model."""
 
 import math
 import os
-import warnings
-from typing import Any, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -30,31 +31,37 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_imagegpt import ImageGPTConfig
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
+from ...utils.model_parallel_utils import assert_device_map, get_device_map
+from .configuration_gpt2mqa import GPT2MQAConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "openai/imagegpt-small"
-_CONFIG_FOR_DOC = "ImageGPTConfig"
-_TOKENIZER_FOR_DOC = "ImageGPTTokenizer"
+_CHECKPOINT_FOR_DOC = "bigcode/santacoder"
+_CONFIG_FOR_DOC = "GPT2MQAConfig"
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
-IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/imagegpt-small",
-    "openai/imagegpt-medium",
-    "openai/imagegpt-large",
-    # See all Image GPT models at https://huggingface.co/models?filter=imagegpt
+GPT2MQA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "bigcode/santacoder",
+    # See all GPT2MQA models at https://huggingface.co/models?filter=gpt2mqa
 ]
 
 
-def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
-    """
-    Load tf checkpoints in a pytorch model
-    """
+# Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2 with gpt2->gpt2mqa
+def load_tf_weights_in_gpt2mqa(model, config, gpt2mqa_checkpoint_path):
+    """Load tf checkpoints in a pytorch model"""
     try:
         import re
 
@@ -65,15 +72,14 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
             "https://www.tensorflow.org/install/ for installation instructions."
         )
         raise
-    tf_path = os.path.abspath(imagegpt_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    tf_path = os.path.abspath(gpt2mqa_checkpoint_path)
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
-
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array.squeeze())
@@ -81,26 +87,12 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
     for name, array in zip(names, arrays):
         name = name[6:]  # skip "model/"
         name = name.split("/")
-
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ) or name[-1] in ["_step"]:
-            logger.info("Skipping {}".format("/".join(name)))
-            continue
-
         pointer = model
-        if name[-1] not in ["wtet"]:
-            pointer = getattr(pointer, "transformer")
-
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+\d+", m_name):
                 scope_names = re.split(r"(\d+)", m_name)
             else:
                 scope_names = [m_name]
-
             if scope_names[0] == "w" or scope_names[0] == "g":
                 pointer = getattr(pointer, "weight")
             elif scope_names[0] == "b":
@@ -108,74 +100,26 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
             elif scope_names[0] == "wpe" or scope_names[0] == "wte":
                 pointer = getattr(pointer, scope_names[0])
                 pointer = getattr(pointer, "weight")
-            elif scope_names[0] in ["q_proj", "k_proj", "v_proj"]:
-                pointer = getattr(pointer, "c_attn")
-                pointer = getattr(pointer, "weight")
-            elif len(name) == 3 and name[1] == "attn" and scope_names[0] == "c_proj":
-                pointer = getattr(pointer, scope_names[0])
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "wtet":
-                pointer = getattr(pointer, "lm_head")
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "sos":
-                pointer = getattr(pointer, "wte")
-                pointer = getattr(pointer, "weight")
             else:
                 pointer = getattr(pointer, scope_names[0])
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
                 pointer = pointer[num]
-
-        if len(name) > 1 and name[1] == "attn" or name[-1] == "wtet" or name[-1] == "sos" or name[-1] == "wte":
-            pass  # array is used to initialize only part of the pointer so sizes won't match
-        else:
-            try:
-                assert pointer.shape == array.shape
-            except AssertionError as e:
-                e.args += (pointer.shape, array.shape)
-                raise
-
-        logger.info("Initialize PyTorch weight {}".format(name))
-
-        if name[-1] == "q_proj":
-            pointer.data[:, : config.n_embd] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
-        elif name[-1] == "k_proj":
-            pointer.data[:, config.n_embd : 2 * config.n_embd] = torch.from_numpy(
-                array.reshape(config.n_embd, config.n_embd)
-            ).T
-        elif name[-1] == "v_proj":
-            pointer.data[:, 2 * config.n_embd :] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
-        elif len(name) == 3 and name[1] == "attn" and name[2] == "c_proj":
-            pointer.data = torch.from_numpy(array.reshape(config.n_embd, config.n_embd))
-        elif name[-1] == "wtet":
-            pointer.data = torch.from_numpy(array)
-        elif name[-1] == "wte":
-            pointer.data[: config.vocab_size - 1, :] = torch.from_numpy(array)
-        elif name[-1] == "sos":
-            pointer.data[-1] = torch.from_numpy(array)
-        else:
-            pointer.data = torch.from_numpy(array)
-
+        try:
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+        except AssertionError as e:
+            e.args += (pointer.shape, array.shape)
+            raise
+        logger.info(f"Initialize PyTorch weight {name}")
+        pointer.data = torch.from_numpy(array)
     return model
 
 
-class ImageGPTLayerNorm(nn.Module):
-    def __init__(self, hidden_size: Tuple[int], eps: float = 1e-5):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.Tensor(hidden_size))
-
-    def forward(self, tensor: torch.Tensor) -> tuple:
-        # input is not mean centered
-        return (
-            tensor
-            / torch.sqrt(torch.mean(torch.square(tensor), axis=-1, keepdim=True) + self.eps)
-            * self.weight.data[..., :]
-        )
-
-
-class ImageGPTAttention(nn.Module):
-    def __init__(self, config, is_cross_attention: Optional[bool] = False, layer_idx: Optional[int] = None):
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Attention with GPT2->GPT2MQA
+class GPT2MQAAttention(nn.Module):
+    def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -236,7 +180,9 @@ class ImageGPTAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
+            attn_weights = attn_weights / torch.full(
+                [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
+            )
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
@@ -245,18 +191,18 @@ class ImageGPTAttention(nn.Module):
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+            mask_value = torch.full([], mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = nn.Softmax(dim=-1)(attn_weights)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
         attn_weights = attn_weights.type(value.dtype)
@@ -306,7 +252,7 @@ class ImageGPTAttention(nn.Module):
             # Apply the attention mask
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = nn.Softmax(dim=-1)(attn_weights)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op if otherwise
         if attn_weights.dtype != torch.float32:
@@ -327,7 +273,7 @@ class ImageGPTAttention(nn.Module):
         Splits hidden_size dim into attn_head_size and num_heads
         """
         new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-        tensor = tensor.view(*new_shape)
+        tensor = tensor.view(new_shape)
         return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
@@ -340,20 +286,20 @@ class ImageGPTAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        layer_past: Optional[bool] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
+        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> tuple:
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
                 raise ValueError(
                     "If class is used as cross attention, the weights `q_attn` have to be defined. "
-                    "Please make sure to instantiate class with `ImageGPTAttention(..., is_cross_attention=True)`."
+                    "Please make sure to instantiate class with `GPT2MQAAttention(..., is_cross_attention=True)`."
                 )
 
             query = self.q_attn(hidden_states)
@@ -392,7 +338,8 @@ class ImageGPTAttention(nn.Module):
         return outputs  # a, present, (attentions)
 
 
-class ImageGPTMLP(nn.Module):
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->GPT2MQA
+class GPT2MQAMLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
@@ -401,7 +348,7 @@ class ImageGPTMLP(nn.Module):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -409,33 +356,34 @@ class ImageGPTMLP(nn.Module):
         return hidden_states
 
 
-class ImageGPTBlock(nn.Module):
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->GPT2MQA
+class GPT2MQABlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
-        self.ln_1 = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = ImageGPTAttention(config, layer_idx=layer_idx)
-        self.ln_2 = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.attn = GPT2MQAAttention(config, layer_idx=layer_idx)
+        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
-            self.crossattention = ImageGPTAttention(config, is_cross_attention=True, layer_idx=layer_idx)
-            self.ln_cross_attn = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.crossattention = GPT2MQAAttention(config, is_cross_attention=True, layer_idx=layer_idx)
+            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        self.mlp = ImageGPTMLP(inner_dim, config)
+        self.mlp = GPT2MQAMLP(inner_dim, config)
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        layer_past: Optional[bool] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
+        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> tuple:
+    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
@@ -479,22 +427,27 @@ class ImageGPTBlock(nn.Module):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        outputs = (hidden_states,) + (outputs if use_cache else outputs[1:])
+        if use_cache:
+            outputs = (hidden_states,) + outputs
+        else:
+            outputs = (hidden_states,) + outputs[1:]
 
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
-class ImageGPTPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel with GPT2->GPT2MQA,gpt2->gpt2mqa,OpenAI GPT-2->GPT2MQA
+class GPT2MQAPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ImageGPTConfig
-    load_tf_weights = load_tf_weights_in_imagegpt
+    config_class = GPT2MQAConfig
+    load_tf_weights = load_tf_weights_in_gpt2mqa
     base_model_prefix = "transformer"
-    main_input_name = "input_ids"
+    is_parallelizable = True
     supports_gradient_checkpointing = True
+    _no_split_modules = ["GPT2MQABlock"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -511,7 +464,8 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, ImageGPTLayerNorm):
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
@@ -521,16 +475,59 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
         #
         # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
         for name, p in module.named_parameters():
-            if "c_proj" in name and "weight" in name:
+            if name == "c_proj.weight":
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ImageGPTModel):
+        if isinstance(module, GPT2MQAModel):
             module.gradient_checkpointing = value
 
 
-IMAGEGPT_START_DOCSTRING = r"""
+@dataclass
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput with GPT2->GPT2MQA
+class GPT2MQADoubleHeadsModelOutput(ModelOutput):
+    """
+    Base class for outputs of models predicting if two sentences are consecutive or not.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss.
+        mc_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mc_labels` is provided):
+            Multiple choice classification loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        mc_logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
+            Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
+        past_key_values (`Tuple[Tuple[torch.Tensor]]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of length `config.n_layers`, containing tuples of tensors of shape `(batch_size, num_heads,
+            sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            GPT2MQAAttentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    mc_loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    mc_logits: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+GPT2MQA_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -541,14 +538,14 @@ IMAGEGPT_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`ImageGPTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`GPT2MQAConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-IMAGEGPT_INPUTS_DOCSTRING = r"""
+GPT2MQA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
             `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
@@ -556,9 +553,10 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`ImageGPTImageProcessor`]. See [`ImageGPTImageProcessor.__call__`] for
-            details.
+            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
+            [What are input IDs?](../glossary#input-ids)
         past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
@@ -569,8 +567,12 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
+            If `past_key_values` is used, `attention_mask` needs to contain the masking strategy that was used for
+            `past_key_values`. In other words, the `attention_mask` always has to have the length:
+            `len(past_key_values) + len(input_ids)`
+
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
 
@@ -608,16 +610,66 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+PARALLELIZE_DOCSTRING = r"""
+    This is an experimental feature and is a subject to change at a moment's notice.
+
+    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
+    it will evenly distribute blocks across all devices.
+
+    Args:
+        device_map (`Dict[int, list]`, optional, defaults to None):
+            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
+            automatically mapped to the first device (for esoteric reasons). That means that the first device should
+            have fewer attention modules mapped to it than other devices. For reference, the gpt2mqa models have the
+            following number of attention modules:
+
+                - gpt2mqa: 12
+                - gpt2mqa-medium: 24
+                - gpt2mqa-large: 36
+                - gpt2mqa-xl: 48
+
+    Example:
+
+    ```python
+    # Here is an example of a device map on a machine with 4 GPUs using gpt2mqa-xl, which has a total of 48 attention modules:
+    model = GPT2MQALMHeadModel.from_pretrained("gpt2mqa-xl")
+    device_map = {
+        0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+        1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
+        3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47],
+    }
+    model.parallelize(device_map)
+    ```
+"""
+DEPARALLELIZE_DOCSTRING = r"""
+    Moves the model to cpu from a model parallel state.
+
+    Example:
+
+    ```python
+    # On a 4 GPU machine with gpt2mqa-large:
+    model = GPT2MQALMHeadModel.from_pretrained("gpt2mqa-large")
+    device_map = {
+        0: [0, 1, 2, 3, 4, 5, 6, 7],
+        1: [8, 9, 10, 11, 12, 13, 14, 15],
+        2: [16, 17, 18, 19, 20, 21, 22, 23],
+        3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35],
+    }
+    model.parallelize(device_map)  # Splits the model across several devices
+    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+    ```
+"""
 
 
 @add_start_docstrings(
-    "The bare ImageGPT Model transformer outputting raw hidden-states without any specific head on top.",
-    IMAGEGPT_START_DOCSTRING,
+    "The bare GPT2MQA Model transformer outputting raw hidden-states without any specific head on top.",
+    GPT2MQA_START_DOCSTRING,
 )
-class ImageGPTModel(ImageGPTPreTrainedModel):
+class GPT2MQAModel(GPT2MQAPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
 
-    def __init__(self, config: ImageGPTConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -626,15 +678,49 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([ImageGPTBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.ln_f = ImageGPTLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.h = nn.ModuleList([GPT2MQABlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Model parallel
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
+
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    def parallelize(self, device_map=None):
+        # Check validity of device_map
+        self.device_map = (
+            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
+        )
+        assert_device_map(self.device_map, len(self.h))
+        self.model_parallel = True
+        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
+        self.last_device = "cuda:" + str(max(self.device_map.keys()))
+        self.wte = self.wte.to(self.first_device)
+        self.wpe = self.wpe.to(self.first_device)
+        # Load onto devices
+        for k, v in self.device_map.items():
+            for block in v:
+                cuda_device = "cuda:" + str(k)
+                self.h[block] = self.h[block].to(cuda_device)
+        # ln_f to last
+        self.ln_f = self.ln_f.to(self.last_device)
+
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+    def deparallelize(self):
+        self.model_parallel = False
+        self.device_map = None
+        self.first_device = "cpu"
+        self.last_device = "cpu"
+        self.wte = self.wte.to("cpu")
+        self.wpe = self.wpe.to("cpu")
+        for index in range(len(self.h)):
+            self.h[index] = self.h[index].to("cpu")
+        self.ln_f = self.ln_f.to("cpu")
+        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.wte
@@ -649,65 +735,29 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(GPT2MQA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs: Any,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
-            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ImageGPTImageProcessor, ImageGPTModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small")
-        >>> model = ImageGPTModel.from_pretrained("openai/imagegpt-small")
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
-
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -743,7 +793,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
-        # ImageGPTAttention mask.
+        # GPT2MQAAttention mask.
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
@@ -866,7 +916,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         hidden_states = self.ln_f(hidden_states)
 
-        hidden_states = hidden_states.view(*output_shape)
+        hidden_states = hidden_states.view(output_shape)
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -889,24 +939,45 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The ImageGPT Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The GPT2MQA Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
-    IMAGEGPT_START_DOCSTRING,
+    GPT2MQA_START_DOCSTRING,
 )
-class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
+class GPT2MQALMHeadModel(GPT2MQAPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
-    def __init__(self, config: ImageGPTConfig):
+    def __init__(self, config):
         super().__init__(config)
-        self.transformer = ImageGPTModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size - 1, bias=False)
+        self.transformer = GPT2MQAModel(config)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+
         # Initialize weights and apply final processing
         self.post_init()
+
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    def parallelize(self, device_map=None):
+        self.device_map = (
+            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
+            if device_map is None
+            else device_map
+        )
+        assert_device_map(self.device_map, len(self.transformer.h))
+        self.transformer.parallelize(self.device_map)
+        self.lm_head = self.lm_head.to(self.transformer.first_device)
+        self.model_parallel = True
+
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+    def deparallelize(self):
+        self.transformer.deparallelize()
+        self.transformer = self.transformer.to("cpu")
+        self.lm_head = self.lm_head.to("cpu")
+        self.model_parallel = False
+        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -914,7 +985,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids: torch.Tensor, past_key_values: Optional[bool] = None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
@@ -942,84 +1013,36 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
             "token_type_ids": token_type_ids,
         }
 
-    @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(GPT2MQA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs: Any,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ImageGPTImageProcessor, ImageGPTForCausalImageModeling
-        >>> import torch
-        >>> import matplotlib.pyplot as plt
-        >>> import numpy as np
-
-        >>> image_processor = ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small")
-        >>> model = ImageGPTForCausalImageModeling.from_pretrained("openai/imagegpt-small")
-        >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        >>> model.to(device)
-
-        >>> # unconditional generation of 8 images
-        >>> batch_size = 8
-        >>> context = torch.full((batch_size, 1), model.config.vocab_size - 1)  # initialize with SOS token
-        >>> context = torch.tensor(context).to(device)
-        >>> output = model.generate(
-        ...     input_ids=context, max_length=model.config.n_positions + 1, temperature=1.0, do_sample=True, top_k=40
-        ... )
-
-        >>> clusters = image_processor.clusters
-        >>> height = image_processor.size["height"]
-        >>> width = image_processor.size["width"]
-
-        >>> samples = output[:, 1:].cpu().detach().numpy()
-        >>> samples_img = [
-        ...     np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [height, width, 3]).astype(np.uint8) for s in samples
-        >>> ]  # convert color cluster tokens back to pixels
-        >>> f, axes = plt.subplots(1, batch_size, dpi=300)
-
-        >>> for img, ax in zip(samples_img, axes):
-        ...     ax.axis("off")
-        ...     ax.imshow(img)
-        ```"""
-
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
-
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -1038,6 +1061,11 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.transformer.first_device)
+            hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         lm_logits = self.lm_head(hidden_states)
 
@@ -1078,81 +1106,273 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The ImageGPT Model transformer with an image classification head on top (linear layer).
-    [`ImageGPTForImageClassification`] average-pools the hidden states in order to do the classification.
-    """,
-    IMAGEGPT_START_DOCSTRING,
+The GPT2MQA Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
+RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
+input embeddings, the classification head takes as input the input of a specified classification token index in the
+input sequence).
+""",
+    GPT2MQA_START_DOCSTRING,
 )
-class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
+class GPT2MQADoubleHeadsModel(GPT2MQAPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
-    def __init__(self, config: ImageGPTConfig):
+    def __init__(self, config):
         super().__init__(config)
-        self.num_labels = config.num_labels
-        self.transformer = ImageGPTModel(config)
-        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
+        config.num_labels = 1
+        self.transformer = GPT2MQAModel(config)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.multiple_choice_head = SequenceSummary(config)
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    def parallelize(self, device_map=None):
+        self.device_map = (
+            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
+            if device_map is None
+            else device_map
+        )
+        assert_device_map(self.device_map, len(self.transformer.h))
+        self.transformer.parallelize(self.device_map)
+        self.lm_head = self.lm_head.to(self.transformer.first_device)
+        self.multiple_choice_head = self.multiple_choice_head.to(self.transformer.first_device)
+        self.model_parallel = True
+
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+    def deparallelize(self):
+        self.transformer.deparallelize()
+        self.transformer = self.transformer.to("cpu")
+        self.lm_head = self.lm_head.to("cpu")
+        self.multiple_choice_head = self.multiple_choice_head.to("cpu")
+        self.model_parallel = False
+        torch.cuda.empty_cache()
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
+        token_type_ids = kwargs.get("token_type_ids", None)
+        # only last token for inputs_ids if past is defined in kwargs
+        if past_key_values:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+        else:
+            position_ids = None
+
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past_key_values,
+            "use_cache": kwargs.get("use_cache"),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
+        }
+
+    @add_start_docstrings_to_model_forward(GPT2MQA_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=GPT2MQADoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        mc_token_ids: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        mc_labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs: Any,
+        **kwargs,
+    ) -> Union[Tuple, GPT2MQADoubleHeadsModelOutput]:
+        r"""
+        mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
+            Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
+            1]`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids`. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`. All labels set to
+            `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`
+        mc_labels (`torch.LongTensor` of shape `(batch_size)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
+            where *num_choices* is the size of the second dimension of the input tensors. (see *input_ids* above)
+
+        Return:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import GPT2Tokenizer, GPT2MQADoubleHeadsModel
+
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2mqa")
+        >>> model = GPT2MQADoubleHeadsModel.from_pretrained("gpt2mqa")
+
+        >>> # Add a [CLS] to the vocabulary (we should train it also!)
+        >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
+        >>> # Update the model embeddings with the new vocabulary size
+        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))
+
+        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+        >>> encoded_choices = [tokenizer.encode(s) for s in choices]
+        >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
+
+        >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
+        >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
+
+        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+        >>> lm_logits = outputs.logits
+        >>> mc_logits = outputs.mc_logits
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.transformer(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = transformer_outputs[0]
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.transformer.first_device)
+            hidden_states = hidden_states.to(self.lm_head.weight.device)
+
+        lm_logits = self.lm_head(hidden_states)
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
+
+        mc_loss = None
+        if mc_labels is not None:
+            loss_fct = CrossEntropyLoss()
+            mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
+        lm_loss = None
+        if labels is not None:
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = CrossEntropyLoss()
+            lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits, mc_logits) + transformer_outputs[1:]
+            if mc_loss is not None:
+                output = (mc_loss,) + output
+            return ((lm_loss,) + output) if lm_loss is not None else output
+
+        return GPT2MQADoubleHeadsModelOutput(
+            loss=lm_loss,
+            mc_loss=mc_loss,
+            logits=lm_logits,
+            mc_logits=mc_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+    @staticmethod
+    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
+        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
+        beam_idx at every generation step.
+        """
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past
+        )
+
+
+@add_start_docstrings(
+    """
+    The GPT2MQA Model transformer with a sequence classification head on top (linear layer).
+
+    [`GPT2MQAForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-1) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """,
+    GPT2MQA_START_DOCSTRING,
+)
+class GPT2MQAForSequenceClassification(GPT2MQAPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.transformer = GPT2MQAModel(config)
+        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(GPT2MQA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint="microsoft/DialogRPT-updown",
+        output_type=SequenceClassifierOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_0'",
+        expected_loss=5.28,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ImageGPTImageProcessor, ImageGPTForImageClassification
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small")
-        >>> model = ImageGPTForImageClassification.from_pretrained("openai/imagegpt-small")
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        ```"""
-
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
-
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -1169,10 +1389,29 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
-        # average-pool the hidden states along the sequence dimension
-        pooled_hidden_states = hidden_states.mean(dim=1)
-        # project from (batch_size, hidden_size) to (batch_size, num_labels)
-        logits = self.score(pooled_hidden_states)
+        logits = self.score(hidden_states)
+
+        if input_ids is not None:
+            batch_size, sequence_length = input_ids.shape[:2]
+        else:
+            batch_size, sequence_length = inputs_embeds.shape[:2]
+
+        assert (
+            self.config.pad_token_id is not None or batch_size == 1
+        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if input_ids is not None:
+                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
+            else:
+                sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                )
+
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
         loss = None
         if labels is not None:
@@ -1187,23 +1426,121 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
                 if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
                 else:
-                    loss = loss_fct(logits, labels)
+                    loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
+            output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
-            logits=logits,
+            logits=pooled_logits,
             past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    GPT2MQA Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
+    GPT2MQA_START_DOCSTRING,
+)
+class GPT2MQAForTokenClassification(GPT2MQAPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.transformer = GPT2MQAModel(config)
+        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
+            classifier_dropout = config.classifier_dropout
+        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
+            classifier_dropout = config.hidden_dropout
+        else:
+            classifier_dropout = 0.1
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(GPT2MQA_INPUTS_DOCSTRING)
+    # fmt: off
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint="brad1141/gpt2mqa-finetuned-comp2",
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_loss=0.25,
+        expected_output=["Lead", "Lead", "Lead", "Position", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead"],
+    )
+    # fmt: on
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TokenClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.transformer(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = transformer_outputs[0]
+        hidden_states = self.dropout(hidden_states)
+        logits = self.classifier(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + transformer_outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )

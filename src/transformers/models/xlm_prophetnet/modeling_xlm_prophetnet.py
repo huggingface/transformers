@@ -1860,7 +1860,7 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -1991,7 +1991,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -2264,7 +2264,7 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
         >>> labels = tokenizer_dec(
         ...     "us rejects charges against its ambassador in bolivia", return_tensors="pt"
-        ... ).input_ids
+        >>> ).input_ids
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:])
 
         >>> loss = outputs.loss

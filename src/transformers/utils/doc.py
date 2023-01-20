@@ -277,7 +277,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
     >>> labels = torch.sum(
     ...     torch.nn.functional.one_hot(predicted_class_ids[None, :].clone(), num_classes=num_labels), dim=1
-    ... ).to(torch.float)
+    >>> ).to(torch.float)
     >>> loss = model(**inputs, labels=labels).loss
     ```
 """

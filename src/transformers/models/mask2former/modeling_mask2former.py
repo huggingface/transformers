@@ -2414,13 +2414,13 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> # Perform post-processing to get semantic, instance or panoptic segmentation maps
         >>> pred_semantic_map = image_processor.post_process_semantic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]
+        >>> )[0]
         >>> pred_instance_map = image_processor.post_process_instance_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]["segmentation"]
+        >>> )[0]["segmentation"]
         >>> pred_panoptic_map = image_processor.post_process_panoptic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]["segmentation"]
+        >>> )[0]["segmentation"]
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

@@ -1393,7 +1393,7 @@ class T5Model(T5PreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
         >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
@@ -1604,7 +1604,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         >>> # inference
         >>> input_ids = tokenizer(
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you.
@@ -1850,7 +1850,7 @@ class T5EncoderModel(T5PreTrainedModel):
         >>> model = T5EncoderModel.from_pretrained("t5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""

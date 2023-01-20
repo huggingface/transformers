@@ -469,7 +469,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ...     eval_dataset=dataset["test"],
 ...     tokenizer=tokenizer,
 ...     data_collator=data_collator,
-... )  # doctest: +SKIP
+>>> )  # doctest: +SKIP
 ```
 
 一切准备就绪后, 调用[`~Trainer.train`]进行训练:
@@ -521,7 +521,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    >>> dataset = dataset.map(tokenize_dataset)  # doctest: +SKIP
    >>> tf_dataset = model.prepare_tf_dataset(
    ...     dataset, batch_size=16, shuffle=True, tokenizer=tokenizer
-   ... )  # doctest: +SKIP
+   >>> )  # doctest: +SKIP
    ```
 
 5. 一切准备就绪后, 调用`compile`和`fit`开始训练:

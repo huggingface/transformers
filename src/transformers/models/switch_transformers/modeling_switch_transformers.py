@@ -1412,7 +1412,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
         >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for SwitchTransformersModel.
@@ -1604,7 +1604,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         >>> # inference
         >>> input_ids = tokenizer(
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> # . To, let’s say you have a dog. To summarize:
         >>> # Since the model has been trained on MLM, this will output gibberish
@@ -1877,7 +1877,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         >>> model = SwitchTransformersEncoderModel.from_pretrained("google/switch-base-8")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""

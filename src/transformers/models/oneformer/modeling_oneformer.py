@@ -3115,7 +3115,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> # you can pass them to feature_extractor for semantic postprocessing
         >>> predicted_semantic_map = feature_extractor.post_process_semantic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]
+        >>> )[0]
         >>> f"👉 Semantic Predictions Shape: {list(predicted_semantic_map.shape)}"
         '👉 Semantic Predictions Shape: [512, 683]'
 
@@ -3132,7 +3132,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> # you can pass them to feature_extractor for instance postprocessing
         >>> predicted_instance_map = feature_extractor.post_process_instance_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]["segmentation"]
+        >>> )[0]["segmentation"]
         >>> f"👉 Instance Predictions Shape: {list(predicted_instance_map.shape)}"
         '👉 Instance Predictions Shape: [512, 683]'
 
@@ -3149,7 +3149,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> # you can pass them to feature_extractor for panoptic postprocessing
         >>> predicted_panoptic_map = feature_extractor.post_process_panoptic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]["segmentation"]
+        >>> )[0]["segmentation"]
         >>> f"👉 Panoptic Predictions Shape: {list(predicted_panoptic_map.shape)}"
         '👉 Panoptic Predictions Shape: [512, 683]'
         ```

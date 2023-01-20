@@ -2761,6 +2761,55 @@ def load_tf_weights_in_gpt2(*args, **kwargs):
     requires_backends(load_tf_weights_in_gpt2, ["torch"])
 
 
+GPT2MQA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GPT2MQADoubleHeadsModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPT2MQAForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPT2MQAForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPT2MQALMHeadModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPT2MQAModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPT2MQAPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_gpt2mqa(*args, **kwargs):
+    requires_backends(load_tf_weights_in_gpt2mqa, ["torch"])
+
+
 GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

@@ -1835,7 +1835,7 @@ class LongT5Model(LongT5PreTrainedModel):
         >>> # Let's try a very long encoder input.
         >>> input_ids = tokenizer(
         ...     100 * "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
 
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
@@ -2202,7 +2202,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         >>> model = LongT5EncoderModel.from_pretrained("google/long-t5-local-base")
         >>> input_ids = tokenizer(
         ...     100 * "Studies have been shown that owning a dog is good for you ", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> ).input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""

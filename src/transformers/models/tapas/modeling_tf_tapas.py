@@ -1122,7 +1122,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         ... )
         >>> labels = tokenizer(
         ...     table=table, queries="How many movies has George Clooney played in?", return_tensors="tf"
-        ... )["input_ids"]
+        >>> )["input_ids"]
 
         >>> outputs = model(**inputs, labels=labels)
         >>> logits = outputs.logits

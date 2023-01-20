@@ -473,7 +473,7 @@ Now gather all these classes in [`Trainer`]:
 ...     eval_dataset=dataset["test"],
 ...     tokenizer=tokenizer,
 ...     data_collator=data_collator,
-... )  # doctest: +SKIP
+>>> )  # doctest: +SKIP
 ```
 
 When you're ready, call [`~Trainer.train`] to start training:
@@ -525,7 +525,7 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> dataset = dataset.map(tokenize_dataset)  # doctest: +SKIP
    >>> tf_dataset = model.prepare_tf_dataset(
    ...     dataset, batch_size=16, shuffle=True, tokenizer=tokenizer
-   ... )  # doctest: +SKIP
+   >>> )  # doctest: +SKIP
    ```
 
 5. When you're ready, you can call `compile` and `fit` to start training:
