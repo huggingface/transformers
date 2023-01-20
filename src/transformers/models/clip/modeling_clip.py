@@ -681,7 +681,8 @@ class CLIPTextTransformer(nn.Module):
         self.embeddings = CLIPTextEmbeddings(config)
         self.encoder = CLIPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
-
+        # For now, assume that the below value is the eos token id as the config's eos_token_id isn't guaranteed to be correct
+        self.eos_token_id = self.config.vocab_size-1
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
     def forward(
@@ -739,7 +740,7 @@ class CLIPTextTransformer(nn.Module):
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
             torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
+            (input_ids.to(dtype=torch.int, device=last_hidden_state.device)== self.eos_token_id).nonzero(as_tuple=True)[-1][0],
         ]
 
         if not return_dict:
