@@ -41,7 +41,7 @@ Obwohl jede Aufgabe eine zugehörige [`pipeline`] hat, ist es einfacher, die all
 ```py
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
->>> )  # doctest: +SKIP
+... )  # doctest: +SKIP
 [{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Iron-priests at the door to the east, and thirteen for the Lord Kings at the end of the mountain'}]
 ```
 
@@ -53,7 +53,7 @@ Wenn Sie mehr als eine Eingabe haben, übergeben Sie die Eingabe als Liste:
 ...         "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
 ...         "Nine for Mortal Men, doomed to die, One for the Dark Lord on his dark throne",
 ...     ]
->>> )  # doctest: +SKIP
+... )  # doctest: +SKIP
 ```
 
 Alle zusätzlichen Parameter für Ihre Aufgabe können auch in die [`pipeline`] aufgenommen werden. Die Aufgabe `Text-Generierung` hat eine [`~generation.GenerationMixin.generate`]-Methode mit mehreren Parametern zur Steuerung der Ausgabe. Wenn Sie zum Beispiel mehr als eine Ausgabe erzeugen wollen, setzen Sie den Parameter `num_return_sequences`:
@@ -62,7 +62,7 @@ Alle zusätzlichen Parameter für Ihre Aufgabe können auch in die [`pipeline`] 
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
 ...     num_return_sequences=2,
->>> )  # doctest: +SKIP
+... )  # doctest: +SKIP
 ```
 
 ### Wählen Sie ein Modell und einen Tokenizer
@@ -89,7 +89,7 @@ Erstellen Sie eine [`pipeline`] für Ihre Aufgabe, und geben Sie das Modell und 
 ```py
 >>> generator(
 ...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone"
->>> )  # doctest: +SKIP
+... )  # doctest: +SKIP
 [{'generated_text': 'Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone, Seven for the Dragon-lords (for them to rule in a world ruled by their rulers, and all who live within the realm'}]
 ```
 
