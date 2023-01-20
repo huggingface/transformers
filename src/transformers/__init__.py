@@ -3856,7 +3856,6 @@ if TYPE_CHECKING:
         WhisperFeatureExtractor,
         WhisperProcessor,
         WhisperTokenizer,
-        WhisperTokenizerFast,
     )
     from .models.x_clip import (
         XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4068,6 +4067,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.whisper import WhisperTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast

@@ -15,7 +15,7 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from tokenizers import pre_tokenizers, processors
 
@@ -23,11 +23,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
-from .tokenization_whisper import WhisperTokenizer, LANGUAGES, TO_LANGUAGE_CODE, TASK_IDS
-
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
+from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -76,15 +72,15 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-        "openai/whisper-tiny": 1500,
-        "openai/whisper-base": 1500,
-        "openai/whisper-small": 1500,
-        "openai/whisper-medium": 1500,
-        "openai/whisper-large": 1500,
-        "openai/whisper-tiny.en": 1500,
-        "openai/whisper-base.en": 1500,
-        "openai/whisper-small.en": 1500,
-        "openai/whisper-medium.en": 1500,
+    "openai/whisper-tiny": 1500,
+    "openai/whisper-base": 1500,
+    "openai/whisper-small": 1500,
+    "openai/whisper-medium": 1500,
+    "openai/whisper-large": 1500,
+    "openai/whisper-tiny.en": 1500,
+    "openai/whisper-base.en": 1500,
+    "openai/whisper-small.en": 1500,
+    "openai/whisper-medium.en": 1500,
 }
 
 
@@ -202,13 +198,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     def _decode(self, *args, normalize: bool = False, **kwargs) -> str:
-      text = super()._decode(*args, **kwargs)
+        text = super()._decode(*args, **kwargs)
 
-      if normalize:
-          clean_text = self._normalize(text)
-          return clean_text
-      else:
-          return text
+        if normalize:
+            clean_text = self._normalize(text)
+            return clean_text
+        else:
+            return text
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._normalize
     def _normalize(self, text):
@@ -219,7 +215,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
 

@@ -926,6 +926,7 @@ class WhisperConverter(Converter):
 
         return tokenizer
 
+
 class BigBirdConverter(SpmConverter):
     def post_processor(self):
         return processors.TemplateProcessing(
