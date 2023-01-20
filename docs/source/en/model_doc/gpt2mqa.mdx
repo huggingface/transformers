@@ -14,19 +14,19 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The GPT2MQA model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The GPT2MQA model was proposed in [SantaCoder: don't reach for the stars!](https://arxiv.org/abs/2301.03988) by Ben Allal et al..
+It adds Multi Query Attention (MQA) to the GPT2 architecture which reduces the memory footprint of the model, especially at large batches.
+The MQA approach was proposed in [Fast Transformer Decoding: One Write-Head is All You Need](https://arxiv.org/abs/1911.02150) by Shazeer et al..
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+The BigCode project is an open-scientific collaboration working on the responsi- ble development of large language models for code.1 This tech report describes the progress of the collaboration until December 2022, outlining the current state of the Personally Identifiable Information (PII) redaction pipeline, the experi- ments conducted to de-risk the model architecture, and the experiments investi- gating better preprocessing methods for the training data. We train 1.1B param- eter models on the Java, JavaScript, and Python subsets of The Stack (Kocetkov et al., 2022) and evaluate them on the MultiPL-E text-to-code benchmark (Cas- sano et al., 2022). We find that more aggressive filtering of near-duplicates can further boost performance and, surprisingly, that selecting files from repositories with 5+ GitHub stars deteriorates performance significantly. Our best model out- performs previous open-source multilingual code generation models (InCoder- 6.7B and CodeGen-Multi-2.7B) in both left-to-right generation and infilling on the Java, JavaScript, and Python portions of MultiPL-E, despite being a sub- stantially smaller model. All models are released under an OpenRAIL license at https://hf.co/bigcode.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+The model can be used like any decoder model but can manage extremly large batches.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [lvwerra](https://huggingface.co/lvwerra).
 
 
 ## GPT2MQAConfig
