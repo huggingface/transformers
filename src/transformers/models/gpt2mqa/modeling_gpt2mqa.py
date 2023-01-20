@@ -44,7 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_gpt2mqa import GPT2MQAConfig
+from .configuration_gpt2mqa import GPT2MQAConfig, MULTI_QUERY, MULTI_HEAD
 
 
 logger = logging.get_logger(__name__)
@@ -142,6 +142,8 @@ class GPT2MQAAttention(nn.Module):
             )
 
         self.scale_attn_weights = config.scale_attn_weights
+        if is_cross_attention:
+            raise NotImplementedError("Cross-attention not implemented for MQA")
         self.is_cross_attention = is_cross_attention
 
         # Layer-wise attention scaling, reordering, and upcasting
@@ -153,7 +155,10 @@ class GPT2MQAAttention(nn.Module):
             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
             self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
         else:
-            self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
+            # self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
+            self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
+            # Keys and values are shared across heads
+            self.kv_attn = Conv1D(2 * self.head_dim, self.embed_dim)
         self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
@@ -177,11 +182,20 @@ class GPT2MQAAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
+        # query: (b, num_heads * sq, head_dim)
+        # key: (b, head_dim, sk)
+        # value: (b, sk, head_dim)
+        batch_size = query.size(0)
+        query_length = query.size(1) // self.num_heads
+        key_length = key.size(2)
+        # (b, num_heads * sq, head_dim) x (b, head_dim, sk) -> (b, num_heads * sq, sk)
+        attn_weights = torch.bmm(query, key)
+        # -> (b, num_heads, sq, sk)
+        attn_weights = attn_weights.view(batch_size, self.num_heads, query_length, key_length)
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / torch.full(
-                [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
+            attn_weights = attn_weights / torch.tensor(
+                value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
             )
 
         # Layer-wise attention scaling
@@ -190,13 +204,12 @@ class GPT2MQAAttention(nn.Module):
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.full([], mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-            attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -212,7 +225,11 @@ class GPT2MQAAttention(nn.Module):
         if head_mask is not None:
             attn_weights = attn_weights * head_mask
 
-        attn_output = torch.matmul(attn_weights, value)
+        # (b, num_heads, sq, sk) -> (b, num_heads * sq, sk)
+        _attn_weights = attn_weights.view(batch_size, self.num_heads * query_length, key_length)
+        # (b, num_heads * sq, sk) x (b, sk, head_dim) -> (b, num_heads * sq, head_dim)
+        attn_output = torch.bmm(_attn_weights, value)
+        attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
 
         return attn_output, attn_weights
 
@@ -296,25 +313,38 @@ class GPT2MQAAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         if encoder_hidden_states is not None:
-            if not hasattr(self, "q_attn"):
-                raise ValueError(
-                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
-                    "Please make sure to instantiate class with `GPT2MQAAttention(..., is_cross_attention=True)`."
-                )
+            raise NotImplementedError("Cross-attention not implemented for MQA")
 
             query = self.q_attn(hidden_states)
             key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
             attention_mask = encoder_attention_mask
         else:
-            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+            query = self.q_attn(hidden_states)
+            key, value = self.kv_attn(hidden_states).split(self.head_dim, dim=2)
 
-        query = self._split_heads(query, self.num_heads, self.head_dim)
-        key = self._split_heads(key, self.num_heads, self.head_dim)
-        value = self._split_heads(value, self.num_heads, self.head_dim)
+
+        batch_size, seq_length = query.shape[:2]
+        # (query_length, batch, num_heads, head_dim)
+        # (batch, num_heads * query_length, head_dim)\
+
+        # (batch, query_length, hidden_size) -> (batch, num_heads, query_length, head_dim)
+        query = query.view(batch_size, seq_length, self.num_heads, self.head_dim).permute([0, 2, 1, 3])
+        # -> (batch, num_heads * query_length, head_dim)
+        query = query.reshape(batch_size, self.num_heads * seq_length, self.head_dim)
+
+        # (batch, query_length, hidden_size) -> (batch, query_length * num_heads, head_dim)
+        # query = query.view(
+        #     batch_size, seq_length, self.num_heads, self.head_dim,
+        # ).reshape(
+        #     batch_size, seq_length * self.num_heads, self.head_dim
+        # )
+        key = key.permute(0, 2, 1)  # (batch_size, head_dim, seq_length)
+        # value (batch_size, seq_length, head_dim)
 
         if layer_past is not None:
             past_key, past_value = layer_past
-            key = torch.cat((past_key, key), dim=-2)
+            # Concatenate on sequence dimension
+            key = torch.cat((past_key, key), dim=-1)
             value = torch.cat((past_value, value), dim=-2)
 
         if use_cache is True:
@@ -323,7 +353,7 @@ class GPT2MQAAttention(nn.Module):
             present = None
 
         if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+            raise NotImplementedError("Reorder and upcast attention not implemented for MQA")
         else:
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
