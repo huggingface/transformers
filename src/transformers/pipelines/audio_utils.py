@@ -1,3 +1,4 @@
+# Copyright 2023 The HuggingFace Team. All rights reserved.
 import datetime
 import platform
 import subprocess
