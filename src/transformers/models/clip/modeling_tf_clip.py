@@ -201,7 +201,6 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.embed_dim = config.hidden_size
-        self.vocab_size = config.vocab_size
 
         self.config = config
 
@@ -209,7 +208,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
 
         with tf.name_scope("token_embedding"):
             self.weight = self.add_weight(
-                shape=(self.vocab_size, self.embed_dim),
+                shape=(self.config.vocab_size, self.embed_dim),
                 initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
                 trainable=True,
                 name="weight",
@@ -245,10 +244,10 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
