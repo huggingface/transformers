@@ -940,10 +940,10 @@ class GenerationMixin:
                 The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
                 shorter if all batches finished early due to the `eos_token_id`.
             scores (`tuple(torch.FloatTensor)`):
-                Transition scores for each vocabulary token at each generation step. Beam transition scores
-                consisting of log probabilities of tokens conditioned on log softmax of previously generated tokens
-                Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each
-                generated token), with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+                Transition scores for each vocabulary token at each generation step. Beam transition scores consisting
+                of log probabilities of tokens conditioned on log softmax of previously generated tokens Tuple of
+                `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token), with
+                each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
             beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*):
                 Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
                 `(batch_size*num_return_sequences, input_ids.shape[-1])`. Only required if a `num_beams>1` at
@@ -961,10 +961,10 @@ class GenerationMixin:
         >>> from transformers import GPT2Tokenizer, AutoModelForCausalLM
         >>> import numpy as np
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2", padding_side="left")
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
         >>> tokenizer.pad_token_id = tokenizer.eos_token_id
-        >>> inputs = tokenizer(["Today is"], return_tensors="pt", padding=True)
+        >>> inputs = tokenizer(["Today is"], return_tensors="pt")
 
         >>> # Example 1: Print the scores for each token generated with Greedy Search
         >>> outputs = model.generate(**inputs, max_new_tokens=5, return_dict_in_generate=True, output_scores=True)
