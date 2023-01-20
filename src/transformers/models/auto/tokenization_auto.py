@@ -290,7 +290,13 @@ else:
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
             ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
             ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
-            ("whisper", ("WhisperTokenizer" if is_sentencepiece_available() else None, None)),
+            (
+                "whisper",
+                (
+                    "WhisperTokenizer" if is_sentencepiece_available() else None,
+                    "WhisperTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("xclip", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "xglm",

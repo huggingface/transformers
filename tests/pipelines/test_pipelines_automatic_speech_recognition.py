@@ -89,6 +89,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             outputs = speech_recognizer(audio)
             self.assertEqual(outputs, {"text": ANY(str)})
         elif "Whisper" in speech_recognizer.model.__class__.__name__:
+            audio.pop("stride")
             outputs = speech_recognizer(audio)
             self.assertEqual(outputs, {"text": ANY(str)})
         else:
@@ -124,7 +125,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             outputs = speech_recognizer(audio, return_timestamps=True)
             self.assertIsInstance(outputs["chunks"], list)
             nb_chunks = len(outputs["chunks"])
-            self.assertGreaterThan(nb_chunks, 0)
+            self.assertTrue(nb_chunks > 0)
             self.assertEqual(
                 outputs,
                 {
