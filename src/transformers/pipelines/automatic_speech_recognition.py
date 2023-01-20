@@ -400,6 +400,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     " only 1 version"
                 )
             forward_params["generate_kwargs"].update(generate_kwargs)
+        if return_timestamps is not None:
+            forward_params["generate_kwargs"]["return_timestamps"] = return_timestamps
 
         postprocess_params = {}
         if decoder_kwargs is not None:
@@ -523,6 +525,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             generate_kwargs = {}
 
         is_last = model_inputs.pop("is_last")
+        return_timestamps = generate_kwargs.pop("return_timestamps", False)
+
         if self.type == "seq2seq":
             encoder = self.model.get_encoder()
             # Consume values so we can let extra information flow freely through
@@ -552,7 +556,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             stride = model_inputs.pop("stride", None)
             tokens = self.model.generate(
                 input_features=model_inputs.pop("input_features"),
-                logits_processor=[WhisperTimeStampLogitsProcessor()],
+                logits_processor=[WhisperTimeStampLogitsProcessor()] if return_timestamps else None,
                 **generate_kwargs,
             )
             out = {"tokens": tokens}
