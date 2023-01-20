@@ -33,6 +33,7 @@ GPT2MQA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 MULTI_HEAD = "multihead"
 MULTI_QUERY = "multiquery"
 
+
 class GPT2MQAConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPT2MQAModel`] or a [`TFGPT2MQAModel`]. It is

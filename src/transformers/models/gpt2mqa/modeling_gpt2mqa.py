@@ -44,7 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_gpt2mqa import GPT2MQAConfig, MULTI_QUERY, MULTI_HEAD
+from .configuration_gpt2mqa import MULTI_HEAD, MULTI_QUERY, GPT2MQAConfig
 
 
 logger = logging.get_logger(__name__)
@@ -321,7 +321,6 @@ class GPT2MQAAttention(nn.Module):
         else:
             query = self.q_attn(hidden_states)
             key, value = self.kv_attn(hidden_states).split(self.head_dim, dim=2)
-
 
         batch_size, seq_length = query.shape[:2]
         # (query_length, batch, num_heads, head_dim)
