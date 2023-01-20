@@ -184,7 +184,7 @@ so we can just convert that directly to a NumPy array without tokenization!
 from transformers import AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-tokenized_data = tokenizer(dataset["text"], return_tensors="np", padding=True)
+tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
 # Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
 tokenized_data = dict(tokenized_data)
 
