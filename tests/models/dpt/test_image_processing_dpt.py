@@ -21,8 +21,7 @@ import numpy as np
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
-from ...test_image_processing_common import prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -74,7 +73,7 @@ class DPTImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class DPTImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class DPTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     image_processing_class = DPTImageProcessor if is_vision_available() else None
 

@@ -25,7 +25,7 @@ from datasets import load_dataset
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_image_processing_common import ImageProcessingSavingTestMixin
 
 
 if is_torch_available():
@@ -78,7 +78,7 @@ class ImageGPTImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ImageGPTImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ImageGPTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     image_processing_class = ImageGPTImageProcessor if is_vision_available() else None
 
