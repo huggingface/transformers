@@ -34,7 +34,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "PoolFormerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "PoolFormerImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "sail/poolformer_s12"
@@ -326,7 +325,6 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -397,7 +395,6 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,

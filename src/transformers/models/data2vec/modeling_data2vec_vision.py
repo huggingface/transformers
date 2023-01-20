@@ -48,7 +48,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Data2VecVisionConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "BeitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/data2vec-vision-base"
@@ -660,7 +659,6 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Data2VecVisionModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -760,7 +758,6 @@ class Data2VecVisionForImageClassification(Data2VecVisionPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

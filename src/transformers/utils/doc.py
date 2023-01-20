@@ -861,10 +861,10 @@ TF_VISION_BASE_MODEL_SAMPLE = r"""
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> image_processor = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> inputs = image_processor(image, return_tensors="tf")
     >>> outputs = model(**inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
@@ -884,10 +884,10 @@ TF_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> image_processor = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> inputs = image_processor(image, return_tensors="tf")
     >>> logits = model(**inputs).logits
 
     >>> # model predicts one of the 1000 ImageNet classes

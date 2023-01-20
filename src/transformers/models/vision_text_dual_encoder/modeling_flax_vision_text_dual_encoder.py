@@ -556,13 +556,13 @@ VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     >>> from transformers import (
     ...     FlaxVisionTextDualEncoderModel,
     ...     VisionTextDualEncoderProcessor,
-    ...     ViTFeatureExtractor,
+    ...     ViTImageProcessor,
     ...     BertTokenizer,
     ... )
 
     >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
-    >>> processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+    >>> image_processor = ViTImageProcesor.from_pretrained("google/vit-base-patch16-224")
+    >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
     ...     "google/vit-base-patch16-224", "bert-base-uncased"
     ... )

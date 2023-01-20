@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DPTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "DPTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "Intel/dpt-large"
@@ -898,7 +897,6 @@ class DPTModel(DPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndIntermediateActivations,
         config_class=_CONFIG_FOR_DOC,

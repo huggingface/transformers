@@ -51,7 +51,6 @@ _CHECKPOINT_FOR_DOC = "facebook/flava-full"
 
 # Codebook docstring
 _CHECKPOINT_FOR_CODEBOOK_DOC = "facebook/flava-image-codebook"
-_FEAT_EXTRACTOR_FOR_DOC = "FlavaFeatureExtractor"
 _CONFIG_CLASS_FOR_IMAGE_MODEL_DOC = "FlavaImageConfig"
 _CONFIG_CLASS_FOR_TEXT_MODEL_DOC = "FlavaTextConfig"
 _CONFIG_CLASS_FOR_MULTIMODAL_MODEL_DOC = "FlavaMultimodalConfig"
@@ -750,8 +749,8 @@ FLAVA_INPUTS_DOCSTRING_COMMON = r"""
 FLAVA_IMAGE_INPUTS_DOCSTRING_BASE = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`FlavaFeatureExtractor`]. See
-            [`FlavaFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`FlavaImageProcessor`]. See
+            [`FlavaImageProcessor.__call__`] for details.
 
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -926,7 +925,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FLAVA_IMAGE_INPUTS_DOCSTRING.format("batch_size, image_num_patches"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_CLASS_FOR_IMAGE_MODEL_DOC,
@@ -1568,22 +1566,22 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-                Pixel values. Codebook pixel values can be obtained using [`FlavaFeatureExtractor`] by passing
-                `return_codebook_pixels=True`. See [`FlavaFeatureExtractor.__call__`] for details.
+                Pixel values. Codebook pixel values can be obtained using [`FlavaImageProcessor`] by passing
+                `return_codebook_pixels=True`. See [`FlavaImageProcessor.__call__`] for details.
 
         Examples:
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import FlavaFeatureExtractor, FlavaImageCodebook
+        >>> from transformers import FlavaImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{0}")
-        >>> feature_extractor = FlavaFeatureExtractor.from_pretrained("{0}")
+        >>> image_processor = FlavaImageProcessor.from_pretrained("{0}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = feature_extractor([image], return_codebook_pixels=True, return_tensors="pt")
+        >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
 
         >>> outputs = model.get_codebook_indices(**inputs)
@@ -1602,23 +1600,23 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-                Pixel values. Codebook pixel values can be obtained using [`FlavaFeatureExtractor`] by passing
-                `return_codebook_pixels=True`. See [`FlavaFeatureExtractor.__call__`] for details.
+                Pixel values. Codebook pixel values can be obtained using [`FlavaImageProcessor`] by passing
+                `return_codebook_pixels=True`. See [`FlavaImageProcessor.__call__`] for details.
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import FlavaFeatureExtractor, FlavaImageCodebook
+        >>> from transformers import FlavaImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{0}")
-        >>> feature_extractor = FlavaFeatureExtractor.from_pretrained("{0}")
+        >>> image_processor = FlavaImageProcessor.from_pretrained("{0}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = feature_extractor([image], return_codebook_pixels=True, return_tensors="pt")
+        >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
 
         >>> outputs = model(**inputs)

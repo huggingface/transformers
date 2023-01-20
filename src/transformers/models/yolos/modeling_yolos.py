@@ -53,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "YolosConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "YolosImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
@@ -627,7 +626,6 @@ class YolosModel(YolosPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(YOLOS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,

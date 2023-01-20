@@ -37,7 +37,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "SegformerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "SegformerImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "nvidia/mit-b0"
@@ -606,7 +605,6 @@ class TFSegformerModel(TFSegformerPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -659,7 +657,6 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
