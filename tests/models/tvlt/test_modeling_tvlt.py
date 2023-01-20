@@ -170,9 +170,7 @@ class TvltModelTester:
             dim=1,
         )
         audio_mask_position_permutation = torch.argsort(
-            floats_tensor(
-                [self.batch_size, self.expected_audio_seq_len],
-            ),
+            floats_tensor([self.batch_size, self.expected_audio_seq_len]),
             dim=1,
         )
 
