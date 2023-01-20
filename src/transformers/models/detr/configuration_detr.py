@@ -48,7 +48,8 @@ class DetrConfig(PretrainedConfig):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which case it will default to `ResNetConfig()`.
+            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
+            case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 100):
