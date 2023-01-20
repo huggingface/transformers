@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
-_TOKENIZER_FOR_DOC = "XLMRobertaTokenizer"
 
 remat = nn_partitioning.remat
 
@@ -112,7 +111,7 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1007,7 +1006,7 @@ class FlaxXLMRobertaModel(FlaxXLMRobertaPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxXLMRobertaModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
+    FlaxXLMRobertaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
 )
 
 
@@ -1077,7 +1076,6 @@ class FlaxXLMRobertaForMaskedLM(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForMaskedLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutputWithPooling,
     _CONFIG_FOR_DOC,
@@ -1151,7 +1149,6 @@ class FlaxXLMRobertaForSequenceClassification(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1236,7 +1233,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxXLMRobertaForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -1316,7 +1312,6 @@ class FlaxXLMRobertaForTokenClassification(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1394,7 +1389,6 @@ class FlaxXLMRobertaForQuestionAnswering(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -1507,7 +1501,6 @@ class FlaxXLMRobertaForCausalLM(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,

@@ -42,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
-_TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 
 FLAX_DISTILBERT_START_DOCSTRING = r"""
@@ -536,7 +535,7 @@ class FlaxDistilBertModel(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertModule
 
 
-append_call_sample_docstring(FlaxDistilBertModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, None, _CONFIG_FOR_DOC)
+append_call_sample_docstring(FlaxDistilBertModel, _CHECKPOINT_FOR_DOC, None, _CONFIG_FOR_DOC)
 
 
 class FlaxDistilBertForMaskedLMModule(nn.Module):
@@ -610,7 +609,7 @@ class FlaxDistilBertForMaskedLM(FlaxDistilBertPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxDistilBertForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
+    FlaxDistilBertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -680,7 +679,6 @@ class FlaxDistilBertForSequenceClassification(FlaxDistilBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxDistilBertForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -763,7 +761,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxDistilBertForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -826,7 +823,6 @@ class FlaxDistilBertForTokenClassification(FlaxDistilBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxDistilBertForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -896,7 +892,6 @@ class FlaxDistilBertForQuestionAnswering(FlaxDistilBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxDistilBertForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,

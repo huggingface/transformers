@@ -34,7 +34,6 @@ from .configuration_gpt_neo import GPTNeoConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTNeoConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 
 
@@ -78,7 +77,7 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length`. Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTNeoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -594,7 +593,7 @@ class FlaxGPTNeoModel(FlaxGPTNeoPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxGPTNeoModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
+    FlaxGPTNeoModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -685,5 +684,5 @@ class FlaxGPTNeoForCausalLM(FlaxGPTNeoPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxGPTNeoForCausalLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC
+    FlaxGPTNeoForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC
 )

@@ -53,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
-_TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 remat = nn_partitioning.remat
 
@@ -111,7 +110,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`ElectraTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -925,7 +924,7 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxElectraModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
+    FlaxElectraModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -1014,7 +1013,7 @@ class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxElectraForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
+    FlaxElectraForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -1085,9 +1084,9 @@ FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import ElectraTokenizer, FlaxElectraForPreTraining
+    >>> from transformers import AutoTokenizer, FlaxElectraForPreTraining
 
-    >>> tokenizer = ElectraTokenizer.from_pretrained("google/electra-small-discriminator")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/electra-small-discriminator")
     >>> model = FlaxElectraForPreTraining.from_pretrained("google/electra-small-discriminator")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
@@ -1176,7 +1175,6 @@ class FlaxElectraForTokenClassification(FlaxElectraPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxElectraForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1328,7 +1326,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxElectraForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -1400,7 +1397,6 @@ class FlaxElectraForQuestionAnswering(FlaxElectraPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxElectraForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -1494,7 +1490,6 @@ class FlaxElectraForSequenceClassification(FlaxElectraPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxElectraForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1605,7 +1600,6 @@ class FlaxElectraForCausalLM(FlaxElectraPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxElectraForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,

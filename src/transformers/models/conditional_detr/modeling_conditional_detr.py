@@ -1097,7 +1097,7 @@ CONDITIONAL_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`ConditionalDetrImageProcessor`]. See
+            Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`ConditionalDetrImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -1901,7 +1901,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
 
-        >>> # Use the `post_process_panoptic_segmentation` method of `ConditionalDetrImageProcessor` to retrieve post-processed panoptic segmentation maps
+        >>> # Use the `post_process_panoptic_segmentation` method of the `image_processor` to retrieve post-processed panoptic segmentation maps
         >>> # Segmentation results are returned as a list of dictionaries
         >>> result = image_processor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
         >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
