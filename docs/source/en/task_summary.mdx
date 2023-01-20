@@ -84,7 +84,7 @@ Image classification labels an entire image from a predefined set of classes. Li
 ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 ... )
 >>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
->>> print(*preds, sep='\n')
+>>> print(*preds, sep="\n")
 {'score': 0.4403, 'label': 'lynx, catamount'}
 {'score': 0.0343, 'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'}
 {'score': 0.0321, 'label': 'snow leopard, ounce, Panthera uncia'}
@@ -201,7 +201,7 @@ Two common types of token classification are:
 ...     }
 ...     for pred in preds
 ... ]
->>> print(*preds, sep='\n')
+>>> print(*preds, sep="\n")
 {'entity': 'I-ORG', 'score': 0.9968, 'index': 1, 'word': 'Hu', 'start': 0, 'end': 2}
 {'entity': 'I-ORG', 'score': 0.9293, 'index': 2, 'word': '##gging', 'start': 2, 'end': 7}
 {'entity': 'I-ORG', 'score': 0.9763, 'index': 3, 'word': 'Face', 'start': 8, 'end': 12}
@@ -229,7 +229,9 @@ There are two common types of question answering:
 ...     question="What is the name of the repository?",
 ...     context="The name of the repository is huggingface/transformers",
 ... )
->>> print(f"score: {round(preds['score'], 4)}, start: {preds['start']}, end: {preds['end']}, answer: {preds['answer']}")
+>>> print(
+...     f"score: {round(preds['score'], 4)}, start: {preds['start']}, end: {preds['end']}, answer: {preds['answer']}"
+... )
 score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 ```
 
