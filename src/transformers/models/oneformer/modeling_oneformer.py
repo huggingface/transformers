@@ -2917,7 +2917,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> class_predictions = outputs.transformer_decoder_class_predictions
 
         >>> f"👉 Mask Predictions Shape: {list(mask_predictions.shape)}, Class Predictions Shape: {list(class_predictions.shape)}"
-        '👉 Mask Predictions Shape: [1, 150, 128, 176], Class Predictions Shape: [1, 150, 151]'
+        '👉 Mask Predictions Shape: [1, 150, 128, 171], Class Predictions Shape: [1, 150, 151]'
         ```"""
 
         if pixel_values is None:
@@ -3112,8 +3112,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> class_queries_logits = outputs.class_queries_logits
         >>> masks_queries_logits = outputs.masks_queries_logits
 
-        >>> # you can pass them to feature_extractor for semantic postprocessing
-        >>> predicted_semantic_map = feature_extractor.post_process_semantic_segmentation(
+        >>> # you can pass them to processor for semantic postprocessing
+        >>> predicted_semantic_map = processor.post_process_semantic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]
         >>> f"👉 Semantic Predictions Shape: {list(predicted_semantic_map.shape)}"
@@ -3129,8 +3129,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> class_queries_logits = outputs.class_queries_logits
         >>> masks_queries_logits = outputs.masks_queries_logits
 
-        >>> # you can pass them to feature_extractor for instance postprocessing
-        >>> predicted_instance_map = feature_extractor.post_process_instance_segmentation(
+        >>> # you can pass them to processor for instance postprocessing
+        >>> predicted_instance_map = processor.post_process_instance_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
         >>> f"👉 Instance Predictions Shape: {list(predicted_instance_map.shape)}"
@@ -3146,8 +3146,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> class_queries_logits = outputs.class_queries_logits
         >>> masks_queries_logits = outputs.masks_queries_logits
 
-        >>> # you can pass them to feature_extractor for panoptic postprocessing
-        >>> predicted_panoptic_map = feature_extractor.post_process_panoptic_segmentation(
+        >>> # you can pass them to processor for panoptic postprocessing
+        >>> predicted_panoptic_map = processor.post_process_panoptic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
         >>> f"👉 Panoptic Predictions Shape: {list(predicted_panoptic_map.shape)}"
