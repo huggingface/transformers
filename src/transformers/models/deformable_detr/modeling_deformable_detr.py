@@ -545,7 +545,7 @@ def build_position_encoding(config):
     return position_embedding
 
 
-def multiscale_deform_attn_core_pytorch(
+def multi_scale_deformable_attention(
     value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
@@ -704,7 +704,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             )
         except Exception:
             # CPU
-            output = multiscale_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+            output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
