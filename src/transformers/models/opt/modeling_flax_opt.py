@@ -695,9 +695,7 @@ class FlaxOPTModel(FlaxOPTPreTrainedModel):
     module_class = FlaxOPTModule
 
 
-append_call_sample_docstring(
-    FlaxOPTModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxOPTModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 @add_start_docstrings(

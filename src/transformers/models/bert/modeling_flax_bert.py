@@ -1031,9 +1031,7 @@ class FlaxBertModel(FlaxBertPreTrainedModel):
     module_class = FlaxBertModule
 
 
-append_call_sample_docstring(
-    FlaxBertModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBertModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForPreTrainingModule(nn.Module):
@@ -1200,9 +1198,7 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     module_class = FlaxBertForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxBertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForNextSentencePredictionModule(nn.Module):

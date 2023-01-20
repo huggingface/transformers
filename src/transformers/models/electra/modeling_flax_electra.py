@@ -923,9 +923,7 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraModule
 
 
-append_call_sample_docstring(
-    FlaxElectraModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxElectraModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxElectraTiedDense(nn.Module):
@@ -1012,9 +1010,7 @@ class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxElectraForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxElectraForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxElectraForPreTrainingModule(nn.Module):

@@ -1218,9 +1218,7 @@ class FlaxBlenderbotSmallModel(FlaxBlenderbotSmallPreTrainedModel):
     module_class = FlaxBlenderbotSmallModule
 
 
-append_call_sample_docstring(
-    FlaxBlenderbotSmallModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBlenderbotSmallModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->BlenderbotSmall
@@ -1496,9 +1494,9 @@ FLAX_BLENDERBOT_SMALL_CONDITIONAL_GENERATION_DOCSTRING = """
 
     Mask filling example:
 
-        >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration >>>
-        tokenizer = AutoTokenizer.from_pretrained('facebook/blenderbot_small-90M') >>> TXT = "My friends are
-        <mask> but they eat too many carbs."
+        >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration >>> tokenizer =
+        AutoTokenizer.from_pretrained('facebook/blenderbot_small-90M') >>> TXT = "My friends are <mask> but they eat
+        too many carbs."
 
         >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot_small-90M') >>>
         input_ids = tokenizer([TXT], return_tensors='np')['input_ids'] >>> logits = model(input_ids).logits

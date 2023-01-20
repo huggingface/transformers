@@ -592,9 +592,7 @@ class FlaxGPTNeoModel(FlaxGPTNeoPreTrainedModel):
     module_class = FlaxGPTNeoModule
 
 
-append_call_sample_docstring(
-    FlaxGPTNeoModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxGPTNeoModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxGPTNeoForCausalLMModule(nn.Module):
@@ -683,6 +681,4 @@ class FlaxGPTNeoForCausalLM(FlaxGPTNeoPreTrainedModel):
         return model_kwargs
 
 
-append_call_sample_docstring(
-    FlaxGPTNeoForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxGPTNeoForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)

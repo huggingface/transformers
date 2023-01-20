@@ -2110,9 +2110,7 @@ class FlaxLongT5Model(FlaxLongT5PreTrainedModel):
     module_class = FlaxLongT5Module
 
 
-append_call_sample_docstring(
-    FlaxLongT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxLongT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 FLAX_LONGT5_MODEL_DOCSTRING = """
     Returns:

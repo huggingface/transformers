@@ -1231,9 +1231,7 @@ class FlaxPegasusModel(FlaxPegasusPreTrainedModel):
     module_class = FlaxPegasusModule
 
 
-append_call_sample_docstring(
-    FlaxPegasusModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxPegasusModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->Pegasus
@@ -1513,11 +1511,12 @@ FLAX_PEGASUS_CONDITIONAL_GENERATION_DOCSTRING = """
 
     ```python
     >>> from transformers import AutoTokenizer, FlaxPegasusForConditionalGeneration
-    >>> tokenizer = AutoTokenizer.from_pretrained('google/pegasus-large')
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/pegasus-large")
     >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-    >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-    >>> input_ids = tokenizer([TXT], return_tensors='np')['input_ids']
+    >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
+    >>> input_ids = tokenizer([TXT], return_tensors="np")["input_ids"]
     >>> logits = model(input_ids).logits
 
     >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()

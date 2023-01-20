@@ -1005,9 +1005,7 @@ class FlaxXLMRobertaModel(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaModule
 
 
-append_call_sample_docstring(
-    FlaxXLMRobertaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxXLMRobertaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForMaskedLMModule with Roberta->XLMRoberta

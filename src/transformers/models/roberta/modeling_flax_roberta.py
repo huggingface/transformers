@@ -992,9 +992,7 @@ class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaModule
 
 
-append_call_sample_docstring(
-    FlaxRobertaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxRobertaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 class FlaxRobertaForMaskedLMModule(nn.Module):

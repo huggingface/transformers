@@ -749,9 +749,7 @@ class FlaxRoFormerModel(FlaxRoFormerPreTrainedModel):
     module_class = FlaxRoFormerModule
 
 
-append_call_sample_docstring(
-    FlaxRoFormerModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxRoFormerModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxRoFormerForMaskedLMModule(nn.Module):

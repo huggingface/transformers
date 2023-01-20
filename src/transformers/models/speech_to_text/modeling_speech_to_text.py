@@ -612,8 +612,8 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the fbank features, padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`~Speech2TextFeatureExtractor.__call__`]
+            [`AutoFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
+            tensor of type `torch.FloatTensor`. See [`~Speech2TextFeatureExtractor.__call__`]
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:

@@ -679,9 +679,7 @@ class FlaxAlbertModel(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertModule
 
 
-append_call_sample_docstring(
-    FlaxAlbertModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxAlbertModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 class FlaxAlbertForPreTrainingModule(nn.Module):
@@ -833,9 +831,7 @@ class FlaxAlbertForMaskedLM(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxAlbertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxAlbertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxAlbertForSequenceClassificationModule(nn.Module):

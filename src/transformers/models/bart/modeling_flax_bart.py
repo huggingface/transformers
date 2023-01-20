@@ -1246,9 +1246,7 @@ class FlaxBartModel(FlaxBartPreTrainedModel):
     module_class = FlaxBartModule
 
 
-append_call_sample_docstring(
-    FlaxBartModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBartModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBartForConditionalGenerationModule(nn.Module):

@@ -1209,9 +1209,7 @@ class FlaxMarianModel(FlaxMarianPreTrainedModel):
     module_class = FlaxMarianModule
 
 
-append_call_sample_docstring(
-    FlaxMarianModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxMarianModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxMarianMTModule(nn.Module):

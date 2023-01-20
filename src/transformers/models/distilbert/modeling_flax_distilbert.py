@@ -608,9 +608,7 @@ class FlaxDistilBertForMaskedLM(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxDistilBertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxDistilBertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxDistilBertForSequenceClassificationModule(nn.Module):

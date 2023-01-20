@@ -1221,9 +1221,7 @@ class FlaxBlenderbotModel(FlaxBlenderbotPreTrainedModel):
     module_class = FlaxBlenderbotModule
 
 
-append_call_sample_docstring(
-    FlaxBlenderbotModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBlenderbotModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->Blenderbot

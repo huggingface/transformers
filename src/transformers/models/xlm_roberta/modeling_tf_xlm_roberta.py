@@ -118,8 +118,8 @@ XLM_ROBERTA_START_DOCSTRING = r"""
 XLM_ROBERTA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`].
-            See [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for details. [What are input
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for details. [What are input
             IDs?](../glossary#input-ids)
         attention_mask (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:

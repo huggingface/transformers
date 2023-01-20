@@ -2723,8 +2723,8 @@ ONEFORMER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`OneFormerProcessor`]. See
             [`OneFormerProcessor.__call__`] for details.
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See
-            [`OneFormerProcessor.__call__`] for details.
+            Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
+            for details.
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 

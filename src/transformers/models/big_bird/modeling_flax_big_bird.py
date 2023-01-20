@@ -1833,9 +1833,7 @@ class FlaxBigBirdModel(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdModule
 
 
-append_call_sample_docstring(
-    FlaxBigBirdModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBigBirdModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForPreTrainingModule with Bert->BigBird
@@ -2006,9 +2004,7 @@ class FlaxBigBirdForMaskedLM(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxBigBirdForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBigBirdForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBigBirdClassificationHead(nn.Module):
