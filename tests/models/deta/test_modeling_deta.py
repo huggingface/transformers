@@ -437,9 +437,11 @@ def prepare_img():
 class DetaModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
+        # TODO update organization
         return AutoImageProcessor.from_pretrained("nielsr/deta-resnet-50") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
+        # TODO update organization
         model = DetaForObjectDetection.from_pretrained("nielsr/deta-resnet-50").to(torch_device)
 
         image_processor = self.default_image_processor
@@ -469,11 +471,49 @@ class DetaModelIntegrationTests(unittest.TestCase):
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.6392, 0.6276, 0.5546, 0.5260, 0.4706]).to(torch_device)
+        expected_scores = torch.tensor([0.6392, 0.6276, 0.5546, 0.5260, 0.4706], device=torch_device)
         expected_labels = [75, 17, 17, 75, 63]
-        expected_slice_boxes = torch.tensor([40.5866, 73.2107, 176.1421, 117.1751]).to(torch_device)
+        expected_slice_boxes = torch.tensor([40.5866, 73.2107, 176.1421, 117.1751], device=torch_device)
 
-        self.assertEqual(len(results["scores"]), 5)
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
+        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
+
+    def test_inference_object_detection_head_swin_backbone(self):
+        # TODO update organization
+        model = DetaForObjectDetection.from_pretrained("nielsr/deta-swin-large").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+
+        expected_logits = torch.tensor(
+            [[-7.6308, -2.8485, -5.3737], [-7.2037, -4.5505, -4.8027], [-7.2943, -4.2611, -4.6617]]
+        ).to(torch_device)
+        expected_boxes = torch.tensor(
+            [[0.4987, 0.4969, 0.9999], [0.2549, 0.5498, 0.4805], [0.5498, 0.2757, 0.0569]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+
+        expected_shape_boxes = torch.Size((1, 300, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+
+        # verify postprocessing
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+        )[0]
+        expected_scores = torch.tensor([0.6831, 0.6826, 0.5684, 0.5464, 0.4392], device=torch_device)
+        expected_labels = [17, 17, 75, 75, 63]
+        expected_slice_boxes = torch.tensor([345.8478, 23.6754, 639.8562, 372.8265], device=torch_device)
+
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
