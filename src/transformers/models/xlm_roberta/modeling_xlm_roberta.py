@@ -286,7 +286,7 @@ class XLMRobertaSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput with Roberta->XLMRoberta
 class XLMRobertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -351,7 +351,7 @@ class XLMRobertaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate
+# Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate with Roberta->XLMRoberta
 class XLMRobertaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -367,7 +367,7 @@ class XLMRobertaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput with Roberta->XLMRoberta
 class XLMRobertaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -567,7 +567,7 @@ class XLMRobertaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler
+# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler with Roberta->XLMRoberta
 class XLMRobertaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1455,7 +1455,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead
+# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->XLMRoberta
 class XLMRobertaClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 

@@ -146,6 +146,17 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
     return result
 
 
+FAKE_MODEL_DISCLAIMER = """
+    <Tip warning={true}>
+
+    This example uses a random model as the real ones are all very big. To get proper results, you should use
+    {real_checkpoint} instead of {fake_checkpoint}. If you get out-of-memory when loading that checkpoint, you can try
+    adding `device_map="auto"` in the `from_pretrained` call.
+
+    </Tip>
+"""
+
+
 PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example:
 
@@ -256,7 +267,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> with torch.no_grad():
     ...     logits = model(**inputs).logits
 
-    >>> predicted_class_ids = torch.arange(0, logits.shape[-1])[torch.sigmoid(logits).squeeze() > 0.5]
+    >>> predicted_class_ids = torch.arange(0, logits.shape[-1])[torch.sigmoid(logits).squeeze(dim=0) > 0.5]
 
     >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
@@ -264,7 +275,9 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ...     "{checkpoint}", num_labels=num_labels, problem_type="multi_label_classification"
     ... )
 
-    >>> labels = torch.nn.functional.one_hot(torch.tensor(predicted_class_ids), num_classes=num_labels).to(torch.float)
+    >>> labels = torch.sum(
+    ...     torch.nn.functional.one_hot(predicted_class_ids[None, :].clone(), num_classes=num_labels), dim=1
+    ... ).to(torch.float)
     >>> loss = model(**inputs, labels=labels).loss
     ```
 """
@@ -848,10 +861,10 @@ TF_VISION_BASE_MODEL_SAMPLE = r"""
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> image_processor = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> inputs = image_processor(image, return_tensors="tf")
     >>> outputs = model(**inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
@@ -871,10 +884,10 @@ TF_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> image_processor = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> inputs = image_processor(image, return_tensors="tf")
     >>> logits = model(**inputs).logits
 
     >>> # model predicts one of the 1000 ImageNet classes
@@ -1056,6 +1069,7 @@ def add_code_sample_docstrings(
     modality=None,
     expected_output=None,
     expected_loss=None,
+    real_checkpoint=None,
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1080,6 +1094,9 @@ def add_code_sample_docstrings(
             qa_target_end_index=qa_target_end_index,
             expected_output=expected_output,
             expected_loss=expected_loss,
+            real_checkpoint=real_checkpoint,
+            fake_checkpoint=checkpoint,
+            true="{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
         )
 
         if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
@@ -1116,6 +1133,8 @@ def add_code_sample_docstrings(
         code_sample = filter_outputs_from_example(
             code_sample, expected_output=expected_output, expected_loss=expected_loss
         )
+        if real_checkpoint is not None:
+            code_sample = FAKE_MODEL_DISCLAIMER + code_sample
         func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)

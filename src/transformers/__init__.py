@@ -244,6 +244,7 @@ _import_structure = {
         "DPRReaderTokenizer",
     ],
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
+    "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": [
@@ -271,6 +272,7 @@ _import_structure = {
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -348,6 +350,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
+    "models.oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig", "OneFormerProcessor"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
     "models.owlvit": [
@@ -581,6 +584,7 @@ _import_structure = {
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
+        "is_torch_neuroncore_available",
         "is_torch_tpu_available",
         "is_vision_available",
         "logging",
@@ -792,6 +796,7 @@ else:
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
+    _import_structure["models.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -802,6 +807,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
@@ -1374,6 +1380,15 @@ else:
             "DPTPreTrainedModel",
         ]
     )
+    _import_structure["models.efficientformer"].extend(
+        [
+            "EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EfficientFormerForImageClassification",
+            "EfficientFormerForImageClassificationWithTeacher",
+            "EfficientFormerModel",
+            "EfficientFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1538,6 +1553,14 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.graphormer"].extend(
+        [
+            "GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GraphormerForGraphClassification",
+            "GraphormerModel",
+            "GraphormerPreTrainedModel",
         ]
     )
     _import_structure["models.groupvit"].extend(
@@ -1872,6 +1895,14 @@ else:
             "NystromformerLayer",
             "NystromformerModel",
             "NystromformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.oneformer"].extend(
+        [
+            "ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OneFormerForUniversalSegmentation",
+            "OneFormerModel",
+            "OneFormerPreTrainedModel",
         ]
     )
     _import_structure["models.openai"].extend(
@@ -3165,12 +3196,14 @@ else:
     _import_structure["models.xlm_roberta"].extend(
         [
             "TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFXLMRobertaForCausalLM",
             "TFXLMRobertaForMaskedLM",
             "TFXLMRobertaForMultipleChoice",
             "TFXLMRobertaForQuestionAnswering",
             "TFXLMRobertaForSequenceClassification",
             "TFXLMRobertaForTokenClassification",
             "TFXLMRobertaModel",
+            "TFXLMRobertaPreTrainedModel",
         ]
     )
     _import_structure["models.xlnet"].extend(
@@ -3447,12 +3480,15 @@ else:
     )
     _import_structure["models.xlm_roberta"].extend(
         [
+            "FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FlaxXLMRobertaForMaskedLM",
             "FlaxXLMRobertaForMultipleChoice",
             "FlaxXLMRobertaForQuestionAnswering",
             "FlaxXLMRobertaForSequenceClassification",
             "FlaxXLMRobertaForTokenClassification",
             "FlaxXLMRobertaModel",
+            "FlaxXLMRobertaForCausalLM",
+            "FlaxXLMRobertaPreTrainedModel",
         ]
     )
 
@@ -3645,6 +3681,7 @@ if TYPE_CHECKING:
         DPRReaderTokenizer,
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
+    from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
@@ -3668,6 +3705,7 @@ if TYPE_CHECKING:
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -3735,6 +3773,7 @@ if TYPE_CHECKING:
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
+    from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
     from .models.owlvit import (
@@ -3958,6 +3997,7 @@ if TYPE_CHECKING:
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
+        is_torch_neuroncore_available,
         is_torch_tpu_available,
         is_vision_available,
         logging,
@@ -4121,6 +4161,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
+        from .models.efficientformer import EfficientFormerImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
@@ -4131,6 +4172,7 @@ if TYPE_CHECKING:
         from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.oneformer import OneFormerImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
@@ -4606,6 +4648,13 @@ if TYPE_CHECKING:
             DPTModel,
             DPTPreTrainedModel,
         )
+        from .models.efficientformer import (
+            EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EfficientFormerForImageClassification,
+            EfficientFormerForImageClassificationWithTeacher,
+            EfficientFormerModel,
+            EfficientFormerPreTrainedModel,
+        )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             ElectraForCausalLM,
@@ -4743,6 +4792,12 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.graphormer import (
+            GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GraphormerForGraphClassification,
+            GraphormerModel,
+            GraphormerPreTrainedModel,
         )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5008,6 +5063,12 @@ if TYPE_CHECKING:
             NystromformerLayer,
             NystromformerModel,
             NystromformerPreTrainedModel,
+        )
+        from .models.oneformer import (
+            ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OneFormerForUniversalSegmentation,
+            OneFormerModel,
+            OneFormerPreTrainedModel,
         )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6044,12 +6105,14 @@ if TYPE_CHECKING:
         )
         from .models.xlm_roberta import (
             TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFXLMRobertaForCausalLM,
             TFXLMRobertaForMaskedLM,
             TFXLMRobertaForMultipleChoice,
             TFXLMRobertaForQuestionAnswering,
             TFXLMRobertaForSequenceClassification,
             TFXLMRobertaForTokenClassification,
             TFXLMRobertaModel,
+            TFXLMRobertaPreTrainedModel,
         )
         from .models.xlnet import (
             TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6262,12 +6325,15 @@ if TYPE_CHECKING:
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
+            FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlaxXLMRobertaForCausalLM,
             FlaxXLMRobertaForMaskedLM,
             FlaxXLMRobertaForMultipleChoice,
             FlaxXLMRobertaForQuestionAnswering,
             FlaxXLMRobertaForSequenceClassification,
             FlaxXLMRobertaForTokenClassification,
             FlaxXLMRobertaModel,
+            FlaxXLMRobertaPreTrainedModel,
         )
 
 else:

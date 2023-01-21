@@ -31,7 +31,7 @@ from tqdm.auto import tqdm
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
 from transformers import (
     AdamW,
     SchedulerType,
@@ -422,7 +422,8 @@ def main():
                 repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
             else:
                 repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            create_repo(repo_name, exist_ok=True, token=args.hub_token)
+            repo = Repository(args.output_dir, clone_from=repo_name, token=args.hub_token)
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()

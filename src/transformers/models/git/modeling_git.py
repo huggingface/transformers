@@ -916,7 +916,7 @@ GIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`CLIPImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1263,6 +1263,11 @@ class GitModel(GitPreTrainedModel):
                 dtype=embedding_output.dtype,
                 device=embedding_output.device,
             )
+
+        # Repeat visual features to match embedding batch size.
+        projected_visual_features = projected_visual_features.repeat(
+            embedding_output.size(0) // projected_visual_features.size(0), 1, 1
+        )
 
         # concatenate patch token and text token embeddings
         hidden_states = torch.cat((projected_visual_features, embedding_output), dim=1)

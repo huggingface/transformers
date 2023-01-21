@@ -451,6 +451,13 @@ def is_torch_tpu_available(check_device=True):
     return False
 
 
+@lru_cache()
+def is_torch_neuroncore_available(check_device=True):
+    if importlib.util.find_spec("torch_neuronx") is not None:
+        return is_torch_tpu_available(check_device)
+    return False
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
@@ -727,6 +734,10 @@ def is_sudachi_available():
 
 def is_jumanpp_available():
     return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
+
+
+def is_cython_available():
+    return importlib.util.find_spec("pyximport") is not None
 
 
 # docstyle-ignore
