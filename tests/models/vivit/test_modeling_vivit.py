@@ -337,7 +337,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_video_classification(self):
-        model = VivitForVideoClassification.from_pretrained("jegormeister/vivit-b-16x2-kinetics400").to(torch_device)
+        model = VivitForVideoClassification.from_pretrained("google/vivit-b-16x2-kinetics400").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
