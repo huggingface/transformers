@@ -150,7 +150,6 @@ class BridgeTowerModelTester:
         model = BridgeTowerForImageAndTextRetrieval(config)
         model.to(torch_device)
         model.eval()
-
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values)
 
@@ -167,7 +166,6 @@ class BridgeTowerModelTester:
         model = BridgeTowerForMaskedLM(config)
         model.to(torch_device)
         model.eval()
-
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values)
 
