@@ -39,6 +39,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
         ("beit", "BeitFeatureExtractor"),
+        ("blip", "BlipFeatureExtractor"),
         ("chinese_clip", "ChineseCLIPFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
         ("clipseg", "ViTFeatureExtractor"),
