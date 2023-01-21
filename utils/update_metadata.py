@@ -211,12 +211,10 @@ def update_pipeline_and_auto_class_table(table):
 
 def update_metadata(token, commit_sha):
     """
-    Update the metada for the Transformers repo.
+    Update the metadata for the Transformers repo.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
-        repo = Repository(
-            tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", use_auth_token=token
-        )
+        repo = Repository(tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", token=token)
 
         frameworks_table = get_frameworks_table()
         frameworks_dataset = Dataset.from_pandas(frameworks_table)

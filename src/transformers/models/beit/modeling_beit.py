@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "BeitConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "BeitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224-pt22k"
@@ -646,7 +645,6 @@ class BeitModel(BeitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BeitModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -844,7 +842,6 @@ class BeitForImageClassification(BeitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

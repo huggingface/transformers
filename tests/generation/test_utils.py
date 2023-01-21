@@ -17,6 +17,8 @@
 import inspect
 import unittest
 
+import numpy as np
+
 from transformers import is_torch_available, pipeline
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -2485,6 +2487,58 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_sequences_no_mask.tolist(), output_sequences_with_mask.tolist())
 
+    def test_transition_scores_greedy_search(self):
+        articles = ["Justin Timberlake", "Michael Phelps"]
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
+        outputs = model.generate(
+            input_ids=input_ids,
+            max_new_tokens=5,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores)
+        expected_scores = np.array(
+            [
+                [0.3596273, 0.39646253, 0.46157718, 0.4594633, 0.44866616],
+                [0.34934354, 0.4935004, 0.6373219, 0.5173545, 0.57517034],
+            ]
+        )
+        self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
+
+    def test_transition_scores_greedy_search_normalized(self):
+        articles = ["Justin Timberlake", "Michael Phelps"]
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
+        outputs = model.generate(
+            input_ids=input_ids,
+            max_new_tokens=5,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
+        expected_scores = np.array(
+            [
+                [-6.5532393, -6.5158753, -6.451863, -6.4527144, -6.459402],
+                [-6.5685124, -6.4277077, -6.282607, -6.399295, -6.340927],
+            ]
+        )
+        self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
+
     def test_transition_scores_beam_search_encoder_decoder(self):
         articles = [
             "Justin Timberlake and Jessica Biel, welcome to parenthood.",
@@ -2506,9 +2560,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(input_ids=input_ids)
 
-        transition_scores = model.compute_transition_beam_scores(
-            outputs.sequences, outputs.scores, outputs.beam_indices
-        )
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
@@ -2533,9 +2585,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(input_ids=input_ids)
 
-        transition_scores = model.compute_transition_beam_scores(
-            outputs.sequences, outputs.scores, outputs.beam_indices
-        )
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
@@ -2564,9 +2614,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(input_ids=input_ids)
 
-        transition_scores = model.compute_transition_beam_scores(
-            outputs.sequences, outputs.scores, outputs.beam_indices
-        )
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
@@ -2593,9 +2641,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(input_ids=input_ids)
 
-        transition_scores = model.compute_transition_beam_scores(
-            outputs.sequences, outputs.scores, outputs.beam_indices
-        )
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
@@ -2622,9 +2668,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(input_ids=input_ids)
 
-        transition_scores = model.compute_transition_beam_scores(
-            outputs.sequences, outputs.scores, outputs.beam_indices
-        )
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
@@ -2653,7 +2697,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             length_penalty=0.0,
         )
 
-        transition_scores = model.compute_transition_beam_scores(
+        transition_scores = model.compute_transition_scores(
             sequences=result.sequences, scores=result.scores, beam_indices=result.beam_indices
         )
 

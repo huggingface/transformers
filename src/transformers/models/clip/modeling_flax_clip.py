@@ -108,7 +108,7 @@ CLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`CLIPImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -143,7 +143,7 @@ CLIP_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`CLIPImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -315,7 +315,7 @@ class FlaxCLIPAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -893,7 +893,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         Args:
             pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
-                using [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+                using [`CLIPImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
 
         Returns:
             image_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The image embeddings obtained by

@@ -19,7 +19,7 @@ distlib==0.3.0
 distro==1.4.0
 entrypoints==0.3
 filelock==3.0.12
-future==0.18.2
+future==0.18.3
 html5lib==1.0.1
 idna==2.8
 ipaddr==2.2.0

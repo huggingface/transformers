@@ -777,7 +777,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
     Args:
         model (`tf.keras.models.Model`): Model in which the weights are loaded
-        model_layer_map (`Dict`): A dictionnary mapping the layer name to the index of the layer in the model.
+        model_layer_map (`Dict`): A dictionary mapping the layer name to the index of the layer in the model.
         resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
         ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`): Whether to ignore the mismatched keys
 
@@ -1345,9 +1345,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if collate_fn is None:
             if tokenizer is None:
-                collate_fn = DefaultDataCollator(return_tensors="tf")
+                collate_fn = DefaultDataCollator(return_tensors="np")
             else:
-                collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
+                collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="np")
         if collate_fn_args is None:
             collate_fn_args = dict()
 

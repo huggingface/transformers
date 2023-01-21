@@ -1343,7 +1343,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 which it will tokenize. This is useful for NER or token classification.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -1572,11 +1572,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def __repr__(self) -> str:
         return (
-            f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path='{self.name_or_path}',"
-            f" vocab_size={self.vocab_size}, model_max_len={self.model_max_length}, is_fast={self.is_fast},"
+            f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
+            f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map_extended})"
         )
+
+    def __len__(self) -> int:
+        raise NotImplementedError()
 
     def get_vocab(self) -> Dict[str, int]:
         """
@@ -2902,7 +2905,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific tokenizer's default, defined by the `return_outputs` attribute.
@@ -3339,7 +3342,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """

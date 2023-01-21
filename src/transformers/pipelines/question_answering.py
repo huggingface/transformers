@@ -509,8 +509,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     def _forward(self, inputs):
         example = inputs["example"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
-        start, end = self.model(**model_inputs)[:2]
-        return {"start": start, "end": end, "example": example, **inputs}
+        output = self.model(**model_inputs)
+        if isinstance(output, dict):
+            return {"start": output["start_logits"], "end": output["end_logits"], "example": example, **inputs}
+        else:
+            start, end = output[:2]
+            return {"start": start, "end": end, "example": example, **inputs}
 
     def postprocess(
         self,
