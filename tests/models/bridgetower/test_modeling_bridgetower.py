@@ -129,7 +129,6 @@ class BridgeTowerModelTester:
         model = BridgeTowerModel(config=config)
         model.to(torch_device)
         model.eval()
-
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values)
         self.parent.assertEqual(result["text_features"].shape, (self.batch_size, self.seq_length, self.hidden_size))
