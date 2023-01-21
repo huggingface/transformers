@@ -1019,9 +1019,12 @@ class DagsHubCallback(MLflowCallback):
         super().__init__()
         if not is_dagshub_available():
             raise RuntimeError("DagsHubCallback requires dagshub to be installed. Run `pip install dagshub`.")
+        from glob import glob
+
         from dagshub.upload import Repo
 
         self.Repo = Repo
+        self.glob = glob
 
     def setup(self, *args, **kwargs):
         """
@@ -1034,6 +1037,7 @@ class DagsHubCallback(MLflowCallback):
 
         self.model = args[2]
         self.log_artifacts = os.getenv("HF_DAGSHUB_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self.name = os.getenv("HF_DAGSHUB_MODEL_NAME") or "main"
         if self.log_artifacts:
             self.data = os.getenv("HF_DAGSHUB_DATA_PATH")
         self.remote = os.getenv("MLFLOW_TRACKING_URI") or input("Please input a remote url.")
@@ -1059,12 +1063,11 @@ class DagsHubCallback(MLflowCallback):
             #     = dataset[i] # or whatever your dataset returns
             # self.repo.directory(self.paths["artifacts"]).add(file=self.data, path=self.paths["data"])
 
-            torch.save(self.model, self.paths["models"] / "model.pt")
-            state.save_to_json(self.paths["artifacts"] / "state.json")
+            Path(self.models["models"] / self.name).mkdir(parents=True, exist_ok=True)
+            torch.save(self.model, self.paths["models"] / self.name / "model.pt")
+            state.save_to_json(self.paths["models"] / self.name / "state.json")
 
-            self.repo.directory(self.paths["artifacts"]).add(
-                file=self.paths["artifacts"], path=self.paths["artifacts"]
-            )
+            self.repo.directory(self.paths["artifacts"]).add_dir(file=self.paths["artifacts"])
             self.repo.directory(self.paths["artifacts"]).commit("updated artifacts", versioning="dvc", force=True)
 
 
