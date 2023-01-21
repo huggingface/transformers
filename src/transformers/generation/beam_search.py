@@ -271,7 +271,7 @@ class BeamSearchScorer(BeamScorer):
             )
 
         # for non-eos
-        first_several_non_eos = first_several_nonzero_indices(
+        first_several_non_eos = _first_several_nonzero_indices(
             (next_tokens != (eos_token_id or [-42])[0]).int(), batch_enable=~self._done, k=self.num_beams)
         next_beam_scores[:] = next_scores[first_several_non_eos].reshape((-1, self.num_beams))
         next_beam_tokens[:] = next_tokens[first_several_non_eos].reshape((-1, self.num_beams))
@@ -388,6 +388,25 @@ class BeamSearchScorer(BeamScorer):
                 "beam_indices": indices,
             }
         )
+
+
+def _first_several_nonzero_indices(raw: torch.Tensor, mask: torch.Tensor, k: int) -> torch.Tensor:
+    x = raw.clone()
+    batch_size, seq_len = x.shape
+
+    if torch.any((torch.count_nonzero(x, dim=1) < k) & mask):
+        raise ValueError(
+            'first_several_nonzero_indices cannot find as many as k values '
+            f'raw={raw}'
+        )
+
+    arange = torch.arange(batch_size)
+    mask = torch.zeros(raw.shape, dtype=torch.bool, device=x.device)
+    for i in range(k):
+        indices = x.argmax(dim=1)
+        mask[arange, indices] = True
+        x[arange, indices] = 0
+    return mask
 
 
 class ConstrainedBeamSearchScorer(BeamScorer):
