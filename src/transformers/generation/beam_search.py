@@ -159,8 +159,8 @@ class BeamSearchScorer(BeamScorer):
         device: torch.device,
         length_penalty: Optional[float] = 1.0,
         do_early_stopping: Optional[bool] = False,
-        num_beam_hyps_to_keep: int = 1,
-        num_beam_groups: int = 1,
+        num_beam_hyps_to_keep: Optional[int] = 1,
+        num_beam_groups: Optional[int] = 1,
         **kwargs: Any,
     ):
         self.num_beams = num_beams
@@ -202,7 +202,7 @@ class BeamSearchScorer(BeamScorer):
             )
 
     @property
-    def is_done(self) -> torch.Tensor:
+    def is_done(self) -> bool:
         return self._done.all()
 
     def process(
@@ -212,7 +212,7 @@ class BeamSearchScorer(BeamScorer):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
     ) -> UserDict:
         # t0 = default_timer()
@@ -236,10 +236,13 @@ class BeamSearchScorer(BeamScorer):
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
 
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+
         batch_beam_indices = torch.arange(batch_size, device=device)[:, None] * self.group_size + next_indices
 
         # for eos
-        is_eos_and_non_done = (~self._done[:, None]) & (next_tokens == (eos_token_id or -42))
+        is_eos_and_non_done = (~self._done[:, None]) & (next_tokens == (eos_token_id or [-42])[0])
 
         next_indices_selected = next_indices[is_eos_and_non_done]
 
@@ -271,7 +274,7 @@ class BeamSearchScorer(BeamScorer):
 
         # for non-eos
         first_several_non_eos = _first_several_nonzero_indices(
-            (next_tokens != (eos_token_id or -42)).int(), mask=~self._done, k=self.num_beams)
+            (next_tokens != (eos_token_id or [-42])[0]).int(), mask=~self._done, k=self.num_beams)
         next_beam_scores[:] = next_scores[first_several_non_eos].reshape((-1, self.num_beams))
         next_beam_tokens[:] = next_tokens[first_several_non_eos].reshape((-1, self.num_beams))
         next_beam_indices[:] = batch_beam_indices[first_several_non_eos].reshape((-1, self.num_beams))
@@ -305,10 +308,13 @@ class BeamSearchScorer(BeamScorer):
         final_beam_indices: torch.LongTensor,
         max_length: int,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
-    ) -> UserDict:
+    ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
+
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
 
         # finalize all open beam hypotheses and add to generated hypotheses
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
@@ -374,7 +380,7 @@ class BeamSearchScorer(BeamScorer):
                 indices[i, : len(best_idx)] = torch.tensor(best_idx)
 
             if sent_lengths[i] < sent_max_len:
-                decoded[i, sent_lengths[i]] = eos_token_id  # type: ignore[assignment]
+                decoded[i, sent_lengths[i]] = eos_token_id[0]  # type: ignore[assignment]
 
         return UserDict(
             {
