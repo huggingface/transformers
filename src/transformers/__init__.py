@@ -998,7 +998,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -6224,8 +6223,6 @@ if TYPE_CHECKING:
             ViTMSNModel,
             ViTMSNPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VivitForVideoClassification,
