@@ -93,12 +93,9 @@ class BridgeTowerModelTester:
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         pixel_mask = random_attention_mask([self.batch_size, self.image_size, self.image_size])
-
         config = self.get_config()
-
         return (config, input_ids, attention_mask, pixel_values, pixel_mask)
 
     def get_config(self):
