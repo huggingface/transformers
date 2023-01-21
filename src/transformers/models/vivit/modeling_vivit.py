@@ -117,7 +117,7 @@ def load_tf_weights_in_vivit(model, config, tf_checkpoint_path):
     return model
 
 
-class TubeletEmbeddings(nn.Module):
+class VivitTubeletEmbeddings(nn.Module):
     """
     Construct Vivit Tubelet embeddings.
 
