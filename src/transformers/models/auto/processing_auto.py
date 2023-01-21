@@ -54,6 +54,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
         ("markuplm", "MarkupLMProcessor"),
+        ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
@@ -257,6 +258,7 @@ class AutoProcessor:
                 processor_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
+                processor_class.register_for_auto_class()
             else:
                 processor_class = processor_class_from_name(processor_class)
 

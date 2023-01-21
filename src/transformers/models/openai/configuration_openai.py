@@ -60,8 +60,6 @@ class OpenAIGPTConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        predict_special_tokens (`bool`, *optional*, defaults to `True`):
-            Whether or not special tokens should be predicted when the model has a language modeling head.
         summary_type (`str`, *optional*, defaults to `"cls_index"`):
             Argument used when doing sequence summary, used in the models [`OpenAIGPTDoubleHeadsModel`] and
             [`OpenAIGPTDoubleHeadsModel`].
@@ -133,7 +131,6 @@ class OpenAIGPTConfig(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        predict_special_tokens=True,
         summary_type="cls_index",
         summary_use_proj=True,
         summary_activation=None,
@@ -152,7 +149,6 @@ class OpenAIGPTConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.predict_special_tokens = predict_special_tokens
         self.summary_type = summary_type
         self.summary_use_proj = summary_use_proj
         self.summary_activation = summary_activation

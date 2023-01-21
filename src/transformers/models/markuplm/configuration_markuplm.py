@@ -65,8 +65,6 @@ class MarkupLMConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (`bool`, *optional*, defaults to `False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the tree id unit embedding might ever use. Typically set this to something large
             just in case (e.g., 1024).
@@ -119,7 +117,6 @@ class MarkupLMConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=0,
         eos_token_id=2,
-        gradient_checkpointing=False,
         max_xpath_tag_unit_embeddings=256,
         max_xpath_subs_unit_embeddings=1024,
         tag_pad_id=216,
@@ -135,7 +132,6 @@ class MarkupLMConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            gradient_checkpointing=gradient_checkpointing,
             **kwargs,
         )
         self.vocab_size = vocab_size
