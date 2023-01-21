@@ -80,7 +80,6 @@ class BridgeTowerModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.tie_word_embeddings = tie_word_embeddings
         self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
-        self.output_hidden_states = output_hidden_states
         self.vocab_size = 50265
         self.num_channels = 3
         self.seq_length = 4
@@ -89,6 +88,7 @@ class BridgeTowerModelTester:
         self.is_training = False
         self.image_size = image_size
         self.expected_num_hidden_layers = 32
+        self.output_hidden_states = output_hidden_states
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
