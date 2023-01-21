@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022, Google and HuggingFace Inc.
+# Copyright 2022, HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -81,6 +81,8 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, default to `False`):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
+        output_router_logits (`bool`, *optional*, default to `False`):
+            Whether or not to return the router logits of all experts.
     """
     model_type = "gptsan-japanese"
     keys_to_ignore_at_inference = [
@@ -115,6 +117,7 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         output_attentions=False,
         use_cache=False,
         initializer_factor=0.002,
+        output_router_logits=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -139,6 +142,7 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         self.output_attentions = output_attentions
         self.use_cache = use_cache
         self.initializer_factor = initializer_factor
+        self.output_router_logits = output_router_logits
 
         kwargs["pad_token_id"] = vocab_size - 4
         kwargs["eos_token_id"] = vocab_size - 1

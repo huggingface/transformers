@@ -53,33 +53,6 @@ GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class GPTSANJapaneseNorm(nn.Module):
-    """
-    Layer Normalyzation for GPTSAN
-
-    """
-
-    def __init__(self, config: GPTSANJapaneseConfig):
-        super().__init__()
-        self.weight = nn.Parameter(torch.zeros(config.d_model))
-        self.bias = nn.Parameter(torch.zeros(config.d_model))
-        self.epsilon = config.layer_norm_epsilon
-
-    def forward(self, x):
-        r"""
-        Args:
-            hidden_states (`torch.Tensor`) :
-                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
-        Returns:
-            torch.Tensor[num_groups, tokens_per_group, hidden_dim]
-
-        """
-        x -= torch.mean(x, dim=-1, keepdims=True)
-        s = torch.mean(x**2, dim=-1, keepdims=True)
-        x *= torch.rsqrt(s + self.epsilon)
-        return x * self.weight + self.bias
-
-
 class GPTSANJapaneseDenseActDense(nn.Module):
     """
     FFN Layer for Switch Transformer and Extra layers
@@ -114,6 +87,7 @@ class GPTSANJapaneseDenseActDense(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->GPTSANJapanese
 class GPTSANJapaneseTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
@@ -155,7 +129,7 @@ class GPTSANJapaneseTop1Router(nn.Module):
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
 
-        if self.training and self.jitter_noise > 0:  # add self.training to fix result in predict
+        if self.jitter_noise > 0:
             # Get the lower and upper bound of the uniform distribution
             # Adapted from: https://stackoverflow.com/questions/44328530/how-to-get-a-uniform-distribution-in-a-range-r1-r2-in-pytorch
             distrib_lower_bound = 1.0 - self.jitter_noise
@@ -276,20 +250,26 @@ class GPTSANJapaneseLayerFF(nn.Module):
         # Check if it is a sparse layer, if not then it is a dense layer
         self.mlp = GPTSANJapaneseSparseMLP(config)
         self.smlp = nn.Linear(config.d_model, config.d_model, bias=False)
-        self.norm = GPTSANJapaneseNorm(config)
+        self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, output_router_logits):
         r"""
         Args:
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+            output_router_logits (`bool`) :
+                output experts router output.
         Returns:
             torch.Tensor[num_groups, tokens_per_group, hidden_dim]
 
         """
-        forwarded_states, _ = self.mlp(hidden_states)
+        forwarded_states, router_tuple = self.mlp(hidden_states)
         forwarded_states += torch.tanh(self.smlp(hidden_states))
         output = hidden_states + self.norm(forwarded_states)
+
+        if output_router_logits and router_tuple is not None:
+            output = (output, router_tuple)
+
         return output
 
 
@@ -307,7 +287,7 @@ class GPTSANJapaneseLayerEFF(nn.Module):
         super().__init__()
         # Check if it is a sparse layer, if not then it is a dense layer
         self.mlp = GPTSANJapaneseDenseActDense(config, ext_layer=True)
-        self.norm = GPTSANJapaneseNorm(config)
+        self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     def forward(self, hidden_states):
         r"""
@@ -418,7 +398,7 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.SelfAttention = GPTSANJapaneseAttention(config)
-        self.norm = GPTSANJapaneseNorm(config)
+        self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     def forward(self, hidden_states, attention_mask, past=None, out_attentions=None):
         r"""
@@ -449,7 +429,7 @@ class GPTSANJapaneseBlock(nn.Module):
         self.att = GPTSANJapaneseLayerSelfAttention(config)
         self.ff = GPTSANJapaneseLayerEFF(config) if ext_layer else GPTSANJapaneseLayerFF(config)
 
-    def forward(self, hidden_states, attention_mask, past=None, out_attentions=None):
+    def forward(self, hidden_states, attention_mask, output_router_logits, past=None, out_attentions=None):
         r"""
         Args:
             hidden_states (`torch.Tensor`) :
@@ -459,7 +439,10 @@ class GPTSANJapaneseBlock(nn.Module):
 
         """
         attention_status, present = self.att(hidden_states, attention_mask, past=past, out_attentions=out_attentions)
-        outputs = self.ff(attention_status)
+        if isinstance(self.ff, GPTSANJapaneseLayerFF):
+            outputs = self.ff(attention_status, output_router_logits)
+        else:
+            outputs = self.ff(attention_status)
         return outputs, present
 
 
@@ -488,7 +471,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, GPTSANJapaneseNorm):
+        if isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(factor * 1.0)
             module.bias.data.zero_()
         elif isinstance(module, nn.Linear):
@@ -1019,6 +1002,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
     ) -> Union[Tuple[torch.FloatTensor], ModelOutput]:
         r"""
         Returns:
@@ -1121,12 +1105,24 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         out_past_key_values = [] if self.config.use_cache else None
         out_hidden_states = [hidden] if self.config.output_hidden_states or output_hidden_states else None
         out_attentions = [] if self.config.output_attentions or output_attentions else None
+        out_router_probs = [] if self.config.output_router_logits or output_router_logits else None
 
         for layer, past in enumerate(pasts):
             if layer == self.config.num_switch_layers:
                 hidden = hidden + ete
 
-            hidden, present = self.blocks[layer](hidden, atten_mask, past=past, out_attentions=out_attentions)
+            block_output, present = self.blocks[layer](
+                hidden, atten_mask, output_router_logits=output_router_logits, past=past, out_attentions=out_attentions
+            )
+            if isinstance(block_output, tuple):
+                if self.config.output_router_logits or output_router_logits:
+                    hidden, router_tuple = block_output
+                    out_router_probs.append(router_tuple[0])
+                else:
+                    hidden = block_output[0]
+            else:
+                hidden = block_output
+
             if self.config.use_cache:
                 out_past_key_values.append(present)
             if self.config.output_hidden_states or output_hidden_states:
@@ -1140,6 +1136,9 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
 
         if self.config.output_attentions or output_attentions:
             out_attentions = tuple(out_attentions)
+
+        if self.config.output_router_logits or output_router_logits:
+            out_router_probs = tuple(out_router_probs)
 
         hidden = self.logits(hidden)
         hidden = self.logact(hidden)
@@ -1160,6 +1159,8 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             ret["hidden_states"] = out_hidden_states
         if self.config.output_attentions or output_attentions:
             ret["attentions"] = out_attentions
+        if self.config.output_router_logits or output_router_logits:
+            ret["router_probs"] = out_router_probs
         ret["loss"] = loss
 
         if return_dict:
