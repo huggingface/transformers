@@ -169,6 +169,15 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_
         feature_extractor = feature_extractor.__class__(
             feature_size=tiny_config.input_feat_per_channel, num_mel_bins=tiny_config.input_feat_per_channel
         )
+
+    # Whisper specific.
+    if feature_extractor.__class__.__name__ == "WhisperFeatureExtractor":
+        # We adjust the sampling rate, such that the featurizer returns features
+        # compatible with the model
+        feature_extractor = feature_extractor.__class__(
+            sampling_rate=tiny_config.max_source_positions * 2 * 160 // 30, hop_length=160, chunk_length=30
+        )
+
     return feature_extractor
 
 

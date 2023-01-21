@@ -97,7 +97,7 @@ class WhisperModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
-        max_source_positions=1500,
+        max_source_positions=30,
         max_target_positions=40,
         bos_token_id=98,
         eos_token_id=98,
