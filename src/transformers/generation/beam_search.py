@@ -161,7 +161,7 @@ class BeamSearchScorer(BeamScorer):
         do_early_stopping: Optional[bool] = False,
         num_beam_hyps_to_keep: Optional[int] = 1,
         num_beam_groups: Optional[int] = 1,
-        **kwargs: Any,
+        **kwargs,
     ):
         self.num_beams = num_beams
         self.device = device
