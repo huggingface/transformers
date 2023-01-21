@@ -50,6 +50,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "InformerConfig"
 
 
+# Eli: FeatureEmbedder, MeanScaler and NOPScaler are from GlounTS (see the exact source below)
+# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/feature.py
 class FeatureEmbedder(nn.Module):
     def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
         super().__init__()
@@ -74,6 +76,7 @@ class FeatureEmbedder(nn.Module):
         )
 
 
+# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/scaler.py
 class MeanScaler(nn.Module):
     """
     Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
@@ -128,6 +131,7 @@ class MeanScaler(nn.Module):
         return data / scale, scale if self.keepdim else scale.squeeze(dim=self.dim)
 
 
+# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/scaler.py
 class NOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
@@ -148,7 +152,9 @@ class NOPScaler(nn.Module):
         scale = torch.ones_like(data).mean(dim=self.dim, keepdim=self.keepdim)
         return data, scale
 
-
+# Eli: TriangularCausalMask, ProbMask, FullAttention, ProbAttention and AttentionLayer
+# are from the original Informer repository (see the exact source below)
+# source: https://github.com/zhouhaoyi/Informer2020/blob/main/utils/masking.py
 class TriangularCausalMask:
     def __init__(self, B, L, device="cpu"):
         mask_shape = [B, 1, L, L]
@@ -162,6 +168,7 @@ class TriangularCausalMask:
         return self._mask
 
 
+# source: https://github.com/zhouhaoyi/Informer2020/blob/main/utils/masking.py
 class ProbMask:
     def __init__(self, B, H, L, index, scores, device="cpu"):
         _mask = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(device).triu(1)
@@ -176,6 +183,7 @@ class ProbMask:
         return self._mask
 
 
+# source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/attn.py
 class FullAttention(nn.Module):
     def __init__(
         self,
@@ -194,7 +202,7 @@ class FullAttention(nn.Module):
     def forward(self, queries, keys, values, attn_mask):
         B, L, H, E = queries.shape
         _, S, _, D = values.shape
-        scale = self.scale or 1.0 / sqrt(E)
+        scale = self.scale or 1. / sqrt(E)
 
         scores = torch.einsum("blhe,bshe->bhls", queries, keys)
         if self.mask_flag:
@@ -212,6 +220,7 @@ class FullAttention(nn.Module):
             return (V.contiguous(), None)
 
 
+# source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/attn.py
 class ProbAttention(nn.Module):
     def __init__(
         self,
@@ -235,22 +244,16 @@ class ProbAttention(nn.Module):
 
         # calculate the sampled Q_K
         K_expand = K.unsqueeze(-3).expand(B, H, L_Q, L_K, E)
-        index_sample = torch.randint(
-            L_K, (L_Q, sample_k)
-        )  # real U = U_part(factor*ln(L_k))*L_q
+        index_sample = torch.randint(L_K, (L_Q, sample_k))  # real U = U_part(factor*ln(L_k))*L_q
         K_sample = K_expand[:, :, torch.arange(L_Q).unsqueeze(1), index_sample, :]
-        Q_K_sample = torch.matmul(Q.unsqueeze(-2), K_sample.transpose(-2, -1)).squeeze(
-            -2
-        )
+        Q_K_sample = torch.matmul(Q.unsqueeze(-2), K_sample.transpose(-2, -1)).squeeze(-2)
 
         # find the Top_k query with sparisty measurement
         M = Q_K_sample.max(-1)[0] - torch.div(Q_K_sample.sum(-1), L_K)
         M_top = M.topk(n_top, sorted=False)[1]
 
         # use the reduced Q to calculate Q_K
-        Q_reduce = Q[
-            torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], M_top, :
-        ]  # factor*ln(L_q)
+        Q_reduce = Q[torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], M_top, :]  # factor*ln(L_q)
         Q_K = torch.matmul(Q_reduce, K.transpose(-2, -1))  # factor*ln(L_q)*L_k
 
         return Q_K, M_top
@@ -317,6 +320,7 @@ class ProbAttention(nn.Module):
         return context.transpose(2, 1).contiguous(), attn
 
 
+# source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/attn.py
 class AttentionLayer(nn.Module):
     def __init__(
         self, attention, d_model, n_heads, d_keys=None, d_values=None, mix=False
@@ -351,6 +355,7 @@ class AttentionLayer(nn.Module):
         return self.out_projection(out), attn
 
 
+# source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
 class ConvLayer(nn.Module):
     def __init__(self, c_in):
         super(ConvLayer, self).__init__()
@@ -374,6 +379,7 @@ class ConvLayer(nn.Module):
         return x
 
 
+# source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
 class EncoderLayer(nn.Module):
     def __init__(self, attention, d_model, d_ff=None, dropout=0.1, activation="relu"):
         super(EncoderLayer, self).__init__()
