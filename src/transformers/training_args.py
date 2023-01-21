@@ -408,6 +408,19 @@ class TrainingArguments:
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
         fsdp_min_num_params (`int`, *optional*, defaults to `0`):
             FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
+        fsdp_backward_prefetch (`str`, *optional*)
+            FSDP's backward prefetch mode. Controls when to prefetch next set of parameters
+
+            A list of options along the following:
+
+            - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's gradient
+                computation.
+            - `"backward_pos"` : This prefetches the next set of parameters after the current set of parameter’s
+                gradient computation.
+        fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
+            FSDP's backward prefetch mode.
+             If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
+             forward pass.
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -863,6 +876,24 @@ class TrainingArguments:
                 " CPU-offload to `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op"
                 " offload`. You can add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard"
                 " auto_wrap` or `shard_grad_op auto_wrap`."
+            ),
+        },
+    )
+    fsdp_backward_prefetch: str = field(
+        default="backward_pre",
+        metadata={
+            "help": (
+                "Which  backward_prefetch mode to use of 'backward_pre' or 'backward post' which using PyTorch Fully "
+                "Sharded Data Parallel (FSDP) training (in distributed training only)."
+            ),
+        },
+    )
+    fsdp_forward_prefetch: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": (
+                "If True, then FSDP explicitly prefetches the next upcoming all-gather"
+                "while executing in the forward pass"
             ),
         },
     )
