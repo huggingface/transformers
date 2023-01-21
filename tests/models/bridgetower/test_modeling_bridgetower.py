@@ -60,10 +60,10 @@ class BridgeTowerModelTester:
         num_hidden_layers=6,
         tie_word_embeddings=False,
         init_layernorm_from_vision_encoder=False,
+        output_hidden_states=False,
         text_config=None,
         vision_config=None,
         image_size=288,
-        output_hidden_states=False,
     ):
         self.parent = parent
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
