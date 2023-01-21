@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Google AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Vivit model."""
+""" PyTorch ViViT model."""
 
 
 import math
@@ -509,7 +509,7 @@ VIVIT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Vivit Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare ViViT Transformer model outputting raw hidden-states without any specific head on top.",
     VIVIT_START_DOCSTRING,
 )
 class VivitModel(VivitPreTrainedModel):
@@ -628,8 +628,7 @@ class VivitModel(VivitPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Vivit Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.""",
+    """ViViT Transformer model with a video classification head on top (a linear layer on top of the final hidden state of the [CLS] token) e.g. for Kinetics-400.""",
     VIVIT_START_DOCSTRING,
 )
 class VivitForVideoClassification(VivitPreTrainedModel):
