@@ -1,15 +1,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+import re
+
+import sentencepiece as spm
 from transformers import (
+    PreTrainedTokenizer,
+    PreTrainedTokenizerBase,
+    PreTrainedTokenizerFast,
     T5Tokenizer,
     T5TokenizerFast,
-    PreTrainedTokenizer,
-    PreTrainedTokenizerFast,
-    PreTrainedTokenizerBase,
 )
-import re
-import sentencepiece as spm
+
 
 # The special tokens of T5Tokenizer is hard-coded with <extra_id_{}>
 # Created another class UDOPTokenizer extending it to add special visual tokens like <loc_{}>
@@ -147,9 +149,10 @@ class UdopTokenizer(T5Tokenizer):
 
 # Below are for Rust-based Fast Tokenizer
 
-from transformers.convert_slow_tokenizer import SpmConverter
-from tokenizers import Tokenizer, processors
 from typing import List
+
+from tokenizers import Tokenizer, processors
+from transformers.convert_slow_tokenizer import SpmConverter
 
 
 class UdopConverter(SpmConverter):

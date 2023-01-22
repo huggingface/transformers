@@ -1,12 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import os
 import logging
+import os
 
 import torch
 
-from .mae import mae_vit_base_patch16, mae_vit_large_patch16, mae_vit_huge_patch14
+from .mae import mae_vit_base_patch16, mae_vit_huge_patch14, mae_vit_large_patch16
+
 
 logger = logging.getLogger(__name__)
 

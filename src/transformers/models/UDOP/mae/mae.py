@@ -14,10 +14,9 @@ from functools import partial
 import torch
 import torch.nn as nn
 
-from timm.models.vision_transformer import PatchEmbed
-
-from core.models.mae.pos_embed import get_2d_sincos_pos_embed
 from core.models.embedding.cell_embed import CellEmbeddings
+from core.models.mae.pos_embed import get_2d_sincos_pos_embed
+from timm.models.vision_transformer import PatchEmbed
 
 
 class Mlp(nn.Module):

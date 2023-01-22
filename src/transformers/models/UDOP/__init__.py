@@ -1,6 +1,4 @@
-from .udop_dual import UdopDualForConditionalGeneration
-from .udop_unimodel import UdopUnimodelForConditionalGeneration
-
-from .udop_config import UdopConfig
-
+from .configuration_udop import UdopConfig
+from .modeling_udop_dual import UdopDualForConditionalGeneration
 from .tokenization import UdopTokenizer, UdopTokenizerFast
+from .udop_unimodel import UdopUnimodelForConditionalGeneration
