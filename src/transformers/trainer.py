@@ -408,7 +408,7 @@ class Trainer:
             if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.12.0"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
-            from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy,BackwardPrefetch
+            from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy, BackwardPrefetch
 
             if FSDPOption.FULL_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.FULL_SHARD
@@ -1440,7 +1440,7 @@ class Trainer:
                     mixed_precision=mixed_precision_policy,
                     device_id=self.args.device,
                     backward_prefetch=self.backward_prefetch,
-                    forward_prefetch=self.forword_prefetch
+                    forward_prefetch=self.forword_prefetch,
                 )
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
