@@ -752,6 +752,13 @@ class Pipeline(_ScikitCompat):
         binary_output: bool = False,
         **kwargs,
     ):
+        if not isinstance(model, (PreTrainedModel, TFPreTrainedModel)) or not isinstance(model, str):
+            raise ValueError(
+                "`model` should be a pretrained model class (`transformers.PreTrainedModel` or"
+                f" `transformers.TFPreTrainedModel`) or `str` (got {model.__class__.__name__}). ",
+                " please make sure you initialized your pipeline with a correct `model`.",
+            )
+
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
 
