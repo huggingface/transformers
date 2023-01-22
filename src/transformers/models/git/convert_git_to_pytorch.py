@@ -325,7 +325,6 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     outputs = model(input_ids, pixel_values=pixel_values)
     logits = outputs.logits
     print("Logits:", logits[0, -1, :3])
-    print("Model name:", model_name)
 
     if model_name == "git-base":
         expected_slice_logits = torch.tensor([-1.2832, -1.2835, -1.2840])
