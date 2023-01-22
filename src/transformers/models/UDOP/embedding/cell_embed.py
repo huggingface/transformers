@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 
+
 class CellEmbeddings(nn.Module):
     def __init__(self, max_2d_position_embeddings=501, hidden_size=1024, ccat=False):
         super(CellEmbeddings, self).__init__()
@@ -18,7 +19,7 @@ class CellEmbeddings(nn.Module):
 
     def forward(self, bbox):
         bbox = torch.clip(bbox, 0.0, 1.0)
-        bbox = (bbox * (self.max_2d_position_embeddings-1)).long()
+        bbox = (bbox * (self.max_2d_position_embeddings - 1)).long()
         left_position_embeddings = self.x_position_embeddings(bbox[:, :, 0])
         upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
         right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
@@ -29,9 +30,10 @@ class CellEmbeddings(nn.Module):
                     left_position_embeddings,
                     upper_position_embeddings,
                     right_position_embeddings,
-                    lower_position_embeddings
+                    lower_position_embeddings,
                 ],
-                dim=-1)
+                dim=-1,
+            )
         else:
             embeddings = (
                 left_position_embeddings
@@ -41,4 +43,3 @@ class CellEmbeddings(nn.Module):
             )
 
         return embeddings
-    

@@ -11,35 +11,41 @@ Udop_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 class UdopConfig(T5Config):
     pretrained_config_archive_map = Udop_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-    def __init__(self, 
-                 max_2d_position_embeddings=1024,
-                 max_bbox_length=1001, 
-                 schema_version: Optional[str] = None,
-                 max_context_weight: float = 1.0,
-                 context_weight_update_time: float = 0.5,
-                 max_pos_dropout: float = 0.0,
-                 image_size: int = 224,
-                 pos_dropout_update_time: float = 0.5,
-                 positional_dropout_type: str = 'random',
-                 context_embeddings: Optional[Sequence[Dict[str, Any]]] = None,
-                 relative_bias_args: Optional[Sequence[Dict[str, Any]]] = [{"type":"1d"},{"type":"horizontal"},{"type":"vertical"}],
-                 vision_augmentation: Optional[Sequence[Dict[str, Any]]] = None,
-                 do_lower_case: bool = False,
-                 disable_sequential_embeddings: bool = False,
-                 word_dropout: float = 0.0,
-                 locked_dropout: float = 0.0,
-                 attention_dropout: Optional[float] = None,
-                 context_residual: Optional[str] = None,
-                 truncate_decoder_after_layer: Optional[int] = None,
-                 truncate_encoder_after_layer: Optional[int] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        max_2d_position_embeddings=1024,
+        max_bbox_length=1001,
+        schema_version: Optional[str] = None,
+        max_context_weight: float = 1.0,
+        context_weight_update_time: float = 0.5,
+        max_pos_dropout: float = 0.0,
+        image_size: int = 224,
+        pos_dropout_update_time: float = 0.5,
+        positional_dropout_type: str = "random",
+        context_embeddings: Optional[Sequence[Dict[str, Any]]] = None,
+        relative_bias_args: Optional[Sequence[Dict[str, Any]]] = [
+            {"type": "1d"},
+            {"type": "horizontal"},
+            {"type": "vertical"},
+        ],
+        vision_augmentation: Optional[Sequence[Dict[str, Any]]] = None,
+        do_lower_case: bool = False,
+        disable_sequential_embeddings: bool = False,
+        word_dropout: float = 0.0,
+        locked_dropout: float = 0.0,
+        attention_dropout: Optional[float] = None,
+        context_residual: Optional[str] = None,
+        truncate_decoder_after_layer: Optional[int] = None,
+        truncate_encoder_after_layer: Optional[int] = None,
+        **kwargs
+    ):
         super().__init__(**kwargs)
-        
+
         self.max_2d_position_embeddings = max_2d_position_embeddings
         self.max_bbox_length = max_bbox_length
-        self.mae_version = 'mae_vit_large_patch16'
-        self.mae_checkpoint = 'mae-models/mae_pretrain_vit_large_full.pth'
-        self.data_dir = '.'
+        self.mae_version = "mae_vit_large_patch16"
+        self.mae_checkpoint = "mae-models/mae_pretrain_vit_large_full.pth"
+        self.data_dir = "."
 
         self.schema_version = schema_version
         self.max_context_weight = max_context_weight

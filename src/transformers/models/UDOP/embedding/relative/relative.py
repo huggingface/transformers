@@ -35,9 +35,18 @@ class RelativePositionBiasBase(nn.Module, ABC):
     :param expand: used for re-using pretrained model with subsequent addition of prefix_bucket
     """
 
-    def __init__(self, num_heads=None, relative_attention_num_buckets=32,
-                 bidirectional=True, scaling_factor=1, max_distance=128,
-                 level="tokens", augmentation=False, prefix_bucket=False, expand=False):
+    def __init__(
+        self,
+        num_heads=None,
+        relative_attention_num_buckets=32,
+        bidirectional=True,
+        scaling_factor=1,
+        max_distance=128,
+        level="tokens",
+        augmentation=False,
+        prefix_bucket=False,
+        expand=False,
+    ):
 
         super(RelativePositionBiasBase, self).__init__()
         self.prefix_bucket = prefix_bucket
@@ -63,8 +72,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
     ) -> Tensor:
         pass
 
-    def get_bucket(self, attention_mask: Optional[Tensor] = None,
-                   seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
+    def get_bucket(self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
         relative_position = self.prepare_input(attention_mask, seg_data)
         rp_bucket: Tensor = get_relative_position_bucket(
             relative_position,
@@ -84,17 +92,16 @@ class RelativePositionBiasBase(nn.Module, ABC):
 
         return relative_position.to(torch.long)
 
-    def forward(self, attention_mask: Optional[Tensor] = None,
-                seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
+    def forward(self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
 
         # re-using pretrained model with subsequent addition of prefix_bucket
         if self.expand and self.prefix_bucket:
             new_bias = nn.Embedding(self.relative_attention_num_buckets + 2, self.num_heads)
-            new_bias.weight.data[:self.relative_attention_num_buckets] = self.relative_attention_bias.weight.data
-            new_bias.weight.data[self.relative_attention_num_buckets:] = 0.1
+            new_bias.weight.data[: self.relative_attention_num_buckets] = self.relative_attention_bias.weight.data
+            new_bias.weight.data[self.relative_attention_num_buckets :] = 0.1
             self.relative_attention_bias = new_bias
             self.expand = False
- 
+
         rp_bucket = self.get_bucket(attention_mask, seg_data)
 
         if self.prefix_bucket:
@@ -122,10 +129,13 @@ class RelativePositionBias1D(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None,
-                      seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
+    def prepare_input(
+        self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None
+    ) -> Tensor:
         assert self.scaling_factor == 1, "No need to scale 1d features"
-        relative_position = self.get_relative_position(torch.arange(attention_mask.size(1), dtype=torch.long, device=attention_mask.device)[None, :])
+        relative_position = self.get_relative_position(
+            torch.arange(attention_mask.size(1), dtype=torch.long, device=attention_mask.device)[None, :]
+        )
 
         return relative_position
 
@@ -133,9 +143,7 @@ class RelativePositionBias1D(RelativePositionBiasBase):
 def expand_feature(token_map, feature, special_tokens_value=0):
     token_map = token_map.clone()
     # add values for special tokens
-    feature_all = torch.cat([feature, torch.full_like(feature[:, 0:1],
-                                                      fill_value=special_tokens_value)],
-                            dim=1)
+    feature_all = torch.cat([feature, torch.full_like(feature[:, 0:1], fill_value=special_tokens_value)], dim=1)
     if feature.dim() == 3:
         bs, seg_len, features_dim = feature.shape
         token_map[token_map == -1] = seg_len
@@ -161,10 +169,10 @@ class RelativePositionBiasHorizontal(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None,
-                      seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
-        assert self.scaling_factor > 1.0, \
-            "Need to scale the values of bboxes, as there are in small (0,1) range"
+    def prepare_input(
+        self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None
+    ) -> Tensor:
+        assert self.scaling_factor > 1.0, "Need to scale the values of bboxes, as there are in small (0,1) range"
         # get x positions of left point of bbox
         assert seg_data is not None
         horizontal_position: Tensor = seg_data[:, :, [0, 2]].mean(dim=-1)
@@ -180,10 +188,10 @@ class RelativePositionBiasVertical(RelativePositionBiasBase):
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
-    def prepare_input(self, attention_mask: Optional[Tensor] = None,
-                      seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
-        assert self.scaling_factor > 1.0, \
-            "Need to scale the values of bboxes, as there are in small (0,1) range"
+    def prepare_input(
+        self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None
+    ) -> Tensor:
+        assert self.scaling_factor > 1.0, "Need to scale the values of bboxes, as there are in small (0,1) range"
         # get y positions of middle of bbox
         assert seg_data is not None
         vertical_position: Tensor = seg_data[:, :, [1, 3]].mean(dim=-1)
@@ -212,10 +220,11 @@ class RelativePositionBiasAggregated(nn.Module):
         return x
 
 
-BIAS_CLASSES = {"1d": RelativePositionBias1D,
-                "horizontal": RelativePositionBiasHorizontal,
-                "vertical": RelativePositionBiasVertical,
-                }
+BIAS_CLASSES = {
+    "1d": RelativePositionBias1D,
+    "horizontal": RelativePositionBiasHorizontal,
+    "vertical": RelativePositionBiasVertical,
+}
 
 
 def create_relative_bias(config: Union[UdopConfig, T5Config]) -> Sequence[RelativePositionBiasBase]:

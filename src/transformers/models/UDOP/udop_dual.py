@@ -27,7 +27,7 @@ from mae.build import mae_model
 
 logger = logging.getLogger(__name__)
 
-        
+
 @dataclass
 class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     """
@@ -68,16 +68,16 @@ class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     vision_embeds: torch.FloatTensor = None
 
-        
+
 @dataclass
 class VisSeq2SeqLMOutput(BaseModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     image_output: Optional[Tuple[torch.FloatTensor]] = None
-    image_target: Optional[Tuple[torch.FloatTensor]] = None  
-    image_mask_label: Optional[Tuple[torch.FloatTensor]] = None 
-        
-         
+    image_target: Optional[Tuple[torch.FloatTensor]] = None
+    image_mask_label: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class Residual(nn.Module):
     def forward(self, x, residual):
         return x + residual
@@ -94,7 +94,7 @@ class T52dStack(T5PreTrainedModel):
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
-        setattr(config, 'output_attentions', True)
+        setattr(config, "output_attentions", True)
         if self.is_decoder:
             self.num_layers = (
                 config.truncate_decoder_after_layer if config.truncate_decoder_after_layer else config.num_layers
@@ -108,21 +108,25 @@ class T52dStack(T5PreTrainedModel):
             [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
         )
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        
-        
+
         self.dropout = nn.Dropout(config.dropout_rate)
-        
+
         if not self.is_decoder:
             self.cell2dembedding = CellEmbeddings(config.max_2d_position_embeddings, config.hidden_size)
 
         self.init_weights()
 
         if not self.is_decoder:
-            self.vision_encoder = mae_model(config.mae_version, os.path.join(config.data_dir, config.mae_checkpoint), config.image_size, config.vocab_size, config.max_2d_position_embeddings)
+            self.vision_encoder = mae_model(
+                config.mae_version,
+                os.path.join(config.data_dir, config.mae_checkpoint),
+                config.image_size,
+                config.vocab_size,
+                config.max_2d_position_embeddings,
+            )
         else:
             self.vision_fc = nn.Linear(config.d_model, config.d_model)
             self.vision_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-            
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -151,11 +155,13 @@ class T52dStack(T5PreTrainedModel):
         return_dict=None,
         position_bias=None,  # modified line,
         seg_data=None,  # modified line
-        cross_attn_head_mask = None,
-        token_type_ids = None,
+        cross_attn_head_mask=None,
+        token_type_ids=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = True #False #True #output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            True  # False #True #output_attentions if output_attentions is not None else self.config.output_attentions
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -175,9 +181,9 @@ class T52dStack(T5PreTrainedModel):
         elif inputs_embeds is None and input_ids is not None and torch.numel(input_ids) == 0:
             input_ids = torch.full((4, 1024), self.config.pad_token_id, device=input_ids.device, dtype=input_ids.dtype)
             attention_mask = torch.zeros((4, 1024), device=input_ids.device, dtype=input_ids.dtype)
-            seg_data['tokens']['bboxes'] = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
+            seg_data["tokens"]["bboxes"] = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
             input_shape = input_ids.size()
-            logger.warning('Empty batch')
+            logger.warning("Empty batch")
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
@@ -196,7 +202,9 @@ class T52dStack(T5PreTrainedModel):
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
         if use_cache is True:
-            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(self)         
+            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
+                self
+            )
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -204,7 +212,7 @@ class T52dStack(T5PreTrainedModel):
             encoder_attention_mask = torch.ones(
                 batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
             )
-            
+
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
 
@@ -225,8 +233,7 @@ class T52dStack(T5PreTrainedModel):
         else:
             position_bias = position_bias + extended_attention_mask
         encoder_decoder_position_bias = None
-        
-        
+
         hidden_states = inputs_embeds
         hidden_states = self.dropout(hidden_states)
 
@@ -248,7 +255,7 @@ class T52dStack(T5PreTrainedModel):
             )
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            if use_cache is False:     # MP fixes
+            if use_cache is False:  # MP fixes
                 layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
             hidden_states, present_key_value_state = layer_outputs[:2]
             # We share the position biases between the layers - the first layer store them
@@ -256,7 +263,7 @@ class T52dStack(T5PreTrainedModel):
             position_bias = layer_outputs[2]
             if self.is_decoder and encoder_hidden_states is not None:
                 encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
-                
+
             # append next layer key value states
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
@@ -283,7 +290,7 @@ class T52dStack(T5PreTrainedModel):
                 ]
                 if v is not None
             )
-        
+
         return BaseModelOutputWithVisionEmbeds(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
@@ -318,7 +325,7 @@ class UdopDualForConditionalGeneration(T5ForConditionalGeneration):
                     bias.relative_attention_bias, self.encoder.block[0].layer[0].SelfAttention.relative_attention_bias
                 )
         self.init_weights()
-        
+
         self.encoder = T52dStack(self.encoder.config, self.shared)
         self.decoder = T52dStack(self.decoder.config, self.shared)
 
@@ -379,9 +386,7 @@ class UdopDualForConditionalGeneration(T5ForConditionalGeneration):
             return return_task_outputs
         if encoder_outputs is None:
             # compute positional bias (can be aggregation of 1D and 2D biases)
-            encoder_position_bias = self.relative_bias(
-                attention_mask=attention_mask, seg_data=seg_data
-            )
+            encoder_position_bias = self.relative_bias(attention_mask=attention_mask, seg_data=seg_data)
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -401,34 +406,46 @@ class UdopDualForConditionalGeneration(T5ForConditionalGeneration):
 
         if ids_restore is not None:
             # print(char_ids.size(), char_seg_data.size(), input_ids.size())
-            image_output = self.encoder.vision_encoder.forward_decoder(encoder_outputs.vision_embeds, ids_restore, context=encoder_outputs.last_hidden_state, char_inputs=[char_ids, char_seg_data])
+            image_output = self.encoder.vision_encoder.forward_decoder(
+                encoder_outputs.vision_embeds,
+                ids_restore,
+                context=encoder_outputs.last_hidden_state,
+                char_inputs=[char_ids, char_seg_data],
+            )
             loss = self.encoder.vision_encoder.forward_loss(image, image_output, image_mask_label)
             return VisSeq2SeqLMOutput(
-                loss=loss,
-                image_output=image_output,
-                image_target=image,
-                image_mask_label=image_mask_label
+                loss=loss, image_output=image_output, image_target=image, image_mask_label=image_mask_label
             )
         else:
             if masked_lm_labels is not None:
                 labels = masked_lm_labels
-                
+
             if decoder_input_ids is None and labels is not None:
                 decoder_input_ids = self._shift_right(labels)
-                
+
             if encoder_outputs.vision_embeds is not None:
                 vision_embeds = self.decoder.vision_fc(encoder_outputs.vision_embeds)
                 vision_embeds = self.decoder.vision_norm(vision_embeds)
                 hidden_states = torch.cat([encoder_outputs.last_hidden_state, vision_embeds], 1)
                 encoder_outputs.last_hidden_state = hidden_states
-                encoder_outputs.vision_embeds = None                
-            
+                encoder_outputs.vision_embeds = None
+
             # ugly hack for model to work as an encoder
             if decoder_input_ids is None and labels is None:
                 return encoder_outputs
-            
-            attention_mask = torch.cat([attention_mask, torch.ones_like(encoder_outputs.last_hidden_state[:, :encoder_outputs.last_hidden_state.size(1)-attention_mask.size(1), 0])], 1)
-    
+
+            attention_mask = torch.cat(
+                [
+                    attention_mask,
+                    torch.ones_like(
+                        encoder_outputs.last_hidden_state[
+                            :, : encoder_outputs.last_hidden_state.size(1) - attention_mask.size(1), 0
+                        ]
+                    ),
+                ],
+                1,
+            )
+
             outputs = super().forward(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -447,8 +464,6 @@ class UdopDualForConditionalGeneration(T5ForConditionalGeneration):
             )
 
             return outputs  # type: ignore
-    
+
     def get_encoder(self):
         return self
-    
-    
