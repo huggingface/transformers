@@ -973,10 +973,6 @@ class T5EncoderModel(UDOPDualPreTrainedModel):
         return encoder_outputs
 
 
-
-
-
-
 class UdopDualForConditionalGeneration(T5ForConditionalGeneration):
     """
     Copied from original T5ForConditionalGeneration class with signature extended with 2D data.
