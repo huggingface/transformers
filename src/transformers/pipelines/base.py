@@ -752,7 +752,8 @@ class Pipeline(_ScikitCompat):
         binary_output: bool = False,
         **kwargs,
     ):
-        if not isinstance(model, (PreTrainedModel, TFPreTrainedModel)) or not isinstance(model, str):
+        # Do the check with model.config instead because of import issues
+        if not hasattr(model, "config") or not isinstance(model, str):
             raise ValueError(
                 "`model` should be a pretrained model class (`transformers.PreTrainedModel` or"
                 f" `transformers.TFPreTrainedModel`) or `str` (got {model.__class__.__name__}). ",
