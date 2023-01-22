@@ -419,8 +419,8 @@ class TrainingArguments:
                 gradient computation.
         fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
             FSDP's backward prefetch mode.
-             If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
-             forward pass.
+             If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the forward
+             pass.
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
