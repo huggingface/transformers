@@ -874,25 +874,6 @@ else:
         ]
     )
 
-# Torchvision-backed objects
-try:
-    if not is_torchvision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_torchvision_objects
-
-    _import_structure["utils.dummy_torchvision_objects"] = [
-        name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.deta"].extend(
-        [
-            "DETA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DetaForObjectDetection",
-            "DetaModel",
-            "DetaPreTrainedModel",
-        ]
-    )
 
 # PyTorch-backed objects
 try:
@@ -1364,6 +1345,14 @@ else:
             "DeiTForMaskedImageModeling",
             "DeiTModel",
             "DeiTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deta"].extend(
+        [
+            "DETA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DetaForObjectDetection",
+            "DetaModel",
+            "DetaPreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -4256,19 +4245,6 @@ if TYPE_CHECKING:
         )
 
     try:
-        if not is_torchvision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_torchvision_objects import *
-    else:
-        from .models.deta import (
-            DETA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DetaForObjectDetection,
-            DetaModel,
-            DetaPreTrainedModel,
-        )
-
-    try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -4667,6 +4643,12 @@ if TYPE_CHECKING:
             DeiTForMaskedImageModeling,
             DeiTModel,
             DeiTPreTrainedModel,
+        )
+        from .models.deta import (
+            DETA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DetaForObjectDetection,
+            DetaModel,
+            DetaPreTrainedModel,
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
