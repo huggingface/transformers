@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "RUCAIBox/mvp"
 _CONFIG_FOR_DOC = "MvpConfig"
-_TOKENIZER_FOR_DOC = "MvpTokenizer"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
@@ -601,7 +600,7 @@ MVP_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -615,7 +614,7 @@ MVP_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -697,9 +696,9 @@ MVP_CONDITIONAL_GENERATION_EXAMPLE = r"""
     Fine-tuning a model
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForConditionalGeneration
+    >>> from transformers import AutoTokenizer, MvpForConditionalGeneration
 
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp")
 
     >>> inputs = tokenizer(
@@ -727,10 +726,10 @@ MVP_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Fine-tuning a model on `num_labels` classes
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForSequenceClassification
+    >>> from transformers import AutoTokenizer, MvpForSequenceClassification
 
     >>> num_labels = 2  # for example, this is a binary classification task
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForSequenceClassification.from_pretrained("RUCAIBox/mvp", num_labels=num_labels)
 
     >>> inputs = tokenizer("Classify: Hello, my dog is cute", return_tensors="pt")
@@ -756,9 +755,9 @@ MVP_QUESTION_ANSWERING_SAMPLE = r"""
     using `BartForConditionalGeneration`
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForQuestionAnswering
+    >>> from transformers import AutoTokenizer, MvpForQuestionAnswering
 
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForQuestionAnswering.from_pretrained("RUCAIBox/mvp")
 
     >>> inputs = tokenizer(
@@ -857,7 +856,7 @@ class MvpEncoder(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1078,7 +1077,7 @@ class MvpDecoder(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1331,7 +1330,6 @@ class MvpModel(MvpPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MVP_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1920,7 +1918,7 @@ class MvpForCausalLM(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1985,9 +1983,9 @@ class MvpForCausalLM(MvpPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MvpTokenizer, MvpForCausalLM
+        >>> from transformers import AutoTokenizer, MvpForCausalLM
 
-        >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+        >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
         >>> model = MvpForCausalLM.from_pretrained("RUCAIBox/mvp", add_cross_attention=False)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
