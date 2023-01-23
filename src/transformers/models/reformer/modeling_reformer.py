@@ -2378,7 +2378,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
 
         >>> # resize model's embedding matrix
-        >>> model.resize_token_embeddings(new_num_tokens=model.config.vocab_size+1)  # doctest: +IGNORE_RESULT
+        >>> model.resize_token_embeddings(new_num_tokens=model.config.vocab_size + 1)  # doctest: +IGNORE_RESULT
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
