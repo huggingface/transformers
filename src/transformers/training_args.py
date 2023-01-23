@@ -883,8 +883,8 @@ class TrainingArguments:
         default="backward_pre",
         metadata={
             "help": (
-                "Which  `backward_prefetch` mode to use out of 'backward_pre' or 'backward post' when using PyTorch Fully "
-                "Sharded Data Parallel (FSDP) training (in distributed training only)."
+                "Which  `backward_prefetch` mode to use out of 'backward_pre' or 'backward post' when using PyTorch"
+                " Fully Sharded Data Parallel (FSDP) training (in distributed training only)."
             ),
         },
     )
