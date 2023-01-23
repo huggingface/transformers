@@ -14,11 +14,14 @@
 # limitations under the License.
 """ Testing suite for the TVLT image processor. """
 
+import json
+import os
+import tempfile
 import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
@@ -100,7 +103,39 @@ class TvltImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase
         self.assertTrue(hasattr(feature_extractor, "size"))
 
     def test_feat_extract_from_and_save_pretrained(self):
-        pass
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+        delattr(feat_extract_first, "random_generator")
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
+            check_json_file_has_correct_format(saved_file)
+            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname, random_generator=None)
+            delattr(feat_extract_second, "random_generator")
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertEqual(dict_first, dict_second)
+
+    def test_feat_extract_to_json_file(self):
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+        delattr(feat_extract_first, "random_generator")
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            json_file_path = os.path.join(tmpdirname, "feat_extract.json")
+            feat_extract_first.to_json_file(json_file_path)
+            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path)
+            delattr(feat_extract_second, "random_generator")
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertEqual(dict_first, dict_second)
+
+    def test_feat_extract_to_json_string(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
+        delattr(feat_extract, "random_generator")
+        obj = json.loads(feat_extract.to_json_string())
+        for key, value in self.feat_extract_dict.items():
+            self.assertEqual(obj[key], value)
 
     def test_call_pil(self):
         # Initialize feature_extraction

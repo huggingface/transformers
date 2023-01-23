@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -19,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import is_speech_available, is_vision_available
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch
 
 
 if is_vision_available():
@@ -38,10 +40,10 @@ class TvltProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_image_processor(self, **kwargs):
-        return TvltImageProcessor.from_pretrained(self.checkpoint, **kwargs)
+        return TvltImageProcessor.from_pretrained(self.checkpoint, random_generator=None, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return TvltFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return TvltFeatureExtractor.from_pretrained(self.checkpoint, random_generator=None, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)

@@ -39,7 +39,7 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-    from transformers import TvltForAudioVisualClassification, TvltForPreTraining, TvltForQuestionAnswering, TvltModel
+    from transformers import TvltForPreTraining, TvltForQuestionAnswering, TvltForVideoClassification, TvltModel
     from transformers.models.tvlt.modeling_tvlt import TVLT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 else:
@@ -244,10 +244,8 @@ class TvltModelTester:
         result = model(pixel_values, audio_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_audiovisual_classification(
-        self, config, pixel_values, audio_values, pixel_masks, audio_masks
-    ):
-        model = TvltForAudioVisualClassification(config=config)
+    def create_and_check_for_video_classification(self, config, pixel_values, audio_values, pixel_masks, audio_masks):
+        model = TvltForVideoClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, audio_values, pixel_masks=pixel_masks, audio_masks=audio_masks)
@@ -312,7 +310,7 @@ class TvltModelTester:
 @unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "TVLT is only available in torch v1.10+")
 class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TvltModel, TvltForPreTraining, TvltForQuestionAnswering, TvltForAudioVisualClassification)
+        (TvltModel, TvltForPreTraining, TvltForQuestionAnswering, TvltForVideoClassification)
         if is_torch_available()
         else ()
     )
@@ -324,7 +322,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     main_input_name = "pixel_values"
 
-    # TvltForQuestionAnswering, TvltForAudioVisualClassification and TvltForPreTraining require special treatment
+    # TvltForQuestionAnswering, TvltForVideoClassification and TvltForPreTraining require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=True):
         inputs_dict = copy.deepcopy(inputs_dict)
 
@@ -333,7 +331,7 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
                 )
-            elif model_class.__name__ == "TvltForAudioVisualClassification":
+            elif model_class.__name__ == "TvltForVideoClassification":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
                 )
@@ -419,9 +417,9 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
-    def test_for_audiovisual_classification(self):
+    def test_for_video_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_audiovisual_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_video_classification(*config_and_inputs)
 
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pretraining()
@@ -602,8 +600,8 @@ class TvltModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-    def test_inference_for_audiovisual_classification(self):
-        model = TvltForAudioVisualClassification.from_pretrained("TVLT/tvlt-base").to(torch_device)
+    def test_inference_for_video_classification(self):
+        model = TvltForVideoClassification.from_pretrained("TVLT/tvlt-base").to(torch_device)
 
         image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()
