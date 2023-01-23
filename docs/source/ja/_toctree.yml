@@ -1,6 +1,8 @@
 - sections:
   - local: index
     title: 🤗 Transformers
+  - local: installation
+    title: インストール
   title: はじめに
 - sections:
   - sections:
