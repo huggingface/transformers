@@ -480,8 +480,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index):
         """
-        Converts an index (integer) in a token (str) using the vocab.
-        Whisper's base tokenizer always decodes OOV tokens as "", thus we do not use the `unk_token` here.
+        Converts an index (integer) in a token (str) using the vocab. Whisper's base tokenizer always decodes OOV
+        tokens as "", thus we do not use the `unk_token` here.
         """
         return self.decoder.get(index, "")
 
