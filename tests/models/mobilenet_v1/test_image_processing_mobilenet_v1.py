@@ -90,11 +90,11 @@ class MobileNetV1ImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         self.assertTrue(hasattr(image_processing, "center_crop"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_proc_dict)
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"shortest_edge": 20})
         self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_proc_dict, size=42, crop_size=84)
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 

@@ -65,7 +65,7 @@ class BlipImageProcessingTester(unittest.TestCase):
         self.do_pad = do_pad
         self.do_convert_rgb = do_convert_rgb
 
-    def prepare_image_proc_dict(self):
+    def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
@@ -117,11 +117,11 @@ class BlipImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase)
         self.image_processor_tester = BlipImageProcessingTester(self)
 
     @property
-    def image_proc_dict(self):
-        return self.image_processor_tester.prepare_image_proc_dict()
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processor, "do_resize"))
         self.assertTrue(hasattr(image_processor, "size"))
         self.assertTrue(hasattr(image_processor, "do_normalize"))
@@ -134,7 +134,7 @@ class BlipImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase)
 
     def test_call_pil(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
         image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False)
         for image in image_inputs:
@@ -166,7 +166,7 @@ class BlipImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase)
 
     def test_call_numpy(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
         image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
@@ -198,7 +198,7 @@ class BlipImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase)
 
     def test_call_pytorch(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
         image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
@@ -240,11 +240,11 @@ class BlipImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, unitte
         self.expected_encoded_image_num_channels = 3
 
     @property
-    def image_proc_dict(self):
-        return self.image_processor_tester.prepare_image_proc_dict()
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processor, "do_resize"))
         self.assertTrue(hasattr(image_processor, "size"))
         self.assertTrue(hasattr(image_processor, "do_normalize"))
@@ -257,7 +257,7 @@ class BlipImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, unitte
 
     def test_call_pil_four_channels(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
         image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False)
         for image in image_inputs:

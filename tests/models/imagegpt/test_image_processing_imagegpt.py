@@ -97,16 +97,16 @@ class ImageGPTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestC
         self.assertTrue(hasattr(image_processing, "do_normalize"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_proc_dict)
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_proc_dict, size=42)
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_image_processor_to_json_string(self):
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         obj = json.loads(image_processor.to_json_string())
-        for key, value in self.image_proc_dict.items():
+        for key, value in self.image_processor_dict.items():
             if key == "clusters":
                 self.assertTrue(np.array_equal(value, obj[key]))
             else:

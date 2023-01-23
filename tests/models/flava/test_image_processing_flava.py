@@ -194,14 +194,14 @@ class FlavaImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase
         self.assertTrue(hasattr(image_processing, "codebook_image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_proc_dict)
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"height": 224, "width": 224})
         self.assertEqual(image_processor.crop_size, {"height": 224, "width": 224})
         self.assertEqual(image_processor.codebook_size, {"height": 112, "width": 112})
         self.assertEqual(image_processor.codebook_crop_size, {"height": 112, "width": 112})
 
         image_processor = self.image_processing_class.from_dict(
-            self.image_proc_dict, size=42, crop_size=84, codebook_size=33, codebook_crop_size=66
+            self.image_processor_dict, size=42, crop_size=84, codebook_size=33, codebook_crop_size=66
         )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
