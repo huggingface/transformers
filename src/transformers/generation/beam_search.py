@@ -337,7 +337,7 @@ class BeamSearchScorer(BeamScorer):
 
         # retrieve best hypotheses
         for i, beam_hyp in enumerate(self._beam_hyps):
-            sorted_hyps = sorted(beam_hyp.beams, key=lambda x: x[0])  # type: ignore[no-any-return]
+            sorted_hyps = sorted(beam_hyp.beams, key=lambda x: x[0]) 
             for j in range(self.num_beam_hyps_to_keep):
                 best_hyp_tuple = sorted_hyps.pop()
                 best_score = best_hyp_tuple[0]
