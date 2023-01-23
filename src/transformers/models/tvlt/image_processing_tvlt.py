@@ -162,8 +162,9 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Args:
         Resize an image.
+
+        Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
