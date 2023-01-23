@@ -116,7 +116,6 @@ class TvltImageProcessor(BaseImageProcessor):
         "pixel_masks_mixed",
         "pixel_mask_pos_perm",
     ]
-    random_generator = np.random.default_rng(seed=1)
 
     def __init__(
         self,
@@ -152,6 +151,7 @@ class TvltImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.random_generator = np.random.default_rng(seed=1)
 
     def resize(
         self,
@@ -195,7 +195,7 @@ class TvltImageProcessor(BaseImageProcessor):
         """
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `size` along any
         edge, the image is padded with 0's and then center cropped.
-        
+
         Args:
             image (`np.ndarray`):
                 Image to center crop.
@@ -229,6 +229,7 @@ class TvltImageProcessor(BaseImageProcessor):
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.normalize
     def normalize(
         self,
         image: np.ndarray,
@@ -243,12 +244,18 @@ class TvltImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            image_mean (`float` or `List[float]`):
-                Image mean.
-            image_std (`float` or `List[float]`):
-                Image standard deviation.
+            mean (`float` or `List[float]`):
+                Image mean to use for normalization.
+            std (`float` or `List[float]`):
+                Image standard deviation to use for normalization.
             data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
@@ -403,7 +410,9 @@ class TvltImageProcessor(BaseImageProcessor):
         # Check number of frames is fewer than maximum frames
         for video in videos:
             if len(video) > self.num_frames:
-                raise ValueError(f"number of frames must not be greater than {self.num_frames}.")
+                raise ValueError(
+                    f"number of frames must not be greater than the maximum frames of the model {self.num_frames}."
+                )
 
         max_num_frames = max([len(video) for video in videos])
         num_patches_per_image = (size["shortest_edge"] // patch_size) ** 2

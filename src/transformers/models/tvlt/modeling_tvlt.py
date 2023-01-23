@@ -1102,7 +1102,6 @@ class TvltForPreTraining(TvltPreTrainedModel):
         total_loss = 0.0
 
         if self.task_matching:
-            
             if labels is None:
                 raise ValueError("Matching task requires labels")
             if pixel_values_mixed is None:
@@ -1127,7 +1126,10 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         if self.task_mae:
             if pixel_mask_position_permutation is None or audio_mask_position_permutation is None:
-                raise ValueError("MAE task requires pixel masks and audio masks, set mask_audio and mask_pixel to True in TvltProcessor")
+                raise ValueError(
+                    "MAE task requires pixel masks and audio masks, set mask_audio and mask_pixel to True in"
+                    " TvltProcessor"
+                )
 
             outputs = self.tvlt(
                 pixel_values,
@@ -1327,7 +1329,7 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
     """,
     TVLT_START_DOCSTRING,
 )
-class TvltForAudioVisualClassification(TvltPreTrainedModel):
+class TvltForVideoClassification(TvltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1367,7 +1369,7 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import TvltProcessor, TvltForAudioVisualClassification
+        >>> from transformers import TvltProcessor, TvltForVideoClassification
         >>> import numpy as np
         >>> import torch
 
@@ -1376,7 +1378,7 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         >>> audio = list(np.random.randn(10000))
 
         >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
-        >>> model = TvltForAudioVisualClassification.from_pretrained("TVLT/tvlt-base")
+        >>> model = TvltForVideoClassification.from_pretrained("TVLT/tvlt-base")
 
         >>> input_dict = processor(pixel, audio, sampling_rate=44100, return_tensors="pt")
 

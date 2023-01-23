@@ -58,7 +58,6 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
     """
 
     model_input_names = ["audio_values", "audio_masks", "audio_mask_pos_perm"]
-    random_generator = np.random.default_rng(seed=1)
 
     def __init__(
         self,
@@ -90,6 +89,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.padding_value = padding_value
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
+        self.random_generator = np.random.default_rng(seed=1)
 
     # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.get_mel_filters with 45.245640471924965->59.99247463746737
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
