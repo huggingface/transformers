@@ -1483,17 +1483,19 @@ FLAX_BLENDERBOT_CONDITIONAL_GENERATION_DOCSTRING = r"""
 
     Conversation example::
 
-        >>> from transformers import AutoTokenizer, FlaxBlenderbotForConditionalGeneration, BlenderbotConfig
+    ```py
+    >>> from transformers import AutoTokenizer, FlaxBlenderbotForConditionalGeneration
 
-        >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained('facebook/blenderbot-400M-distill') >>>
-        tokenizer = AutoTokenizer.from_pretrained('facebook/blenderbot-400M-distill')
+    >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
-        >>> UTTERANCE = "My friends are cool but they eat too many carbs." >>> inputs = tokenizer([UTTERANCE],
-        max_length=1024, return_tensors='np')
+    >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([UTTERANCE], max_length=1024, return_tensors="np")
 
-        >>> # Generate Reply >>> reply_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5,
-        early_stopping=True).sequences >>> print([tokenizer.decode(g, skip_special_tokens=True,
-        clean_up_tokenization_spaces=False) for g in reply_ids])
+    >>> # Generate Reply
+    >>> reply_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5, early_stopping=True).sequences
+    >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in reply_ids])
+    ```
 """
 
 overwrite_call_docstring(

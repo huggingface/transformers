@@ -535,23 +535,34 @@ BLENDERBOT_SMALL_START_DOCSTRING = r"""
 BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     Conversation example::
 
-        >>> from transformers import AutoTokenizer, TFBlenderbotSmallForConditionalGeneration >>> mname =
-        'facebook/blenderbot_small-90M' >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname) >>>
-        tokenizer = AutoTokenizer.from_pretrained(mname)
+    ```py
+    >>> from transformers import AutoTokenizer, TFBlenderbotSmallForConditionalGeneration
 
-        >>> UTTERANCE = "My friends are cool but they eat too many carbs." >>> print("Human: ", UTTERANCE) >>> inputs =
-        tokenizer([UTTERANCE], return_tensors='tf')
+    >>> mname = "facebook/blenderbot_small-90M"
+    >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
+    >>> tokenizer = AutoTokenizer.from_pretrained(mname)
 
-        >>> reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(reply_ids,
-        skip_special_tokens=True)[0]) what kind of carbs do they eat? i don't know much about carbs.
+    >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+    >>> print("Human: ", UTTERANCE)
+    >>> inputs = tokenizer([UTTERANCE], return_tensors="tf")
 
-        >>> REPLY = "I'm not sure" >>> print("Human: ", REPLY) >>> NEXT_UTTERANCE = ( ... "My friends are cool but they
-        eat too many carbs.</s> " ... "<s>what kind of carbs do they eat? i don't know much about carbs.</s> " ...
-        "<s>I'm not sure." ... )
+    >>> reply_ids = model.generate(**inputs)
+    >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
+    what kind of carbs do they eat? i don't know much about carbs.
 
-        >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='tf') >>> inputs.pop("token_type_ids") >>>
-        next_reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids,
-        skip_special_tokens=True)[0])
+    >>> REPLY = "I'm not sure"
+    >>> print("Human: ", REPLY)
+    >>> NEXT_UTTERANCE = (
+    ...     "My friends are cool but they eat too many carbs.</s> "
+    ...     "<s>what kind of carbs do they eat? i don't know much about carbs.</s> "
+    ...     "<s>I'm not sure."
+    ... )
+
+    >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="tf")
+    >>> inputs.pop("token_type_ids")
+    >>> next_reply_ids = model.generate(**inputs)
+    >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+    ```
 """
 
 BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""

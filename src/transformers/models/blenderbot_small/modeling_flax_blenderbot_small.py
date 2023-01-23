@@ -1481,30 +1481,38 @@ FLAX_BLENDERBOT_SMALL_CONDITIONAL_GENERATION_DOCSTRING = """
 
     Summarization example:
 
-        >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration
+    ```py
+    >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
-        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot_small-90M') >>>
-        tokenizer = AutoTokenizer.from_pretrained('facebook/blenderbot_small-90M')
+    >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs." >>> inputs =
-        tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
+    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="np")
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids']).sequences >>>
-        print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"]).sequences
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 
     Mask filling example:
 
-        >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration >>> tokenizer =
-        AutoTokenizer.from_pretrained('facebook/blenderbot_small-90M') >>> TXT = "My friends are <mask> but they eat
-        too many carbs."
+    ```py
+    >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
-        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot_small-90M') >>>
-        input_ids = tokenizer([TXT], return_tensors='np')['input_ids'] >>> logits = model(input_ids).logits
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+    >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs =
-        jax.nn.softmax(logits[0, masked_index], axis=0) >>> values, predictions = jax.lax.top_k(probs)
+    >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
+    >>> input_ids = tokenizer([TXT], return_tensors="np")["input_ids"]
+    >>> logits = model(input_ids).logits
 
-        >>> tokenizer.decode(predictions).split()
+    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+    >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
+    >>> values, predictions = jax.lax.top_k(probs)
+
+    >>> tokenizer.decode(predictions).split()
+    ```
 """
 
 overwrite_call_docstring(
