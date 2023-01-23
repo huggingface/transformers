@@ -256,10 +256,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _convert_token_to_id_with_added_voc(self, token: str) -> int:
         index = self._tokenizer.token_to_id(token)
-        # TODO: it looks like the '' token is not re-added when retraining
-        # the tokenizer in tests, and we fall into an infinite reursion
-        # trying to convert unknown token to id
-        if index is None and token != self.unk_token:
+        if index is None:
             return self.unk_token_id
         return index
 
