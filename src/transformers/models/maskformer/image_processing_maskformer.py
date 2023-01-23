@@ -1021,49 +1021,73 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        # [batch_size, num_queries, num_classes+1]
+        class_queries_logits = outputs.class_queries_logits
+        # [batch_size, num_queries, height, width]
+        masks_queries_logits = outputs.masks_queries_logits
 
-        batch_size = class_queries_logits.shape[0]
-        num_labels = class_queries_logits.shape[-1] - 1
+        # Scale back to preprocessed image size - (384, 384) for all models
+        masks_queries_logits = torch.nn.functional.interpolate(
+            masks_queries_logits, size=(384, 384), mode="bilinear", align_corners=False
+        )
 
-        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
-
-        # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+        device = masks_queries_logits.device
+        num_classes = class_queries_logits.shape[-1] - 1
+        num_queries = class_queries_logits.shape[-2]
 
         # Loop over items in batch size
         results: List[Dict[str, TensorType]] = []
 
-        for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+        for i in range(class_queries_logits.shape[0]):
+            mask_pred = masks_queries_logits[i]
+            mask_cls = class_queries_logits[i]
+
+            scores = torch.nn.functional.softmax(mask_cls, dim=-1)[:, :-1]
+            labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
+
+            scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
+            labels_per_image = labels[topk_indices]
+
+            topk_indices = topk_indices // num_classes
+            mask_pred = mask_pred[topk_indices]
+            pred_masks = (mask_pred > 0).float()
+
+            # Calculate average mask prob
+            mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
+                pred_masks.flatten(1).sum(1) + 1e-6
             )
+            pred_scores = scores_per_image * mask_scores_per_image
+            pred_classes = labels_per_image
 
-            # No mask found
-            if mask_probs_item.shape[0] <= 0:
-                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
-                segmentation = torch.zeros((height, width)) - 1
-                results.append({"segmentation": segmentation, "segments_info": []})
-                continue
+            segmentation = torch.zeros(target_sizes[i]) - 1
+            if target_sizes is not None:
+                pred_masks = torch.nn.functional.interpolate(
+                    pred_masks.unsqueeze(0), size=target_sizes[i], mode="nearest"
+                )[0]
 
-            # Get segmentation map and segment information of batch item
-            target_size = target_sizes[i] if target_sizes is not None else None
-            segmentation, segments = compute_segments(
-                mask_probs=mask_probs_item,
-                pred_scores=pred_scores_item,
-                pred_labels=pred_labels_item,
-                mask_threshold=mask_threshold,
-                overlap_mask_area_threshold=overlap_mask_area_threshold,
-                label_ids_to_fuse=[],
-                target_size=target_size,
-            )
+            segments = []
+            current_segment_id = 0
+            for j in range(num_queries):
+                score = pred_scores[j].item()
 
-            # Return segmentation map in run-length encoding (RLE) format
-            if return_coco_annotation:
-                segmentation = convert_segmentation_to_rle(segmentation)
+                if not torch.all(pred_masks[j] == 0) and score >= threshold:
+                    segmentation[pred_masks[j] == 1] = current_segment_id
+                    segments.append(
+                        {
+                            "id": current_segment_id,
+                            "label_id": pred_classes[j].item(),
+                            "was_fused": False,
+                            "score": round(score, 6),
+                        }
+                    )
+                    current_segment_id += 1
+
+                    # Return segmentation map in run-length encoding (RLE) format
+                    if return_coco_annotation:
+                        segmentation = convert_segmentation_to_rle(segmentation)
 
             results.append({"segmentation": segmentation, "segments_info": segments})
+
         return results
 
     def post_process_panoptic_segmentation(
