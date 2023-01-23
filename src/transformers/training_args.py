@@ -409,7 +409,7 @@ class TrainingArguments:
         fsdp_min_num_params (`int`, *optional*, defaults to `0`):
             FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
         fsdp_backward_prefetch (`str`, *optional*)
-            FSDP's backward prefetch mode. Controls when to prefetch next set of parameters
+            FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when `fsdp` field is passed).
 
             A list of options along the following:
 
