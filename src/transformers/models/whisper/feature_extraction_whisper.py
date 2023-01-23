@@ -15,7 +15,7 @@
 """
 Feature extractor class for Whisper
 """
-
+import json
 from typing import List, Optional, Union
 
 import numpy as np
@@ -322,3 +322,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+    def __repr__(self):
+        obj = json.loads(self.to_json_string())
+        obj["mel_filters"] = "<array of shape {}>".format(np.shape(obj["mel_filters"]))
+        return f"{self.__class__.__name__} {obj}"
