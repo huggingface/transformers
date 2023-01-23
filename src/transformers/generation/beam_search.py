@@ -379,7 +379,7 @@ class BeamSearchScorer(BeamScorer):
                 indices[i, : len(best_idx)] = torch.tensor(best_idx)
 
             if sent_lengths[i] < sent_max_len:
-                decoded[i, sent_lengths[i]] = eos_token_id[0]  # type: ignore[assignment]
+                decoded[i, sent_lengths[i]] = eos_token_id[0]
 
         return UserDict(
             {
