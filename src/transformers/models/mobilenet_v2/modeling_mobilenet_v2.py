@@ -637,6 +637,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
