@@ -50,9 +50,9 @@ PROCESS_INPUTS_DOCSTRING = r"""
 
             - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of all
               non-finished beams.
-            - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be added
+            - **next_beam_tokens** (`torch.LongTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be added
               to the non-finished beam_hypotheses.
-            - **next_beam_indices** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Beam indices
+            - **next_beam_indices** (`torch.LongTensor` of shape `(batch_size * num_beams)`) -- Beam indices
               indicating to which beam the next tokens shall be added.
 
 """
