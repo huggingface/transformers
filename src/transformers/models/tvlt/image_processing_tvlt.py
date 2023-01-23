@@ -217,8 +217,9 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs
     ):
         """
-        Args:
         Rescale an image by a scale factor. image = image * scale.
+
+        Args:
             image (`np.ndarray`):
                 Image to rescale.
             scale (`int` or `float`):
