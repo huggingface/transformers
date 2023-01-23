@@ -477,6 +477,7 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("timesformer", "TimesformerForVideoClassification"),
         ("videomae", "VideoMAEForVideoClassification"),
+        ("tvlt", "TvltForVideoClassification"),
     ]
 )
 
@@ -854,15 +855,6 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("wavlm", "WavLMForSequenceClassification"),
     ]
 )
-
-
-MODEL_FOR_AUDIO_VISUAL_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
-    [
-        # Model for Audiovisual Classification mapping
-        ("tvlt", "TvltForAudioVisualClassification"),
-    ]
-)
-
 
 MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     [
