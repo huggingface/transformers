@@ -339,7 +339,7 @@ class SegformerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Test
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 150)
 
-        image_processing.reduce_labels = True
+        image_processing.do_reduce_labels = True
         encoding = image_processing(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 255)
