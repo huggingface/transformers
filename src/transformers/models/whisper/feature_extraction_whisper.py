@@ -338,6 +338,12 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
+        # zero-mean and unit-variance normalization
+        if do_normalize:
+            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
+                padded_inputs["input_values"], attention_mask=None, padding_value=self.padding_value
+            )
+
         input_features = [self._np_extract_fbank_features(waveform) for waveform in input_features[0]]
 
         if isinstance(input_features[0], List):
@@ -345,11 +351,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         else:
             padded_inputs["input_features"] = input_features
 
-        # zero-mean and unit-variance normalization
-        if do_normalize:
-            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_values"], attention_mask=None, padding_value=self.padding_value
-            )
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
