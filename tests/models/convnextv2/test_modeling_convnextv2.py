@@ -29,7 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import ConvNeXtV2ForImageClassification, ConvNeXtV2Model
+    from transformers import ConvNextV2ForImageClassification, ConvNextV2Model
     from transformers.models.convnextv2.modeling_convnextv2 import CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -39,7 +39,7 @@ if is_vision_available():
     from transformers import AutoFeatureExtractor
 
 
-class ConvNeXtV2ModelTester:
+class ConvNextV2ModelTester:
     def __init__(
         self,
         parent,
@@ -96,7 +96,7 @@ class ConvNeXtV2ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = ConvNeXtV2Model(config=config)
+        model = ConvNextV2Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -108,7 +108,7 @@ class ConvNeXtV2ModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = ConvNeXtV2ForImageClassification(config)
+        model = ConvNextV2ForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -122,7 +122,7 @@ class ConvNeXtV2ModelTester:
 
 
 @require_torch
-class ConvNeXtV2ModelTest(ModelTesterMixin, unittest.TestCase):
+class ConvNextV2ModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ConvNeXtV2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -130,8 +130,8 @@ class ConvNeXtV2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            ConvNeXtV2Model,
-            ConvNeXtV2ForImageClassification,
+            ConvNextV2Model,
+            ConvNextV2ForImageClassification,
         )
         if is_torch_available()
         else ()
@@ -144,7 +144,7 @@ class ConvNeXtV2ModelTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = ConvNeXtV2ModelTester(self)
+        self.model_tester = ConvNextV2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ConvNextV2Config, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
@@ -222,7 +222,7 @@ class ConvNeXtV2ModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvNeXtV2Model.from_pretrained(model_name)
+            model = ConvNextV2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -234,14 +234,14 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class ConvNeXtV2ModelIntegrationTest(unittest.TestCase):
+class ConvNextV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return AutoFeatureExtractor.from_pretrained("facebook/convnextv2-base-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ConvNeXtV2ForImageClassification.from_pretrained("facebook/convnextv2-base-224").to(torch_device)
+        model = ConvNextV2ForImageClassification.from_pretrained("facebook/convnextv2-base-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
