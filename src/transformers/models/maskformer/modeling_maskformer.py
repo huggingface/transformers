@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MaskFormerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/maskformer-swin-base-ade"
-_FEAT_EXTRACTOR_FOR_DOC = "MaskFormerImageProcessor"
 
 MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/maskformer-swin-base-ade",

@@ -65,6 +65,7 @@ from . import (
     donut,
     dpr,
     dpt,
+    efficientformer,
     electra,
     encoder_decoder,
     ernie,

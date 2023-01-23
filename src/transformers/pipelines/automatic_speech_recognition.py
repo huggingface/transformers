@@ -400,6 +400,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     " only 1 version"
                 )
             forward_params["generate_kwargs"].update(generate_kwargs)
+        if return_timestamps is not None:
+            forward_params["generate_kwargs"]["return_timestamps"] = return_timestamps
 
         postprocess_params = {}
         if decoder_kwargs is not None:
@@ -512,8 +514,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
-                if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
-                    raise ValueError("Stride is only usable with CTC models, try removing it")
+                if self.type == "seq2seq":
+                    raise ValueError("Stride is only usable with CTC models, try removing it !")
 
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
@@ -523,6 +525,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             generate_kwargs = {}
 
         is_last = model_inputs.pop("is_last")
+        return_timestamps = generate_kwargs.pop("return_timestamps", False)
+
         if self.type == "seq2seq":
             encoder = self.model.get_encoder()
             # Consume values so we can let extra information flow freely through
@@ -558,7 +562,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     WhisperTimeStampLogitsProcessor(
                         eos_token_id=eos_token_id, no_timestamps_token_id=no_timestamps_token_id
                     )
-                ],
+                ]
+                if return_timestamps
+                else None,
                 **generate_kwargs,
             )
             out = {"tokens": tokens}
