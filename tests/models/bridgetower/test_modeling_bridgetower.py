@@ -254,7 +254,7 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    # Override as `hidden states output` is different for BridgeTower
+    # Override this as `hidden states output` is different for BridgeTower
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
