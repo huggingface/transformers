@@ -43,7 +43,6 @@ from .configuration_tapas import TapasConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TapasConfig"
-_TOKENIZER_FOR_DOC = "google/tapas-base"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
 TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
