@@ -2373,7 +2373,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
         >>> model = ReformerForMaskedLM.from_pretrained("hf-internal-testing/tiny-random-reformer")
 
-        >>> # add mask_tokengit
+        >>> # add mask_token
         >>> tokenizer.add_special_tokens({"mask_token": "[MASK]"})  # doctest: +IGNORE_RESULT
         >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
 
