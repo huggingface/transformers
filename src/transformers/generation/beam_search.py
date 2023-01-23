@@ -215,7 +215,6 @@ class BeamSearchScorer(BeamScorer):
         eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
     ) -> UserDict:
-        # t0 = default_timer()
 
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
