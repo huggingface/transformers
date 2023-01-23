@@ -1020,11 +1020,15 @@ class Trainer:
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in opt_model.named_parameters() if n in decay_parameters],
+                    "params": [
+                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
+                    ],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in opt_model.named_parameters() if n not in decay_parameters],
+                    "params": [
+                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
+                    ],
                     "weight_decay": 0.0,
                 },
             ]
