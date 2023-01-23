@@ -518,7 +518,7 @@ class GPT2MQAModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
 
-    def test_gpt2mqa_reorder_and_upcast_attn(self):
+
     @unittest.skip("GPT2MQA does not support head pruning.")
     def test_head_pruning(self):
         pass
