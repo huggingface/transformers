@@ -138,8 +138,7 @@ def get_tiny_tokenizer_from_checkpoint(checkpoint):
         return tokenizer
     logger.info("Training new from iterator ...")
     vocabulary = string.ascii_letters + string.digits + " "
-    if "Whisper" not in tokenizer.__class__.__name__:
-        tokenizer = tokenizer.train_new_from_iterator(vocabulary, vocab_size=len(vocabulary), show_progress=False)
+    tokenizer = tokenizer.train_new_from_iterator(vocabulary, vocab_size=len(vocabulary), show_progress=False)
     logger.info("Trained.")
     return tokenizer
 

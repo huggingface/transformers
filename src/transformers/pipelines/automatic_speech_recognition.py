@@ -550,9 +550,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             out = {"tokens": tokens}
         elif self.type == "seq2seq_whisper":
             stride = model_inputs.pop("stride", None)
+            eos_token_id = self.tokenizer.eos_token_id
+            no_timestamps_token_id = self.tokenizer.convert_tokens_to_ids("<|notimestamps|>")
             tokens = self.model.generate(
                 input_features=model_inputs.pop("input_features"),
-                logits_processor=[WhisperTimeStampLogitsProcessor()],
+                logits_processor=[
+                    WhisperTimeStampLogitsProcessor(
+                        eos_token_id=eos_token_id, no_timestamps_token_id=no_timestamps_token_id
+                    )
+                ],
                 **generate_kwargs,
             )
             out = {"tokens": tokens}

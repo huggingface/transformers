@@ -88,7 +88,7 @@ class WhisperModelTester:
         seq_length=60,
         is_training=True,
         use_labels=False,
-        vocab_size=51865,
+        vocab_size=300,
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=4,
