@@ -89,7 +89,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             outputs = speech_recognizer(audio)
             self.assertEqual(outputs, {"text": ANY(str)})
         elif "Whisper" in speech_recognizer.model.__class__.__name__:
-            audio.pop("stride")
             outputs = speech_recognizer(audio)
             self.assertEqual(outputs, {"text": ANY(str)})
         else:
