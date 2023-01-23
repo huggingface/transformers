@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -127,21 +127,12 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
 """
 
 
-class BridgeTowerLayerNorm(nn.LayerNorm):
-    """Subclass torch's LayerNorm to handle fp16."""
-
-    def forward(self, x: torch.Tensor):
-        orig_type = x.dtype
-        ret = super().forward(x.type(torch.float32))
-        return ret.type(orig_type)
-
-
 class BridgeTowerResidualAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
 
         self.attn = nn.MultiheadAttention(config.hidden_size, config.hidden_size // 64)
-        self.ln_1 = BridgeTowerLayerNorm(config.hidden_size)
+        self.ln_1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = nn.ModuleDict(
             OrderedDict(
                 [
@@ -151,7 +142,7 @@ class BridgeTowerResidualAttention(nn.Module):
                 ]
             )
         )
-        self.ln_2 = BridgeTowerLayerNorm(config.hidden_size)
+        self.ln_2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn_mask = None
 
     def attention(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor):
@@ -195,7 +186,7 @@ class BridgeTowerTransformer(nn.Module):
             )
         self.stop_gradient = config.stop_gradient
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor = None):
+    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         hidden_states = []
         for block in self.resblocks:
             hidden_state = block(hidden_state, attention_mask)
@@ -222,13 +213,13 @@ class BridgeTowerVisualTransformer(nn.Module):
         self.positional_embedding = nn.Parameter(
             scale * torch.randn((config.image_size // config.patch_size) ** 2 + 1, config.hidden_size)
         )
-        self.ln_pre = BridgeTowerLayerNorm(config.hidden_size)
+        self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.transformer = BridgeTowerTransformer(config)
-        self.ln_post = BridgeTowerLayerNorm(config.hidden_size)
+        self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.share_layernorm = config.share_layernorm
         if not config.share_layernorm:
             self.ln_separate = nn.ModuleList(
-                [BridgeTowerLayerNorm(config.hidden_size) for _ in range(config.num_hidden_layers)]
+                [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
             )
 
     def forward(self, hidden_state: torch.Tensor, attention_mask):
@@ -297,16 +288,12 @@ class BridgeTowerLinkTower(nn.Module):
         super().__init__()
         self.link_tower_type = config.link_tower_type
         self.hidden_size = config.hidden_size
-        if config.link_tower_type in [
-            "add",
-            "scaled_add",
-            "interpolate",
-        ]:
+        if config.link_tower_type in ["add", "scaled_add", "interpolate"]:
             if config.link_tower_type == "scaled_add":
                 self.scaled_factor = nn.Parameter(torch.tensor(1.0))
             elif config.link_tower_type == "interpolate":
                 self.beta = nn.Parameter(torch.tensor(0.5))
-            self.LayerNorm = nn.LayerNorm(self.hidden_size)
+            self.LayerNorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         else:
             raise NotImplementedError(f"link_tower_type {config.link_tower_type} is not implemented")
 
@@ -469,9 +456,8 @@ class BridgeTowerSelfAttention(nn.Module):
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
             if use_cache:
-                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
-                    -1, 1
-                )
+                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device)
+                position_ids_l = position_ids_l.view(-1, 1)
             else:
                 position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
             position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
@@ -1221,8 +1207,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         self.cross_modal_text_pooler = BridgeTowerPooler(config)
 
         # Initialize BridgeTower Components
-        self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size)
-        self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size)
+        self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.share_link_tower_layers:
             self.cross_modal_text_link_tower = BridgeTowerLinkTower(config)

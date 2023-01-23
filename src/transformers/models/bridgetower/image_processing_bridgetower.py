@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, center_crop, normalize, pad, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -49,46 +49,6 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     Return the maximum value across all indices of an iterable of values.
     """
     return [max(values_i) for values_i in zip(*values)]
-
-
-def pad(
-    image: np.ndarray,
-    output_size: Tuple[int, int],
-    input_channel_dimension: Optional[ChannelDimension] = None,
-    data_format: Optional[ChannelDimension] = None,
-) -> np.ndarray:
-    """
-    Pad the bottom and right of the image with zeros to the output size.
-
-    Args:
-        image (`np.ndarray`):
-            Image to pad.
-        output_size (`Tuple[int, int]`):
-            Output size of the image.
-        input_channel_dimension (`ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be inferred from the input image.
-        data_format (`str` or `ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be the same as the input image.
-    """
-    if input_channel_dimension is None:
-        input_channel_dimension = infer_channel_dimension_format(image)
-
-    output_height, output_width = output_size
-    input_height, input_width = get_image_size(image)
-    pad_bottom = output_height - input_height
-    pad_right = output_width - input_width
-
-    if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=0)
-    elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=0)
-    else:
-        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
-
-    if data_format is not None:
-        padded_image = to_channel_dimension_format(padded_image, data_format)
-
-    return padded_image
 
 
 # Copied from transformers.models.vilt.image_processing_vilt.make_pixel_mask
@@ -164,7 +124,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             Resize the shorter side of the input to `size["shortest_edge"]`. The longer side will be limited to under
             `int((1333 / 800) * size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if
             `do_resize` is set to `True`. Can be overridden by the `size` parameter in the `preprocess` method.
-        size_divisor (`int`, *optional*, defaults to 32):
+        size_divisor (`int`, *optional*, defaults to `32`):
             The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
             is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
@@ -206,9 +166,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        do_center_crop: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_center_crop: bool = True,
         do_pad: bool = True,
         **kwargs
     ) -> None:
@@ -335,6 +295,27 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
+    def _pad_image(
+        self,
+        image: np.ndarray,
+        output_size: Tuple[int, int],
+        constant_values: Union[float, Iterable[float]] = 0,
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
+        """
+        Pad an image with zeros to the given size.
+        """
+        input_height, input_width = get_image_size(image)
+        output_height, output_width = output_size
+
+        pad_bottom = output_height - input_height
+        pad_right = output_width - input_width
+        padding = ((0, pad_bottom), (0, pad_right))
+        padded_image = pad(
+            image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format
+        )
+        return padded_image
+
     def pad(
         self,
         images: List[np.ndarray],
@@ -362,7 +343,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         pad_size = get_max_height_width(images)
-        padded_images = [pad(image=image, output_size=pad_size, data_format=data_format) for image in images]
+        padded_images = [
+            self._pad_image(image=image, output_size=pad_size, data_format=data_format) for image in images
+        ]
         data = {"pixel_values": padded_images}
         if return_pixel_mask:
             masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]

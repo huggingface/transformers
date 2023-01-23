@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +44,6 @@ class BridgeTowerProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
 
     def __call__(
         self,
@@ -77,7 +76,7 @@ class BridgeTowerProcessor(ProcessorMixin):
             add_special_tokens=add_special_tokens,
             padding=padding,
             truncation=truncation,
-            max_length=max_length if max_length is not None else self.current_processor.max_text_len,
+            max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
             return_token_type_ids=return_token_type_ids,

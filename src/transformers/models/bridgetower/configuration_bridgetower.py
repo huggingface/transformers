@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License=, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,23 +42,26 @@ class BridgeTowerVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to 288):
-            The size (resolution) of each image.
-        stop_gradient (`bool`, *optional*, defaults to `False`):
-            Whether to stop gradient for training.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in visual encoder model.
-        share_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether LayerNorm layers are shared.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        remove_last_layer (`bool`, *optional*, defaults to `False`):
-            Whether to remove the last layer from the vision encoder.
+        image_size (`int`, *optional*, defaults to 288):
+            The size (resolution) of each image.
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
+        stop_gradient (`bool`, *optional*, defaults to `False`):
+            Whether to stop gradient for training.
+        share_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether LayerNorm layers are shared.
+        remove_last_layer (`bool`, *optional*, defaults to `False`):
+            Whether to remove the last layer from the vision encoder.
+
 
     Example:
 
@@ -80,6 +83,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         patch_size=16,
         image_size=288,
         initializer_factor=1,
+        layer_norm_eps=1e-05,
         stop_gradient=False,
         share_layernorm=True,
         remove_last_layer=False,
@@ -91,6 +95,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_factor = initializer_factor
+        self.layer_norm_eps = layer_norm_eps
         self.stop_gradient = stop_gradient
         self.share_layernorm = share_layernorm
         self.remove_last_layer = remove_last_layer
@@ -140,7 +145,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
+        max_position_embeddings (`int`, *optional*, defaults to 514):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
@@ -150,7 +155,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
             testing).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
