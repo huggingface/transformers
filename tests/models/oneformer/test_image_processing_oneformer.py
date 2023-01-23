@@ -99,7 +99,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         self.reduce_labels = reduce_labels
         self.ignore_index = ignore_index
 
-    def prepare_feat_extract_dict(self):
+    def prepare_image_proc_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
@@ -157,18 +157,18 @@ class OneFormerImageProcessorTester(unittest.TestCase):
 @require_vision
 class OneFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
     image_processing_class = OneFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
-    # only for test_feat_extracttion_common.test_feat_extract_to_json_string
-    feature_extraction_class = image_processing_class
+    # only for test_image_processing_common.test_image_proc_to_json_string
+    image_processing_class = image_processing_class
 
     def setUp(self):
         self.image_processing_tester = OneFormerImageProcessorTester(self)
 
     @property
-    def feat_extract_dict(self):
-        return self.image_processing_tester.prepare_feat_extract_dict()
+    def image_proc_dict(self):
+        return self.image_processing_tester.prepare_image_proc_dict()
 
-    def test_feat_extract_properties(self):
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+    def test_image_proc_properties(self):
+        image_processor = self.image_processing_class(**self.image_proc_dict)
         self.assertTrue(hasattr(image_processor, "image_mean"))
         self.assertTrue(hasattr(image_processor, "image_std"))
         self.assertTrue(hasattr(image_processor, "do_normalize"))
@@ -186,7 +186,7 @@ class OneFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Test
 
     def test_call_pil(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+        image_processor = self.image_processing_class(**self.image_proc_dict)
         # create random PIL images
         image_inputs = prepare_image_inputs(self.image_processing_tester, equal_resolution=False)
         for image in image_inputs:
@@ -220,7 +220,7 @@ class OneFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Test
 
     def test_call_numpy(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+        image_processor = self.image_processing_class(**self.image_proc_dict)
         # create random numpy tensors
         image_inputs = prepare_image_inputs(self.image_processing_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
@@ -254,7 +254,7 @@ class OneFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Test
 
     def test_call_pytorch(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+        image_processor = self.image_processing_class(**self.image_proc_dict)
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.image_processing_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
@@ -288,7 +288,7 @@ class OneFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Test
 
     def test_equivalence_pad_and_create_pixel_mask(self):
         # Initialize image_processors
-        image_processor_1 = self.image_processing_class(**self.feat_extract_dict)
+        image_processor_1 = self.image_processing_class(**self.image_proc_dict)
         image_processor_2 = self.image_processing_class(
             do_resize=False,
             do_normalize=False,
@@ -319,7 +319,7 @@ class OneFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Test
     def comm_get_image_processor_inputs(
         self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"
     ):
-        image_processor = self.image_processing_class(**self.feat_extract_dict)
+        image_processor = self.image_processing_class(**self.image_proc_dict)
         # prepare image and target
         num_labels = self.image_processing_tester.num_labels
         annotations = None
