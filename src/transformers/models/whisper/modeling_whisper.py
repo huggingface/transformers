@@ -17,6 +17,7 @@
 
 import math
 import random
+import warnings
 from typing import Optional, Tuple, Union
 
 import torch
@@ -25,6 +26,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation.configuration_utils import GenerationConfig
+from ...generation.logits_process import WhisperTimeStampLogitsProcessor
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1230,6 +1233,61 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+        )
+
+    def generate(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        generation_config=None,
+        logits_processor=None,
+        stopping_criteria=None,
+        prefix_allowed_tokens_fn=None,
+        synced_gpus=False,
+        return_timestamps=None,
+        task=None,
+        is_multilingual=None,
+        **kwargs
+    ):
+        # priority: `generation_config` argument > `model.generation_config` (the default generation config)
+        if generation_config is None:
+            # legacy: users may modify the model configuration to control generation -- update the generation config
+            # model attribute accordingly, if it was created from the model config
+            if self.generation_config._from_model_config:
+                new_generation_config = GenerationConfig.from_model_config(self.config)
+                if new_generation_config != self.generation_config:
+                    warnings.warn(
+                        "You have modified the pretrained model configuration to control generation. This is a"
+                        " deprecated strategy to control generation and will be removed soon, in a future version."
+                        " Please use a generation configuration file (see"
+                        " https://huggingface.co/docs/transformers/main_classes/text_generation)I don't agree with"
+                        " this warning, the generation config can be different but the rest of the model is the"
+                        " samne.........."
+                    )
+                    self.generation_config = new_generation_config
+            generation_config = self.generation_config
+
+        generation_config.return_timestamps = return_timestamps if return_timestamps is not None else False
+        generation_config.task = task if task is not None else False
+        generation_config.is_multilingual = is_multilingual if is_multilingual is not None else False
+
+        if generation_config.forced_decoder_ids and task is not None:
+            if generation_config.is_multilingual:
+                generation_config.forced_decoder_ids[1][1] = generation_config.task_to_id[generation_config["task"]]
+            else:
+                raise ValueError(
+                    "A task or language were given but the model was trained on english and can thus only transcribe"
+                    " from english to english."
+                )
+        if return_timestamps:
+            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
+        return super().generate(
+            inputs,
+            generation_config,
+            logits_processor,
+            stopping_criteria,
+            prefix_allowed_tokens_fn,
+            synced_gpus,
+            **kwargs,
         )
 
     def prepare_inputs_for_generation(
