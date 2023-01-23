@@ -61,7 +61,7 @@ class EfficientFormerImageProcessorTester(unittest.TestCase):
         self.image_mean = image_mean
         self.image_std = image_std
 
-    def prepare_image_proc_dict(self):
+    def prepare_image_processor_dict(self):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -81,11 +81,11 @@ class EfficientFormerImageProcessorTest(ImageProcessingSavingTestMixin, unittest
         self.image_proc_tester = EfficientFormerImageProcessorTester(self)
 
     @property
-    def image_proc_dict(self):
-        return self.image_proc_tester.prepare_image_proc_dict()
+    def image_processor_dict(self):
+        return self.image_proc_tester.prepare_image_processor_dict()
 
     def test_image_proc_properties(self):
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processor, "image_mean"))
         self.assertTrue(hasattr(image_processor, "image_std"))
         self.assertTrue(hasattr(image_processor, "do_normalize"))
@@ -97,7 +97,7 @@ class EfficientFormerImageProcessorTest(ImageProcessingSavingTestMixin, unittest
 
     def test_call_pil(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
         image_inputs = prepare_image_inputs(self.image_proc_tester, equal_resolution=False)
         for image in image_inputs:
@@ -129,7 +129,7 @@ class EfficientFormerImageProcessorTest(ImageProcessingSavingTestMixin, unittest
 
     def test_call_numpy(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
         image_inputs = prepare_image_inputs(self.image_proc_tester, equal_resolution=False, numpify=True)
         for image in image_inputs:
@@ -161,7 +161,7 @@ class EfficientFormerImageProcessorTest(ImageProcessingSavingTestMixin, unittest
 
     def test_call_pytorch(self):
         # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_proc_dict)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.image_proc_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
