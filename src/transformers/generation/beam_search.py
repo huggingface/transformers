@@ -373,7 +373,7 @@ class BeamSearchScorer(BeamScorer):
 
         # fill with hypotheses and eos_token_id if the latter fits in
         for i, (hypo, best_idx) in enumerate(zip(best, best_indices)):
-            decoded[i, : sent_lengths[i]] = hypo  # type: ignore[misc]
+            decoded[i, : sent_lengths[i]] = hypo
 
             if indices is not None:
                 indices[i, : len(best_idx)] = torch.tensor(best_idx)
