@@ -140,7 +140,7 @@ To apply the `jitter` over the entire dataset, use the 🤗 Datasets [`~datasets
 <frameworkcontent>
 <tf>
 It is common to apply some data augmentations to an image dataset to make a model more robust against overfitting.
-In this guide, you'll use `tf.image` to randomly change the color properties of an image, but you can also use any image
+In this guide, you'll use [`tf.image`](https://www.tensorflow.org/api_docs/python/tf/image) to randomly change the color properties of an image, but you can also use any image
 library you like.
 Define two separate transformation functions:
 - training data transformations that include image augmentation
