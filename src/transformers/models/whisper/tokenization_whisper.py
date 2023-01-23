@@ -479,8 +479,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, self.decoder.get(self.unk_token_id))
+        """
+        Converts an index (integer) in a token (str) using the vocab. Whisper's base tokenizer always decodes OOV
+        tokens as "", thus we do not use the `unk_token` here.
+        """
+        return self.decoder.get(index, "")
 
     def _normalize(self, text):
         """
