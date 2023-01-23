@@ -26,9 +26,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-from torchvision.ops.boxes import batched_nms
-
-from transformers import AutoBackbone
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -44,7 +41,8 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_ninja_available, logging
+from ...utils import is_ninja_available, is_torchvision_available, logging
+from ..auto import AutoBackbone
 from .configuration_deta import DetaConfig
 from .load_custom import load_cuda_kernels
 
@@ -64,6 +62,9 @@ else:
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
+
+if is_torchvision_available():
+    from torchvision.ops.boxes import batched_nms
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
