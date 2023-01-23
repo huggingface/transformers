@@ -35,7 +35,7 @@ Before you go further, it is good to have some basic knowledge of the original T
 [wav2vec2](model_doc/wav2vec2) is a self-supervised model pretrained on unlabeled speech data and finetuned on labeled data for audio classification and automatic speech recognition. 
 
 <div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/datasets/wav2vec2_architecture.png"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/wav2vec2_architecture.png"/>
 </div>
 
 This model has four main components:
@@ -116,7 +116,7 @@ This section briefly explains convolutions, but it'd be helpful to have a basic 
 [ConvNeXT](model_doc/convnext) is a CNN architecture that adopts new and modern network designs to improve performance. However, convolutions are still at the core of the model. From a high-level perspective, a [convolution](glossary#convolution) is an operation where a smaller matrix (*kernel*) is multiplied by a small window of the image pixels. It computes some features from it, such as a particular texture or curvature of a line. Then it slides over to the next window of pixels; the distance the convolution travels is known as the *stride*. You can feed this output to another convolutional layer, and with each successive layer, the network learns more complex and abstract things like hotdogs or rockets. Between convolutional layers, it is common to add a pooling layer to reduce dimensionality and make the model more robust to variations of a feature's position. This is the basic idea behind CNNs.
 
 <div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/convnext_architecture.jpg"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convnext_architecture.png"/>
 </div>
 
 From here, ConvNeXT modernizes the CNN in five ways:
@@ -138,7 +138,7 @@ The output from the convolution blocks is passed to a classification head which 
 DETR, *DEtection TRansformer*, is an end-to-end object detection model that combines a CNN with a Transformer encoder-decoder.
 
 <div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/detr_architecture.jpg"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/detr_architecture.png"/>
 </div>
 
 1. A pretrained CNN *backbone* takes an image, represented by its pixel values, and creates a low-resolution activation map of the image features. A 1x1 convolution is applied to the feature map to reduce dimensionality, creating a new feature map that gives a high-level image representation. Since the Transformer is a sequential model, the feature map is flattened into a sequence of feature vectors. Like the original Transformer, you need to add positional embeddings to the feature vectors.
@@ -214,7 +214,7 @@ Notice how easy it is to use BERT for different tasks once it's been pretrained.
 [GPT-2](model_doc/gpt2) is a decoder-only model pretrained on a large amount of text. It can generate convincing (though not always true) text given a prompt and complete other NLP tasks like question answering despite not being explicitly trained to.
 
 <div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/gpt2_architecture.jpg"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/gpt2_architecture.png"/>
 </div>
 
 1. GPT-2 uses [byte pair encoding (BPE)](tokenizer_summary#bytepair-encoding-bpe) to tokenize words and generate a token embedding. Positional encodings are added to the token embeddings to indicate the position of each token in the sequence. The input embeddings are passed through multiple decoder blocks to output some final hidden state. Within each decoder block, GPT-2 uses a *masked self-attention* layer which means GPT-2 can't attend to future tokens. It is only allowed to attend to tokens on the left. This is different from BERT's [`mask`] token because, in masked self-attention, an attention mask is used to set the score to `0` for future tokens.
@@ -236,7 +236,7 @@ For more information about text generation, check out the [text generation strat
 Encoder-decoder models like [BART](model_doc/bart) and [T5](model_doc/t5) are designed for the sequence-to-sequence pattern of a summarization task. We'll explain how BART works in this section, and then you can try finetuning T5 at the end.
 
 <div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bart_architecture.jpg"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bart_architecture.png"/>
 </div>
 
 1. BART's encoder architecture is very similar to BERT and accepts a token and positional embedding of the text. BART is pretrained by corrupting the input and then reconstructing it with the decoder. Unlike other encoders with specific corruption strategies, BART can apply any type of corruption. The *text infilling* corruption strategy works exceptionally well. In text infilling, a number of text spans are replaced with a **single** [`mask`] token. This is important because the model has to predict the masked tokens, and it teaches the model to predict the number of missing tokens. The input embeddings and masked spans are passed through the encoder to output some final hidden states, but unlike BERT, BART doesn't add a final feedforward network at the end to predict a word.
