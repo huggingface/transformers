@@ -190,20 +190,12 @@ if is_sagemaker_mp_enabled():
     from smdistributed.modelparallel import __version__ as SMP_VERSION
 
     IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
-    IS_SAGEMAKER_MP_POST_1_11 = version.parse(SMP_VERSION) >= version.parse("1.11")
-
-    # # for SDP full model loading support
-    # from .sharded_data_parallel_checkpoint import (
-    #     get_buffer_names,
-    #     get_param_shapes,
-    # )
+    IS_SAGEMAKER_MP_POST_1_15 = version.parse(SMP_VERSION) >= version.parse("1.15")
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
-    IS_SAGEMAKER_MP_POST_1_11 = False
-
-
+    IS_SAGEMAKER_MP_POST_1_15 = False
 
 
 skip_first_batches = None
@@ -1038,10 +1030,12 @@ class Trainer:
         Trainer's init through `optimizers`, or subclass and override this method (or `create_optimizer` and/or
         `create_scheduler`) in a subclass.
         """
-        print(f'before creation {self.args.local_rank}')
+        print(f"before creation {self.args.local_rank}")
         self.create_optimizer()
-        if (IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16) or (IS_SAGEMAKER_MP_POST_1_11 and smp.state.cfg.sharded_data_parallel_degree > 1):
-            # If smp >= 1.10 and fp16 is enabled, we unwrap the optimizer
+        if (IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16) or (
+            IS_SAGEMAKER_MP_POST_1_15 and smp.state.cfg.sharded_data_parallel_degree > 1
+        ):
+            # If smp >= 1.10 and fp16 is enabled or smp >= 1.11 and SDP enabled, we unwrap the optimizer
             optimizer = self.optimizer.optimizer
         else:
             optimizer = self.optimizer
@@ -1056,9 +1050,9 @@ class Trainer:
         """
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
-        print(f'come creation {self.args.local_rank}')
+        print(f"come creation {self.args.local_rank}")
         if self.optimizer is None:
-            print(f'param is nonenonenone')
+            print(f"param is nonenonenone")
             decay_parameters = get_parameter_names(opt_model, ALL_LAYERNORM_LAYERS)
             # print(f'decay param 1 is {decay_parameters}')
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
@@ -1080,7 +1074,7 @@ class Trainer:
             if is_sagemaker_mp_enabled():
                 opt_grouped_params = []
                 for params in optimizer_grouped_parameters:
-                    if len(params['params']) > 0:
+                    if len(params["params"]) > 0:
                         opt_grouped_params.append(params)
                 optimizer_grouped_parameters = opt_grouped_params
                 print(f"opt g params is {[len(x['params']) for x in optimizer_grouped_parameters]}")
@@ -1683,7 +1677,7 @@ class Trainer:
             self.model.gradient_checkpointing_enable()
 
         model = self._wrap_model(self.model_wrapped)
-            
+
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
             self.model_wrapped = model
@@ -1691,16 +1685,20 @@ class Trainer:
         if delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
-        # if loading a checkpoint, we need to load it 
+        # if loading a checkpoint, we need to load it
         # after we wrap the model with smp.DistributedModel
-        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None \
-                and (os.path.isdir(os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial")) or \
-                os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))):
+        if (
+            is_sagemaker_mp_enabled()
+            and resume_from_checkpoint is not None
+            and (
+                os.path.isdir(os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial"))
+                or os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))
+            )
+        ):
             self._load_from_checkpoint(resume_from_checkpoint, model)
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
-
 
         # important: at this point:
         # self.model         is the Transformers Model
@@ -2042,9 +2040,11 @@ class Trainer:
         if model is None:
             model = self.model
 
-        if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
-                os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)) and not os.path.isdir(
-                os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial")):
+        if (
+            not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))
+            and not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME))
+            and not os.path.isdir(os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial"))
+        ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
         logger.info(f"Loading model from {resume_from_checkpoint}.")
@@ -2063,11 +2063,15 @@ class Trainer:
             # will be resumed in deepspeed_init
             pass
         elif is_sagemaker_mp_enabled():
-            if os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) or os.path.isdir(os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial")):
-                if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")) or \
-                    os.path.isfile(os.path.join(os.path.dirname(resume_from_checkpoint), "user_content.pt")):
-
-                    if smp.state.cfg.sharded_data_parallel_degree > 1 and os.path.isdir(os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial")):
+            if os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) or os.path.isdir(
+                os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial")
+            ):
+                if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
+                    if (
+                        IS_SAGEMAKER_MP_POST_1_15
+                        and smp.state.cfg.sharded_data_parallel_degree > 1
+                        and os.path.isdir(os.path.join(resume_from_checkpoint, WEIGHTS_NAME + "_partial"))
+                    ):
                         # If SDP enabled and partial checkpoint exists, load partial checkpoint
                         smp.resume_from_checkpoint(
                             path=resume_from_checkpoint, tag=WEIGHTS_NAME, partial=True, load_optimizer=True
@@ -2135,14 +2139,19 @@ class Trainer:
                     if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
                         # If the 'user_content.pt' file exists, load with the new smp api.
                         # Checkpoint must have been saved with the new smp api.
-                        if smp.state.cfg.sharded_data_parallel_degree > 1 and \
-                                os.path.isdir(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME + "_partial")):
+                        if (
+                            IS_SAGEMAKER_MP_POST_1_15
+                            and smp.state.cfg.sharded_data_parallel_degree > 1
+                            and os.path.isdir(
+                                os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME + "_partial")
+                            )
+                        ):
                             # If SDP enabled and partial checkpoint exists, load partial checkpoint
                             smp.resume_from_checkpoint(
-                                path=self.state.best_model_checkpoint, 
-                                tag=WEIGHTS_NAME, 
-                                partial=True, 
-                                load_optimizer=True
+                                path=self.state.best_model_checkpoint,
+                                tag=WEIGHTS_NAME,
+                                partial=True,
+                                load_optimizer=True,
                             )
                         else:
                             # Otherwise, load full model
@@ -2288,15 +2297,16 @@ class Trainer:
 
         self.save_model(output_dir, _internal_call=True)
 
-        if is_sagemaker_mp_enabled() and smp.state.cfg.sharded_data_parallel_degree > 1:
-            smp.save_checkpoint(path=output_dir, partial=True, tag=WEIGHTS_NAME, model=self.model_wrapped, optimizer=self.optimizer)
+        if is_sagemaker_mp_enabled() and IS_SAGEMAKER_MP_POST_1_15 and smp.state.cfg.sharded_data_parallel_degree > 1:
+            smp.save_checkpoint(
+                path=output_dir, partial=True, tag=WEIGHTS_NAME, model=self.model_wrapped, optimizer=self.optimizer
+            )
 
         if self.deepspeed:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
             self.deepspeed.save_checkpoint(output_dir)
 
-        
         # Save optimizer and scheduler
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
             self.optimizer.consolidate_state_dict()
@@ -2308,7 +2318,7 @@ class Trainer:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            if not smp.state.cfg.sharded_data_parallel_degree > 1:
+            if not (IS_SAGEMAKER_MP_POST_1_15 and smp.state.cfg.sharded_data_parallel_degree > 1):
                 opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
                 smp.barrier()
                 if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
@@ -2417,7 +2427,11 @@ class Trainer:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
                 if is_sagemaker_mp_enabled():
                     if os.path.isfile(os.path.join(checkpoint, "user_content.pt")):
-                        if smp.state.cfg.sharded_data_parallel_degree > 1 and os.path.isdir(os.path.join(checkpoint, WEIGHTS_NAME + "_partial")):
+                        if (
+                            IS_SAGEMAKER_MP_POST_1_15
+                            and smp.state.cfg.sharded_data_parallel_degree > 1
+                            and os.path.isdir(os.path.join(checkpoint, WEIGHTS_NAME + "_partial"))
+                        ):
                             # If SDP is enabled, then loading optimizer handled in load_checkpoint
                             pass
                         else:
@@ -2425,6 +2439,7 @@ class Trainer:
                             def opt_load_hook(mod, opt):
                                 opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
+                            self.model_wrapped.register_post_step_hook(opt_load_hook)
                     else:
                         # Optimizer checkpoint was saved with smp < 1.10
                         def opt_load_hook(mod, opt):
@@ -2435,7 +2450,8 @@ class Trainer:
                             else:
                                 opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
-                    self.model_wrapped.register_post_step_hook(opt_load_hook)
+                        self.model_wrapped.register_post_step_hook(opt_load_hook)
+
                 else:
                     self.optimizer.load_state_dict(
                         torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
@@ -2747,7 +2763,13 @@ class Trainer:
                         smp.save_checkpoint(path=output_dir, partial=False, tag=WEIGHTS_NAME, model=self.model_wrapped)
                     else:
                         # Otherwise save partial checkpoint
-                        smp.save_checkpoint(path=output_dir, partial=True, tag=WEIGHTS_NAME, model=self.model_wrapped, optimizer=self.optimizer)
+                        smp.save_checkpoint(
+                            path=output_dir,
+                            partial=True,
+                            tag=WEIGHTS_NAME,
+                            model=self.model_wrapped,
+                            optimizer=self.optimizer,
+                        )
 
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
                 Path(os.path.join(output_dir, "user_content.pt")).touch()

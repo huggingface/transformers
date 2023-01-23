@@ -1779,7 +1779,6 @@ class TrainingArguments:
                 a work description to be used in debug logs
 
         """
-        print(f"[viczhu] main_process_first | local_process_index: {self.local_process_index} | rank: {smp.rank()} | world_size: {self.world_size}")
         if is_torch_available() and self.world_size > 1:
             main_process_desc = "main process"
             if local:
@@ -1795,13 +1794,10 @@ class TrainingArguments:
                     # tell all replicas to wait
                     logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
                     if is_torch_tpu_available():
-                        print(f"[viczhu] NOT IS_MAIN_PROCESS ERR??? TORCH_TPU | local_process_index: {self.local_process_index} | rank: {smp.rank()} | world_size: {self.world_size}")
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        print(f"[viczhu] main_process_first NOT IS_MAIN_PROCESS is_sagemaker_dp_enabled() | local_process_index: {self.local_process_index} | rank: {smp.rank()} | world_size: {self.world_size}")
                         dist.barrier()
                     else:
-                        print(f"[viczhu] main_process_first NOT_MAIN_BARRIER | local_process_index: {self.local_process_index} | rank: {smp.rank()} | world_size: {self.world_size}")
                         torch.distributed.barrier()
                 yield
             finally:
@@ -1809,13 +1805,10 @@ class TrainingArguments:
                     # the wait is over
                     logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
                     if is_torch_tpu_available():
-                        print(f"[viczhu] IS_MAIN_PROCESS ERR??? TORCH_TPU | local_process_index: {self.local_process_index} | rank: {smp.rank()} | world_size: {self.world_size}")
                         xm.rendezvous(desc)
                     elif is_sagemaker_dp_enabled():
-                        print(f"[viczhu] main_process_first IS_MAIN_PROCESS is_sagemaker_dp_enabled() | local_process_index: {self.local_process_index} | rank: {smp.rank()} | world_size: {self.world_size}")
                         dist.barrier()
                     else:
-                        print(f"[viczhu] main_process_first IS_MAIN_BARRIER | local_process_index: {self.local_process_index} | rank: {smp.rank()} | world_size: {self.world_size}")
                         torch.distributed.barrier()
         else:
             yield
