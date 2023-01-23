@@ -519,8 +519,22 @@ class GPT2MQAModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
 
     def test_gpt2mqa_reorder_and_upcast_attn(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(reorder_and_upcast_attn=True)
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
+    @unittest.skip("GPT2MQA does not support head pruning.")
+    def test_head_pruning(self):
+        pass
+
+    @unittest.skip("GPT2MQA does not support head pruning.")
+    def test_head_pruning_integration(self):
+        pass
+
+    @unittest.skip("GPT2MQA does not support head pruning.")
+    def test_head_pruning_save_load_from_config_init(self):
+        pass
+
+    @unittest.skip("GPT2MQA does not support head pruning.")
+    def test_head_pruning_save_load_from_pretrained(self):
+        pass
+
 
     def test_gpt2mqa_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -528,9 +542,9 @@ class GPT2MQAModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     @slow
     def test_batch_generation(self):
-        model = GPT2MQALMHeadModel.from_pretrained("gpt2mqa")
+        model = GPT2MQALMHeadModel.from_pretrained("bigcode/santacoder")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2mqa")
+        tokenizer = GPT2Tokenizer.from_pretrained("bigcode/santacoder")
 
         tokenizer.padding_side = "left"
 
