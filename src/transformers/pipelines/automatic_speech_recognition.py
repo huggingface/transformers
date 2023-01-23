@@ -101,10 +101,10 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         sequence = sequence[begin_idx:]
 
         timestamp_tokens = sequence >= timestamp_begin
-        consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
-        last_timestamp = np.where(timestamp_tokens)[0][-1]
-        consecutive = np.append(consecutive, last_timestamp) if last_timestamp not in consecutive else consecutive
-        if seq_idx != 0:
+        if seq_idx != 0 and sum(timestamp_tokens) > 0:
+            consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+            last_timestamp = np.where(timestamp_tokens)[0][-1]
+            consecutive = np.append(consecutive, last_timestamp) if last_timestamp not in consecutive else consecutive
             time -= stride_left + stride_right
             offset = int((time / feature_extractor.sampling_rate) / time_precision)
             overlap_time = int((stride_left / feature_extractor.sampling_rate) / time_precision)
@@ -400,13 +400,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     " only 1 version"
                 )
             forward_params["generate_kwargs"].update(generate_kwargs)
-        if return_timestamps is not None:
-            forward_params["generate_kwargs"]["return_timestamps"] = return_timestamps
 
         postprocess_params = {}
         if decoder_kwargs is not None:
             postprocess_params["decoder_kwargs"] = decoder_kwargs
         if return_timestamps is not None:
+            forward_params["return_timestamps"] = return_timestamps
             postprocess_params["return_timestamps"] = return_timestamps
             if self.model.config.model_type == "whisper":
                 # Whisper is highly specific, if we want timestamps, we need to
@@ -520,12 +519,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, generate_kwargs=None):
+    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
 
         is_last = model_inputs.pop("is_last")
-        return_timestamps = generate_kwargs.pop("return_timestamps", False)
 
         if self.type == "seq2seq":
             encoder = self.model.get_encoder()
