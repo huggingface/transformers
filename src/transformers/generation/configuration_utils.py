@@ -282,6 +282,14 @@ class GenerationConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
 
+        # Additional attributes without default values
+        for key, value in kwargs.items():
+            try:
+                setattr(self, key, value)
+            except AttributeError as err:
+                logger.error(f"Can't set {key} with value {value} for {self}")
+                raise err
+
     def __eq__(self, other):
         self_dict = self.__dict__.copy()
         other_dict = other.__dict__.copy()
