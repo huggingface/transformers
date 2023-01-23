@@ -1102,8 +1102,12 @@ class TvltForPreTraining(TvltPreTrainedModel):
         total_loss = 0.0
 
         if self.task_matching:
-            assert labels is not None
-            assert pixel_values_mixed is not None
+            
+            if labels is None:
+                raise ValueError("Matching task requires labels")
+            if pixel_values_mixed is None:
+                raise ValueError("Matching task requires pixel_values_mixed")
+
             outputs = self.tvlt(
                 pixel_values_mixed,
                 audio_values,
@@ -1122,9 +1126,8 @@ class TvltForPreTraining(TvltPreTrainedModel):
             total_loss += loss
 
         if self.task_mae:
-            assert (
-                pixel_mask_position_permutation is not None and audio_mask_position_permutation is not None
-            ), "MAE task requires pixel masks and audio masks, set mask_audio and mask_pixel to True in TvltProcessor"
+            if pixel_mask_position_permutation is None or audio_mask_position_permutation is None:
+                raise ValueError("MAE task requires pixel masks and audio masks, set mask_audio and mask_pixel to True in TvltProcessor")
 
             outputs = self.tvlt(
                 pixel_values,
