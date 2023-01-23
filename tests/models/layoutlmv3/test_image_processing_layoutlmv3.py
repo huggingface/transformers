@@ -21,7 +21,8 @@ import numpy as np
 from transformers.testing_utils import require_pytesseract, require_torch
 from transformers.utils import is_pytesseract_available, is_torch_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_image_processing_common import prepare_image_inputs
 
 
 if is_torch_available():
