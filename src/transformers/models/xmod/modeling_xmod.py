@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook AI Research and the HuggingFace Inc. team.
+# Copyright 2023 Facebook AI Research and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -669,7 +669,6 @@ class XMODPreTrainedModel(PreTrainedModel):
     config_class = XMODConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -1087,10 +1086,10 @@ class XMODForCausalLM(XMODPreTrainedModel):
         >>> from transformers import AutoTokenizer, XMODForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-        >>> config = AutoConfig.from_pretrained("roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("jvamvas/xmod-base")
+        >>> config = AutoConfig.from_pretrained("jvamvas/xmod-base")
         >>> config.is_decoder = True
-        >>> model = XMODForCausalLM.from_pretrained("roberta-base", config=config)
+        >>> model = XMODForCausalLM.from_pretrained("jvamvas/xmod-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
