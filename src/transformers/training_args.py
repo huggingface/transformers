@@ -418,7 +418,7 @@ class TrainingArguments:
             - `"backward_pos"` : This prefetches the next set of parameters after the current set of parameter’s
                 gradient computation.
         fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
-            FSDP's backward prefetch mode.
+            FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
              If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the forward
              pass.
         deepspeed (`str` or `dict`, *optional*):
