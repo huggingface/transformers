@@ -13,16 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from abc import ABC, abstractmethod
 from collections import UserDict
 from typing import List, Optional, Tuple, Union
+import warnings
 
 import numpy as np
 import torch
 
 from ..utils import add_start_docstrings
-from .beam_constraints import Constraint, ConstraintListState
+from .beam_constraints import Constraint
+from .beam_constraints import ConstraintListState
 
 
 PROCESS_INPUTS_DOCSTRING = r"""
@@ -52,8 +53,8 @@ PROCESS_INPUTS_DOCSTRING = r"""
               non-finished beams.
             - **next_beam_tokens** (`torch.LongTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be added
               to the non-finished beam_hypotheses.
-            - **next_beam_indices** (`torch.LongTensor` of shape `(batch_size * num_beams)`) -- Beam indices
-              indicating to which beam the next tokens shall be added.
+            - **next_beam_indices** (`torch.LongTensor` of shape `(batch_size * num_beams)`) -- Beam indices indicating
+              to which beam the next tokens shall be added.
 
 """
 
