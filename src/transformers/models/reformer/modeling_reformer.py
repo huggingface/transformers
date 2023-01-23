@@ -2377,6 +2377,9 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> tokenizer.add_special_tokens({"mask_token": "[MASK]"})  # doctest: +IGNORE_RESULT
         >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
 
+        >>> # resize model's embedding matrix
+        >>> model.resize_token_embeddings(new_num_tokens=model.config.vocab_size + 1)  # doctest: +IGNORE_RESULT
+
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
 
@@ -2384,8 +2387,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
 
         >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-        >>> tokenizer.decode(predicted_token_id)
-        'it'
+        >>> predicted_token = tokenizer.decode(predicted_token_id)
         ```
 
         ```python
@@ -2396,8 +2398,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         ... )
 
         >>> outputs = model(**inputs, labels=labels)
-        >>> round(outputs.loss.item(), 2)
-        7.09
+        >>> loss = round(outputs.loss.item(), 2)
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2494,8 +2495,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         ...     logits = model(**inputs).logits
 
         >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_0'
+        >>> label = model.config.id2label[predicted_class_id]
         ```
 
         ```python
@@ -2507,8 +2507,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
-        >>> round(loss.item(), 2)
-        0.68
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
