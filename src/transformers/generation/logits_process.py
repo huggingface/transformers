@@ -919,29 +919,26 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     Args:
         begin_index (`int`, *optional*, defaults to 5 ):
             This indicates to the processor where the first tokens are generated. This is used to differentiate between
-            the `prompt` tokens and the `generated` tokens. When generating with `WhisperForConditionalGeneration` the
-            `prompt` tokens are the first 4 tokens.
+            the `prompt` tokens and the `generated` tokens. When generating with `WhisperForConditionalGeneration` with
+            a m multilingual model, the `prompt` tokens are the first 4 tokens :
+            "<startoftranscript><language><task><timestamptoken>" where the `"<timestamptoken>'` is an OOV token
+            corresponding to the first timestamp (50364 for [Whisper
+            large](https://huggingface.co/openai/whisper-large))
         eos_token_id (`int`, *optional*, defaults to 50257):
             The id of the *end-of-sequence* token.
         no_timestamps_token_id (`int`, *optional*, defaults to 50363):
             The id of the `"<|notimestamps|>"` token.
-        max_initial_timestamp (`int`, *optional*, defaults to 1):
+        max_initial_timestamp_idx (`int`, *optional*, defaults to 1):
             Used to set the maximum value of the initial timestamp. This is used to prevent the model from predicting
             timestamps that are too far in the future.
     """
 
-    def __init__(
-        self,
-        begin_index=5,
-        eos_token_id=50257,
-        no_timestamps_token_id=50363,
-        max_initial_timestamp=1,
-    ):
-        self.eos_token_id = eos_token_id
-        self.no_timestamps_token_id = no_timestamps_token_id
-        self.timestamp_begin = no_timestamps_token_id + 1
-        self.begin_index = begin_index
-        self.max_initial_timestamp_index = max_initial_timestamp
+    def __init__(self, generate_config, begin_index=None, **kwargs):  # support for the kwargs
+        self.eos_token_id = generate_config.eos_token_id
+        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
+        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+        self.begin_index = len(generate_config.forced_decoder_ids) + 2 if not begin_index else begin_index
+        self.max_initial_timestamp_idx = generate_config.max_initial_timestamp_idx
 
     def __call__(self, input_ids, scores):
         # suppress <|notimestamps|> which is handled by without_timestamps
@@ -960,8 +957,8 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                     scores[k, : self.eos_token_id] = -float("inf")
 
             # apply the `max_initial_timestamp` option
-            if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
-                last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+            if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_idx is not None:
+                last_allowed = self.timestamp_begin + self.max_initial_timestamp_idx
                 scores[:, last_allowed + 1 :] = -float("inf")
 
         # if sum of probability over timestamps is above any other token, sample timestamp
