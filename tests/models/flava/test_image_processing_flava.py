@@ -21,8 +21,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
-from ...test_image_processing_common import prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -31,7 +30,7 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
-    from transformers import FlavaFeatureExtractor
+    from transformers import FlavaImageProcessor
     from transformers.image_utils import PILImageResampling
     from transformers.models.flava.image_processing_flava import (
         FLAVA_CODEBOOK_MEAN,
@@ -43,7 +42,7 @@ else:
     FLAVA_IMAGE_MEAN = FLAVA_IMAGE_STD = FLAVA_CODEBOOK_MEAN = FLAVA_CODEBOOK_STD = None
 
 
-class FlavaFeatureExtractionTester(unittest.TestCase):
+class FlavaImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -115,7 +114,7 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
         self.codebook_image_mean = codebook_image_mean
         self.codebook_image_std = codebook_image_std
 
-    def prepare_feat_extract_dict(self):
+    def prepare_image_processor_dict(self):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -160,82 +159,82 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class FlavaImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = FlavaFeatureExtractor if is_vision_available() else None
+    image_processing_class = FlavaImageProcessor if is_vision_available() else None
     maxDiff = None
 
     def setUp(self):
-        self.feature_extract_tester = FlavaFeatureExtractionTester(self)
+        self.image_processor_tester = FlavaImageProcessingTester(self)
 
     @property
-    def feat_extract_dict(self):
-        return self.feature_extract_tester.prepare_feat_extract_dict()
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
 
-    def test_feat_extract_properties(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feature_extractor, "image_mean"))
-        self.assertTrue(hasattr(feature_extractor, "image_std"))
-        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
-        self.assertTrue(hasattr(feature_extractor, "do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "resample"))
-        self.assertTrue(hasattr(feature_extractor, "crop_size"))
-        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "do_rescale"))
-        self.assertTrue(hasattr(feature_extractor, "rescale_factor"))
-        self.assertTrue(hasattr(feature_extractor, "masking_generator"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_size"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_resample"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_do_center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_crop_size"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_do_map_pixels"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_do_normalize"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_image_mean"))
-        self.assertTrue(hasattr(feature_extractor, "codebook_image_std"))
+    def test_image_processor_properties(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        self.assertTrue(hasattr(image_processing, "image_mean"))
+        self.assertTrue(hasattr(image_processing, "image_std"))
+        self.assertTrue(hasattr(image_processing, "do_normalize"))
+        self.assertTrue(hasattr(image_processing, "do_resize"))
+        self.assertTrue(hasattr(image_processing, "resample"))
+        self.assertTrue(hasattr(image_processing, "crop_size"))
+        self.assertTrue(hasattr(image_processing, "do_center_crop"))
+        self.assertTrue(hasattr(image_processing, "do_rescale"))
+        self.assertTrue(hasattr(image_processing, "rescale_factor"))
+        self.assertTrue(hasattr(image_processing, "masking_generator"))
+        self.assertTrue(hasattr(image_processing, "codebook_do_resize"))
+        self.assertTrue(hasattr(image_processing, "codebook_size"))
+        self.assertTrue(hasattr(image_processing, "codebook_resample"))
+        self.assertTrue(hasattr(image_processing, "codebook_do_center_crop"))
+        self.assertTrue(hasattr(image_processing, "codebook_crop_size"))
+        self.assertTrue(hasattr(image_processing, "codebook_do_map_pixels"))
+        self.assertTrue(hasattr(image_processing, "codebook_do_normalize"))
+        self.assertTrue(hasattr(image_processing, "codebook_image_mean"))
+        self.assertTrue(hasattr(image_processing, "codebook_image_std"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"height": 224, "width": 224})
-        self.assertEqual(feature_extractor.crop_size, {"height": 224, "width": 224})
-        self.assertEqual(feature_extractor.codebook_size, {"height": 112, "width": 112})
-        self.assertEqual(feature_extractor.codebook_crop_size, {"height": 112, "width": 112})
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        self.assertEqual(image_processor.size, {"height": 224, "width": 224})
+        self.assertEqual(image_processor.crop_size, {"height": 224, "width": 224})
+        self.assertEqual(image_processor.codebook_size, {"height": 112, "width": 112})
+        self.assertEqual(image_processor.codebook_crop_size, {"height": 112, "width": 112})
 
-        feature_extractor = self.feature_extraction_class.from_dict(
-            self.feat_extract_dict, size=42, crop_size=84, codebook_size=33, codebook_crop_size=66
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42, crop_size=84, codebook_size=33, codebook_crop_size=66
         )
-        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
-        self.assertEqual(feature_extractor.crop_size, {"height": 84, "width": 84})
-        self.assertEqual(feature_extractor.codebook_size, {"height": 33, "width": 33})
-        self.assertEqual(feature_extractor.codebook_crop_size, {"height": 66, "width": 66})
+        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+        self.assertEqual(image_processor.codebook_size, {"height": 33, "width": 33})
+        self.assertEqual(image_processor.codebook_crop_size, {"height": 66, "width": 66})
 
     def test_batch_feature(self):
         pass
 
     def test_call_pil(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, PIL.Image.Image)
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt")
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt")
 
         # Test no bool masked pos
         self.assertFalse("bool_masked_pos" in encoded_images)
 
-        expected_height, expected_width = self.feature_extract_tester.get_expected_image_size()
+        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
 
         self.assertEqual(
             encoded_images.pixel_values.shape,
-            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
+            (1, self.image_processor_tester.num_channels, expected_height, expected_width),
         )
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt")
-        expected_height, expected_width = self.feature_extract_tester.get_expected_image_size()
+        encoded_images = image_processing(image_inputs, return_tensors="pt")
+        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
 
         # Test no bool masked pos
         self.assertFalse("bool_masked_pos" in encoded_images)
@@ -243,86 +242,86 @@ class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         self.assertEqual(
             encoded_images.pixel_values.shape,
             (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
+                self.image_processor_tester.batch_size,
+                self.image_processor_tester.num_channels,
                 expected_height,
                 expected_width,
             ),
         )
 
     def _test_call_framework(self, instance_class, prepare_kwargs):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, **prepare_kwargs)
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, **prepare_kwargs)
         for image in image_inputs:
             self.assertIsInstance(image, instance_class)
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt")
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt")
 
-        expected_height, expected_width = self.feature_extract_tester.get_expected_image_size()
+        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
         self.assertEqual(
             encoded_images.pixel_values.shape,
-            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
+            (1, self.image_processor_tester.num_channels, expected_height, expected_width),
         )
 
-        encoded_images = feature_extractor(image_inputs, return_image_mask=True, return_tensors="pt")
+        encoded_images = image_processing(image_inputs, return_image_mask=True, return_tensors="pt")
 
-        expected_height, expected_width = self.feature_extract_tester.get_expected_image_size()
+        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
         self.assertEqual(
             encoded_images.pixel_values.shape,
             (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
+                self.image_processor_tester.batch_size,
+                self.image_processor_tester.num_channels,
                 expected_height,
                 expected_width,
             ),
         )
 
-        expected_height, expected_width = self.feature_extract_tester.get_expected_mask_size()
+        expected_height, expected_width = self.image_processor_tester.get_expected_mask_size()
         self.assertEqual(
             encoded_images.bool_masked_pos.shape,
             (
-                self.feature_extract_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 expected_height,
                 expected_width,
             ),
         )
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
 
-        expected_height, expected_width = self.feature_extract_tester.get_expected_image_size()
+        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
         self.assertEqual(
             encoded_images.shape,
             (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
+                self.image_processor_tester.batch_size,
+                self.image_processor_tester.num_channels,
                 expected_height,
                 expected_width,
             ),
         )
 
         # Test masking
-        encoded_images = feature_extractor(image_inputs, return_image_mask=True, return_tensors="pt")
+        encoded_images = image_processing(image_inputs, return_image_mask=True, return_tensors="pt")
 
-        expected_height, expected_width = self.feature_extract_tester.get_expected_image_size()
+        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
         self.assertEqual(
             encoded_images.pixel_values.shape,
             (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
+                self.image_processor_tester.batch_size,
+                self.image_processor_tester.num_channels,
                 expected_height,
                 expected_width,
             ),
         )
 
-        expected_height, expected_width = self.feature_extract_tester.get_expected_mask_size()
+        expected_height, expected_width = self.image_processor_tester.get_expected_mask_size()
         self.assertEqual(
             encoded_images.bool_masked_pos.shape,
             (
-                self.feature_extract_tester.batch_size,
+                self.image_processor_tester.batch_size,
                 expected_height,
                 expected_width,
             ),
@@ -335,39 +334,39 @@ class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         self._test_call_framework(torch.Tensor, prepare_kwargs={"torchify": True})
 
     def test_masking(self):
-        # Initialize feature_extractor
+        # Initialize image_processing
         random.seed(1234)
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_image_mask=True, return_tensors="pt")
+        encoded_images = image_processing(image_inputs[0], return_image_mask=True, return_tensors="pt")
         self.assertEqual(encoded_images.bool_masked_pos.sum().item(), 75)
 
     def test_codebook_pixels(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
+        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, PIL.Image.Image)
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_codebook_pixels=True, return_tensors="pt")
-        expected_height, expected_width = self.feature_extract_tester.get_expected_codebook_image_size()
+        encoded_images = image_processing(image_inputs[0], return_codebook_pixels=True, return_tensors="pt")
+        expected_height, expected_width = self.image_processor_tester.get_expected_codebook_image_size()
         self.assertEqual(
             encoded_images.codebook_pixel_values.shape,
-            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
+            (1, self.image_processor_tester.num_channels, expected_height, expected_width),
         )
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs, return_codebook_pixels=True, return_tensors="pt")
-        expected_height, expected_width = self.feature_extract_tester.get_expected_codebook_image_size()
+        encoded_images = image_processing(image_inputs, return_codebook_pixels=True, return_tensors="pt")
+        expected_height, expected_width = self.image_processor_tester.get_expected_codebook_image_size()
         self.assertEqual(
             encoded_images.codebook_pixel_values.shape,
             (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
+                self.image_processor_tester.batch_size,
+                self.image_processor_tester.num_channels,
                 expected_height,
                 expected_width,
             ),
