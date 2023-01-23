@@ -1185,6 +1185,8 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         >>> inputs["labels"] = labels
         >>> outputs = model(**inputs)
+        >>> loss = outputs.loss
+        >>> loss.backward()
 
         >>> # inference
         >>> text = "How many cats are in the picture?"
