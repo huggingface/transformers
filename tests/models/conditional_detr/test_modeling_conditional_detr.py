@@ -31,7 +31,12 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_timm_available():
     import torch
 
-    from transformers import ConditionalDetrForObjectDetection, ConditionalDetrForSegmentation, ConditionalDetrModel
+    from transformers import (
+        ConditionalDetrForObjectDetection,
+        ConditionalDetrForSegmentation,
+        ConditionalDetrModel,
+        ResNetConfig,
+    )
 
 
 if is_vision_available():
@@ -153,6 +158,25 @@ class ConditionalDetrModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
+    def create_and_check_no_timm_backbone(self, config, pixel_values, pixel_mask, labels):
+        config.use_timm_backbone = False
+        config.backbone_config = ResNetConfig()
+        model = ConditionalDetrForObjectDetection(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
 
 @require_timm
 class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -212,6 +236,10 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     def test_conditional_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_conditional_detr_object_detection_head_model(*config_and_inputs)
+
+    def test_conditional_detr_no_timm_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_no_timm_backbone(*config_and_inputs)
 
     @unittest.skip(reason="Conditional DETR does not use inputs_embeds")
     def test_inputs_embeds(self):

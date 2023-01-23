@@ -43,6 +43,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
+from ..auto import AutoBackbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
@@ -371,45 +372,57 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DeformableDetrTimmConvEncoder(nn.Module):
+class DeformableDetrConvEncoder(nn.Module):
     """
-    Convolutional encoder (backbone) from the timm library.
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by DeformableDetrFrozenBatchNorm2d as defined above.
+
     """
 
     def __init__(self, config):
         super().__init__()
 
-        kwargs = {}
-        if config.dilation:
-            kwargs["output_stride"] = 16
+        self.config = config
 
-        requires_backends(self, ["timm"])
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = AutoBackbone.from_config(config.backbone_config)
 
-        out_indices = (2, 3, 4) if config.num_feature_levels > 1 else (4,)
-        backbone = create_model(
-            config.backbone, pretrained=True, features_only=True, out_indices=out_indices, **kwargs
-        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.feature_info.channels()
-        self.strides = self.model.feature_info.reduction()
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
-        if "resnet" in config.backbone:
+        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                    parameter.requires_grad_(False)
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
 
+    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DeformableDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        """
-        Outputs feature maps of latter stages C_3 through C_5 in ResNet if `config.num_feature_levels > 1`, otherwise
-        outputs feature maps of C_5.
-        """
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values)
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -1438,13 +1451,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DeformableDetrTimmConvEncoder(config)
+        backbone = DeformableDetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DeformableDetrConvModel(backbone, position_embeddings)
 
         # Create input projection layers
         if config.num_feature_levels > 1:
-            num_backbone_outs = len(backbone.strides)
+            num_backbone_outs = len(backbone.intermediate_channel_sizes)
             input_proj_list = []
             for _ in range(num_backbone_outs):
                 in_channels = backbone.intermediate_channel_sizes[_]
