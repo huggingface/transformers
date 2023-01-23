@@ -193,9 +193,10 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Args:
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `size` along any
         edge, the image is padded with 0's and then center cropped.
+        
+        Args:
             image (`np.ndarray`):
                 Image to center crop.
             size (`Dict[str, int]`):
