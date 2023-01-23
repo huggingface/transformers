@@ -91,7 +91,7 @@ class TvltConfig(PretrainedConfig):
             Whether to use vision audio matching task in pretraining.
         task_mae (`bool`, *optional*, defaults to `True`):
             Whether to use mae task in pretraining.
-        loss_type (`str`, *optional*, defaults to `True`):
+        loss_type (`str`, *optional*, defaults to `classification`):
             Loss types including regression and classification.
 
     Example:
