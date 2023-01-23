@@ -569,6 +569,28 @@ class TrainingArguments:
             The mode to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
 
             Possible choices are `"default"`, `"reduce-overhead"` and `"max-autotune"`.
+        
+        xla_fsdp (`str`, `dict`, *optional*):
+            Use PyTorch/XLA Fully Sharded Data Parallel Training
+
+            For a complete list of options, please see [here](
+            https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
+
+            This is an experimental feature and its API may evolve in the future. The value is the location of config
+            file (e.g., `fsdp_config.json`).
+        xla_fsdp_min_num_params (`int`, *optional*, defaults to `0`):
+            Automatically recursively wrap layers with XLA FSDP if they have at least the specified number of parameters. This setting may only be used with xla_fsdp. It is
+            one of two (mutually exclusive) training arguments that determines an auto wrap policy for XLA FSDP; the other is xla_fsdp_transformer_layer_cls_to_wrap.
+        xla_fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
+            Automatically recursively wrap layers with XLA FSDP if their transformer layer class name matches one in the specified list (case-sensitive). This setting 
+            may only be used with xla_fsdp. It is one of two (mutually exclusive) training arguments that determines an auto wrap policy for XLA FSDP; the other is 
+            xla_fsdp_min_num_params.
+        xla_fsdp_grad_ckpt (`bool`, *optional*, defaults to `False`):
+            Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be used with
+            xla_fsdp when an auto wrapping policy is specified through xla_fsdp_min_num_params or xla_fsdp_transformer_layer_cls_to_wrap.
+
+    
+
     """
 
     framework = "pt"
@@ -1003,6 +1025,43 @@ class TrainingArguments:
     include_inputs_for_metrics: bool = field(
         default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
     )
+    xla_fsdp: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Whether or not to use PyTorch/XLA Fully Sharded Data Parallel (FSDP) training. For a complete list"
+                " of configuration options, please see the PyTorch/XLA FSDP definitions."
+            ),
+        },
+    )
+    xla_fsdp_min_num_params: Optional[int] = field(
+        default=0,
+        metadata={
+            "help": (
+                "Automatically recursively wrap layers with XLA FSDP if they have at least the specified number of parameters." 
+                " This setting may only be used with xla_fsdp."
+            ),
+        },
+    )
+    xla_fsdp_transformer_layer_cls_to_wrap: Optional[List[str]] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Automatically recursively wrap layers with XLA FSDP if their transformer layer class name matches one in the"
+                " specified list (case-sensitive). This setting may only be used with xla_fsdp."
+            ),
+        },
+    )
+    xla_fsdp_grad_ckpt: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": (
+                "Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting can only be used with xla_fsdp"
+                " and xla_fsdp_nested."
+            
+            ),
+        },
+    )
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
@@ -1365,6 +1424,32 @@ class TrainingArguments:
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.deepspeed)
             self.hf_deepspeed_config.trainer_config_process(self)
+
+        if self.xla_fsdp:
+            # gather fsdp configuration parameters into a dictionary from specified json file
+            with io.open(self.xla_fsdp, "r", encoding="utf-8") as f:
+                self.xla_fsdp = json.load(f)
+            # apply appropriate string to torch.dtype conversions for parameters
+            if "compute_dtype" in self.xla_fsdp_config:
+                self.xla_fsdp_config["compute_dtype"] = getattr(torch, self.xla_fsdp_config["compute_dtype"])
+            if "buffer_dtype" in self.xla_fsdp_config:
+                self.xla_fsdp_config["buffer_dtype"] = getattr(torch, self.xla_fsdp_config["buffer_dtype"])
+            
+            if self.fsdp_min_num_params > 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+                raise ValueError(
+                    "`--xla_fsdp_min_num_params` and `--xla_fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
+                )
+        else:
+             if self.fsdp_min_num_params > 0:
+                warnings.warn("`--xla_fsdp_min_num_params` is useful only when `--xla_fsdp` is specified.")
+            if self.fsdp_transformer_layer_cls_to_wrap is not None:
+                warnings.warn("`--xla_fsdp_transformer_layer_cls_to_wrap` is useful only when `--xla_fsdp` is specified.")
+            elif self.xla_fsdp_grad_ckpt:
+                raise ValueError(
+                "`--xla_fsdp_grad_ckpt` may only be used when --xla_fsdp is enabled."
+            )
+
+
 
         if self.push_to_hub_token is not None:
             warnings.warn(
