@@ -2149,6 +2149,37 @@ class DPTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class EfficientFormerForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EfficientFormerForImageClassificationWithTeacher(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EfficientFormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EfficientFormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2859,6 +2890,30 @@ class GPTJModel(metaclass=DummyObject):
 
 
 class GPTJPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GraphormerForGraphClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GraphormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GraphormerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
