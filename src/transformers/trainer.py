@@ -419,7 +419,7 @@ class Trainer:
 
             self.backward_prefetch = BackwardPrefetch.BACKWARD_PRE
 
-            if "backward_prefetch" in args.fsdp_backward_prefetch:
+            if "backward_prefetch" not in args.fsdp_backward_prefetch:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
             self.forword_prefetch = False
