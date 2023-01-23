@@ -533,7 +533,7 @@ def main():
             model=model,
             label_pad_token_id=label_pad_token_id,
             pad_to_multiple_of=128,  # Reduce the number of unique shapes for XLA, especially for generation
-            return_tensors="tf",
+            return_tensors="np",
         )
 
         dataset_options = tf.data.Options()
