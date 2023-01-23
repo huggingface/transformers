@@ -1073,8 +1073,11 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
         labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
             Labels for computing the vision audio matching loss. Indices should be in `[0, 1]`. num_labels has to be 1.
+
         Return:
+
         Examples:
+
         ```python
         >>> from transformers import TvltProcessor, TvltForPreTraining
         >>> import numpy as np
