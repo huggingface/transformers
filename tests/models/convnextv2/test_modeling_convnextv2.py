@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import ConvNeXtV2Config
+from transformers import ConvNextV2Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -85,7 +85,7 @@ class ConvNeXtV2ModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ConvNeXtV2Config(
+        return ConvNextV2Config(
             num_channels=self.num_channels,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
@@ -145,7 +145,7 @@ class ConvNeXtV2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ConvNeXtV2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConvNeXtV2Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ConvNextV2Config, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.create_and_test_config_common_properties()
