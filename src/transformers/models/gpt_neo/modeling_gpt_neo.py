@@ -39,7 +39,6 @@ from .configuration_gpt_neo import GPTNeoConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTNeoConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-neo-1.3B",
@@ -414,7 +413,7 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`GPTNeoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -496,7 +495,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -713,7 +711,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -828,7 +825,6 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,

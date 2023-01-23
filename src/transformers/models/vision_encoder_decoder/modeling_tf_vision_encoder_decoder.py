@@ -88,7 +88,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using the vision's model's image processor. For example, using
-            [`ViTImageProcessor`]. See [`ViTImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`] for details.
         decoder_input_ids (`np.ndarray` or `tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -299,12 +299,12 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         Example:
 
         ```python
-        >>> from transformers import TFVisionEncoderDecoderModel, ViTImageProcessor, GPT2Tokenizer
+        >>> from transformers import TFVisionEncoderDecoderModel, AutoImageProcessor, AutoTokenizer
         >>> from PIL import Image
         >>> import requests
 
-        >>> image_processor = ViTImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
-        >>> decoder_tokenizer = GPT2Tokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> image_processor = AutoImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> decoder_tokenizer = AutoTokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
         >>> model = TFVisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

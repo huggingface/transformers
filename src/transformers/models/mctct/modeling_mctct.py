@@ -49,7 +49,6 @@ if is_torch_less_than_1_9:
 _HIDDEN_STATES_START_POSITION = 1
 
 _CONFIG_FOR_DOC = "MCTCTConfig"
-_PROCESSOR_FOR_DOC = "MCTCTProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "speechbrain/m-ctc-t-large"
@@ -678,7 +677,6 @@ class MCTCTModel(MCTCTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -749,7 +747,6 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,

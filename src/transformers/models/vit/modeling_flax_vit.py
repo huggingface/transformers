@@ -70,7 +70,7 @@ VIT_START_DOCSTRING = r"""
 VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
         output_attentions (`bool`, *optional*):
@@ -565,14 +565,14 @@ FLAX_VISION_MODEL_DOCSTRING = """
     Examples:
 
     ```python
-    >>> from transformers import ViTImageProcessor, FlaxViTModel
+    >>> from transformers import AutoImageProcessor, FlaxViTModel
     >>> from PIL import Image
     >>> import requests
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+    >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
     >>> model = FlaxViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
 
     >>> inputs = image_processor(images=image, return_tensors="np")
@@ -648,7 +648,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import ViTImageProcessor, FlaxViTForImageClassification
+    >>> from transformers import AutoImageProcessor, FlaxViTForImageClassification
     >>> from PIL import Image
     >>> import jax
     >>> import requests
@@ -656,7 +656,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
+    >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
     >>> model = FlaxViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
 
     >>> inputs = image_processor(images=image, return_tensors="np")

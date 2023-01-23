@@ -63,7 +63,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
-_TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
 # TokenClassification docstring
 _CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "vumichien/mobilebert-finetuned-ner"
@@ -910,7 +909,7 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MobileBertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -973,7 +972,6 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -1064,9 +1062,9 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import MobileBertTokenizer, TFMobileBertForPreTraining
+        >>> from transformers import AutoTokenizer, TFMobileBertForPreTraining
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = TFMobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         >>> outputs = model(input_ids)
@@ -1144,7 +1142,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1255,9 +1252,9 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, TFMobileBertForNextSentencePrediction
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = TFMobileBertForNextSentencePrediction.from_pretrained("google/mobilebert-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1339,7 +1336,6 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1433,7 +1429,6 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1554,7 +1549,6 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1681,7 +1675,6 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
