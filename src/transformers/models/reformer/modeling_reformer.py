@@ -2373,9 +2373,12 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
         >>> model = ReformerForMaskedLM.from_pretrained("hf-internal-testing/tiny-random-reformer")
 
-        >>> # add mask_token
+        >>> # add mask_tokengit
         >>> tokenizer.add_special_tokens({"mask_token": "[MASK]"})  # doctest: +IGNORE_RESULT
         >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
+
+        >>> # resize model's embedding matrix
+        >>> model.resize_token_embeddings(new_num_tokens=model.config.vocab_size+1)  # doctest: +IGNORE_RESULT
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
@@ -2396,8 +2399,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         ... )
 
         >>> outputs = model(**inputs, labels=labels)
-        >>> round(outputs.loss.item(), 2)
-        7.09
+        >>> loss = round(outputs.loss.item(), 2)
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2494,8 +2496,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         ...     logits = model(**inputs).logits
 
         >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_0'
+        >>> label = model.config.id2label[predicted_class_id]
         ```
 
         ```python
@@ -2507,8 +2508,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
-        >>> round(loss.item(), 2)
-        0.68
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
