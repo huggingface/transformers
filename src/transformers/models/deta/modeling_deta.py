@@ -2538,14 +2538,14 @@ class DetaMatcher(object):
     def __init__(self, thresholds: List[float], labels: List[int], allow_low_quality_matches: bool = False):
         """
         Args:
-            thresholds (list): a list of thresholds used to stratify predictions
-                into levels.
-            labels (list): a list of values to label predictions belonging at
-                each level. A label can be one of {-1, 0, 1} signifying {ignore, negative class, positive class},
-                respectively.
-            allow_low_quality_matches (bool): if True, produce additional matches
-                for predictions with maximum match quality lower than high_threshold. See set_low_quality_matches_ for
-                more details.
+            thresholds (`list[float]`):
+                A list of thresholds used to stratify predictions into levels.
+            labels (`list[int`):
+                A list of values to label predictions belonging at each level. A label can be one of {-1, 0, 1}
+                signifying {ignore, negative class, positive class}, respectively.
+            allow_low_quality_matches (`bool`, *optional*, defaults to `False`):
+                If `True`, produce additional matches for predictions with maximum match quality lower than
+                high_threshold. See `set_low_quality_matches_` for more details.
 
             For example,
                 thresholds = [0.3, 0.5] labels = [0, -1, 1] All predictions with iou < 0.3 will be marked with 0 and
@@ -2555,13 +2555,17 @@ class DetaMatcher(object):
         """
         # Add -inf and +inf to first and last position in thresholds
         thresholds = thresholds[:]
-        assert thresholds[0] > 0
+        if thresholds[0] < 0:
+            raise ValueError("Thresholds should be positive")
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
         # Currently torchscript does not support all + generator
-        assert all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])]), thresholds
-        assert all([l in [-1, 0, 1] for l in labels])
-        assert len(labels) == len(thresholds) - 1
+        if not all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])]):
+            raise ValueError("Thresholds should be sorted.")
+        if not all([l in [-1, 0, 1] for l in labels]):
+            raise ValueError("All labels should be either -1, 0 or 1")
+        if len(labels) != len(thresholds) - 1:
+            raise ValueError("Number of labels should be equal to number of thresholds - 1")
         self.thresholds = thresholds
         self.labels = labels
         self.allow_low_quality_matches = allow_low_quality_matches
