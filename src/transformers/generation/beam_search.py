@@ -274,9 +274,9 @@ class BeamSearchScorer(BeamScorer):
         # for non-eos
         first_several_non_eos = _first_several_nonzero_indices(
             (next_tokens != (eos_token_id or [-42])[0]).int(), mask=~self._done, k=self.num_beams)
-        next_beam_scores[:] = next_scores[first_several_non_eos].reshape((-1, self.num_beams))
-        next_beam_tokens[:] = next_tokens[first_several_non_eos].reshape((-1, self.num_beams))
-        next_beam_indices[:] = batch_beam_indices[first_several_non_eos].reshape((-1, self.num_beams))
+        next_beam_scores = next_scores[first_several_non_eos].reshape((-1, self.num_beams))
+        next_beam_tokens = next_tokens[first_several_non_eos].reshape((-1, self.num_beams))
+        next_beam_indices = batch_beam_indices[first_several_non_eos].reshape((-1, self.num_beams))
 
         # those who are `done`
         next_beam_scores[self._done, :] = 0
