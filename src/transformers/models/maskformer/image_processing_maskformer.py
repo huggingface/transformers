@@ -373,7 +373,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         ignore_index (`int`, *optional*):
             Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
             denoted with 0 (background) will be replaced with `ignore_index`.
-        reduce_labels (`bool`, *optional*, defaults to `False`):
+        do_reduce_labels (`bool`, *optional*, defaults to `False`):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
@@ -394,7 +394,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: bool = False,
+        do_reduce_labels: bool = False,
         **kwargs
     ):
         if "size_divisibility" in kwargs:
@@ -415,6 +415,13 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             self._max_size = kwargs.pop("max_size")
         else:
             self._max_size = 1333
+        if "reduce_labels" in kwargs:
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use "
+                "`do_reduce_labels` instead.",
+                FutureWarning,
+            )
+            do_reduce_labels = kwargs.pop("reduce_labels")
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
@@ -430,7 +437,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
-        self.reduce_labels = reduce_labels
+        self.do_reduce_labels = do_reduce_labels
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -462,6 +469,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             FutureWarning,
         )
         return self.size["longest_edge"]
+
+    @property
+    def reduce_labels(self):
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in v4.27. Please use "
+            "`do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
 
     def resize(
         self,
@@ -532,6 +548,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
+        **kwargs
     ):
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
@@ -645,16 +662,26 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: Optional[bool] = None,
+        do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         **kwargs
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version",
+                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
                 FutureWarning,
             )
+        if "reduce_labels" in kwargs:
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use"
+                " `do_reduce_labels` instead.",
+                FutureWarning,
+            )
+            if do_reduce_labels is not None:
+                raise ValueError(
+                    "Cannot use both `reduce_labels` and `do_reduce_labels`. Please use `do_reduce_labels` instead."
+                )
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -667,7 +694,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
-        reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
         if do_resize is not None and size is None or size_divisor is None:
             raise ValueError("If `do_resize` is True, `size` and `size_divisor` must be provided.")
@@ -720,7 +747,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 for segmentation_map in segmentation_maps
             ]
         encoded_inputs = self.encode_inputs(
-            images, segmentation_maps, instance_id_to_semantic_id, ignore_index, reduce_labels, return_tensors
+            images, segmentation_maps, instance_id_to_semantic_id, ignore_index, do_reduce_labels, return_tensors
         )
         return encoded_inputs
 
@@ -842,13 +869,12 @@ class MaskFormerImageProcessor(BaseImageProcessor):
               `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
-        ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        reduce_labels = self.reduce_labels if reduce_labels is None else reduce_labels
-
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
                 "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
             )
+        ignore_index = self.ignore_index if ignore_index is None else ignore_index
+        reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)

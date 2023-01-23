@@ -69,7 +69,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         num_labels=10,
-        reduce_labels=False,
+        do_reduce_labels=False,
         ignore_index=255,
         repo_path="shi-labs/oneformer_demo",
         class_info_file="ade20k_panoptic.json",
@@ -97,7 +97,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         self.height = 3
         self.width = 4
         self.num_labels = num_labels
-        self.reduce_labels = reduce_labels
+        self.do_reduce_labels = do_reduce_labels
         self.ignore_index = ignore_index
 
     def prepare_feat_extract_dict(self):
@@ -108,7 +108,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "num_labels": self.num_labels,
-            "reduce_labels": self.reduce_labels,
+            "do_reduce_labels": self.do_reduce_labels,
             "ignore_index": self.ignore_index,
             "class_info_file": self.class_info_file,
             "metadata": self.metadata,
@@ -180,7 +180,7 @@ class OneFormerImageProcessingTest(FeatureExtractionSavingTestMixin, unittest.Te
         self.assertTrue(hasattr(image_processor, "num_text"))
         self.assertTrue(hasattr(image_processor, "repo_path"))
         self.assertTrue(hasattr(image_processor, "metadata"))
-        self.assertTrue(hasattr(image_processor, "reduce_labels"))
+        self.assertTrue(hasattr(image_processor, "do_reduce_labels"))
 
     def test_batch_feature(self):
         pass
