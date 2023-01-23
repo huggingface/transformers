@@ -2021,7 +2021,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                 losses=losses,
                 num_queries=self.config.num_queries,
             )
-            criterion.to(self.device)
+            criterion.to(logits.device)
             # Third: compute the losses, based on outputs and labels
             outputs_loss = {}
             outputs_loss["logits"] = logits
