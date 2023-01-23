@@ -45,12 +45,12 @@ class InformerConfig(PretrainedConfig):
             cardinality: Optional[List[int]] = None,
             embedding_dimension: Optional[List[int]] = None,
             dim_feedforward: int = 32,  # decoder_ffn_dim & encoder_ffn_dim
-            nhead: int = 2,  # Eli: not sure what the name
+            nhead: int = 8,  # Eli: how much attention heads?
             num_encoder_layers: int = 2,  # encoder_layers
-            num_decoder_layers: int = 2,  # decoder_layers
+            num_decoder_layers: int = 1,  # decoder_layers
             is_encoder_decoder: bool = True,
             activation: str = "gelu",  # activation_function
-            dropout: float = 0.1,
+            dropout: float = 0.05,
             attn: str = "prob",
             factor: int = 5,
             distil: bool = True,
@@ -104,7 +104,7 @@ class InformerConfig(PretrainedConfig):
         self.dim_feedforward = dim_feedforward
         self.activation = activation  # activation_function
         self.dropout = dropout
-        self.attn = attn,
+        self.attn = attn
         self.factor = factor
         self.distil = distil
         self.init_std = init_std
@@ -122,7 +122,6 @@ class InformerConfig(PretrainedConfig):
             + self.num_feat_static_real
             + self.input_size  # the log(scale)
         )
-
 
     # @property
     # def _number_of_features(self) -> int:
