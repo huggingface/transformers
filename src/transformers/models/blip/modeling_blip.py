@@ -1176,17 +1176,30 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> # training
         >>> text = "How many cats are in the picture?"
-
+        >>> label = "2"
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
+        >>> labels = processor(text=label, return_tensors="pt").input_ids
 
+        >>> inputs["labels"] = labels
         >>> outputs = model(**inputs)
+        >>> loss = outputs.loss
+        >>> loss.backward()
+
+        >>> # inference
+        >>> text = "How many cats are in the picture?"
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
+        >>> outputs = model.generate(**inputs)
+        >>> print(processor.decode(outputs[0], skip_special_tokens=True))
+        2
         ```"""
         if labels is None and decoder_input_ids is None:
             raise ValueError(
                 "Either `decoder_input_ids` or `labels` should be passed when calling `forward` with"
                 " `BlipForQuestionAnswering`. if you are training the model make sure that `labels` is passed, if you"
-                " are using the model for inference make sure that `decoder_input_ids` is passed."
+                " are using the model for inference make sure that `decoder_input_ids` is passed or call `generate`"
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1392,8 +1405,8 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         >>> import requests
         >>> from transformers import BlipProcessor, BlipForImageTextRetrieval
 
-        >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base")
+        >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
