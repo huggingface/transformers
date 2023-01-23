@@ -237,8 +237,9 @@ class TvltImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Args:
         Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
             image (`np.ndarray`):
                 Image to normalize.
             image_mean (`float` or `List[float]`):
