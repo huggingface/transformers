@@ -432,7 +432,7 @@ CONVNEXT_START_DOCSTRING = r"""
 CONVNEXT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ConvNextImageProcessor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
@@ -470,14 +470,14 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ConvNextImageProcessor, TFConvNextModel
+        >>> from transformers import AutoImageProcessor, TFConvNextModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = ConvNextImageProcessor.from_pretrained("facebook/convnext-tiny-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
         >>> model = TFConvNextModel.from_pretrained("facebook/convnext-tiny-224")
 
         >>> inputs = image_processor(images=image, return_tensors="tf")
@@ -561,7 +561,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         Examples:
 
         ```python
-        >>> from transformers import ConvNextImageProcessor, TFConvNextForImageClassification
+        >>> from transformers import AutoImageProcessor, TFConvNextForImageClassification
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
@@ -569,7 +569,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = ConvNextImageProcessor.from_pretrained("facebook/convnext-tiny-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
         >>> model = TFConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
 
         >>> inputs = image_processor(images=image, return_tensors="tf")

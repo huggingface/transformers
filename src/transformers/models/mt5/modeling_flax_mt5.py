@@ -24,7 +24,6 @@ from .configuration_mt5 import MT5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
@@ -48,10 +47,10 @@ class FlaxMT5Model(FlaxT5Model):
     Examples:
 
     ```python
-    >>> from transformers import FlaxMT5Model, T5Tokenizer
+    >>> from transformers import FlaxMT5Model, AutoTokenizer
 
     >>> model = FlaxMT5Model.from_pretrained("google/mt5-small")
-    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
 
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
@@ -74,10 +73,10 @@ class FlaxMT5EncoderModel(FlaxT5EncoderModel):
     Examples:
 
     ```python
-    >>> from transformers import FlaxT5EncoderModel, T5Tokenizer
+    >>> from transformers import FlaxT5EncoderModel, AutoTokenizer
 
     >>> model = FlaxT5EncoderModel.from_pretrained("google/mt5-small")
-    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
 
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
@@ -100,10 +99,10 @@ class FlaxMT5ForConditionalGeneration(FlaxT5ForConditionalGeneration):
     Examples:
 
     ```python
-    >>> from transformers import FlaxMT5ForConditionalGeneration, T5Tokenizer
+    >>> from transformers import FlaxMT5ForConditionalGeneration, AutoTokenizer
 
     >>> model = FlaxMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
-    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
 
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."

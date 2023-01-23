@@ -55,7 +55,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 remat = nn_partitioning.remat
 
@@ -142,7 +141,7 @@ BERT_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1032,9 +1031,7 @@ class FlaxBertModel(FlaxBertPreTrainedModel):
     module_class = FlaxBertModule
 
 
-append_call_sample_docstring(
-    FlaxBertModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBertModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForPreTrainingModule(nn.Module):
@@ -1116,9 +1113,9 @@ FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import BertTokenizer, FlaxBertForPreTraining
+    >>> from transformers import AutoTokenizer, FlaxBertForPreTraining
 
-    >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     >>> model = FlaxBertForPreTraining.from_pretrained("bert-base-uncased")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
@@ -1201,9 +1198,7 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     module_class = FlaxBertForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxBertForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForNextSentencePredictionModule(nn.Module):
@@ -1273,9 +1268,9 @@ FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import BertTokenizer, FlaxBertForNextSentencePrediction
+    >>> from transformers import AutoTokenizer, FlaxBertForNextSentencePrediction
 
-    >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     >>> model = FlaxBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
 
     >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1372,7 +1367,6 @@ class FlaxBertForSequenceClassification(FlaxBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBertForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1455,7 +1449,7 @@ overwrite_call_docstring(
     FlaxBertForMultipleChoice, BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
 )
 append_call_sample_docstring(
-    FlaxBertForMultipleChoice, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMultipleChoiceModelOutput, _CONFIG_FOR_DOC
+    FlaxBertForMultipleChoice, _CHECKPOINT_FOR_DOC, FlaxMultipleChoiceModelOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -1530,7 +1524,7 @@ class FlaxBertForTokenClassification(FlaxBertPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxBertForTokenClassification, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxTokenClassifierOutput, _CONFIG_FOR_DOC
+    FlaxBertForTokenClassification, _CHECKPOINT_FOR_DOC, FlaxTokenClassifierOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -1604,7 +1598,6 @@ class FlaxBertForQuestionAnswering(FlaxBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBertForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -1715,7 +1708,6 @@ class FlaxBertForCausalLM(FlaxBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBertForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,

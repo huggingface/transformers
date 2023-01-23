@@ -40,7 +40,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "EfficientFormerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "EfficientFormerImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "efficientformer-l1-300"
@@ -554,7 +553,6 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(EFFICIENTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -620,7 +618,6 @@ class EfficientFormerForImageClassification(EfficientFormerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(EFFICIENTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -753,7 +750,6 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
 
     @add_start_docstrings_to_model_forward(EFFICIENTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=EfficientFormerForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,

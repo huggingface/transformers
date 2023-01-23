@@ -605,7 +605,7 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -739,10 +739,10 @@ class VisualBertModel(VisualBertPreTrainedModel):
 
         ```python
         # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image.
-        from transformers import BertTokenizer, VisualBertModel
+        from transformers import AutoTokenizer, VisualBertModel
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
@@ -926,9 +926,9 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
         ```python
         # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image in the batch.
-        from transformers import BertTokenizer, VisualBertForPreTraining
+        from transformers import AutoTokenizer, VisualBertForPreTraining
 
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
@@ -1065,10 +1065,10 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
 
         ```python
         # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image in the batch.
-        from transformers import BertTokenizer, VisualBertForMultipleChoice
+        from transformers import AutoTokenizer, VisualBertForMultipleChoice
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertForMultipleChoice.from_pretrained("uclanlp/visualbert-vcr")
 
         prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1216,10 +1216,10 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
 
         ```python
         # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image in the batch.
-        from transformers import BertTokenizer, VisualBertForQuestionAnswering
+        from transformers import AutoTokenizer, VisualBertForQuestionAnswering
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa")
 
         text = "Who is eating the apple?"
@@ -1342,10 +1342,10 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
 
         ```python
         # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image in the batch.
-        from transformers import BertTokenizer, VisualBertForVisualReasoning
+        from transformers import AutoTokenizer, VisualBertForVisualReasoning
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertForVisualReasoning.from_pretrained("uclanlp/visualbert-nlvr2")
 
         text = "Who is eating the apple?"
@@ -1508,10 +1508,10 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
 
         ```python
         # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image in the batch.
-        from transformers import BertTokenizer, VisualBertForRegionToPhraseAlignment
+        from transformers import AutoTokenizer, VisualBertForRegionToPhraseAlignment
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         model = VisualBertForRegionToPhraseAlignment.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         text = "Who is eating the apple?"

@@ -301,7 +301,7 @@ POOLFORMER_START_DOCSTRING = r"""
 POOLFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`PoolFormerImageProcessor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`PoolFormerImageProcessor.__call__`] for details.
 """
 

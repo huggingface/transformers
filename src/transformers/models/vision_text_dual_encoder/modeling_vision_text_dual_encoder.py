@@ -96,7 +96,7 @@ VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -113,7 +113,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -131,7 +131,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            an image processor (e.g. if you use ViT as the encoder, you should use [`ViTImageProcessor`]). See
+            an image processor (e.g. if you use ViT as the encoder, you should use [`AutoImageProcessor`]). See
             [`ViTImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -316,12 +316,12 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> from transformers import (
         ...     VisionTextDualEncoderModel,
         ...     VisionTextDualEncoderProcessor,
-        ...     ViTImageProcessor,
-        ...     BertTokenizer,
+        ...     AutoImageProcessor,
+        ...     Autookenizer,
         ... )
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
         >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
         >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained(
         ...     "google/vit-base-patch16-224", "bert-base-uncased"

@@ -1462,7 +1462,7 @@ MASKFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`MaskFormerImageProcessor.__call__`] for details.
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 
@@ -1561,12 +1561,12 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MaskFormerImageProcessor, MaskFormerModel
+        >>> from transformers import AutoImageProcessor, MaskFormerModel
         >>> from PIL import Image
         >>> import requests
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
-        >>> image_processor = MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
         >>> model = MaskFormerModel.from_pretrained("facebook/maskformer-swin-base-ade")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1740,12 +1740,12 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         Semantic segmentation example:
 
         ```python
-        >>> from transformers import MaskFormerImageProcessor, MaskFormerForInstanceSegmentation
+        >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
-        >>> image_processor = MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
         >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade")
 
         >>> url = (
@@ -1773,12 +1773,12 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         Panoptic segmentation example:
 
         ```python
-        >>> from transformers import MaskFormerImageProcessor, MaskFormerForInstanceSegmentation
+        >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation
-        >>> image_processor = MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-base-coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-coco")
         >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

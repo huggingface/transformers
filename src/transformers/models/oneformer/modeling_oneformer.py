@@ -46,7 +46,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "OneFormerConfig"
 _CHECKPOINT_FOR_DOC = "shi-labs/oneformer_ade20k_swin_tiny"
-_IMAGE_PROCESSOR_FOR_DOC = "OneFormerImageProcessor"
 
 ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "shi-labs/oneformer_ade20k_swin_tiny",
@@ -2724,8 +2723,8 @@ ONEFORMER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`OneFormerProcessor`]. See
             [`OneFormerProcessor.__call__`] for details.
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Task inputs. Task inputs can be obtained using [`OneFormerImageProcessor`]. See
-            [`OneFormerProcessor.__call__`] for details.
+            Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
+            for details.
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 

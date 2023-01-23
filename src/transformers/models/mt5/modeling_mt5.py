@@ -50,7 +50,6 @@ from .configuration_mt5 import MT5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MT5Config"
-_TOKENIZER_FOR_DOC = "MT5Tokenizer"
 _CHECKPOINT_FOR_DOC = "mt5-small"
 
 
@@ -1118,7 +1117,7 @@ MT5_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. MT5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`MT5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1134,7 +1133,7 @@ MT5_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MT5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1211,7 +1210,7 @@ MT5_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. MT5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`MT5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [MT5 Training](./mt5#training).
@@ -1260,10 +1259,10 @@ class MT5Model(MT5PreTrainedModel):
     Examples:
 
     ```python
-    >>> from transformers import MT5Model, MT5Tokenizer
+    >>> from transformers import MT5Model, AutoTokenizer
 
     >>> model = MT5Model.from_pretrained("google/mt5-small")
-    >>> tokenizer = MT5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, return_tensors="pt")
@@ -1389,9 +1388,9 @@ class MT5Model(MT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MT5Tokenizer, MT5Model
+        >>> from transformers import AutoTokenizer, MT5Model
 
-        >>> tokenizer = MT5Tokenizer.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
         >>> model = MT5Model.from_pretrained("mt5-small")
 
         >>> input_ids = tokenizer(
@@ -1484,10 +1483,10 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     Examples:
 
     ```python
-    >>> from transformers import MT5ForConditionalGeneration, MT5Tokenizer
+    >>> from transformers import MT5ForConditionalGeneration, AutoTokenizer
 
     >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-small")
-    >>> tokenizer = MT5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, text_target=summary, return_tensors="pt")
@@ -1621,9 +1620,9 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MT5Tokenizer, MT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, MT5ForConditionalGeneration
 
-        >>> tokenizer = MT5Tokenizer.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
         >>> model = MT5ForConditionalGeneration.from_pretrained("mt5-small")
 
         >>> # training
@@ -1810,10 +1809,10 @@ class MT5EncoderModel(MT5PreTrainedModel):
     Examples:
 
     ```python
-    >>> from transformers import MT5EncoderModel, MT5Tokenizer
+    >>> from transformers import MT5EncoderModel, AutoTokenizer
 
     >>> model = MT5EncoderModel.from_pretrained("google/mt5-small")
-    >>> tokenizer = MT5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> input_ids = tokenizer(article, return_tensors="pt").input_ids
     >>> outputs = model(input_ids)
@@ -1909,9 +1908,9 @@ class MT5EncoderModel(MT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MT5Tokenizer, MT5EncoderModel
+        >>> from transformers import AutoTokenizer, MT5EncoderModel
 
-        >>> tokenizer = MT5Tokenizer.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
         >>> model = MT5EncoderModel.from_pretrained("mt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"

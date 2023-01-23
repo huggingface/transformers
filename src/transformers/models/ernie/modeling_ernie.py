@@ -54,7 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "nghuyong/ernie-1.0-base-zh"
 _CONFIG_FOR_DOC = "ErnieConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 
 ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -740,7 +739,7 @@ ERNIE_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -839,7 +838,6 @@ class ErnieModel(ErniePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1040,10 +1038,10 @@ class ErnieForPreTraining(ErniePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BertTokenizer, ErnieForPreTraining
+        >>> from transformers import AutoTokenizer, ErnieForPreTraining
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("nghuyong/ernie-1.0-base-zh")
+        >>> tokenizer = AutoTokenizer.from_pretrained("nghuyong/ernie-1.0-base-zh")
         >>> model = ErnieForPreTraining.from_pretrained("nghuyong/ernie-1.0-base-zh")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -1121,7 +1119,6 @@ class ErnieForCausalLM(ErniePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1272,7 +1269,6 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1401,10 +1397,10 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BertTokenizer, ErnieForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, ErnieForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("nghuyong/ernie-1.0-base-zh")
+        >>> tokenizer = AutoTokenizer.from_pretrained("nghuyong/ernie-1.0-base-zh")
         >>> model = ErnieForNextSentencePrediction.from_pretrained("nghuyong/ernie-1.0-base-zh")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1584,7 +1580,6 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ERNIE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,

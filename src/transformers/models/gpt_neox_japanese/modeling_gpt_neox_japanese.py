@@ -33,7 +33,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "abeja/gpt-neox-japanese-2.7b"
 _CONFIG_FOR_DOC = "GPTNeoXJapaneseConfig"
-_TOKENIZER_FOR_DOC = "GPTNeoXJapaneseTokenizer"
 
 GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = {
     "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/config.json",
@@ -392,7 +391,7 @@ GPT_NEOX_JAPANESE_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTNeoXJapaneseTokenizer`].
+            Indices can be obtained using [`AutoTokenizer`].
 
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -485,10 +484,10 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPTNeoXJapaneseTokenizer, GPTNeoXJapaneseModel
+        >>> from transformers import AutoTokenizer, GPTNeoXJapaneseModel
         >>> import torch
 
-        >>> tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> model = GPTNeoXJapaneseModel.from_pretrained("abeja/gpt-neox-japanese-2.7b")
 
         >>> inputs = tokenizer("日本語のGPT-neoxがHugging Faceで使えます😀", return_tensors="pt")
@@ -651,10 +650,10 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPTNeoXJapaneseTokenizer, GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseConfig
+        >>> from transformers import AutoTokenizer, GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseConfig
         >>> import torch
 
-        >>> tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> config = GPTNeoXJapaneseConfig.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> config.is_decoder = True
         >>> model = GPTNeoXJapaneseForCausalLM.from_pretrained("abeja/gpt-neox-japanese-2.7b", config=config)
