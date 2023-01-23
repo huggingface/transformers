@@ -635,8 +635,8 @@ VILT_INPUTS_DOCSTRING = r"""
             [What are token type IDs?](../glossary#token-type-ids)
 
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViltFeatureExtractor`]. See
-            [`ViltFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`ViltImageProcessor`]. See
+            [`ViltImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -690,8 +690,8 @@ VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING = r"""
             [What are token type IDs?](../glossary#token-type-ids)
 
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_images, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViltFeatureExtractor`]. See
-            [`ViltFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`ViltImageProcessor`]. See
+            [`ViltImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, num_images, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:

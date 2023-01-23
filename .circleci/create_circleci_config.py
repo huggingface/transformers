@@ -15,7 +15,9 @@
 
 import argparse
 import copy
+import glob
 import os
+import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -58,6 +60,8 @@ class CircleCIJob:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
             self.tests_to_run = [self.tests_to_run]
+        if self.parallelism is None:
+            self.parallelism = 1
 
     def to_dict(self):
         job = {
@@ -99,10 +103,57 @@ class CircleCIJob:
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
         test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
-        if self.tests_to_run is None:
-            test_command += " << pipeline.parameters.tests_to_run >>"
+        if self.parallelism == 1:
+            if self.tests_to_run is None:
+                test_command += " << pipeline.parameters.tests_to_run >>"
+            else:
+                test_command += " " + " ".join(self.tests_to_run)
         else:
-            test_command += " " + " ".join(self.tests_to_run)
+            # We need explicit list instead of `pipeline.parameters.tests_to_run` (only available at job runtime)
+            tests = self.tests_to_run
+            if tests is None:
+                folder = os.environ["test_preparation_dir"]
+                test_file = os.path.join(folder, "filtered_test_list.txt")
+                if os.path.exists(test_file):
+                    with open(test_file) as f:
+                        tests = f.read().split(" ")
+
+            # expand the test list
+            if tests == ["tests"]:
+                tests = [os.path.join("tests", x) for x in os.listdir("tests")]
+            expanded_tests = []
+            for test in tests:
+                if test.endswith(".py"):
+                    expanded_tests.append(test)
+                elif test == "tests/models":
+                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                elif test == "tests/pipelines":
+                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                else:
+                    expanded_tests.append(test)
+            # Avoid long tests always being collected together
+            random.shuffle(expanded_tests)
+            tests = " ".join(expanded_tests)
+
+            # Each executor to run ~10 tests
+            n_executors = max(len(tests) // 10, 1)
+            # Avoid empty test list on some executor(s) or launching too many executors
+            if n_executors > self.parallelism:
+                n_executors = self.parallelism
+            job["parallelism"] = n_executors
+
+            # Need to be newline separated for the command `circleci tests split` below
+            command = f'echo {tests} | tr " " "\\n" >> tests.txt'
+            steps.append({"run": {"name": "Get tests", "command": command}})
+
+            command = 'TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'
+            steps.append({"run": {"name": "Split tests", "command": command}})
+
+            steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
+            steps.append({"store_artifacts": {"path": "~/transformers/splitted_tests.txt"}})
+
+            test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
         test_command += " | tee tests_output.txt"
@@ -156,6 +207,7 @@ torch_job = CircleCIJob(
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
+    parallelism=1,
     pytest_num_workers=3,
 )
 
@@ -168,6 +220,7 @@ tf_job = CircleCIJob(
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
     ],
+    parallelism=1,
     pytest_options={"rA": None},
 )
 
@@ -179,6 +232,7 @@ flax_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
     ],
+    parallelism=1,
     pytest_options={"rA": None},
 )
 
@@ -356,6 +410,8 @@ REPO_UTIL_TESTS = [repo_utils_job]
 def create_circleci_config(folder=None):
     if folder is None:
         folder = os.getcwd()
+    # Used in CircleCIJob.to_dict() to expand the test list (for using parallelism)
+    os.environ["test_preparation_dir"] = folder
     jobs = []
     all_test_file = os.path.join(folder, "test_list.txt")
     if os.path.exists(all_test_file):
