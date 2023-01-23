@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -52,6 +52,17 @@ else:
         "TFResNetPreTrainedModel",
     ]
 
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_resnet"] = [
+        "FlaxResNetForImageClassification",
+        "FlaxResNetModel",
+        "FlaxResNetPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig, ResNetOnnxConfig
@@ -82,6 +93,14 @@ if TYPE_CHECKING:
             TFResNetModel,
             TFResNetPreTrainedModel,
         )
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_resnet import FlaxResNetForImageClassification, FlaxResNetModel, FlaxResNetPreTrainedModel 
 
 
 else:
