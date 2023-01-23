@@ -430,6 +430,8 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"feature-extraction"`
             - `"fill-mask"`
             - `"image-classification"`
+            - `"image-segmentation"`
+            - `"image-to-text"`
             - `"question-answering"`
             - `"table-question-answering"`
             - `"text2text-generation"`
@@ -441,6 +443,12 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"summarization"`
             - `"zero-shot-classification"`
             - `"zero-shot-image-classification"`
+            - `"zero-shot-object-detection"`
+            - `"visual-question-answering"`
+            - `"document-question-answering"`
+            - `"object-detection"`
+            - `"depth-estimation"`
+            - `"video-classification"`
 
     Returns:
         (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None)) The normalized task name
@@ -505,6 +513,8 @@ def pipeline(
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
             - `"fill-mask"`: will return a [`FillMaskPipeline`]:.
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
+            - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
+            - `"image-to-text"`:  will return a [`ImageToTextPipeline`].
             - `"question-answering"`: will return a [`QuestionAnsweringPipeline`].
             - `"table-question-answering"`: will return a [`TableQuestionAnsweringPipeline`].
             - `"text2text-generation"`: will return a [`Text2TextGenerationPipeline`].
@@ -516,6 +526,13 @@ def pipeline(
             - `"translation_xx_to_yy"`: will return a [`TranslationPipeline`].
             - `"summarization"`: will return a [`SummarizationPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
+            - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
+            - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
+            - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
+            - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
+            - `"object-detection"`: will return a [`ObjectDetectionPipeline`].
+            - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
+            - `"video-classification"`: will return a [`VideoClassificationPipeline`].
 
         model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
