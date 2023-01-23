@@ -514,7 +514,7 @@ def pipeline(
             - `"fill-mask"`: will return a [`FillMaskPipeline`]:.
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
             - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
-            - `"image-to-text"`:  will return a [`ImageToTextPipeline`].
+            - `"image-to-text"`: will return a [`ImageToTextPipeline`].
             - `"question-answering"`: will return a [`QuestionAnsweringPipeline`].
             - `"table-question-answering"`: will return a [`TableQuestionAnsweringPipeline`].
             - `"text2text-generation"`: will return a [`Text2TextGenerationPipeline`].
