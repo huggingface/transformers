@@ -156,10 +156,10 @@ def data():
         yield f"My example {i}"
 
 
-pipe = pipe(model="gpt2", device=0)
+pipe = pipeline(model="gpt2", device=0)
 generated_characters = 0
 for out in pipe(data()):
-    generated_characters += len(out["generated_text"])
+    generated_characters += len(out[0]["generated_text"])
 ```
 
 The iterator `data()` yields each result, and the pipeline automatically
