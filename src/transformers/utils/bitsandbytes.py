@@ -112,7 +112,7 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", 
     """
     for name, module in model.named_children():
         if len(list(module.children())) > 0:
-            replace_8bit_linear(module, threshold, modules_to_not_convert)
+            replace_8bit_linear(module, threshold, modules_to_not_convert, memory_efficient_backward)
 
         if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
             with init_empty_weights():
