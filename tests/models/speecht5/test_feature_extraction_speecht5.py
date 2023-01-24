@@ -22,12 +22,17 @@ import numpy as np
 
 from transformers import is_speech_available
 from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_speech_available():
     from transformers import SpeechT5SpectrogramFeatureExtractor, SpeechT5WaveformFeatureExtractor
+
+if is_torch_available():
+    import torch
+
 
 global_rng = random.Random()
 
@@ -202,8 +207,6 @@ class SpeechT5WaveformFeatureExtractionTest(SequenceFeatureExtractionTestMixin, 
         self.assertTrue(input_values.shape == (3, 1200))
 
     def test_double_precision_pad(self):
-        import torch
-
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_speech_inputs = np.random.rand(100).astype(np.float64)
         py_speech_inputs = np_speech_inputs.tolist()
@@ -213,6 +216,30 @@ class SpeechT5WaveformFeatureExtractionTest(SequenceFeatureExtractionTestMixin, 
             self.assertTrue(np_processed.input_values.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_values.dtype == torch.float32)
+
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    def test_integration(self):
+        # fmt: off
+        EXPECTED_INPUT_VALUES = torch.tensor(
+            [0.0386, 0.0337, 0.0322, 0.0341, 0.0263, 0.0051,  0.0016, 0.0056,
+             0.0159, 0.0297, 0.0327, 0.0341, 0.0282, 0.0075, -0.0063, 0.0075,
+             0.0164, 0.0016, 0.0080, 0.0189, 0.0120, 0.0154,  0.0292, 0.0297,
+             0.0144, 0.0070, 0.0080, 0.0120, 0.0179, 0.0341]
+        )
+        # fmt: on
+
+        input_speech = self._load_datasamples(1)
+        feature_extractor = SpeechT5WaveformFeatureExtractor()
+        input_values = feature_extractor(input_speech, return_tensors="pt").input_values
+        self.assertTrue(torch.allclose(input_values[0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
 
 
 @require_torch
@@ -317,3 +344,27 @@ class SpeechT5SpectrogramFeatureExtractionTest(SequenceFeatureExtractionTestMixi
         encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    def test_integration(self):
+        # fmt: off
+        EXPECTED_INPUT_VALUES = torch.tensor(
+            [-2.7713, -2.8896, -3.2619, -3.0843, -2.9919, -3.0084, -3.2796, -3.3169,
+             -3.2397, -3.2053, -2.9151, -2.7921, -2.9403, -2.7411, -3.0654, -2.8314,
+             -3.0026, -2.9797, -3.1314, -2.9939, -2.6748, -2.7725, -2.8563, -2.9462,
+             -3.2623, -3.3044, -3.1318, -3.2672, -3.4030, -3.1988]
+        )
+        # fmt: on
+
+        input_speech = self._load_datasamples(1)
+        feature_extractor = SpeechT5SpectrogramFeatureExtractor()
+        input_values = feature_extractor(input_speech, return_tensors="pt").input_values
+        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
