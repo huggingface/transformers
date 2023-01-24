@@ -1032,6 +1032,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             custom_object_save(self, save_directory, config=self.config)
 
         self.config.save_pretrained(save_directory)
+        if self.can_generate():
+            self.generation_config.save_pretrained(save_directory)
 
         # save model
         output_model_file = os.path.join(save_directory, FLAX_WEIGHTS_NAME)
@@ -1122,10 +1124,9 @@ def overwrite_call_docstring(model_class, docstring):
     model_class.__call__ = add_start_docstrings_to_model_forward(docstring)(model_class.__call__)
 
 
-def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, output_type, config_class, mask=None):
+def append_call_sample_docstring(model_class, checkpoint, output_type, config_class, mask=None):
     model_class.__call__ = copy_func(model_class.__call__)
     model_class.__call__ = add_code_sample_docstrings(
-        processor_class=tokenizer_class,
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,
