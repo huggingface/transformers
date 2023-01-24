@@ -544,7 +544,7 @@ class XMODEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([XMODLayer(config) for _ in range(config.num_hidden_layers)])
-        self.is_pre_norm = config.pre_norm 
+        self.is_pre_norm = config.pre_norm
         if self.is_pre_norm:
             self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
@@ -618,7 +618,7 @@ class XMODEncoder(nn.Module):
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
-        if self.is_pre_norm:  # pre-norm
+        if self.is_pre_norm:
             hidden_states = self.LayerNorm(hidden_states)
 
         if output_hidden_states:
