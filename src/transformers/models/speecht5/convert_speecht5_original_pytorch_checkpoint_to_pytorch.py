@@ -51,9 +51,9 @@ MAPPING_TEXT_ENCODER_PRENET = {
     "text_encoder_prenet.encoder_prenet.1.alpha": "speecht5.encoder.prenet.encode_positions.alpha",
 }
 MAPPING_SPEECH_DECODER_PRENET = {
-    "speech_decoder_prenet.decoder_prenet.0.0.prenet.0.0": "speecht5.decoder.prenet.layer1",
-    "speech_decoder_prenet.decoder_prenet.0.0.prenet.1.0": "speecht5.decoder.prenet.layer2",
-    "speech_decoder_prenet.decoder_prenet.0.1": "speecht5.decoder.prenet.layer3",
+    "speech_decoder_prenet.decoder_prenet.0.0.prenet.0.0": "speecht5.decoder.prenet.layers.0",
+    "speech_decoder_prenet.decoder_prenet.0.0.prenet.1.0": "speecht5.decoder.prenet.layers.1",
+    "speech_decoder_prenet.decoder_prenet.0.1": "speecht5.decoder.prenet.final_layer",
     "speech_decoder_prenet.decoder_prenet.1.alpha": "speecht5.decoder.prenet.encode_positions.alpha",
     "speech_decoder_prenet.spkembs_layer.0": "speecht5.decoder.prenet.speaker_embeds_layer",
 }

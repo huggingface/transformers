@@ -144,6 +144,8 @@ class SpeechT5Config(PretrainedConfig):
         num_mel_bins (`int`, *optional*, defaults to 80):
             Number of mel features used per input features. Used by the speech decoder pre-net. Should correspond to
             the value used in the `SpeechT5ProcessorForTextToSpeech` or `SpeechT5ProcessorForSpeechToSpeech` class.
+        speech_decoder_prenet_layers (`int`, *optional*, defaults to 2):
+            Number of layers in the speech decoder pre-net.
         speech_decoder_prenet_units (`int`, *optional*, defaults to 256):
             Dimensionality of the layers in the speech decoder pre-net.
         speech_decoder_prenet_dropout (`float`, *optional*, defaults to 0.5):
@@ -237,6 +239,7 @@ class SpeechT5Config(PretrainedConfig):
         eos_token_id=2,
         decoder_start_token_id=2,
         num_mel_bins=80,
+        speech_decoder_prenet_layers=2,
         speech_decoder_prenet_units=256,
         speech_decoder_prenet_dropout=0.5,
         speaker_embedding_dim=512,
@@ -308,6 +311,7 @@ class SpeechT5Config(PretrainedConfig):
         self.mask_feature_min_masks = mask_feature_min_masks
 
         self.num_mel_bins = num_mel_bins
+        self.speech_decoder_prenet_layers = speech_decoder_prenet_layers
         self.speech_decoder_prenet_units = speech_decoder_prenet_units
         self.speech_decoder_prenet_dropout = speech_decoder_prenet_dropout
         self.speaker_embedding_dim = speaker_embedding_dim

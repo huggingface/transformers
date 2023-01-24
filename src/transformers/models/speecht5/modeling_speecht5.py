@@ -695,10 +695,14 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         super().__init__()
         self.config = config
 
-        # In the original implementation the number of layers is configurable.
-        self.layer1 = nn.Linear(config.num_mel_bins, config.speech_decoder_prenet_units)
-        self.layer2 = nn.Linear(config.speech_decoder_prenet_units, config.speech_decoder_prenet_units)
-        self.layer3 = nn.Linear(config.speech_decoder_prenet_units, config.hidden_size)
+        self.layers = nn.ModuleList([
+            nn.Linear(
+                config.num_mel_bins if i == 0 else config.speech_decoder_prenet_units,
+                config.speech_decoder_prenet_units
+            )
+            for i in range(config.speech_decoder_prenet_layers)])
+
+        self.final_layer = nn.Linear(config.speech_decoder_prenet_units, config.hidden_size)
 
         self.encode_positions = SpeechT5ScaledPositionalEncoding(
             config.positional_dropout,
@@ -715,12 +719,12 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
     ):
         # Dropout is always applied, even when evaluating. See §2.2 in https://arxiv.org/abs/1712.05884.
 
-        inputs_embeds = nn.functional.relu(self.layer1(input_values))
-        inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True)
-        inputs_embeds = nn.functional.relu(self.layer2(inputs_embeds))
-        inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True)
+        inputs_embeds = input_values
+        for layer in self.layers:
+            inputs_embeds = nn.functional.relu(layer(inputs_embeds))
+            inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True)
 
-        inputs_embeds = self.layer3(inputs_embeds)
+        inputs_embeds = self.final_layer(inputs_embeds)
         inputs_embeds = self.encode_positions(inputs_embeds)
 
         if speaker_embeddings is not None:
