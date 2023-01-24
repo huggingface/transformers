@@ -546,7 +546,6 @@ class GenerationConfig(PushToHubMixin):
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         config = cls(**config_dict)
-        unused_kwargs = config.update(**kwargs)
 
         to_remove = []
         for key, value in kwargs.items():
@@ -557,6 +556,7 @@ class GenerationConfig(PushToHubMixin):
         for key in to_remove:
             kwargs.pop(key, None)
 
+        unused_kwargs = config.update(**kwargs)
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
             return config, unused_kwargs
