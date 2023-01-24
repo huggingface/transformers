@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
@@ -21,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers import is_speech_available, is_vision_available
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch
+from transformers.testing_utils import require_torch
 
 
 if is_vision_available():
