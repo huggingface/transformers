@@ -1043,7 +1043,7 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
     if token is None:
         token = HfFolder.get_token()
     cached_files = get_all_cached_files(cache_dir=cache_dir)
-    print(f"Moving {len(cached_files)} files to the new cache system")
+    logger.info(f"Moving {len(cached_files)} files to the new cache system")
 
     hub_metadata = {}
     for file_info in tqdm(cached_files):
