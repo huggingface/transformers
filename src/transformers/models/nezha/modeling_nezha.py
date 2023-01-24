@@ -54,7 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "sijunhe/nezha-cn-base"
 _CONFIG_FOR_DOC = "NezhaConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sijunhe/nezha-cn-base",
@@ -813,7 +812,7 @@ NEZHA_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -898,7 +897,6 @@ class NezhaModel(NezhaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1089,10 +1087,10 @@ class NezhaForPreTraining(NezhaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BertTokenizer, NezhaForPreTraining
+        >>> from transformers import AutoTokenizer, NezhaForPreTraining
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("sijunhe/nezha-cn-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("sijunhe/nezha-cn-base")
         >>> model = NezhaForPreTraining.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -1167,7 +1165,6 @@ class NezhaForMaskedLM(NezhaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1286,10 +1283,10 @@ class NezhaForNextSentencePrediction(NezhaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BertTokenizer, NezhaForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, NezhaForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("sijunhe/nezha-cn-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("sijunhe/nezha-cn-base")
         >>> model = NezhaForNextSentencePrediction.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1369,7 +1366,6 @@ class NezhaForSequenceClassification(NezhaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1467,7 +1463,6 @@ class NezhaForMultipleChoice(NezhaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1564,7 +1559,6 @@ class NezhaForTokenClassification(NezhaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1643,7 +1637,6 @@ class NezhaForQuestionAnswering(NezhaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(NEZHA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

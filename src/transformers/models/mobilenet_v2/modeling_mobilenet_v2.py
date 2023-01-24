@@ -485,7 +485,7 @@ MOBILENET_V2_START_DOCSTRING = r"""
 MOBILENET_V2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileNetV2ImageProcessor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileNetV2ImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -808,14 +808,14 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileNetV2ImageProcessor, MobileNetV2ForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, MobileNetV2ForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = MobileNetV2ImageProcessor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
         >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
