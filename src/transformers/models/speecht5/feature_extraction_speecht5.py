@@ -42,7 +42,7 @@ class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features.
         sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         do_normalize (`bool`, *optional*, defaults to `True`):
@@ -226,7 +226,7 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features. This is the number of mel-frequency bins.
         sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding vectors.
         hop_length (`int`, *optional*, defaults to 16):

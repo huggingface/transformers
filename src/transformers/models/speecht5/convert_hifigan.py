@@ -26,20 +26,20 @@ logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
 
 
-def load_weights(checkpoint, hf_model):
+def load_weights(checkpoint, hf_model, config):
     hf_model.apply_weight_norm()
 
     hf_model.conv_pre.weight_g.data = checkpoint["input_conv.weight_g"]
     hf_model.conv_pre.weight_v.data = checkpoint["input_conv.weight_v"]
     hf_model.conv_pre.bias.data = checkpoint["input_conv.bias"]
 
-    for i in range(4):
+    for i in range(len(config.upsample_rates)):
         hf_model.upsampler[i].weight_g.data = checkpoint[f"upsamples.{i}.1.weight_g"]
         hf_model.upsampler[i].weight_v.data = checkpoint[f"upsamples.{i}.1.weight_v"]
         hf_model.upsampler[i].bias.data = checkpoint[f"upsamples.{i}.1.bias"]
 
-    for i in range(12):
-        for j in range(3):
+    for i in range(len(config.upsample_rates) * len(config.resblock_kernel_sizes)):
+        for j in range(len(config.resblock_dilation_sizes)):
             hf_model.resblocks[i].convs1[j].weight_g.data = checkpoint[f"blocks.{i}.convs1.{j}.1.weight_g"]
             hf_model.resblocks[i].convs1[j].weight_v.data = checkpoint[f"blocks.{i}.convs1.{j}.1.weight_v"]
             hf_model.resblocks[i].convs1[j].bias.data = checkpoint[f"blocks.{i}.convs1.{j}.1.bias"]
@@ -71,7 +71,7 @@ def convert_hifigan_checkpoint(
     model = SpeechT5HiFiGAN(config)
 
     orig_checkpoint = torch.load(checkpoint_path)
-    load_weights(orig_checkpoint["model"]["generator"], model)
+    load_weights(orig_checkpoint["model"]["generator"], model, config)
 
     stats = np.load(stats_path)
     mean = stats[0].reshape(-1)
