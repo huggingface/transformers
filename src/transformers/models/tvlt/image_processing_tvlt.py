@@ -114,7 +114,7 @@ class TvltImageProcessor(BaseImageProcessor):
         "pixel_masks",
         "pixel_values_mixed",
         "pixel_masks_mixed",
-        "pixel_mask_pos_perm",
+        "pixel_mask_position_permutation",
     ]
 
     def __init__(
@@ -381,7 +381,7 @@ class TvltImageProcessor(BaseImageProcessor):
             - **pixel_masks_mixed** -- Pixel masks with both postive or negative to be fed to a model, of shape
               (batch_size, num_pixel_patches).
 
-            - **pixel_mask_pos_perm** -- Pixel MAE masks position permutation to be fed to a model, of shape
+            - **pixel_mask_position_permutation** -- Pixel MAE masks position permutation to be fed to a model, of shape
               (batch_size, num_pixel_patches).
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
