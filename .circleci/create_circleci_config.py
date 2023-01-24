@@ -168,10 +168,12 @@ class CircleCIJob:
         steps.append({"run": {"name": "Run tests", "command": test_command}})
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
+        
+        steps.append({"run": {"name": "echo node index", "command": "echo $CIRCLE_NODE_INDEX"}})
 
         steps.append(
             {
-                "persist_to_workspace": {"root": self.working_directory, "paths": "tests_torch/summary_short.txt"}
+                "persist_to_workspace": {"root": self.working_directory, "paths": "reports/tests_torch/summary_short.txt"}
             }
         )
 
