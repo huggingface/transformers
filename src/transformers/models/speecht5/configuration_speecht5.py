@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2022-2023 The Fairseq Authors, Microsoft Research, and
-# the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Fairseq Authors, Microsoft Research, and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,11 +58,11 @@ class SpeechT5Config(PretrainedConfig):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
+            Number of hidden layers in the Transformer decoder.
         decoder_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer decoder.
         decoder_ffn_dim (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer decoder.
         decoder_layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.

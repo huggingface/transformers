@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2022-2023 The Fairseq Authors, Microsoft Research, and
-# the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Fairseq Authors, Microsoft Research, and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -249,85 +248,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _generate_speech(
-    model,
-    input_values: torch.FloatTensor,
-    speaker_embeddings: Optional[torch.FloatTensor] = None,
-    threshold: float = 0.5,
-    minlenratio: float = 0.0,
-    maxlenratio: float = 20.0,
-    vocoder: Optional[nn.Module] = None,
-) -> torch.FloatTensor:
-    encoder_attention_mask = torch.ones_like(input_values)
-
-    encoder_out = model.speecht5.encoder(
-        input_values=input_values,
-        attention_mask=encoder_attention_mask,
-        return_dict=True,
-    )
-
-    encoder_last_hidden_state = encoder_out.last_hidden_state
-
-    # downsample encoder attention mask
-    if isinstance(model.speecht5.encoder, SpeechT5EncoderWithSpeechPrenet):
-        encoder_attention_mask = model.speecht5.encoder.prenet._get_feature_vector_attention_mask(
-            encoder_out[0].shape[1], encoder_attention_mask
-        )
-
-    maxlen = int(encoder_last_hidden_state.size(1) * maxlenratio / model.config.reduction_factor)
-    minlen = int(encoder_last_hidden_state.size(1) * minlenratio / model.config.reduction_factor)
-
-    # Start the output sequence with a mel spectrum that is all zeros.
-    output_sequence = encoder_last_hidden_state.new_zeros(1, 1, model.config.num_mel_bins)
-
-    spectrogram = []
-    past_key_values = None
-    idx = 0
-
-    while True:
-        idx += 1
-
-        # Run the decoder prenet on the entire output sequence.
-        decoder_hidden_states = model.speecht5.decoder.prenet(output_sequence, speaker_embeddings)
-
-        # Run the decoder layers on the last element of the prenet output.
-        decoder_out = model.speecht5.decoder.wrapped_decoder(
-            hidden_states=decoder_hidden_states[:, -1:],
-            attention_mask=None,
-            encoder_hidden_states=encoder_last_hidden_state,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=True,
-            return_dict=True,
-        )
-
-        last_decoder_output = decoder_out.last_hidden_state[0, -1]
-        past_key_values = decoder_out.past_key_values
-
-        # Predict the new mel spectrum for this step in the sequence.
-        spectrum = model.speech_decoder_postnet.feat_out(last_decoder_output)
-        spectrum = spectrum.view(model.config.reduction_factor, model.config.num_mel_bins)
-        spectrogram.append(spectrum)
-
-        # Extend the output sequence with the new mel spectrum.
-        output_sequence = torch.cat((output_sequence, spectrum[-1].view(1, 1, model.config.num_mel_bins)), dim=1)
-
-        # Predict the probability that this is the stop token.
-        prob = torch.sigmoid(model.speech_decoder_postnet.prob_out(last_decoder_output))
-
-        # Finished when stop token or maximum length is reached.
-        if idx >= minlen and (int(sum(prob >= threshold)) > 0 or idx >= maxlen):
-            spectrogram = torch.cat(spectrogram, dim=0).unsqueeze(0)
-            spectrogram = model.speech_decoder_postnet.postnet(spectrogram)
-            spectrogram = spectrogram.squeeze(0)
-            break
-
-    if vocoder is not None:
-        return vocoder(spectrogram)
-    else:
-        return spectrogram
-
-
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
 class SpeechT5NoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
@@ -532,6 +452,25 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
         emb = emb + self.alpha * self.pe[:, : emb.size(1)]
         emb = self.dropout(emb)
         return emb
+
+
+class SpeechT5RelativePositionalEncoding(torch.nn.Module):
+    def __init__(self, dim, max_length=1000):
+        super().__init__()
+        self.dim = dim
+        self.max_length = max_length
+        self.pe_k = torch.nn.Embedding(2 * max_length, dim)
+
+    def forward(self, hidden_states):
+        seq_len = hidden_states.shape[1]
+        pos_seq = torch.arange(0, seq_len).long().to(hidden_states.device)
+        pos_seq = pos_seq[:, None] - pos_seq[None, :]
+
+        pos_seq[pos_seq < -self.max_length] = -self.max_length
+        pos_seq[pos_seq >= self.max_length] = self.max_length - 1
+        pos_seq = pos_seq + self.max_length
+
+        return self.pe_k(pos_seq)
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->SpeechT5
@@ -774,7 +713,7 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         input_values: torch.Tensor,
         speaker_embeddings: Optional[torch.Tensor] = None,
     ):
-        # Dropout is always applied, even when evaluating. https://arxiv.org/abs/1712.05884
+        # Dropout is always applied, even when evaluating. See §2.2 in https://arxiv.org/abs/1712.05884.
 
         inputs_embeds = nn.functional.relu(self.layer1(input_values))
         inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True)
@@ -842,9 +781,7 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
         self.feat_out = nn.Linear(config.hidden_size, config.num_mel_bins * config.reduction_factor)
         self.prob_out = nn.Linear(config.hidden_size, config.reduction_factor)
 
-        layers = []
-        for i in range(config.speech_decoder_postnet_layers):
-            layers.append(SpeechT5BatchNormConvLayer(config, i))
+        layers = [SpeechT5BatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)]
         self.layers = nn.ModuleList(layers)
 
     def forward(self, hidden_states: torch.Tensor):
@@ -914,7 +851,7 @@ class SpeechT5TextDecoderPrenet(nn.Module):
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         else:
-            raise ValueError("You have to specify decoder_input_ids")
+            raise ValueError("You have to specify `decoder_input_ids`")
 
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
         positions = self.embed_positions(input_ids, past_key_values_length)
@@ -943,7 +880,7 @@ class SpeechT5TextDecoderPostnet(nn.Module):
 
 
 class SpeechT5Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Multi-headed attention from 'Attention Is All You Need' paper with relative position bias (see https://aclanthology.org/N18-2074.pdf)"""
 
     def __init__(
         self,
@@ -1288,25 +1225,6 @@ class SpeechT5DecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-
-
-class SpeechT5RelativePositionalEncoding(torch.nn.Module):
-    def __init__(self, dim, max_length=1000):
-        super().__init__()
-        self.dim = dim
-        self.max_length = max_length
-        self.pe_k = torch.nn.Embedding(2 * max_length, dim)
-
-    def forward(self, hidden_states):
-        seq_len = hidden_states.shape[1]
-        pos_seq = torch.arange(0, seq_len).long().to(hidden_states.device)
-        pos_seq = pos_seq[:, None] - pos_seq[None, :]
-
-        pos_seq[pos_seq < -self.max_length] = -self.max_length
-        pos_seq[pos_seq >= self.max_length] = self.max_length - 1
-        pos_seq = pos_seq + self.max_length
-
-        return self.pe_k(pos_seq)
 
 
 class SpeechT5PreTrainedModel(PreTrainedModel):
@@ -1975,7 +1893,7 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
 
-        return self.wrapped_decoder(
+        outputs = self.wrapped_decoder(
             hidden_states=input_values,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -1988,6 +1906,7 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        return outputs
 
 
 SPEECHT5_BASE_START_DOCSTRING = r"""
@@ -2549,7 +2468,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         ```python
         >>> from transformers import SpeechT5ProcessorForSpeechToText, SpeechT5ForSpeechToText
         >>> from datasets import load_dataset
-        >>> import torch
 
         >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
         >>> dataset = dataset.sort("id")
@@ -2657,6 +2575,85 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+
+def _generate_speech(
+    model: SpeechT5PreTrainedModel,
+    input_values: torch.FloatTensor,
+    speaker_embeddings: Optional[torch.FloatTensor] = None,
+    threshold: float = 0.5,
+    minlenratio: float = 0.0,
+    maxlenratio: float = 20.0,
+    vocoder: Optional[nn.Module] = None,
+) -> torch.FloatTensor:
+    encoder_attention_mask = torch.ones_like(input_values)
+
+    encoder_out = model.speecht5.encoder(
+        input_values=input_values,
+        attention_mask=encoder_attention_mask,
+        return_dict=True,
+    )
+
+    encoder_last_hidden_state = encoder_out.last_hidden_state
+
+    # downsample encoder attention mask
+    if isinstance(model.speecht5.encoder, SpeechT5EncoderWithSpeechPrenet):
+        encoder_attention_mask = model.speecht5.encoder.prenet._get_feature_vector_attention_mask(
+            encoder_out[0].shape[1], encoder_attention_mask
+        )
+
+    maxlen = int(encoder_last_hidden_state.size(1) * maxlenratio / model.config.reduction_factor)
+    minlen = int(encoder_last_hidden_state.size(1) * minlenratio / model.config.reduction_factor)
+
+    # Start the output sequence with a mel spectrum that is all zeros.
+    output_sequence = encoder_last_hidden_state.new_zeros(1, 1, model.config.num_mel_bins)
+
+    spectrogram = []
+    past_key_values = None
+    idx = 0
+
+    while True:
+        idx += 1
+
+        # Run the decoder prenet on the entire output sequence.
+        decoder_hidden_states = model.speecht5.decoder.prenet(output_sequence, speaker_embeddings)
+
+        # Run the decoder layers on the last element of the prenet output.
+        decoder_out = model.speecht5.decoder.wrapped_decoder(
+            hidden_states=decoder_hidden_states[:, -1:],
+            attention_mask=None,
+            encoder_hidden_states=encoder_last_hidden_state,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=True,
+            return_dict=True,
+        )
+
+        last_decoder_output = decoder_out.last_hidden_state[0, -1]
+        past_key_values = decoder_out.past_key_values
+
+        # Predict the new mel spectrum for this step in the sequence.
+        spectrum = model.speech_decoder_postnet.feat_out(last_decoder_output)
+        spectrum = spectrum.view(model.config.reduction_factor, model.config.num_mel_bins)
+        spectrogram.append(spectrum)
+
+        # Extend the output sequence with the new mel spectrum.
+        output_sequence = torch.cat((output_sequence, spectrum[-1].view(1, 1, model.config.num_mel_bins)), dim=1)
+
+        # Predict the probability that this is the stop token.
+        prob = torch.sigmoid(model.speech_decoder_postnet.prob_out(last_decoder_output))
+
+        # Finished when stop token or maximum length is reached.
+        if idx >= minlen and (int(sum(prob >= threshold)) > 0 or idx >= maxlen):
+            spectrogram = torch.cat(spectrogram, dim=0).unsqueeze(0)
+            spectrogram = model.speech_decoder_postnet.postnet(spectrogram)
+            spectrogram = spectrogram.squeeze(0)
+            break
+
+    if vocoder is not None:
+        return vocoder(spectrogram)
+    else:
+        return spectrogram
 
 
 @add_start_docstrings(
@@ -2788,8 +2785,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         _, spectrogram, logits = self.speech_decoder_postnet(outputs[0])
 
         loss = None
-        # if labels is not None:
-        #     TODO: the loss consists of a spectrogram loss but also for the stop token
 
         if not return_dict:
             output = (spectrogram,) + outputs[1:]
@@ -2992,8 +2987,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         _, spectrogram, logits = self.speech_decoder_postnet(outputs[0])
 
         loss = None
-        # if labels is not None:
-        #     TODO: the loss consists of a spectrogram loss but also for the stop token
 
         if not return_dict:
             output = (spectrogram,) + outputs[1:]

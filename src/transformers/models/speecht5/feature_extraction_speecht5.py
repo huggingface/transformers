@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021-2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,9 +28,12 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
+# Adapted from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor, with Wav2Vec2 tips removed.
 class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a SpeechT5 feature extractor.
+    Constructs a SpeechT5 feature extractor for use by the SpeechT5 speech encoder prenet.
+
+    This class pre-processes a raw speech signal by (optionally) normalizing to zero-mean unit-variance.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
@@ -212,12 +215,12 @@ class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
 
 class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a SpeechT5 spectrogram feature extractor.
+    Constructs a SpeechT5 spectrogram feature extractor for use by the SpeechT5 speech decoder prenet.
+
+    This class extracts log mel-filter bank features from raw speech.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
-
-    This class extracts log mel-filter bank features from raw speech.
 
     Args:
         feature_size (`int`, *optional*, defaults to 80):
