@@ -36,7 +36,7 @@ import transformers
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     DefaultDataCollator,
     HfArgumentParser,
     PushToHubCallback,
@@ -156,7 +156,7 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    feature_extractor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
     use_auth_token: bool = field(
         default=False,
         metadata={
@@ -305,7 +305,7 @@ def main():
         label2id[label] = str(i)
         id2label[str(i)] = label
 
-    # Load model feature extractor and configuration
+    # Load model image processor and configuration
     config = AutoConfig.from_pretrained(
         model_args.config_name or model_args.model_name_or_path,
         num_labels=len(labels),
@@ -316,8 +316,8 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name or model_args.model_name_or_path,
+    image_processor = AutoImageProcessor.from_pretrained(
+        model_args.image_processor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
@@ -332,11 +332,11 @@ def main():
 
     # Define our data preprocessing function. It takes an image file path as input and returns
     # Write a note describing the resizing behaviour.
-    if "shortest_edge" in feature_extractor.size:
+    if "shortest_edge" in image_processor.size:
         # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
-        image_size = (feature_extractor.size["shortest_edge"], feature_extractor.size["shortest_edge"])
+        image_size = (image_processor.size["shortest_edge"], image_processor.size["shortest_edge"])
     else:
-        image_size = (feature_extractor.size["height"], feature_extractor.size["width"])
+        image_size = (image_processor.size["height"], image_processor.size["width"])
 
     def _train_transforms(image):
         img_size = image_size
@@ -344,7 +344,7 @@ def main():
         image = random_resized_crop(image, size=img_size)
         image = tf.image.random_flip_left_right(image)
         image /= 255.0
-        image = (image - feature_extractor.image_mean) / feature_extractor.image_std
+        image = (image - image_processor.image_mean) / image_processor.image_std
         image = tf.transpose(image, perm=[2, 0, 1])
         return image
 
@@ -354,7 +354,7 @@ def main():
         # image = np.array(image) # FIXME - use tf.image function
         image = center_crop(image, size=image_size)
         image /= 255.0
-        image = (image - feature_extractor.image_mean) / feature_extractor.image_std
+        image = (image - image_processor.image_mean) / image_processor.image_std
         image = tf.transpose(image, perm=[2, 0, 1])
         return image
 
@@ -527,7 +527,7 @@ def main():
                     output_dir=training_args.output_dir,
                     hub_model_id=push_to_hub_model_id,
                     hub_token=training_args.push_to_hub_token,
-                    tokenizer=feature_extractor,
+                    tokenizer=image_processor,
                     **model_card_kwargs,
                 )
             )
