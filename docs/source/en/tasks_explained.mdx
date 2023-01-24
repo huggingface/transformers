@@ -16,7 +16,7 @@ In [What 🤗 Transformers can do](task_summary), you learned about natural lang
 
 To explain how tasks are solved, we'll walk through how models are pretrained and equipped with task-specific heads to output useful predictions.
 
-- [wav2vec2](model_doc/wav2vec2) for audio classification and automatic speech recognition (ASR)
+- [Wav2Vec2](model_doc/wav2vec2) for audio classification and automatic speech recognition (ASR)
 - [Vision Transformer (ViT)](model_doc/vit) and [ConvNeXT](model_doc/convnext) for image classification
 - [DETR](model_doc/detr) for image segmentation and object detection
 - [GLPN](model_doc/glpn) for depth estimation
@@ -32,7 +32,7 @@ Before you go further, it is good to have some basic knowledge of the original T
 
 ## Speech and audio
 
-[wav2vec2](model_doc/wav2vec2) is a self-supervised model pretrained on unlabeled speech data and finetuned on labeled data for audio classification and automatic speech recognition. 
+[Wav2Vec2](model_doc/wav2vec2) is a self-supervised model pretrained on unlabeled speech data and finetuned on labeled data for audio classification and automatic speech recognition. 
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/wav2vec2_architecture.png"/>
@@ -52,15 +52,15 @@ Now that wav2vec2 is pretrained, you can finetune it on your data for audio clas
 
 ### Audio classification
 
-To use the pretrained model for audio classification, add a sequence classification head on top of the base wav2vec2 model. The classification head is a linear layer that accepts the encoder's hidden states. The hidden states represent the learned features from each audio frame which can have varying lengths. So instead, the hidden states are pooled first to create one vector of fixed-length and then transformed into logits over the class labels. The cross-entropy loss is calculated between the logits and target to find the most likely class.
+To use the pretrained model for audio classification, add a sequence classification head on top of the base Wav2Vec2 model. The classification head is a linear layer that accepts the encoder's hidden states. The hidden states represent the learned features from each audio frame which can have varying lengths. So instead, the hidden states are pooled first to create one vector of fixed-length and then transformed into logits over the class labels. The cross-entropy loss is calculated between the logits and target to find the most likely class.
 
-Ready to try your hand at audio classification? Check out our complete [audio classification guide](tasks/audio_classification) to learn how to finetune wav2vec2 and use it for inference!
+Ready to try your hand at audio classification? Check out our complete [audio classification guide](tasks/audio_classification) to learn how to finetune Wav2Vec2 and use it for inference!
 
 ### Automatic speech recognition
 
-To use the pretrained model for automatic speech recognition, add a language modeling head on top of the base wav2vec2 model for [connectionist temporal classification (CTC)](glossary#connectionist-temporal-classification-ctc). The language modeling head is a linear layer that accepts the encoder's hidden states and transforms them into logits. Each logit represents a token class (the number of tokens comes from the task vocabulary). The CTC loss is calculated between the logits and targets to find the most likely sequence of tokens, which are then decoded into a transcription.
+To use the pretrained model for automatic speech recognition, add a language modeling head on top of the base Wav2Vec2 model for [connectionist temporal classification (CTC)](glossary#connectionist-temporal-classification-ctc). The language modeling head is a linear layer that accepts the encoder's hidden states and transforms them into logits. Each logit represents a token class (the number of tokens comes from the task vocabulary). The CTC loss is calculated between the logits and targets to find the most likely sequence of tokens, which are then decoded into a transcription.
 
-Ready to try your hand at automatic speech recognition? Check out our complete [automatic speech recognition guide](tasks/asr) to learn how to finetune wav2vec2 and use it for inference!
+Ready to try your hand at automatic speech recognition? Check out our complete [automatic speech recognition guide](tasks/asr) to learn how to finetune Wav2Vec2 and use it for inference!
 
 ## Computer vision
 
