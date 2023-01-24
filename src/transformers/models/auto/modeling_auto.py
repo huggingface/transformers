@@ -476,8 +476,8 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("timesformer", "TimesformerForVideoClassification"),
-        ("videomae", "VideoMAEForVideoClassification"),
         ("tvlt", "TvltForVideoClassification"),
+        ("videomae", "VideoMAEForVideoClassification"),
     ]
 )
 
