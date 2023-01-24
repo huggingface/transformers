@@ -283,12 +283,13 @@ class GenerationConfig(PushToHubMixin):
         self.transformers_version = kwargs.pop("transformers_version", __version__)
 
         # Additional attributes without default values
-        for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
+        if not self._from_model_config:
+            for key, value in kwargs.items():
+                try:
+                    setattr(self, key, value)
+                except AttributeError as err:
+                    logger.error(f"Can't set {key} with value {value} for {self}")
+                    raise err
 
     def __eq__(self, other):
         self_dict = self.__dict__.copy()
@@ -545,18 +546,11 @@ class GenerationConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
-        config = cls(**config_dict)
+        # remove all the arguments that are in the config_dict
 
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                if key != "torch_dtype":
-                    to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-
+        config = cls(**config_dict, **kwargs)
         unused_kwargs = config.update(**kwargs)
+
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
             return config, unused_kwargs
@@ -594,6 +588,7 @@ class GenerationConfig(PushToHubMixin):
         for key, value in config_dict.items():
             if key not in default_config_dict or key == "transformers_version" or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
+
         self.dict_torch_dtype_to_str(serializable_config_dict)
         return serializable_config_dict
 
@@ -610,6 +605,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
+
         self.dict_torch_dtype_to_str(output)
         return output
 
@@ -659,7 +655,7 @@ class GenerationConfig(PushToHubMixin):
             [`GenerationConfig`]: The configuration object instantiated from those parameters.
         """
         config_dict = model_config.to_dict()
-        config = cls.from_dict(config_dict, return_unused_kwargs=False)
+        config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
         # generation config.
@@ -671,7 +667,6 @@ class GenerationConfig(PushToHubMixin):
                     if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
                         setattr(config, attr, decoder_config[attr])
 
-        config._from_model_config = True
         return config
 
     def update(self, **kwargs):
