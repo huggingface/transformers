@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 from torch import nn as nn
 
-from core.models.udop_config import UdopConfig
+from ...configuration_udop import UdopConfig
 from transformers import T5Config
 from transformers.models.t5.modeling_t5 import T5Attention
 

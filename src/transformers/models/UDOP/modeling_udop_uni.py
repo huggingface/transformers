@@ -11,18 +11,17 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from embedding.cell_embed import CellEmbeddings
-from embedding.relative.relative import (
+from .embedding.cell_embed import CellEmbeddings
+from .embedding.relative.relative import (
     RelativePositionBias1D,
     RelativePositionBiasAggregated,
     RelativePositionBiasBase,
     create_relative_bias,
 )
-from mae.build import mae_model
-from transformers import T5Config, T5PreTrainedModel
+from .mae.build import mae_model
 from transformers.modeling_outputs import BaseModelOutput
-from transformers.models.t5.modeling_t5 import T5Block, T5ForConditionalGeneration, T5LayerNorm
-
+from .configuration_udop import UdopConfig
+from transformers.models.UDOP.modeling_udop_dual import UDOPPreTrainedModel, UDOPBlock, UDOPLayerNorm
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +198,7 @@ class Residual(nn.Module):
         return x + residual
 
 
-class T52dStack(T5PreTrainedModel):
+class UDOPUniStack(UDOPPreTrainedModel):
     """
     Almost exact copy of transformers T5Stack with the modification
     of passing `position_bias` in the forward method
@@ -223,9 +222,9 @@ class T52dStack(T5PreTrainedModel):
             )
 
         self.block = nn.ModuleList(
-            [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
+            [UDOPBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
         )
-        self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -245,7 +244,7 @@ class T52dStack(T5PreTrainedModel):
         self.init_weights()
 
     @staticmethod
-    def _get_relative_bias(config: T5Config) -> RelativePositionBiasAggregated:
+    def _get_relative_bias(config: UdopConfig) -> RelativePositionBiasAggregated:
         relative_bias_list = create_relative_bias(config)
         return RelativePositionBiasAggregated(relative_bias_list)
 
@@ -453,7 +452,7 @@ class T52dStack(T5PreTrainedModel):
         )
 
 
-class UdopUnimodelForConditionalGeneration(T5ForConditionalGeneration):
+class UdopUnimodelForConditionalGeneration(UDOPPreTrainedModel):
     """
     Copied from original T5ForConditionalGeneration class with signature extended with 2D data.
     :param config: a `T5Config` instance
@@ -468,8 +467,8 @@ class UdopUnimodelForConditionalGeneration(T5ForConditionalGeneration):
 
         self.config.decoder_start_token_id = self.config.pad_token_id
 
-        self.encoder = T52dStack(self.encoder.config, self.shared)
-        self.decoder = T52dStack(self.decoder.config, self.shared)
+        self.encoder = UDOPUniStack(self.encoder.config, self.shared)
+        self.decoder = UDOPUniStack(self.decoder.config, self.shared)
 
         self.init_weights()
 

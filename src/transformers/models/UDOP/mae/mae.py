@@ -14,8 +14,8 @@ from functools import partial
 import torch
 import torch.nn as nn
 
-from core.models.embedding.cell_embed import CellEmbeddings
-from core.models.mae.pos_embed import get_2d_sincos_pos_embed
+from ..embedding.cell_embed import CellEmbeddings
+from .pos_embed import get_2d_sincos_pos_embed
 from timm.models.vision_transformer import PatchEmbed
 
 
