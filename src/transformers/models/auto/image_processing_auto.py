@@ -55,7 +55,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("dpt", "DPTImageProcessor"),
         ("efficientformer", "EfficientFormerImageProcessor"),
         ("flava", "FlavaImageProcessor"),
-        ("git", ("CLIPImageProcessor", "VideoMAEImageProcessor")),
+        ("git", "CLIPImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
