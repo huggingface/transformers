@@ -100,7 +100,7 @@ class CircleCIJob:
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if value is not None else f"-{key}" for key, value in all_options.items()]
         pytest_flags.append(
-            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
+            f"--make-reports={self.job_name}"
         )
         test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
         if self.parallelism == 1:
@@ -138,6 +138,10 @@ class CircleCIJob:
                 "tests/models/gpt2/test_modeling_gpt2.py",
                 "tests/models/bart/test_modeling_bart.py",
                 "tests/models/t5/test_modeling_t5.py",
+                "tests/models/bert/test_modeling_tf_bert.py",
+                "tests/models/gpt2/test_modeling_tf_gpt2.py",
+                "tests/models/bart/test_modeling_tf_bart.py",
+                "tests/models/t5/test_modeling_tf_t5.py",
             ]
 
             random.shuffle(expanded_tests)
@@ -177,7 +181,7 @@ class CircleCIJob:
                 {
                     "run": {
                         "name": "rename output files",
-                        "command": "mkdir -p renamed_reports/tests_torch && cp reports/tests_torch/summary_short.txt renamed_reports/tests_torch/summary_short_$CIRCLE_NODE_INDEX.txt"  # noqa
+                        "command": f"mkdir -p renamed_reports/{self.job_name} && cp reports/{self.job_name}/summary_short.txt renamed_reports/{self.job_name}/summary_short_$CIRCLE_NODE_INDEX.txt"  # noqa
                     }
                 }
             )
@@ -187,7 +191,7 @@ class CircleCIJob:
                 {
                     "run": {
                         "name": "show file structure",
-                        "command": "ls -l renamed_reports/tests_torch"
+                        "command": f"ls -l renamed_reports && ls -l renamed_reports/{self.job_name}"
                     }
                 }
             )
@@ -207,7 +211,7 @@ class CircleCIJob:
                 {
                     "run": {
                         "name": "show file structure",
-                        "command": "ls -l renamed_reports && ls -l renamed_reports/tests_torch"
+                        f"command": "ls -l renamed_reports && ls -l renamed_reports/{self.job_name}"
                     }
                 }
             )
@@ -272,7 +276,7 @@ tf_job = CircleCIJob(
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
     ],
-    parallelism=1,
+    parallelism=2,
     pytest_options={"rA": None},
 )
 
@@ -441,7 +445,7 @@ REGULAR_TESTS = [
     # torch_and_tf_job,
     # torch_and_flax_job,
     torch_job,
-    # tf_job,
+    tf_job,
     # flax_job,
     # custom_tokenizers_job,
     # hub_job,
