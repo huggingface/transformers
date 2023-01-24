@@ -1253,9 +1253,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             task (`bool`, *optional*):
                 Task to use for generation, either "translate" or "transcribe"
             language (`bool`, *optional*):
-                language token to use for generation
+                Language token to use for generation
             is_multilingual (`bool`, *optional*):
-                whether or not the model is multilingual
+                Whether or not the model is multilingual
         """
         if generation_config is None:
             generation_config = self.generation_config
