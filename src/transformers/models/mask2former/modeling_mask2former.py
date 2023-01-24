@@ -49,6 +49,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Mask2FormerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/mask2former-swin-small-coco-instance"
+_IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
 
 MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/mask2former-swin-small-coco-instance",
@@ -194,10 +195,10 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     """
     Class for outputs of [`Mask2FormerForUniversalSegmentationOutput`].
 
-    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or
-    [`~MaskFormerImageProcessor.post_process_instance_segmentation`] or
-    [`~MaskFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~MaskFormerImageProcessor] for details regarding usage.
+    This output can be directly passed to [`~Mask2FormerImageProcessor.post_process_semantic_segmentation`] or
+    [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] or
+    [`~Mask2FormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~Mask2FormerImageProcessor] for details regarding usage.
 
     Args:
         loss (`torch.Tensor`, *optional*):
