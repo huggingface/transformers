@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ConvNeXtV2 checkpoints from the original repository.
+"""Convert ConvNextV2 checkpoints from the original repository.
 
 URL: https://github.com/facebookresearch/ConvNeXt"""
 
@@ -131,10 +131,10 @@ def prepare_img():
 @torch.no_grad()
 def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     """
-    Copy/paste/tweak model's weights to our ConvNeXtV2 structure.
+    Copy/paste/tweak model's weights to our ConvNextV2 structure.
     """
 
-    # define ConvNeXtV2 configuration based on URL
+    # define ConvNextV2 configuration based on URL
     config, expected_shape = get_convnextv2_config(checkpoint_url)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]

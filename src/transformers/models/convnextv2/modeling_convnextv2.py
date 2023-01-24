@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvNeXtV2 model."""
+""" PyTorch ConvNextV2 model."""
 
 
 from typing import Optional, Tuple, Union
@@ -36,7 +36,7 @@ from .configuration_convnextv2 import ConvNextV2Config
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ConvNeXtV2Config"
+_CONFIG_FOR_DOC = "ConvNextV2Config"
 _FEAT_EXTRACTOR_FOR_DOC = "ConvNextImageProcessor"
 
 # Base docstring
@@ -49,7 +49,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnextv2-tiny-224",
-    # See all ConvNeXtV2 models at https://huggingface.co/models?filter=convnextv2
+    # See all ConvNextV2 models at https://huggingface.co/models?filter=convnextv2
 ]
 
 
@@ -202,10 +202,10 @@ class ConvNextV2Layer(nn.Module):
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNext->ConvNeXtV2,ConvNeXT->ConvNeXtV2
 class ConvNextV2Stage(nn.Module):
-    """ConvNeXtV2 stage, consisting of an optional downsampling layer + multiple residual blocks.
+    """ConvNextV2 stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
-        config ([`ConvNeXtV2Config`]): Model configuration class.
+        config ([`ConvNextV2Config`]): Model configuration class.
         in_channels (`int`): Number of input channels.
         out_channels (`int`): Number of output channels.
         depth (`int`): Number of residual blocks.
@@ -316,7 +316,7 @@ CONVNEXTV2_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ConvNeXtV2Config`]): Model configuration class with all the parameters of the model.
+        config ([`ConvNextV2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -336,7 +336,7 @@ CONVNEXTV2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ConvNeXtV2 model outputting raw features without any specific head on top.",
+    "The bare ConvNextV2 model outputting raw features without any specific head on top.",
     CONVNEXTV2_START_DOCSTRING,
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2,ConvNext->ConvNeXtV2
@@ -402,7 +402,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    ConvNeXtV2 Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ConvNextV2 Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
     """,
     CONVNEXTV2_START_DOCSTRING,

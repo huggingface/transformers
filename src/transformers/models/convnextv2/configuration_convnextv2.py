@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvNeXtV2 model configuration"""
+""" ConvNextV2 model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -27,16 +27,16 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/ConvNeXt-V2": "https://huggingface.co/facebook/convnextv2-tiny-224/resolve/main/config.json",
+    "facebook/convnextv2-tiny-224": "https://huggingface.co/facebook/convnextv2-tiny-224/resolve/main/config.json",
 }
 
 
 class ConvNextV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ConvNeXtV2Model`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`ConvNextV2Model`]. It is used to instantiate an
     ConvNextV2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ConvNeXtV2
-    [facebook/ConvNeXt-V2](https://huggingface.co/facebook/convnextv2-tiny-224) architecture.
+    [facebook/convnextv2-tiny-224](https://huggingface.co/facebook/convnextv2-tiny-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
