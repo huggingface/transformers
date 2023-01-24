@@ -2868,7 +2868,7 @@ class GPTSANJapaneseDenseActDense(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class GPTSANJapaneseModel(metaclass=DummyObject):
+class GPTSANJapaneseForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2889,14 +2889,14 @@ class GPTSANJapaneseSparseMLP(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class GPTSANJapaneseTop1Router(metaclass=DummyObject):
+class GPTSANJapaneseTokenizer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GPTSANSentenceGenerator(metaclass=DummyObject):
+class GPTSANJapaneseTop1Router(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

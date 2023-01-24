@@ -115,9 +115,9 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         router_ignore_padding_tokens=False,
         output_hidden_states=False,
         output_attentions=False,
-        use_cache=False,
         initializer_factor=0.002,
         output_router_logits=False,
+        top_k=120,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -140,13 +140,19 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         self.router_ignore_padding_tokens = router_ignore_padding_tokens
         self.output_hidden_states = output_hidden_states
         self.output_attentions = output_attentions
-        self.use_cache = use_cache
         self.initializer_factor = initializer_factor
         self.output_router_logits = output_router_logits
 
-        kwargs["pad_token_id"] = vocab_size - 4
         kwargs["eos_token_id"] = vocab_size - 1
+        kwargs["separator_token_id"] = vocab_size - 2
+        kwargs["unk_token_id"] = vocab_size - 4
+        kwargs["pad_token_id"] = vocab_size - 5
+        kwargs["mask_token_id"] = vocab_size - 6
+        kwargs["bos_token_id"] = vocab_size - 7
         kwargs["is_encoder_decoder"] = False
+        kwargs["use_cache"] = True
+        kwargs["do_sample"] = True
+        kwargs["top_k"] = top_k
         super().__init__(
             **kwargs,
         )

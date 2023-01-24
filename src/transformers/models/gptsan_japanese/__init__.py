@@ -28,7 +28,8 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_gptsan_japanese": ["GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSANJapaneseConfig"]
+    "configuration_gptsan_japanese": ["GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSANJapaneseConfig"],
+    "tokenization_gptsan_japanese": ["GPTSANJapaneseTokenizer"],
 }
 
 try:
@@ -40,16 +41,19 @@ else:
     _import_structure["modeling_gptsan_japanese"] = [
         "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTSANJapaneseDenseActDense",
-        "GPTSANJapaneseModel",
+        "GPTSANJapaneseForConditionalGeneration",
         "GPTSANJapanesePreTrainedModel",
         "GPTSANJapaneseSparseMLP",
         "GPTSANJapaneseTop1Router",
-        "GPTSANSentenceGenerator",
+    ]
+    _import_structure["tokenization_gptsan_japanese"] = [
+        "GPTSANJapaneseTokenizer",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_gptsan_japanese import GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSANJapaneseConfig
+    from .tokenization_gptsan_japanese import GPTSANJapaneseTokenizer
 
     try:
         if not is_torch_available():
@@ -60,12 +64,12 @@ if TYPE_CHECKING:
         from .modeling_gptsan_japanese import (
             GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTSANJapaneseDenseActDense,
-            GPTSANJapaneseModel,
+            GPTSANJapaneseForConditionalGeneration,
             GPTSANJapanesePreTrainedModel,
             GPTSANJapaneseSparseMLP,
             GPTSANJapaneseTop1Router,
-            GPTSANSentenceGenerator,
         )
+        from .gokenization_gptsan_japanese import GPTSANJapaneseTokenizer
 
 
 else:
