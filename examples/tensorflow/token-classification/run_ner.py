@@ -396,7 +396,7 @@ def main():
 
         # We need the DataCollatorForTokenClassification here, as we need to correctly pad labels as
         # well as inputs.
-        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
+        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="np")
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
 

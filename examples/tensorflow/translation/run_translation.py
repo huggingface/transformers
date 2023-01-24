@@ -499,7 +499,7 @@ def main():
             model=model,
             label_pad_token_id=label_pad_token_id,
             pad_to_multiple_of=64,  # Reduce the number of unique shapes for XLA, especially for generation
-            return_tensors="tf",
+            return_tensors="np",
         )
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
