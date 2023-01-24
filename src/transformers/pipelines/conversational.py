@@ -1,8 +1,15 @@
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
-from ..utils import add_end_docstrings, logging
+from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
+
+
+if is_tf_available():
+    import tensorflow as tf
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -253,12 +260,8 @@ class ConversationalPipeline(Pipeline):
             input_ids = self._legacy_parse_and_tokenize(conversation)
 
         if self.framework == "pt":
-            import torch
-
             input_ids = torch.LongTensor([input_ids])
         elif self.framework == "tf":
-            import tensorflow as tf
-
             input_ids = tf.constant([input_ids])
         return {"input_ids": input_ids, "conversation": conversation}
 
