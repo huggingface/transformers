@@ -986,9 +986,9 @@ class SpeechT5Attention(nn.Module):
         # relative attention bias
         if position_bias is not None:
             reshape_q = query_states.contiguous().view(bsz * self.num_heads, -1, self.head_dim).transpose(0, 1)
-            B = torch.matmul(reshape_q, position_bias.transpose(-2, -1))
-            B = B.transpose(0, 1).view(bsz * self.num_heads, position_bias.size(0), position_bias.size(1))
-            attn_weights += B
+            rel_pos_bias = torch.matmul(reshape_q, position_bias.transpose(-2, -1))
+            rel_pos_bias = rel_pos_bias.transpose(0, 1).view(bsz * self.num_heads, position_bias.size(0), position_bias.size(1))
+            attn_weights += rel_pos_bias
 
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
