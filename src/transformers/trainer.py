@@ -358,10 +358,10 @@ class Trainer:
             self.is_model_parallel = False
 
         # At this stage the model is already loaded
-        if getattr(model, "is_loaded_in_8bit", False):
+        if getattr(model, "is_loaded_in_8bit", False) and not getattr(model, "_memory_efficient_int8", False):
             raise ValueError(
-                "The model you want to train is loaded in 8-bit precision. "
-                "Training an 8-bit model is not supported yet. "
+                "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit model,"
+                " please load it with `enable_memory_efficient_backward=True`. "
             )
 
         # Setup Sharded DDP training
