@@ -179,7 +179,7 @@ class CircleCIJob:
             for file_name in [
                 "failures_line.txt", "failures_long.txt", "failures_short.txt", "stats.txt", "summary_short.txt"
             ]:
-                rename_command += f" && cp reports/{self.job_name}/{file_name} renamed_reports/{self.job_name}/{file_name}_$CIRCLE_NODE_INDEX.txt | true"
+                rename_command += f" && cp reports/{self.job_name}/{file_name} renamed_reports/{self.job_name}/{file_name.replace('.txt', '')}_$CIRCLE_NODE_INDEX.txt | true"
             steps.append({"run": {"name": "rename output files", "command": rename_command}})
 
             # upload renamed files
