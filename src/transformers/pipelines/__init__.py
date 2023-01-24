@@ -838,7 +838,7 @@ def pipeline(
             )
 
     if load_image_processor:
-        # Try to infer feature extractor from model or config name (if provided as str)
+        # Try to infer image processor from model or config name (if provided as str)
         if image_processor is None:
             if isinstance(model_name, str):
                 image_processor = model_name
