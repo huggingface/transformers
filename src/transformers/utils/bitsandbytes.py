@@ -122,6 +122,7 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head"):
                     module.bias is not None,
                     has_fp16_weights=False,
                     threshold=threshold,
+                    memory_efficient_backward=True,
                 )
     return model
 
