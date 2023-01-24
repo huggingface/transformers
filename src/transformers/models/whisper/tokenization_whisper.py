@@ -495,8 +495,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
         """
-        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`.
-        This method decodes given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
+        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
+        given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
         """
         timestamp_begin = self.all_special_ids[-1] + 1
         outputs = [[]]
@@ -580,7 +580,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
             output_offsets (`bool`, *optional*, defaults to `False`):
-                Whether or not to output the offsets of the tokens. This should only be set if the model predicted timestamps.
+                Whether or not to output the offsets of the tokens. This should only be set if the model predicted
+                timestamps.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 WHether or not to decode with timestamps included in the raw text.
         Returns:

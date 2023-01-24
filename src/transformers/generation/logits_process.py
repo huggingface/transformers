@@ -923,10 +923,11 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                     This indicates to the processor where the first tokens are generated. This is used to differentiate
                     between the `prompt` tokens and the `generated` tokens. When generating with
                     `WhisperForConditionalGeneration` with a m multilingual model, the `prompt` tokens are the first 4
-                    tokens : "<|startoftranscript|><|language|><|task|><|timestamptoken|>" where the `"<timestamptoken>'` is an
-                    OOV token corresponding to the first timestamp (50364 for [Whisper
-                    large](https://huggingface.co/openai/whisper-large)). Since the `<|startoftranscript|>` is also the `bos_token_id`
-                    we have to add `2` to the `begin_index` to get the index of the first generated token.
+                    tokens : "<|startoftranscript|><|language|><|task|><|timestamptoken|>" where the
+                    `"<timestamptoken>'` is an OOV token corresponding to the first timestamp (50364 for [Whisper
+                    large](https://huggingface.co/openai/whisper-large)). Since the `<|startoftranscript|>` is also the
+                    `bos_token_id` we have to add `2` to the `begin_index` to get the index of the first generated
+                    token.
                 eos_token_id (`int`, *optional*, defaults to 50257):
                     The id of the *end-of-sequence* token.
                 no_timestamps_token_id (`int`, *optional*, defaults to 50363):
