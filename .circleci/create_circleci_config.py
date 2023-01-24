@@ -197,7 +197,7 @@ class CircleCIJob:
 
             steps.append(
                 {
-                    "persist_to_workspace": {"root": self.working_directory, "paths": "renamed_reports"}
+                    "persist_to_workspace": {"root": "renamed_reports", "paths": "tests_torch"}
                 }
             )
         else:
