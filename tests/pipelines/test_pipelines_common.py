@@ -310,8 +310,6 @@ class PipelineTestCaseMeta(type):
                             feature_extractor_class.__name__ if feature_extractor_class else "nofeature_extractor"
                         )
                         image_processor_class = IMAGE_PROCESSOR_MAPPING.get(configuration, None)
-                        if isinstance(image_processor_class, (list, tuple)):
-                            image_processor_class = image_processor_class[0]
                         image_processor_name = (
                             image_processor_class.__name__ if image_processor_class else "noimage_processor"
                         )
