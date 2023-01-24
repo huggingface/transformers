@@ -61,7 +61,7 @@ def convert_hifigan_checkpoint(
     stats_path,
     pytorch_dump_folder_path,
     config_path=None,
-    push_to_hub=False,
+    repo_id=None,
 ):
     if config_path is not None:
         config = SpeechT5HiFiGANConfig.from_pretrained(config_path)
@@ -81,9 +81,8 @@ def convert_hifigan_checkpoint(
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-    if push_to_hub:
+    if repo_id:
         print("Pushing to the hub...")
-        repo_id = "Matthijs/speecht5_hifigan"
         model.push_to_hub(repo_id)
 
 
@@ -96,7 +95,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
 
     args = parser.parse_args()

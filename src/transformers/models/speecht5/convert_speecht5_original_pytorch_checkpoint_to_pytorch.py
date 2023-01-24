@@ -346,7 +346,7 @@ def convert_speecht5_checkpoint(
     pytorch_dump_folder_path,
     config_path=None,
     vocab_path=None,
-    push_to_hub=False,
+    repo_id=None,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
@@ -362,25 +362,21 @@ def convert_speecht5_checkpoint(
         config.max_length = config.max_text_positions
         processor_class = SpeechT5ProcessorForSpeechToText
         model = SpeechT5ForSpeechToText(config)
-        model_name = "speecht5_asr"
     elif task == "ctc":
         config.max_length = config.max_text_positions
         config.is_encoder_decoder = False
         tokenizer_class = SpeechT5CTCTokenizer
         processor_class = SpeechT5ProcessorForCTC
         model = SpeechT5ForCTC(config)
-        model_name = "speecht5_ctc"
     elif task == "t2s":
         config.max_speech_positions = 1876
         config.max_text_positions = 600
         config.max_length = config.max_speech_positions
         model = SpeechT5ForTextToSpeech(config)
-        model_name = "speecht5_tts"
     elif task == "s2s":
         config.max_speech_positions = 1876
         config.max_length = config.max_speech_positions
         model = SpeechT5ForSpeechToSpeech(config)
-        model_name = "speecht5_vc"
     else:
         raise ValueError(f"Unknown task name: {task}")
 
@@ -427,9 +423,8 @@ def convert_speecht5_checkpoint(
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-    if push_to_hub:
+    if repo_id:
         print("Pushing to the hub...")
-        repo_id = "Matthijs/" + model_name
         processor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
@@ -449,7 +444,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
 
     args = parser.parse_args()
