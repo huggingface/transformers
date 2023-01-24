@@ -423,18 +423,20 @@ class XMODOutput(nn.Module):
 
         if not self.ln_before_adapter:
             residual = hidden_states
+
         if self.adapter_layer_norm is not None:
             hidden_states = self.adapter_layer_norm(hidden_states)
         elif self.adapter_reuse_layer_norm:
             hidden_states = self.LayerNorm(hidden_states)
+
         if self.ln_before_adapter:
             residual = hidden_states
 
         split_hidden_states = torch.split(hidden_states, lang_lengths.tolist(), 0)
         lang_wise_outputs = []
-        for i, (lang_id, s_x) in enumerate(zip(lang_ids, split_hidden_states)):
+        for i, (lang_id, split_hidden_state) in enumerate(zip(lang_ids, split_hidden_states)):
             lang = list(self.adapter_modules.keys())[int(lang_id.item())]
-            lang_wise_outputs.append(self.adapter_modules[lang](s_x))
+            lang_wise_outputs.append(self.adapter_modules[lang](split_hidden_state))
         hidden_states = torch.cat(lang_wise_outputs, 0)
 
         hidden_states = self.dropout(hidden_states)
@@ -542,10 +544,9 @@ class XMODEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([XMODLayer(config) for _ in range(config.num_hidden_layers)])
-        if config.pre_norm:
+        self.is_pre_norm = config.pre_norm 
+        if self.is_pre_norm:
             self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        else:
-            self.LayerNorm = None
         self.gradient_checkpointing = False
 
     def forward(
@@ -617,7 +618,7 @@ class XMODEncoder(nn.Module):
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
-        if self.LayerNorm is not None:  # pre-norm
+        if self.is_pre_norm:  # pre-norm
             hidden_states = self.LayerNorm(hidden_states)
 
         if output_hidden_states:
