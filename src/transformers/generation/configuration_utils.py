@@ -548,6 +548,15 @@ class GenerationConfig(PushToHubMixin):
         config = cls(**config_dict)
         unused_kwargs = config.update(**kwargs)
 
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+                if key != "torch_dtype":
+                    to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
+
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
             return config, unused_kwargs
