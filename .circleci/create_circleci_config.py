@@ -197,11 +197,11 @@ class CircleCIJob:
 
             steps.append(
                 {
-                    "persist_to_workspace": {"root": "renamed_reports", "paths": "tests_torch"}
+                    "persist_to_workspace": {"root": "~/transformers", "paths": "renamed_reports"}
                 }
             )
         else:
-            steps.append({"attach_workspace": {"at": "~/transformers/renamed_reports"}})
+            steps.append({"attach_workspace": {"at": "~/transformers"}})
             # (show file system structure)
             steps.append(
                 {
