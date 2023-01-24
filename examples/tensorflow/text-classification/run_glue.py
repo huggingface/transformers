@@ -345,9 +345,9 @@ def main():
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
     if data_args.pad_to_max_length:
-        data_collator = DefaultDataCollator(return_tensors="tf")
+        data_collator = DefaultDataCollator(return_tensors="np")
     else:
-        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
+        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="np")
     # endregion
 
     # region Metric function
