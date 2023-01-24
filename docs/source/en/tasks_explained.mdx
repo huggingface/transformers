@@ -26,7 +26,7 @@ To explain how tasks are solved, we'll walk through how models are pretrained an
 
 <Tip>
 
-Before you go further, it is good to have some basic knowledge of the original Transformer architecture. Knowing how encoders, decoders, and attention work will aid you in understanding how different Transformer models work. If you're just getting started or need a refresher, check out our [course](https://huggingface.co/course/chapter1/4?fw=pt) for more information about how Transformers work! 
+Before you go further, it is good to have some basic knowledge of the original Transformer architecture. Knowing how encoders, decoders, and attention work will aid you in understanding how different Transformer models work. If you're just getting started or need a refresher, check out our [course](https://huggingface.co/course/chapter1/4?fw=pt) for more information! 
 
 </Tip>
 
@@ -42,25 +42,23 @@ This model has four main components:
 
 1. A *feature encoder* takes the raw audio waveform, normalizes it to zero mean and unit variance, and converts it into a sequence of feature vectors that are each 20ms long.
 
-2. Next, the feature vectors are passed to a *quantization module*. The quantizer's goal is to learn discrete speech units. Waveforms are continuous by nature, so they can't be divided into separate units like a sequence of text can be split into words. So what are speech units? A speech unit is a combination of the different phonemes (a *codeword*) that make up a word, sort of like the tokens of a sentence. The speech unit is chosen from a collection of codewords, known as a *codebook* (you can think of this as the vocabulary).
+2. Waveforms are continuous by nature, so they can't be divided into separate units like a sequence of text can be split into words. That's why the feature vectors are passed to a *quantization module*, which aims to learn discrete speech units. The speech unit is chosen from a collection of codewords, known as a *codebook* (you can think of this as the vocabulary). From the codebook, the vector or speech unit, that best represents the continuous audio input is chosen and forwarded through the model.
 
-    In practice, the feature vectors are multiplied by a quantization matrix to generate a score for each potential codeword in each codebook. Then the Gumbel softmax chooses the codewords with the highest probability, which are concatenated to form the final speech unit.
+3. About half of the feature vectors are randomly masked, and the masked feature vector is fed to a *context network*. The context network is a Transformer encoder that also adds relative positional embeddings.
 
-3. About half of the feature vectors are randomly masked, and the masked positions are replaced by the same trained feature vector. The masked feature vector is fed to a *context network*. The context network is a Transformer encoder, but unlike the original Transformer, wav2vec2 adds a relative positional embedding with another convolutional layer.
-
-4. The pretraining objective of the context network is to learn the speech representation of the masked positions by solving a *contrastive task*. The model has to predict the true quantized speech representation from a set of false ones. The contrastive loss encourages the model to maximize the similarity between the context vector and the quantized speech unit (the target label). The output is the encoder's hidden states.
+4. The pretraining objective of the context network is a *contrastive task*. The model has to predict the true quantized speech representation of the masked prediction from a set of false ones, encouraging the model to find the most similar context vector and quantized speech unit (the target label).
 
 Now that wav2vec2 is pretrained, you can finetune it on your data for audio classification or automatic speech recognition!
 
 ### Audio classification
 
-To use the pretrained model for audio classification, add a sequence classification head on top of the base wav2vec2 model. The classification head is a linear layer that accepts the encoder's hidden states and transforms them into logits. The cross-entropy loss is calculated between the logits and target to find the most likely class.
+To use the pretrained model for audio classification, add a sequence classification head on top of the base wav2vec2 model. The classification head is a linear layer that accepts the encoder's hidden states. The hidden states represent the learned features from each audio frame which can have varying lengths. So instead, the hidden states are pooled first to create one vector of fixed-length and then transformed into logits over the class labels. The cross-entropy loss is calculated between the logits and target to find the most likely class.
 
 Ready to try your hand at audio classification? Check out our complete [audio classification guide](tasks/audio_classification) to learn how to finetune wav2vec2 and use it for inference!
 
 ### Automatic speech recognition
 
-To use the pretrained model for automatic speech recognition, add a language modeling head on top of the base wav2vec2 model for [connectionist temporal classification (CTC)](glossary#connectionist-temporal-classification-ctc). The language modeling head is a linear layer that accepts the encoder's hidden states and transforms them into logits. Each logit represents a token class (the number of tokens comes from the task vocabulary). The CTC loss is calculated between the logits and target to find the most likely token, which is decoded into a word.
+To use the pretrained model for automatic speech recognition, add a language modeling head on top of the base wav2vec2 model for [connectionist temporal classification (CTC)](glossary#connectionist-temporal-classification-ctc). The language modeling head is a linear layer that accepts the encoder's hidden states and transforms them into logits. Each logit represents a token class (the number of tokens comes from the task vocabulary). The CTC loss is calculated between the logits and targets to find the most likely sequence of tokens, which are then decoded into a transcription.
 
 Ready to try your hand at automatic speech recognition? Check out our complete [automatic speech recognition guide](tasks/asr) to learn how to finetune wav2vec2 and use it for inference!
 
