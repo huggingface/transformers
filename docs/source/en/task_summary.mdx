@@ -85,11 +85,11 @@ Image classification labels an entire image from a predefined set of classes. Li
 ... )
 >>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
 >>> print(*preds, sep="\n")
-{'score': 0.4403, 'label': 'lynx, catamount'}
-{'score': 0.0343, 'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'}
-{'score': 0.0321, 'label': 'snow leopard, ounce, Panthera uncia'}
-{'score': 0.0235, 'label': 'Egyptian cat'}
-{'score': 0.023, 'label': 'tiger cat'}
+{'score': 0.4335, 'label': 'lynx, catamount'}
+{'score': 0.0348, 'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'}
+{'score': 0.0324, 'label': 'snow leopard, ounce, Panthera uncia'}
+{'score': 0.0239, 'label': 'Egyptian cat'}
+{'score': 0.0229, 'label': 'tiger cat'}
 ```
 
 ### Object detection
@@ -131,10 +131,10 @@ Segmentation tasks are helpful in self-driving vehicles to create a pixel-level 
 ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 ... )
 >>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
->>> preds
-[{'score': 0.9856, 'label': 'LABEL_184'},
- {'score': 0.9976, 'label': 'snow'},
- {'score': 0.9962, 'label': 'cat'}]
+>>> print(*preds, sep="\n")
+{'score': 0.9879, 'label': 'LABEL_184'}
+{'score': 0.9973, 'label': 'snow'}
+{'score': 0.9972, 'label': 'cat'}
 ```
 
 ### Depth estimation
