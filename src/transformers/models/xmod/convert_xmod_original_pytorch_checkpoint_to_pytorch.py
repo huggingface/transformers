@@ -6,17 +6,9 @@ from pathlib import Path
 import fairseq
 import torch
 from fairseq.models.xmod import XMODModel as FairseqXMODModel
-from fairseq.models.xmod.transformer_layer_xmod import XMODTransformerEncoderLayerBase
 from packaging import version
 
 from transformers import XMODConfig, XMODForMaskedLM, XMODForSequenceClassification
-from transformers.models.xmod.modeling_xmod import (
-    XMODIntermediate,
-    XMODLayer,
-    XMODOutput,
-    XMODSelfAttention,
-    XMODSelfOutput,
-)
 from transformers.utils import logging
 
 
@@ -36,7 +28,6 @@ def convert_xmod_checkpoint_to_pytorch(
     xmod_checkpoint_path: str, pytorch_dump_folder_path: str, classification_head: bool
 ):
     data_dir = Path("data_bin")
-    assert data_dir.exists()
     xmod = FairseqXMODModel.from_pretrained(
         model_name_or_path=str(Path(xmod_checkpoint_path).parent),
         checkpoint_file=Path(xmod_checkpoint_path).name,
@@ -89,17 +80,18 @@ def convert_xmod_checkpoint_to_pytorch(
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
-        layer: XMODLayer = model.roberta.encoder.layer[i]
-        xmod_layer: XMODTransformerEncoderLayerBase = xmod_sent_encoder.layers[i]
+        layer = model.roberta.encoder.layer[i]
+        xmod_layer = xmod_sent_encoder.layers[i]
 
         # self attention
-        self_attn: XMODSelfAttention = layer.attention.self
-        assert (
+        self_attn = layer.attention.self
+        if not (
             xmod_layer.self_attn.k_proj.weight.data.shape
             == xmod_layer.self_attn.q_proj.weight.data.shape
             == xmod_layer.self_attn.v_proj.weight.data.shape
             == torch.Size((config.hidden_size, config.hidden_size))
-        )
+        ):
+            raise AssertionError("Dimensions of self-attention weights do not match.")
 
         self_attn.query.weight.data = xmod_layer.self_attn.q_proj.weight
         self_attn.query.bias.data = xmod_layer.self_attn.q_proj.bias
@@ -109,22 +101,25 @@ def convert_xmod_checkpoint_to_pytorch(
         self_attn.value.bias.data = xmod_layer.self_attn.v_proj.bias
 
         # self-attention output
-        self_output: XMODSelfOutput = layer.attention.output
-        assert self_output.dense.weight.shape == xmod_layer.self_attn.out_proj.weight.shape
+        self_output = layer.attention.output
+        if self_output.dense.weight.shape != xmod_layer.self_attn.out_proj.weight.shape:
+            raise AssertionError("Dimensions of self-attention output weights do not match.")
         self_output.dense.weight = xmod_layer.self_attn.out_proj.weight
         self_output.dense.bias = xmod_layer.self_attn.out_proj.bias
         self_output.LayerNorm.weight = xmod_layer.self_attn_layer_norm.weight
         self_output.LayerNorm.bias = xmod_layer.self_attn_layer_norm.bias
 
         # intermediate
-        intermediate: XMODIntermediate = layer.intermediate
-        assert intermediate.dense.weight.shape == xmod_layer.fc1.weight.shape
+        intermediate = layer.intermediate
+        if intermediate.dense.weight.shape != xmod_layer.fc1.weight.shape:
+            raise AssertionError("Dimensions of intermediate weights do not match.")
         intermediate.dense.weight = xmod_layer.fc1.weight
         intermediate.dense.bias = xmod_layer.fc1.bias
 
         # output
-        bert_output: XMODOutput = layer.output
-        assert bert_output.dense.weight.shape == xmod_layer.fc2.weight.shape
+        bert_output = layer.output
+        if bert_output.dense.weight.shape != xmod_layer.fc2.weight.shape:
+            raise AssertionError("Dimensions of feed-forward weights do not match.")
         bert_output.dense.weight = xmod_layer.fc2.weight
         bert_output.dense.bias = xmod_layer.fc2.bias
         bert_output.LayerNorm.weight = xmod_layer.final_layer_norm.weight
@@ -133,7 +128,8 @@ def convert_xmod_checkpoint_to_pytorch(
             bert_output.adapter_layer_norm.weight = xmod_layer.adapter_layer_norm.weight
             bert_output.adapter_layer_norm.bias = xmod_layer.adapter_layer_norm.bias
 
-        assert list(sorted(bert_output.adapter_modules.keys())) == list(sorted(xmod_layer.adapter_modules.keys()))
+        if list(sorted(bert_output.adapter_modules.keys())) != list(sorted(xmod_layer.adapter_modules.keys())):
+            raise AssertionError("Lists of language adapters do not match.")
         for lang_code, adapter in xmod_layer.adapter_modules.items():
             to_adapter = bert_output.adapter_modules[lang_code]
             from_adapter = xmod_layer.adapter_modules[lang_code]
@@ -144,7 +140,7 @@ def convert_xmod_checkpoint_to_pytorch(
 
         # end of layer
 
-    if model.roberta.encoder.LayerNorm is not None:
+    if xmod_sent_encoder.layer_norm is not None:
         model.roberta.encoder.LayerNorm.weight = xmod_sent_encoder.layer_norm.weight
         model.roberta.encoder.LayerNorm.bias = xmod_sent_encoder.layer_norm.bias
 
@@ -163,7 +159,7 @@ def convert_xmod_checkpoint_to_pytorch(
         model.lm_head.decoder.bias = xmod.model.encoder.lm_head.bias
 
     # Let's check that we get the same results.
-    input_ids: torch.Tensor = xmod.encode(SAMPLE_TEXT).unsqueeze(0)  # batch of size 1
+    input_ids = xmod.encode(SAMPLE_TEXT).unsqueeze(0)  # batch of size 1
     model.roberta.set_default_language(SAMPLE_LANGUAGE)
 
     our_output = model(input_ids)[0]
