@@ -36,9 +36,9 @@ There are two ways to specify the input language:
 1. By setting a default language before using the model:
 
 ```python
-from transformers import XMODModel
+from transformers import XmodModel
 
-model = XMODModel.from_pretrained("jvamvas/xmod-base")
+model = XmodModel.from_pretrained("jvamvas/xmod-base")
 model.set_default_language("en_XX")
 ```
 
@@ -78,41 +78,41 @@ model.set_default_language("de_DE")
 # Evaluate the model on German examples ...
 ```
 
-## XMODConfig
+## XmodConfig
 
-[[autodoc]] XMODConfig
+[[autodoc]] XmodConfig
 
-## XMODModel
+## XmodModel
 
-[[autodoc]] XMODModel
+[[autodoc]] XmodModel
     - forward
 
-## XMODForCausalLM
+## XmodForCausalLM
 
-[[autodoc]] XMODForCausalLM
+[[autodoc]] XmodForCausalLM
     - forward
 
-## XMODForMaskedLM
+## XmodForMaskedLM
 
-[[autodoc]] XMODForMaskedLM
+[[autodoc]] XmodForMaskedLM
     - forward
 
-## XMODForSequenceClassification
+## XmodForSequenceClassification
 
-[[autodoc]] XMODForSequenceClassification
+[[autodoc]] XmodForSequenceClassification
     - forward
 
-## XMODForMultipleChoice
+## XmodForMultipleChoice
 
-[[autodoc]] XMODForMultipleChoice
+[[autodoc]] XmodForMultipleChoice
     - forward
 
-## XMODForTokenClassification
+## XmodForTokenClassification
 
-[[autodoc]] XMODForTokenClassification
+[[autodoc]] XmodForTokenClassification
     - forward
 
-## XMODForQuestionAnswering
+## XmodForQuestionAnswering
 
-[[autodoc]] XMODForQuestionAnswering
+[[autodoc]] XmodForQuestionAnswering
     - forward

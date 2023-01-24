@@ -24,8 +24,8 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_xmod": [
         "XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "XMODConfig",
-        "XMODOnnxConfig",
+        "XmodConfig",
+        "XmodOnnxConfig",
     ],
 }
 
@@ -37,18 +37,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_xmod"] = [
         "XMOD_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "XMODForCausalLM",
-        "XMODForMaskedLM",
-        "XMODForMultipleChoice",
-        "XMODForQuestionAnswering",
-        "XMODForSequenceClassification",
-        "XMODForTokenClassification",
-        "XMODModel",
-        "XMODPreTrainedModel",
+        "XmodForCausalLM",
+        "XmodForMaskedLM",
+        "XmodForMultipleChoice",
+        "XmodForQuestionAnswering",
+        "XmodForSequenceClassification",
+        "XmodForTokenClassification",
+        "XmodModel",
+        "XmodPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XMODConfig, XMODOnnxConfig
+    from .configuration_xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XmodConfig, XmodOnnxConfig
 
     try:
         if not is_torch_available():
@@ -58,14 +58,14 @@ if TYPE_CHECKING:
     else:
         from .modeling_xmod import (
             XMOD_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XMODForCausalLM,
-            XMODForMaskedLM,
-            XMODForMultipleChoice,
-            XMODForQuestionAnswering,
-            XMODForSequenceClassification,
-            XMODForTokenClassification,
-            XMODModel,
-            XMODPreTrainedModel,
+            XmodForCausalLM,
+            XmodForMaskedLM,
+            XmodForMultipleChoice,
+            XmodForQuestionAnswering,
+            XmodForSequenceClassification,
+            XmodForTokenClassification,
+            XmodModel,
+            XmodPreTrainedModel,
         )
 
 else:

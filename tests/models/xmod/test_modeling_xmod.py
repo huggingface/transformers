@@ -26,19 +26,19 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        XMODConfig,
-        XMODForCausalLM,
-        XMODForMaskedLM,
-        XMODForMultipleChoice,
-        XMODForQuestionAnswering,
-        XMODForSequenceClassification,
-        XMODForTokenClassification,
-        XMODModel,
+        XmodConfig,
+        XmodForCausalLM,
+        XmodForMaskedLM,
+        XmodForMultipleChoice,
+        XmodForQuestionAnswering,
+        XmodForSequenceClassification,
+        XmodForTokenClassification,
+        XmodModel,
     )
-    from transformers.models.xmod.modeling_xmod import XMODEmbeddings, create_position_ids_from_input_ids
+    from transformers.models.xmod.modeling_xmod import XmodEmbeddings, create_position_ids_from_input_ids
 
 
-class XMODModelTester:
+class XmodModelTester:
     def __init__(
         self,
         parent,
@@ -111,7 +111,7 @@ class XMODModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return XMODConfig(
+        return XmodConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -156,7 +156,7 @@ class XMODModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = XMODModel(config=config)
+        model = XmodModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -179,7 +179,7 @@ class XMODModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = XMODModel(config)
+        model = XmodModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -211,7 +211,7 @@ class XMODModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = XMODForCausalLM(config=config)
+        model = XmodForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -231,7 +231,7 @@ class XMODModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = XMODForCausalLM(config=config).to(torch_device).eval()
+        model = XmodForCausalLM(config=config).to(torch_device).eval()
 
         # make sure that ids don't start with pad token
         mask = input_ids.ne(config.pad_token_id).long()
@@ -288,7 +288,7 @@ class XMODModelTester:
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = XMODForMaskedLM(config=config)
+        model = XmodForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -298,7 +298,7 @@ class XMODModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = XMODForTokenClassification(config=config)
+        model = XmodForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -308,7 +308,7 @@ class XMODModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
-        model = XMODForMultipleChoice(config=config)
+        model = XmodForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -325,7 +325,7 @@ class XMODModelTester:
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = XMODForQuestionAnswering(config=config)
+        model = XmodForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -354,26 +354,26 @@ class XMODModelTester:
 
 
 @require_torch
-class XMODModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            XMODForCausalLM,
-            XMODForMaskedLM,
-            XMODModel,
-            XMODForSequenceClassification,
-            XMODForTokenClassification,
-            XMODForMultipleChoice,
-            XMODForQuestionAnswering,
+            XmodForCausalLM,
+            XmodForMaskedLM,
+            XmodModel,
+            XmodForSequenceClassification,
+            XmodForTokenClassification,
+            XmodForMultipleChoice,
+            XmodForQuestionAnswering,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (XMODForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (XmodForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = XMODModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XMODConfig, hidden_size=37)
+        self.model_tester = XmodModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=XmodConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -454,10 +454,10 @@ class XMODModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
-        first available non-padding position index is XMODEmbeddings.padding_idx + 1
+        first available non-padding position index is XmodEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        model = XMODEmbeddings(config=config)
+        model = XmodEmbeddings(config=config)
 
         input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
         expected_positions = torch.as_tensor(
@@ -473,10 +473,10 @@ class XMODModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
-        first available non-padding position index is XMODEmbeddings.padding_idx + 1
+        first available non-padding position index is XmodEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        embeddings = XMODEmbeddings(config=config)
+        embeddings = XmodEmbeddings(config=config)
 
         inputs_embeds = torch.empty(2, 4, 30)
         expected_single_positions = [
@@ -492,7 +492,7 @@ class XMODModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     def test_set_default_language(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
-        model = XMODForMaskedLM(config=config)
+        model = XmodForMaskedLM(config=config)
         model.set_default_language("en_XX")
         self.assertEqual(model.config.default_language, "en_XX")
         with self.assertRaises(ValueError):
@@ -500,7 +500,7 @@ class XMODModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     def test_freeze_embeddings_and_language_adapters(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
-        model = XMODForMaskedLM(config=config)
+        model = XmodForMaskedLM(config=config)
         num_trainable_params_before = sum(p.numel() for p in model.parameters() if p.requires_grad)
         model.freeze_embeddings_and_language_adapters()
         num_trainable_params_after = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -510,10 +510,10 @@ class XMODModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 @require_torch
-class XMODModelIntegrationTest(unittest.TestCase):
+class XmodModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xmod_base(self):
-        model = XMODModel.from_pretrained("jvamvas/xmod-base")
+        model = XmodModel.from_pretrained("jvamvas/xmod-base")
 
         # language en_XX
         model.set_default_language("en_XX")
@@ -546,7 +546,7 @@ class XMODModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_xmod_large_prenorm(self):
-        model = XMODModel.from_pretrained("jvamvas/xmod-large-prenorm")
+        model = XmodModel.from_pretrained("jvamvas/xmod-large-prenorm")
 
         # language en_XX
         model.set_default_language("en_XX")
@@ -582,7 +582,7 @@ class XMODModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_multilingual_batch(self):
-        model = XMODModel.from_pretrained("jvamvas/xmod-base")
+        model = XmodModel.from_pretrained("jvamvas/xmod-base")
         # fmt: off
         input_ids = torch.tensor([
             [0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2],

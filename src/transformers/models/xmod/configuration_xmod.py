@@ -37,9 +37,9 @@ XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class XMODConfig(PretrainedConfig):
+class XmodConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XMODModel`]. It is used to instantiate an X-MOD
+    This is the configuration class to store the configuration of a [`XmodModel`]. It is used to instantiate an X-MOD
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the [xmod-base](https://huggingface.co/jvamvas/xmod-base)
     architecture.
@@ -51,7 +51,7 @@ class XMODConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the X-MOD model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`XMODModel`].
+            `inputs_ids` passed when calling [`XmodModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -71,7 +71,7 @@ class XMODConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`XMODModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`XmodModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -108,13 +108,13 @@ class XMODConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import XMODConfig, XMODModel
+    >>> from transformers import XmodConfig, XmodModel
 
     >>> # Initializing an X-MOD jvamvas/xmod-base style configuration
-    >>> configuration = XMODConfig()
+    >>> configuration = XmodConfig()
 
     >>> # Initializing a model (with random weights) from the jvamvas/xmod-base style configuration
-    >>> model = XMODModel(configuration)
+    >>> model = XmodModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -176,8 +176,8 @@ class XMODConfig(PretrainedConfig):
         self.default_language = default_language
 
 
-# Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->XMOD
-class XMODOnnxConfig(OnnxConfig):
+# Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->Xmod
+class XmodOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         if self.task == "multiple-choice":

@@ -42,13 +42,13 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_xmod import XMODConfig
+from .configuration_xmod import XmodConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "jvamvas/xmod-base"
-_CONFIG_FOR_DOC = "XMODConfig"
+_CONFIG_FOR_DOC = "XmodConfig"
 
 XMOD_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "jvamvas/xmod-base",
@@ -64,8 +64,8 @@ XMOD_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->XMOD
-class XMODEmbeddings(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Xmod
+class XmodEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -152,8 +152,8 @@ class XMODEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->XMOD
-class XMODSelfAttention(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->Xmod
+class XmodSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -260,7 +260,7 @@ class XMODSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in XMODModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in XmodModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -287,7 +287,7 @@ class XMODSelfAttention(nn.Module):
         return outputs
 
 
-class XMODSelfOutput(nn.Module):
+class XmodSelfOutput(nn.Module):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput.__init__
     def __init__(self, config):
         super().__init__()
@@ -302,11 +302,11 @@ class XMODSelfOutput(nn.Module):
         return hidden_states
 
 
-class XMODAttention(nn.Module):
+class XmodAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = XMODSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = XMODSelfOutput(config)
+        self.self = XmodSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = XmodSelfOutput(config)
         self.pruned_heads = set()
         self.pre_norm = config.pre_norm
 
@@ -359,7 +359,7 @@ class XMODAttention(nn.Module):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate
-class XMODIntermediate(nn.Module):
+class XmodIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -374,7 +374,7 @@ class XMODIntermediate(nn.Module):
         return hidden_states
 
 
-class XMODAdapter(nn.Module):
+class XmodAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.bottleneck_size = config.hidden_size // config.adapter_reduction_factor
@@ -392,7 +392,7 @@ class XMODAdapter(nn.Module):
         return hidden_states
 
 
-class XMODOutput(nn.Module):
+class XmodOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -406,7 +406,7 @@ class XMODOutput(nn.Module):
         self.adapter_reuse_layer_norm = config.adapter_reuse_layer_norm
         self.adapter_modules = nn.ModuleDict(dict())
         for language in config.languages:
-            self.adapter_modules[str(language)] = XMODAdapter(config)
+            self.adapter_modules[str(language)] = XmodAdapter(config)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor, lang_ids: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -442,20 +442,20 @@ class XMODOutput(nn.Module):
         return hidden_states
 
 
-class XMODLayer(nn.Module):
+class XmodLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = XMODAttention(config)
+        self.attention = XmodAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = XMODAttention(config, position_embedding_type="absolute")
-        self.intermediate = XMODIntermediate(config)
-        self.output = XMODOutput(config)
+            self.crossattention = XmodAttention(config, position_embedding_type="absolute")
+        self.intermediate = XmodIntermediate(config)
+        self.output = XmodOutput(config)
         self.pre_norm = config.pre_norm
 
     def forward(
@@ -537,11 +537,11 @@ class XMODLayer(nn.Module):
         return self.intermediate(attention_output)
 
 
-class XMODEncoder(nn.Module):
+class XmodEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([XMODLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([XmodLayer(config) for _ in range(config.num_hidden_layers)])
         self.is_pre_norm = config.pre_norm
         if self.is_pre_norm:
             self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -644,7 +644,7 @@ class XMODEncoder(nn.Module):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaPooler
-class XMODPooler(nn.Module):
+class XmodPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -659,13 +659,13 @@ class XMODPooler(nn.Module):
         return pooled_output
 
 
-class XMODPreTrainedModel(PreTrainedModel):
+class XmodPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = XMODConfig
+    config_class = XmodConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
 
@@ -686,9 +686,9 @@ class XMODPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel._set_gradient_checkpointing with Roberta->XMOD
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel._set_gradient_checkpointing with Roberta->Xmod
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, XMODEncoder):
+        if isinstance(module, XmodEncoder):
             module.gradient_checkpointing = value
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel.update_keys_to_ignore
@@ -742,7 +742,7 @@ XMOD_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`XMODConfig`]): Model configuration class with all the parameters of the
+        config ([`XmodConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -804,7 +804,7 @@ XMOD_INPUTS_DOCSTRING = r"""
     "The bare X-MOD Model transformer outputting raw hidden-states without any specific head on top.",
     XMOD_START_DOCSTRING,
 )
-class XMODModel(XMODPreTrainedModel):
+class XmodModel(XmodPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -822,15 +822,15 @@ class XMODModel(XMODPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->XMOD
+    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Xmod
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = XMODEmbeddings(config)
-        self.encoder = XMODEncoder(config)
+        self.embeddings = XmodEmbeddings(config)
+        self.encoder = XmodEncoder(config)
 
-        self.pooler = XMODPooler(config) if add_pooling_layer else None
+        self.pooler = XmodPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -924,7 +924,7 @@ class XMODModel(XMODPreTrainedModel):
 
         if lang_ids is None:
             if self.config.default_language is None:
-                raise ValueError("Input language unknown. Please call `XMODPreTrainedModel.set_default_language()`")
+                raise ValueError("Input language unknown. Please call `XmodPreTrainedModel.set_default_language()`")
             adapter_languages = list(self.encoder.layer[0].output.adapter_modules.keys())
             default_lang_id = adapter_languages.index(self.config.default_language)
             lang_ids = default_lang_id * torch.ones(batch_size, device=device)
@@ -1002,20 +1002,20 @@ class XMODModel(XMODPreTrainedModel):
     "X-MOD Model with a `language modeling` head on top for CLM fine-tuning.",
     XMOD_START_DOCSTRING,
 )
-class XMODForCausalLM(XMODPreTrainedModel):
+class XmodForCausalLM(XmodPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.__init__ with Roberta->XMOD
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `XMODLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `XmodLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.roberta = XMODModel(config, add_pooling_layer=False)
-        self.lm_head = XMODLMHead(config)
+        self.roberta = XmodModel(config, add_pooling_layer=False)
+        self.lm_head = XmodLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -1081,13 +1081,13 @@ class XMODForCausalLM(XMODPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, XMODForCausalLM, AutoConfig
+        >>> from transformers import AutoTokenizer, XmodForCausalLM, AutoConfig
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("jvamvas/xmod-base")
         >>> config = AutoConfig.from_pretrained("jvamvas/xmod-base")
         >>> config.is_decoder = True
-        >>> model = XMODForCausalLM.from_pretrained("jvamvas/xmod-base", config=config)
+        >>> model = XmodForCausalLM.from_pretrained("jvamvas/xmod-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1164,23 +1164,23 @@ class XMODForCausalLM(XMODPreTrainedModel):
     """X-MOD Model with a `language modeling` head on top.""",
     XMOD_START_DOCSTRING,
 )
-class XMODForMaskedLM(XMODPreTrainedModel):
+class XmodForMaskedLM(XmodPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with Roberta->XMOD
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `XMODForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `XmodForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.roberta = XMODModel(config, add_pooling_layer=False)
-        self.lm_head = XMODLMHead(config)
+        self.roberta = XmodModel(config, add_pooling_layer=False)
+        self.lm_head = XmodLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -1266,7 +1266,7 @@ class XMODForMaskedLM(XMODPreTrainedModel):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
-class XMODLMHead(nn.Module):
+class XmodLMHead(nn.Module):
     """Roberta Head for masked language modeling."""
 
     def __init__(self, config):
@@ -1304,17 +1304,17 @@ class XMODLMHead(nn.Module):
     """,
     XMOD_START_DOCSTRING,
 )
-class XMODForSequenceClassification(XMODPreTrainedModel):
+class XmodForSequenceClassification(XmodPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->XMOD
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
 
-        self.roberta = XMODModel(config, add_pooling_layer=False)
-        self.classifier = XMODClassificationHead(config)
+        self.roberta = XmodModel(config, add_pooling_layer=False)
+        self.classifier = XmodClassificationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1406,14 +1406,14 @@ class XMODForSequenceClassification(XMODPreTrainedModel):
     """,
     XMOD_START_DOCSTRING,
 )
-class XMODForMultipleChoice(XMODPreTrainedModel):
+class XmodForMultipleChoice(XmodPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice.__init__ with Roberta->XMOD
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
 
-        self.roberta = XMODModel(config)
+        self.roberta = XmodModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1502,16 +1502,16 @@ class XMODForMultipleChoice(XMODPreTrainedModel):
     """,
     XMOD_START_DOCSTRING,
 )
-class XMODForTokenClassification(XMODPreTrainedModel):
+class XmodForTokenClassification(XmodPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->XMOD
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = XMODModel(config, add_pooling_layer=False)
+        self.roberta = XmodModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1585,7 +1585,7 @@ class XMODForTokenClassification(XMODPreTrainedModel):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead
-class XMODClassificationHead(nn.Module):
+class XmodClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
@@ -1614,16 +1614,16 @@ class XMODClassificationHead(nn.Module):
     """,
     XMOD_START_DOCSTRING,
 )
-class XMODForQuestionAnswering(XMODPreTrainedModel):
+class XmodForQuestionAnswering(XmodPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->XMOD
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = XMODModel(config, add_pooling_layer=False)
+        self.roberta = XmodModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing

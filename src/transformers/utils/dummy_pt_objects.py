@@ -6940,56 +6940,56 @@ def load_tf_weights_in_xlnet(*args, **kwargs):
 XMOD_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class XMODForCausalLM(metaclass=DummyObject):
+class XmodForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XMODForMaskedLM(metaclass=DummyObject):
+class XmodForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XMODForMultipleChoice(metaclass=DummyObject):
+class XmodForMultipleChoice(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XMODForQuestionAnswering(metaclass=DummyObject):
+class XmodForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XMODForSequenceClassification(metaclass=DummyObject):
+class XmodForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XMODForTokenClassification(metaclass=DummyObject):
+class XmodForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XMODModel(metaclass=DummyObject):
+class XmodModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XMODPreTrainedModel(metaclass=DummyObject):
+class XmodPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

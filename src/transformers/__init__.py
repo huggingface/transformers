@@ -506,7 +506,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlm_roberta_xl": ["XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaXLConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
-    "models.xmod": ["XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP", "XMODConfig"],
+    "models.xmod": ["XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP", "XmodConfig"],
     "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "onnx": [],
@@ -2569,14 +2569,14 @@ else:
     _import_structure["models.xmod"].extend(
         [
             "XMOD_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "XMODForCausalLM",
-            "XMODForMaskedLM",
-            "XMODForMultipleChoice",
-            "XMODForQuestionAnswering",
-            "XMODForSequenceClassification",
-            "XMODForTokenClassification",
-            "XMODModel",
-            "XMODPreTrainedModel",
+            "XmodForCausalLM",
+            "XmodForMaskedLM",
+            "XmodForMultipleChoice",
+            "XmodForQuestionAnswering",
+            "XmodForSequenceClassification",
+            "XmodForTokenClassification",
+            "XmodModel",
+            "XmodPreTrainedModel",
         ]
     )
     _import_structure["models.yolos"].extend(
@@ -3973,7 +3973,7 @@ if TYPE_CHECKING:
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
     from .models.xlm_roberta_xl import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaXLConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
-    from .models.xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XMODConfig
+    from .models.xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XmodConfig
     from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
@@ -5666,14 +5666,14 @@ if TYPE_CHECKING:
         )
         from .models.xmod import (
             XMOD_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XMODForCausalLM,
-            XMODForMaskedLM,
-            XMODForMultipleChoice,
-            XMODForQuestionAnswering,
-            XMODForSequenceClassification,
-            XMODForTokenClassification,
-            XMODModel,
-            XMODPreTrainedModel,
+            XmodForCausalLM,
+            XmodForMaskedLM,
+            XmodForMultipleChoice,
+            XmodForQuestionAnswering,
+            XmodForSequenceClassification,
+            XmodForTokenClassification,
+            XmodModel,
+            XmodPreTrainedModel,
         )
         from .models.yolos import (
             YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST,

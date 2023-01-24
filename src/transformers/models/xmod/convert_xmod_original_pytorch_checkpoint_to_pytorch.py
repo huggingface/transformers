@@ -5,10 +5,10 @@ from pathlib import Path
 
 import fairseq
 import torch
-from fairseq.models.xmod import XMODModel as FairseqXMODModel
+from fairseq.models.xmod import XMODModel as FairseqXmodModel
 from packaging import version
 
-from transformers import XMODConfig, XMODForMaskedLM, XMODForSequenceClassification
+from transformers import XmodConfig, XmodForMaskedLM, XmodForSequenceClassification
 from transformers.utils import logging
 
 
@@ -28,7 +28,7 @@ def convert_xmod_checkpoint_to_pytorch(
     xmod_checkpoint_path: str, pytorch_dump_folder_path: str, classification_head: bool
 ):
     data_dir = Path("data_bin")
-    xmod = FairseqXMODModel.from_pretrained(
+    xmod = FairseqXmodModel.from_pretrained(
         model_name_or_path=str(Path(xmod_checkpoint_path).parent),
         checkpoint_file=Path(xmod_checkpoint_path).name,
         _name="xmod_base",
@@ -43,7 +43,7 @@ def convert_xmod_checkpoint_to_pytorch(
     print(xmod)
 
     xmod_sent_encoder = xmod.model.encoder.sentence_encoder
-    config = XMODConfig(
+    config = XmodConfig(
         vocab_size=xmod_sent_encoder.embed_tokens.num_embeddings,
         hidden_size=xmod.cfg.model.encoder_embed_dim,
         num_hidden_layers=xmod.cfg.model.encoder_layers,
@@ -64,7 +64,7 @@ def convert_xmod_checkpoint_to_pytorch(
 
     print("Our X-MOD config:", config)
 
-    model = XMODForSequenceClassification(config) if classification_head else XMODForMaskedLM(config)
+    model = XmodForSequenceClassification(config) if classification_head else XmodForMaskedLM(config)
     model.eval()
 
     # Now let's copy all the weights.

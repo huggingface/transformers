@@ -192,7 +192,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaConfig"),
         ("xlm-roberta-xl", "XLMRobertaXLConfig"),
         ("xlnet", "XLNetConfig"),
-        ("xmod", "XMODConfig"),
+        ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
     ]
