@@ -940,14 +940,20 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.eos_token_id = generate_config.eos_token_id
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
-        self.begin_index = len(generate_config.forced_decoder_ids) + 1  # as we need the next token
+
+        self.begin_index = len(generate_config.forced_decoder_ids) + 1
+        if generate_config.forced_decoder_ids[-1][1] == self.no_timestamps_token_id:
+            self.begin_index -= 1
         if generate_config.is_multilingual:
-            self.begin_index += 2  # for the task and language tokens
+            self.begin_index += 1
         self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
 
     def __call__(self, input_ids, scores):
         # suppress <|notimestamps|> which is handled by without_timestamps
         scores[:, self.no_timestamps_token_id] = -float("inf")
+        if input_ids.shape[1] == self.begin_index:
+            scores[:, self.timestamp_begin] = 0
+
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):
             seq = [t for t in input_ids[k, self.begin_index :].tolist()]
