@@ -1247,7 +1247,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         is_multilingual=None,
         **kwargs
     ):
-        # priority: `generation_config` argument > `model.generation_config` (the default generation config)
+        """
+        Parameters:
+            return_timestamps (`bool`, *optional*):
+                Whether to return timestamps for each token
+            task (`bool`, *optional*):
+                Task to use for generation, either "translate" or "transcribe"
+            language (`bool`, *optional*):
+                language token to use for generation
+            is_multilingual (`bool`, *optional*):
+                whether or not the model is multilingual
+        """
         if generation_config is None:
             generation_config = self.generation_config
 
@@ -1260,15 +1270,18 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if is_multilingual is not None:
             generation_config.is_multilingual = is_multilingual
 
+        if language is not None:
+            generation_config.language = language
+
         forced_decoder_ids = []
 
         if generation_config.is_multilingual:
-            if language is not None:
+            if hasattr(generation_config, "language"):
                 forced_decoder_ids.append((1, generation_config.lang_to_id[generation_config.language]))
             else:
                 forced_decoder_ids.append((1, None))
 
-            if task is not None:
+            if hasattr(generation_config, "task"):
                 forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
             else:
                 forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
@@ -1276,8 +1289,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if generation_config.return_timestamps or return_timestamps:
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
         else:
-            idx = forced_decoder_ids[-1][0] if forced_decoder_ids else 1
-            forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
+            if forced_decoder_ids and forced_decoder_ids[-1][0] != generation_config.no_timestamps_token_id:
+                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
+                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
 
         if len(forced_decoder_ids) > 0:
             generation_config.forced_decoder_ids = forced_decoder_ids
