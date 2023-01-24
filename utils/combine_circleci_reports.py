@@ -1,11 +1,16 @@
 import os
 
+
+target_files = ["failures_line.txt", "failures_long.txt", "failures_short.txt", "stats.txt", "summary_short.txt"]
+
 report_directories = os.listdir("renamed_reports")
 
 for test_job in report_directories:
     assert test_job.startswith("tests_") or test_job == "examples"
     report_files = os.listdir(os.path.join("renamed_reports", test_job))
-    for prefix in ["summary_short_"]:
+
+    for target in target_files:
+        prefix = target[:-len(".txt")] + "_"
         reports = []
         for fn in report_files:
             if fn.startswith(prefix):

@@ -174,36 +174,18 @@ class CircleCIJob:
             steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
             steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
 
-            steps.append({"run": {"name": "echo node index", "command": "echo $CIRCLE_NODE_INDEX"}})
+            # rename files to include executor node index
+            rename_command = f"mkdir -p renamed_reports/{self.job_name}"
+            for file_name in [
+                "failures_line.txt", "failures_long.txt", "failures_short.txt", "stats.txt", "summary_short.txt"
+            ]:
+                rename_command += f" && cp reports/{self.job_name}/{file_name} renamed_reports/{self.job_name}/{file_name}_$CIRCLE_NODE_INDEX.txt | true"
+            steps.append({"run": {"name": "rename output files", "command": rename_command}})
 
-            # rename files
-            steps.append(
-                {
-                    "run": {
-                        "name": "rename output files",
-                        "command": f"mkdir -p renamed_reports/{self.job_name} && cp reports/{self.job_name}/summary_short.txt renamed_reports/{self.job_name}/summary_short_$CIRCLE_NODE_INDEX.txt"  # noqa
-                    }
-                }
-            )
-
-            # (show file system structure)
-            steps.append(
-                {
-                    "run": {
-                        "name": "show file structure",
-                        "command": f"ls -l renamed_reports && ls -l renamed_reports/{self.job_name}"
-                    }
-                }
-            )
-
-            # (upload renamed files)
+            # upload renamed files
             steps.append({"store_artifacts": {"path": "~/transformers/renamed_reports"}})
-
-            steps.append(
-                {
-                    "persist_to_workspace": {"root": "~/transformers", "paths": "renamed_reports"}
-                }
-            )
+            # persist the report file, so we can combien them later
+            steps.append({"persist_to_workspace": {"root": "~/transformers", "paths": "renamed_reports"}})
         else:
             steps.append({"attach_workspace": {"at": "~/transformers"}})
             # (show file system structure)
