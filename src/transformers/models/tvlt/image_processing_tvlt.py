@@ -381,8 +381,8 @@ class TvltImageProcessor(BaseImageProcessor):
             - **pixel_masks_mixed** -- Pixel masks with both postive or negative to be fed to a model, of shape
               (batch_size, num_pixel_patches).
 
-            - **pixel_mask_position_permutation** -- Pixel MAE masks position permutation to be fed to a model, of shape
-              (batch_size, num_pixel_patches).
+            - **pixel_mask_position_permutation** -- Pixel MAE masks position permutation to be fed to a model, of
+              shape (batch_size, num_pixel_patches).
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample

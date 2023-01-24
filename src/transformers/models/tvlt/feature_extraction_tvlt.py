@@ -277,8 +277,8 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
             - **audio_masks** -- Audio masks to be fed to a model, of shape (batch_size, num_audio_patches).
 
-            - **audio_mask_position_permutation** -- Audio MAE masks position permutation to be fed to a model, of shape
-              (batch_size, num_audio_patches).
+            - **audio_mask_position_permutation** -- Audio MAE masks position permutation to be fed to a model, of
+              shape (batch_size, num_audio_patches).
         """
 
         if sampling_rate is not None:
