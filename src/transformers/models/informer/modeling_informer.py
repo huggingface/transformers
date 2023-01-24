@@ -43,7 +43,6 @@ from typing import List, Optional
 import math
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)
@@ -253,28 +252,14 @@ class TimeFeatureEmbedding(nn.Module):
 
 
 class DataEmbedding(nn.Module):
-    # def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
-    #     super(DataEmbedding, self).__init__()
-    #
-    #     self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
-    #     self.position_embedding = PositionalEmbedding(d_model=d_model)
-    #     self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type,
-    #                                                 freq=freq) if embed_type != 'timeF' else TimeFeatureEmbedding(
-    #         d_model=d_model, embed_type=embed_type, freq=freq)
-    #
-    #     self.dropout = nn.Dropout(p=dropout)
-
-    def __init__(self, config: InformerConfig):
+    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding, self).__init__()
 
-        self.value_embedding = TokenEmbedding(c_in=c_in, d_model=config.d_model)
-        self.position_embedding = PositionalEmbedding(d_model=config.d_model)
-        self.temporal_embedding = TemporalEmbedding(d_model=config.d_model,
-                                                    embed_type=config.time_features_embedding_type,
-                                                    freq=freq) if config.time_features_embedding_type != 'timeF' \
-            else TimeFeatureEmbedding(d_model=config.d_model, embed_type=config.embed_type, freq=freq)
+        self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
+        self.position_embedding = PositionalEmbedding(d_model=d_model)
+        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq) if embed_type!='timeF' else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
 
-        self.dropout = nn.Dropout(p=config.dropout)
+        self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
         x = self.value_embedding(x) + self.position_embedding(x) + self.temporal_embedding(x_mark)
@@ -713,14 +698,18 @@ class InformerModel(InformerPreTrainedModel):
         else:
             self.scaler = NOPScaler(dim=1, keepdim=True)
 
-        self.embedder = FeatureEmbedder(
-            cardinalities=config.cardinality,
-            embedding_dims=config.embedding_dimension,
-        )
+        # Eli: it's not clear if the model will use the embedding of the paper,
+        # or the embedding from glounTS. Let's wait for HF review :)
+
+        # self.embedder = FeatureEmbedder(
+        #     cardinalities=config.cardinality,
+        #     embedding_dims=config.embedding_dimension,
+        # )
 
         # Informer time features embeddings
-        self.enc_embedding = DataEmbedding(config)
-        self.dec_embedding = DataEmbedding(config)
+        # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/model.py#L23
+        self.enc_embedding = DataEmbedding(config.enc_in, config.d_model, config.embedding_type, config.freq, config.dropout)
+        self.dec_embedding = DataEmbedding(config.enc_in, config.d_model, config.embedding_type, config.freq, config.dropout)
 
         # Informer encoder-decoder and mask initializer
         self.encoder = InformerEncoder(config)

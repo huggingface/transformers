@@ -55,8 +55,12 @@ class InformerConfig(PretrainedConfig):
             factor: int = 5,
             distil: bool = True,
             num_parallel_samples: int = 100,
-            time_features_embedding_type: str = "timeF",  # This can be set to timeF, fixed, learned
             init_std: float = 0.02,
+            embedding_type: str = "timeF",  # This can be set to timeF, fixed, learned
+            d_model: int = 512,  # because of the informer embedding
+            enc_in: int = 7,
+            dec_in: int = 7,
+            freq: str = "h",
             use_cache=True,
             **kwargs
     ):
@@ -98,7 +102,8 @@ class InformerConfig(PretrainedConfig):
         # self.history_length = context_length + max(self.lags_seq) # Eli: I think can be removed
 
         # Transformer architecture configuration
-        self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
+        # self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
+        self.d_model = d_model
         self.nhead = nhead
         self.num_encoder_layers = num_encoder_layers  # encoder_layers
         self.num_decoder_layers = num_decoder_layers  # decoder_layers
@@ -110,7 +115,10 @@ class InformerConfig(PretrainedConfig):
         self.distil = distil
         self.init_std = init_std
         self.use_cache = use_cache
-        self.time_features_embedding_type = time_features_embedding_type
+        self.embedding_type = embedding_type
+        self.enc_in = enc_in
+        self.dec_in = dec_in
+        self.freq = freq
 
         # self.param_proj = distr_output.get_args_proj(d_model)
 
