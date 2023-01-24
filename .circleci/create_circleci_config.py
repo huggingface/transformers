@@ -211,10 +211,30 @@ class CircleCIJob:
                 {
                     "run": {
                         "name": "show file structure",
-                        f"command": "ls -l renamed_reports && ls -l renamed_reports/{self.job_name}"
+                        f"command": f"ls -l renamed_reports"
                     }
                 }
             )
+            # combine failure report
+            steps.append(
+                {
+                    "run": {
+                        "name": "combine failure report files",
+                        "command": "python utils/combine_circleci_reports.py"
+                    }
+                }
+            )
+            # (show file system structure)
+            steps.append(
+                {
+                    "run": {
+                        "name": "show file structure",
+                        "command": f"ls -l combined_reports && ls -l combined_reports/tests_torch"
+                    }
+                }
+            )
+            # (upload combined reports)
+            steps.append({"store_artifacts": {"path": "~/transformers/combined_reports"}})
 
         job["steps"] = steps
         return job
