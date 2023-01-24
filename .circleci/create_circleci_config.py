@@ -167,39 +167,39 @@ class CircleCIJob:
         test_command += " | tee tests_output.txt"
         if self.job_name != "tests_combine_test_reports":
             steps.append({"run": {"name": "Run tests", "command": test_command}})
-        steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
-        steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
+            steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
+            steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
 
-        steps.append({"run": {"name": "echo node index", "command": "echo $CIRCLE_NODE_INDEX"}})
+            steps.append({"run": {"name": "echo node index", "command": "echo $CIRCLE_NODE_INDEX"}})
 
-        # rename files
-        steps.append(
-            {
-                "run": {
-                    "name": "rename output files",
-                    "command": "mkdir -p renamed_reports/tests_torch && cp reports/tests_torch/summary_short.txt renamed_reports/tests_torch/summary_short_$CIRCLE_NODE_INDEX.txt"  # noqa
+            # rename files
+            steps.append(
+                {
+                    "run": {
+                        "name": "rename output files",
+                        "command": "mkdir -p renamed_reports/tests_torch && cp reports/tests_torch/summary_short.txt renamed_reports/tests_torch/summary_short_$CIRCLE_NODE_INDEX.txt"  # noqa
+                    }
                 }
-            }
-        )
+            )
 
-        # (show file system structure)
-        steps.append(
-            {
-                "run": {
-                    "name": "show file structure",
-                    "command": "ls -l renamed_reports/tests_torch"
+            # (show file system structure)
+            steps.append(
+                {
+                    "run": {
+                        "name": "show file structure",
+                        "command": "ls -l renamed_reports/tests_torch"
+                    }
                 }
-            }
-        )
+            )
 
-        # (upload renamed files)
-        steps.append({"store_artifacts": {"path": "~/transformers/renamed_reports"}})
+            # (upload renamed files)
+            steps.append({"store_artifacts": {"path": "~/transformers/renamed_reports"}})
 
-        steps.append(
-            {
-                "persist_to_workspace": {"root": self.working_directory, "paths": "renamed_reports/tests_torch"}
-            }
-        )
+            steps.append(
+                {
+                    "persist_to_workspace": {"root": self.working_directory, "paths": "renamed_reports/tests_torch"}
+                }
+            )
 
         job["steps"] = steps
         return job
