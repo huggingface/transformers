@@ -500,7 +500,7 @@ CLIPSEG_TEXT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -530,7 +530,7 @@ CLIPSEG_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -547,7 +547,7 @@ CLIPSEG_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -565,7 +565,7 @@ CLIPSEG_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -808,9 +808,9 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, CLIPSegTextModel
+        >>> from transformers import AutoTokenizer, CLIPSegTextModel
 
-        >>> tokenizer = CLIPTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> tokenizer = AutoTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
         >>> model = CLIPSegTextModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -919,9 +919,9 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPSegProcessor, CLIPSegVisionModel
+        >>> from transformers import AutoProcessor, CLIPSegVisionModel
 
-        >>> processor = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
         >>> model = CLIPSegVisionModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -995,9 +995,9 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, CLIPSegModel
+        >>> from transformers import AutoTokenizer, CLIPSegModel
 
-        >>> tokenizer = CLIPTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> tokenizer = AutoTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
         >>> model = CLIPSegModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -1042,9 +1042,9 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPSegProcessor, CLIPSegModel
+        >>> from transformers import AutoProcessor, CLIPSegModel
 
-        >>> processor = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
         >>> model = CLIPSegModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1094,9 +1094,9 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPSegProcessor, CLIPSegModel
+        >>> from transformers import AutoProcessor, CLIPSegModel
 
-        >>> processor = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
         >>> model = CLIPSegModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1401,11 +1401,11 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPSegProcessor, CLIPSegForImageSegmentation
+        >>> from transformers import AutoProcessor, CLIPSegForImageSegmentation
         >>> from PIL import Image
         >>> import requests
 
-        >>> processor = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
         >>> model = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
