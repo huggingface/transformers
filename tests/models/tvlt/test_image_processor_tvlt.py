@@ -24,7 +24,7 @@ import numpy as np
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_video_inputs
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 if is_torch_available():
@@ -34,6 +34,51 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import TvltImageProcessor
+
+
+def prepare_video(feature_extract_tester, width=10, height=10, numpify=False, torchify=False):
+    """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
+
+    video = []
+    for i in range(feature_extract_tester.num_frames):
+        video.append(np.random.randint(255, size=(feature_extract_tester.num_channels, width, height), dtype=np.uint8))
+
+    if not numpify and not torchify:
+        # PIL expects the channel dimension as last dimension
+        video = [Image.fromarray(np.moveaxis(frame, 0, -1)) for frame in video]
+
+    if torchify:
+        video = [torch.from_numpy(frame) for frame in video]
+
+    return video
+
+
+def prepare_video_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
+    """This function prepares a batch of videos: a list of list of PIL images, or a list of list of numpy arrays if
+    one specifies numpify=True, or a list of list of PyTorch tensors if one specifies torchify=True.
+    One can specify whether the videos are of the same resolution or not.
+    """
+
+    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+
+    video_inputs = []
+    for i in range(feature_extract_tester.batch_size):
+        if equal_resolution:
+            width = height = feature_extract_tester.max_resolution
+        else:
+            width, height = np.random.choice(
+                np.arange(feature_extract_tester.min_resolution, feature_extract_tester.max_resolution), 2
+            )
+            video = prepare_video(
+                feature_extract_tester=feature_extract_tester,
+                width=width,
+                height=height,
+                numpify=numpify,
+                torchify=torchify,
+            )
+        video_inputs.append(video)
+
+    return video_inputs
 
 
 class TvltImageProcessorTester(unittest.TestCase):
