@@ -230,22 +230,57 @@ class BridgeTowerTransformer(nn.Module):
         return hidden_states
 
 
+class BridgeTowerVisionEmbeddings(nn.Module):
+    def __init__(self, config: BridgeTowerVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            bias=False,
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches + 1
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+        batch_size = pixel_values.shape[0]
+        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
+
+
 class BridgeTowerVisionTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.conv1 = nn.Conv2d(
-            in_channels=3,
-            out_channels=config.hidden_size,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
-            bias=False,
-        )
-        scale = config.hidden_size**-0.5
-        self.class_embedding = nn.Parameter(scale * torch.randn(config.hidden_size))
-        self.positional_embedding = nn.Parameter(
-            scale * torch.randn((config.image_size // config.patch_size) ** 2 + 1, config.hidden_size)
-        )
+        # self.conv1 = nn.Conv2d(
+        #     in_channels=3,
+        #     out_channels=config.hidden_size,
+        #     kernel_size=config.patch_size,
+        #     stride=config.patch_size,
+        #     bias=False,
+        # )
+        # scale = config.hidden_size**-0.5
+        # self.class_embedding = nn.Parameter(scale * torch.randn(config.hidden_size))
+        # self.positional_embedding = nn.Parameter(
+            # scale * torch.randn((config.image_size // config.patch_size) ** 2 + 1, config.hidden_size)
+        # )
+        self.embeddings = BridgeTowerVisionEmbeddings(config)
         self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.transformer = BridgeTowerTransformer(config)
         self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -255,60 +290,62 @@ class BridgeTowerVisionTransformer(nn.Module):
                 [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
             )
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask):
+    def forward(self, pixel_values: torch.Tensor, attention_mask):
         # shape = [*, hidden_size, grid, grid]
-        visual_output = self.conv1(hidden_state)
-        # shape = [*, hidden_size, grid ** 2]
-        visual_output = visual_output.reshape(visual_output.shape[0], visual_output.shape[1], -1)
-        # shape = [*, grid ** 2, hidden_size]
-        visual_output = visual_output.permute(0, 2, 1)
-        t = self.class_embedding.to(visual_output.dtype) + torch.zeros(
-            visual_output.shape[0], 1, visual_output.shape[-1], dtype=visual_output.dtype, device=visual_output.device
-        )
-        # shape = [*, grid ** 2 + 1, hidden_size]
-        visual_output = torch.cat([t, visual_output], dim=1)
-        visual_output = visual_output + self.positional_embedding.to(visual_output.dtype)
-        visual_output = self.ln_pre(visual_output)
+        # visual_output = self.conv1(hidden_state)
+        # # shape = [*, hidden_size, grid ** 2]
+        # visual_output = visual_output.reshape(visual_output.shape[0], visual_output.shape[1], -1)
+        # # shape = [*, grid ** 2, hidden_size]
+        # visual_output = visual_output.permute(0, 2, 1)
+        # t = self.class_embedding.to(visual_output.dtype) + torch.zeros(
+        #     visual_output.shape[0], 1, visual_output.shape[-1], dtype=visual_output.dtype, device=visual_output.device
+        # )
+        # # shape = [*, grid ** 2 + 1, hidden_size]
+        # visual_output = torch.cat([t, visual_output], dim=1)
+        # visual_output = visual_output + self.positional_embedding.to(visual_output.dtype)
+        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
-        visual_output = visual_output.permute(1, 0, 2)
+        hidden_states = hidden_states.permute(1, 0, 2)
 
-        visual_outputs = self.transformer(visual_output, attention_mask)
+        hidden_states = self.transformer(hidden_states, attention_mask)
         # shape = [num_hidden_layers, hidden_size, *, grid ** 2]
-        visual_outputs = torch.stack(visual_outputs, dim=0)
+        hidden_states = torch.stack(hidden_states, dim=0)
         # shape = [num_hidden_layers, *, hidden_size, grid ** 2]
-        visual_outputs = visual_outputs.permute(0, 2, 1, 3)
+        hidden_states = hidden_states.permute(0, 2, 1, 3)
         if self.share_layernorm:
-            visual_outputs = self.ln_post(visual_outputs)
+            hidden_states = self.ln_post(hidden_states)
         else:
-            visual_outputs_stack = []
-            for visual_output, ln in zip(visual_outputs, self.ln_separate):
-                visual_output = ln(visual_output)
-                visual_outputs_stack.append(visual_output)
+            hidden_states_stack = []
+            for hidden_states, ln in zip(hidden_states, self.ln_separate):
+                hidden_states = ln(hidden_states)
+                hidden_states_stack.append(hidden_states)
             # shape = [num_hidden_layers, *, hidden_size, grid ** 2]
-            visual_outputs = torch.stack(visual_outputs_stack, dim=0)
-        return visual_outputs
+            hidden_states = torch.stack(hidden_states_stack, dim=0)
+        return hidden_states
 
-    def forward_pre(self, hidden_state: torch.Tensor):
-        # shape = [*, hidden_size, grid, grid]
-        visual_outputs_pre = self.conv1(hidden_state)
-        # shape = [*, hidden_size, grid ** 2]
-        visual_outputs_pre = visual_outputs_pre.reshape(visual_outputs_pre.shape[0], visual_outputs_pre.shape[1], -1)
-        # shape = [*, grid ** 2, hidden_size]
-        visual_outputs_pre = visual_outputs_pre.permute(0, 2, 1)
-        embeddings_to = self.class_embedding.to(visual_outputs_pre.dtype) + torch.zeros(
-            visual_outputs_pre.shape[0],
-            1,
-            visual_outputs_pre.shape[-1],
-            dtype=visual_outputs_pre.dtype,
-            device=visual_outputs_pre.device,
-        )
-        # shape = [*, grid ** 2 + 1, hidden_size]
-        visual_outputs_pre = torch.cat([embeddings_to, visual_outputs_pre], dim=1)
-        visual_outputs_pre = visual_outputs_pre + self.positional_embedding.to(visual_outputs_pre.dtype)
-        visual_outputs_pre = self.ln_pre(visual_outputs_pre)
+    def forward_pre(self, pixel_values: torch.Tensor):
+        # # shape = [*, hidden_size, grid, grid]
+        # visual_outputs_pre = self.conv1(hidden_state)
+        # # shape = [*, hidden_size, grid ** 2]
+        # visual_outputs_pre = visual_outputs_pre.reshape(visual_outputs_pre.shape[0], visual_outputs_pre.shape[1], -1)
+        # # shape = [*, grid ** 2, hidden_size]
+        # visual_outputs_pre = visual_outputs_pre.permute(0, 2, 1)
+        # embeddings_to = self.class_embedding.to(visual_outputs_pre.dtype) + torch.zeros(
+        #     visual_outputs_pre.shape[0],
+        #     1,
+        #     visual_outputs_pre.shape[-1],
+        #     dtype=visual_outputs_pre.dtype,
+        #     device=visual_outputs_pre.device,
+        # )
+        # # shape = [*, grid ** 2 + 1, hidden_size]
+        # visual_outputs_pre = torch.cat([embeddings_to, visual_outputs_pre], dim=1)
+        # visual_outputs_pre = visual_outputs_pre + self.positional_embedding.to(visual_outputs_pre.dtype)
+        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
-        visual_outputs_pre = visual_outputs_pre.permute(1, 0, 2)
-        return visual_outputs_pre
+        hidden_states = hidden_states.permute(1, 0, 2)
+        return hidden_states
 
     def forward_post(self, hidden_state: torch.Tensor):
         visual_output_post = hidden_state.permute(1, 0, 2)
@@ -984,7 +1021,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
 
     @property
     def dtype(self):
-        return self.visual.conv1.weight.dtype
+        return self.visual.embeddings.patch_embedding.weight.dtype
 
     def forward(self, image, image_mask=None):
         return self.visual(image.type(self.dtype), image_mask)
