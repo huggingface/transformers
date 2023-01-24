@@ -352,8 +352,8 @@ class TrainingArguments:
         label_names (`List[str]`, *optional*):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
-            Will eventually default to the list of input keys that contain the word "label", except if the model used is
-            one of the `XxxForQuestionAnswering` in which case it will also include the
+            Will eventually default to the list of arguments names in `model.forward` that contain the word "label",
+            except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
             Whether or not to load the best model found during training at the end of training.
