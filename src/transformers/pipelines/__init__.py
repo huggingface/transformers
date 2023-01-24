@@ -376,6 +376,7 @@ SUPPORTED_TASKS = {
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
+NO_IMAGE_PROCESSOR_TASKS = set()
 NO_TOKENIZER_TASKS = set()
 # Those model configs are special, they are generic over their task, meaning
 # any tokenizer/feature_extractor might be use for a given model so we cannot
@@ -385,6 +386,7 @@ MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
+        NO_IMAGE_PROCESSOR_TASKS.add(task)
     elif values["type"] in {"audio", "image", "video"}:
         NO_TOKENIZER_TASKS.add(task)
     elif values["type"] != "multimodal":
@@ -803,6 +805,8 @@ def pipeline(
 
     if task in NO_FEATURE_EXTRACTOR_TASKS:
         load_feature_extractor = False
+    if task in NO_IMAGE_PROCESSOR_TASKS:
+        load_image_processor = False
 
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)
@@ -843,9 +847,9 @@ def pipeline(
             else:
                 # Impossible to guess what is the right image_processor here
                 raise Exception(
-                    "Impossible to guess which feature extractor to use. "
-                    "Please provide a PreTrainedFeatureExtractor class or a path/identifier "
-                    "to a pretrained feature extractor."
+                    "Impossible to guess which image processor to use. "
+                    "Please provide a PreTrainedImageProcessor class or a path/identifier "
+                    "to a pretrained image processor."
                 )
 
         # Instantiate image_processor if needed
