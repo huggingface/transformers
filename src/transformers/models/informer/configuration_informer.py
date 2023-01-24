@@ -55,6 +55,7 @@ class InformerConfig(PretrainedConfig):
             factor: int = 5,
             distil: bool = True,
             num_parallel_samples: int = 100,
+            time_features_embedding_type: str = "timeF",  # This can be set to timeF, fixed, learned
             init_std: float = 0.02,
             use_cache=True,
             **kwargs
@@ -109,6 +110,7 @@ class InformerConfig(PretrainedConfig):
         self.distil = distil
         self.init_std = init_std
         self.use_cache = use_cache
+        self.time_features_embedding_type = time_features_embedding_type
 
         # self.param_proj = distr_output.get_args_proj(d_model)
 
