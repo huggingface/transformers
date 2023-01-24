@@ -33,9 +33,6 @@ from ...test_sequence_feature_extraction_common import SequenceFeatureExtraction
 if is_datasets_available():
     from datasets import load_dataset
 
-if is_torch_available():
-    import torch
-
 if is_speech_available():
     from transformers import TvltFeatureExtractor
 
