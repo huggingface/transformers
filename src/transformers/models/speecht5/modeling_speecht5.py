@@ -881,7 +881,8 @@ class SpeechT5TextDecoderPostnet(nn.Module):
 
 class SpeechT5Attention(nn.Module):
     """
-    Multi-headed attention from 'Attention Is All You Need' paper with relative position bias (see https://aclanthology.org/N18-2074.pdf)
+    Multi-headed attention from 'Attention Is All You Need' paper with relative position bias (see
+    https://aclanthology.org/N18-2074.pdf)
     """
 
     def __init__(

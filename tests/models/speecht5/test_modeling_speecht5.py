@@ -1299,6 +1299,10 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load(self):
         pass
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        pass
+
     @slow
     def test_torchscript_output_attentions(self):
         # disabled because this model doesn't have decoder_input_ids
