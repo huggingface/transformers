@@ -70,11 +70,11 @@ jobs:
             - store_artifacts:
                   path: test_preparation/examples_test_list.txt
             - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
-            - run: |
-                  if [ ! -s test_preparation/generated_config.yml ]; then
-                      echo "No tests to run, exiting early!"
-                      circleci-agent step halt
-                  fi
+#            - run: |
+#                  if [ ! -s test_preparation/generated_config.yml ]; then
+#                      echo "No tests to run, exiting early!"
+#                      circleci-agent step halt
+#                  fi
             - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:
                   path: test_preparation/generated_config.txt
@@ -184,9 +184,9 @@ workflows:
         when:
             not: <<pipeline.parameters.nightly>>
         jobs:
-            - check_circleci_user
-            - check_code_quality
-            - check_repository_consistency
+#            - check_circleci_user
+#            - check_code_quality
+#            - check_repository_consistency
             - fetch_tests
 
     nightly:

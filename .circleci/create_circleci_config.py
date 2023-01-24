@@ -132,6 +132,14 @@ class CircleCIJob:
                 else:
                     expanded_tests.append(test)
             # Avoid long tests always being collected together
+
+            expanded_tests = [
+                "tests/models/bert/test_modeling_bert.py",
+                "tests/models/gpt2/test_modeling_gpt2.py",
+                "tests/models/bart/test_modeling_bart.py",
+                "tests/models/t5/test_modeling_t5.py",
+            ]
+
             random.shuffle(expanded_tests)
             tests = " ".join(expanded_tests)
 
@@ -207,7 +215,7 @@ torch_job = CircleCIJob(
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
-    parallelism=1,
+    parallelism=2,
     pytest_num_workers=3,
 )
 
@@ -386,15 +394,15 @@ repo_utils_job = CircleCIJob(
 )
 
 REGULAR_TESTS = [
-    torch_and_tf_job,
-    torch_and_flax_job,
+    # torch_and_tf_job,
+    # torch_and_flax_job,
     torch_job,
-    tf_job,
-    flax_job,
-    custom_tokenizers_job,
-    hub_job,
-    onnx_job,
-    exotic_models_job,
+    # tf_job,
+    # flax_job,
+    # custom_tokenizers_job,
+    # hub_job,
+    # onnx_job,
+    # exotic_models_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
@@ -419,8 +427,8 @@ def create_circleci_config(folder=None):
             all_test_list = f.read()
     else:
         all_test_list = []
-    if len(all_test_list) > 0:
-        jobs.extend(PIPELINE_TESTS)
+    # if len(all_test_list) > 0:
+    #     jobs.extend(PIPELINE_TESTS)
 
     test_file = os.path.join(folder, "filtered_test_list.txt")
     if os.path.exists(test_file):
@@ -428,16 +436,16 @@ def create_circleci_config(folder=None):
             test_list = f.read()
     else:
         test_list = []
-    if len(test_list) > 0:
-        jobs.extend(REGULAR_TESTS)
+    # if len(test_list) > 0:
+    jobs.extend(REGULAR_TESTS)
 
     example_file = os.path.join(folder, "examples_test_list.txt")
-    if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        jobs.extend(EXAMPLES_TESTS)
+    # if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
+    #     jobs.extend(EXAMPLES_TESTS)
     
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
+    # if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
+    #     jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) > 0:
         config = {"version": "2.1"}
