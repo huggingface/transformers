@@ -187,6 +187,7 @@ class CircleCIJob:
             # persist the report file, so we can combien them later
             steps.append({"persist_to_workspace": {"root": "~/transformers", "paths": "renamed_reports"}})
         else:
+            test_job_name = self.name.replace("_report", "")
             steps.append({"attach_workspace": {"at": "~/transformers"}})
             # (show file system structure)
             steps.append(
@@ -211,7 +212,7 @@ class CircleCIJob:
                 {
                     "run": {
                         "name": "show file structure",
-                        "command": f"ls -l combined_reports && ls -l combined_reports/tests_torch"
+                        f"command": f"ls -l combined_reports && ls -l combined_reports/{test_job_name}"
                     }
                 }
             )
