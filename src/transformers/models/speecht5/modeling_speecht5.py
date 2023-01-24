@@ -695,12 +695,15 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         super().__init__()
         self.config = config
 
-        self.layers = nn.ModuleList([
-            nn.Linear(
-                config.num_mel_bins if i == 0 else config.speech_decoder_prenet_units,
-                config.speech_decoder_prenet_units
-            )
-            for i in range(config.speech_decoder_prenet_layers)])
+        self.layers = nn.ModuleList(
+            [
+                nn.Linear(
+                    config.num_mel_bins if i == 0 else config.speech_decoder_prenet_units,
+                    config.speech_decoder_prenet_units,
+                )
+                for i in range(config.speech_decoder_prenet_layers)
+            ]
+        )
 
         self.final_layer = nn.Linear(config.speech_decoder_prenet_units, config.hidden_size)
 
@@ -722,7 +725,9 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         inputs_embeds = input_values
         for layer in self.layers:
             inputs_embeds = nn.functional.relu(layer(inputs_embeds))
-            inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True)
+            inputs_embeds = nn.functional.dropout(
+                inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True
+            )
 
         inputs_embeds = self.final_layer(inputs_embeds)
         inputs_embeds = self.encode_positions(inputs_embeds)
@@ -785,14 +790,15 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
         self.feat_out = nn.Linear(config.hidden_size, config.num_mel_bins * config.reduction_factor)
         self.prob_out = nn.Linear(config.hidden_size, config.reduction_factor)
 
-        layers = [SpeechT5BatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)]
-        self.layers = nn.ModuleList(layers)
+        self.layers = nn.ModuleList(
+            [SpeechT5BatchNormConvLayer(config, i) for i in range(config.speech_decoder_postnet_layers)]
+        )
 
     def forward(self, hidden_states: torch.Tensor):
-        before_outs = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
+        outputs_before_postnet = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
+        outputs_after_postnet = self.postnet(outputs_before_postnet)
         logits = self.prob_out(hidden_states).view(hidden_states.size(0), -1)
-        after_outs = self.postnet(before_outs)
-        return before_outs, after_outs, logits
+        return outputs_before_postnet, outputs_after_postnet, logits
 
     def postnet(self, hidden_states: torch.Tensor):
         layer_output = hidden_states.transpose(1, 2)
@@ -987,7 +993,9 @@ class SpeechT5Attention(nn.Module):
         if position_bias is not None:
             reshape_q = query_states.contiguous().view(bsz * self.num_heads, -1, self.head_dim).transpose(0, 1)
             rel_pos_bias = torch.matmul(reshape_q, position_bias.transpose(-2, -1))
-            rel_pos_bias = rel_pos_bias.transpose(0, 1).view(bsz * self.num_heads, position_bias.size(0), position_bias.size(1))
+            rel_pos_bias = rel_pos_bias.transpose(0, 1).view(
+                bsz * self.num_heads, position_bias.size(0), position_bias.size(1)
+            )
             attn_weights += rel_pos_bias
 
         if attention_mask is not None:
