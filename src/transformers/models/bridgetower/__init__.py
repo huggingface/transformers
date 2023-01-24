@@ -28,8 +28,8 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
-    "processing_bridgetower": "BridgeTowerProcessor"
 }
+_import_structure["processing_bridgetower"] = ["BridgeTowerProcessor"]
 
 try:
     if not is_vision_available():
