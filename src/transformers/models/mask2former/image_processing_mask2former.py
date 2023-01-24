@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for MaskFormer."""
+"""Image processor class for Mask2Former."""
 
 import math
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -51,10 +51,6 @@ from transformers.utils import (
 
 
 logger = logging.get_logger(__name__)
-
-
-if TYPE_CHECKING:
-    from transformers import MaskFormerForInstanceSegmentationOutput
 
 
 if is_torch_available():
@@ -294,7 +290,7 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
 
-def get_maskformer_resize_output_image_size(
+def get_mask2former_resize_output_image_size(
     image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     max_size: Optional[int] = None,
@@ -332,9 +328,9 @@ def get_maskformer_resize_output_image_size(
     return output_size
 
 
-class MaskFormerImageProcessor(BaseImageProcessor):
+class Mask2FormerImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a MaskFormer image processor. The image processor can be used to prepare image(s) and optional targets
+    Constructs a Mask2Former image processor. The image processor can be used to prepare image(s) and optional targets
     for the model.
 
     This image processor inherits from [`BaseImageProcessor`] which contains most of the main methods. Users should
@@ -436,7 +432,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `MaskFormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
+        created using from_dict and kwargs e.g. `Mask2FormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
@@ -496,7 +492,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
                 f" {size.keys()}."
             )
-        size = get_maskformer_resize_output_image_size(
+        size = get_mask2former_resize_output_image_size(
             image=image,
             size=size,
             max_size=max_size,
@@ -798,7 +794,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
 
-        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
+        Mask2Former addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
         will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
         `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
         [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
@@ -884,63 +880,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    def post_process_segmentation(
-        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
-    ) -> "torch.Tensor":
-        """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
-        supports PyTorch.
-
-        Args:
-            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`].
-
-            target_size (`Tuple[int, int]`, *optional*):
-                If set, the `masks_queries_logits` will be resized to `target_size`.
-
-        Returns:
-            `torch.Tensor`:
-                A tensor of shape (`batch_size, num_class_labels, height, width`).
-        """
-        logger.warning(
-            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_instance_segmentation`",
-            FutureWarning,
-        )
-
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-        if target_size is not None:
-            masks_queries_logits = torch.nn.functional.interpolate(
-                masks_queries_logits,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-        # remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs = masks_queries_logits.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-
-        return segmentation
-
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
-        Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
+        Converts the output of [`Mask2FormerForUniversalSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
 
         Args:
-            outputs ([`MaskFormerForInstanceSegmentation`]):
+            outputs ([`Mask2FormerForUniversalSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
@@ -953,6 +901,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+
+        # Scale back to preprocessed image size - (384, 384) for all models
+        masks_queries_logits = torch.nn.functional.interpolate(
+            masks_queries_logits, size=(384, 384), mode="bilinear", align_corners=False
+        )
 
         # Remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
@@ -993,11 +946,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         return_binary_maps: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
-        supports PyTorch.
+        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into instance segmentation predictions.
+        Only supports PyTorch.
 
         Args:
-            outputs ([`MaskFormerForInstanceSegmentation`]):
+            outputs ([`Mask2FormerForUniversalSegmentation`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
@@ -1032,6 +985,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         # [batch_size, num_queries, height, width]
         masks_queries_logits = outputs.masks_queries_logits
 
+        # Scale back to preprocessed image size - (384, 384) for all models
+        masks_queries_logits = torch.nn.functional.interpolate(
+            masks_queries_logits, size=(384, 384), mode="bilinear", align_corners=False
+        )
+
         device = masks_queries_logits.device
         num_classes = class_queries_logits.shape[-1] - 1
         num_queries = class_queries_logits.shape[-2]
@@ -1060,7 +1018,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             pred_scores = scores_per_image * mask_scores_per_image
             pred_classes = labels_per_image
 
-            segmentation = torch.zeros(masks_queries_logits.shape[2:]) - 1
+            segmentation = torch.zeros((384, 384)) - 1
             if target_sizes is not None:
                 segmentation = torch.zeros(target_sizes[i]) - 1
                 pred_masks = torch.nn.functional.interpolate(
@@ -1105,12 +1063,12 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
+        Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
 
         Args:
-            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`].
+            outputs ([`Mask2FormerForUniversalSegmentationOutput`]):
+                The outputs from [`Mask2FormerForUniversalSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
             mask_threshold (`float`, *optional*, defaults to 0.5):
@@ -1146,6 +1104,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
 
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+
+        # Scale back to preprocessed image size - (384, 384) for all models
+        masks_queries_logits = torch.nn.functional.interpolate(
+            masks_queries_logits, size=(384, 384), mode="bilinear", align_corners=False
+        )
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
