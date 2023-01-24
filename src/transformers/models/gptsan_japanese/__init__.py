@@ -69,7 +69,7 @@ if TYPE_CHECKING:
             GPTSANJapaneseSparseMLP,
             GPTSANJapaneseTop1Router,
         )
-        from .gokenization_gptsan_japanese import GPTSANJapaneseTokenizer
+        from .tokenization_gptsan_japanese import GPTSANJapaneseTokenizer
 
 
 else:
