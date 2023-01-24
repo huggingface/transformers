@@ -990,6 +990,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
+        return_binary_maps: Optional[bool] = False,
     ) -> List[Dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
@@ -1008,9 +1009,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             target_sizes (`List[Tuple]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
-            return_coco_annotation (`bool`, *optional*):
-                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
-                format.
+            return_coco_annotation (`bool`, *optional*, defaults to `False`):
+                If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE) format.
+            return_binary_maps (`bool`, *optional*, defaults to `False`):
+                If set to `True`, segmentation maps are returned as a concatenated tensor of binary segmentation maps
+                (one per detected instance).
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
@@ -1021,6 +1024,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
+        if return_coco_annotation and return_binary_maps:
+            raise ValueError("return_coco_annotation and return_binary_maps can not be both set to True.")
+
         # [batch_size, num_queries, num_classes+1]
         class_queries_logits = outputs.class_queries_logits
         # [batch_size, num_queries, height, width]
@@ -1059,13 +1065,14 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             pred_scores = scores_per_image * mask_scores_per_image
             pred_classes = labels_per_image
 
-            segmentation = torch.zeros(target_sizes[i]) - 1
+            segmentation = torch.zeros((384, 384)) - 1
             if target_sizes is not None:
+                segmentation = torch.zeros(target_sizes[i]) - 1
                 pred_masks = torch.nn.functional.interpolate(
                     pred_masks.unsqueeze(0), size=target_sizes[i], mode="nearest"
                 )[0]
 
-            segments = []
+            instance_maps, segments = [], []
             current_segment_id = 0
             for j in range(num_queries):
                 score = pred_scores[j].item()
@@ -1081,13 +1088,16 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                         }
                     )
                     current_segment_id += 1
-
+                    instance_maps.append(pred_masks[j])
                     # Return segmentation map in run-length encoding (RLE) format
                     if return_coco_annotation:
                         segmentation = convert_segmentation_to_rle(segmentation)
 
-            results.append({"segmentation": segmentation, "segments_info": segments})
+            # Return a concatenated tensor of binary instance maps
+            if return_binary_maps and len(instance_maps) != 0:
+                segmentation = torch.stack(instance_maps, dim=0)
 
+            results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
     def post_process_panoptic_segmentation(

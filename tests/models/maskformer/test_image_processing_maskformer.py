@@ -576,6 +576,30 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
 
         self.assertEqual(segmentation[0].shape, target_sizes[0])
 
+    def test_post_process_instance_segmentation(self):
+        feature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes)
+        outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
+        segmentation = feature_extractor.post_process_instance_segmentation(outputs, threshold=0)
+
+        self.assertTrue(len(segmentation) == self.feature_extract_tester.batch_size)
+        for el in segmentation:
+            self.assertTrue("segmentation" in el)
+            self.assertTrue("segments_info" in el)
+            self.assertEqual(type(el["segments_info"]), list)
+            self.assertEqual(el["segmentation"].shape, (384, 384))
+
+        segmentation = feature_extractor.post_process_instance_segmentation(
+            outputs, threshold=0, return_binary_maps=True
+        )
+
+        self.assertTrue(len(segmentation) == self.feature_extract_tester.batch_size)
+        for el in segmentation:
+            self.assertTrue("segmentation" in el)
+            self.assertTrue("segments_info" in el)
+            self.assertEqual(type(el["segments_info"]), list)
+            self.assertEqual(len(el["segmentation"].shape), 3)
+            self.assertEqual(el["segmentation"].shape[1:], (384, 384))
+
     def test_post_process_panoptic_segmentation(self):
         feature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes)
         outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
