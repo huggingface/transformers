@@ -57,7 +57,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             Padding value used to pad the audio. Should correspond to silences.
     """
 
-    model_input_names = ["audio_values", "audio_masks", "audio_mask_pos_perm"]
+    model_input_names = ["audio_values", "audio_masks", "audio_mask_position_permutation"]
 
     def __init__(
         self,
