@@ -169,7 +169,7 @@ class CircleCIJob:
         if self.marker is not None:
             test_command += f" -m {self.marker}"
         test_command += " | tee tests_output.txt"
-        if self.job_name != "tests_combine_test_reports":
+        if not self.job_name.endswith("_report"):
             steps.append({"run": {"name": "Run tests", "command": test_command}})
             steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
             steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
@@ -505,10 +505,11 @@ def create_circleci_config(folder=None):
             "tests_to_run": {"type": "string", "default": test_list},
         }
         config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
-        final_job = CircleCIJob("combine_test_reports", install_steps=[], pytest_num_workers=1)
-        config["jobs"]["tests_combine_test_reports"] = final_job.to_dict()
+        report_jobs = [CircleCIJob(f"{j.job_name}_report", install_steps=[], pytest_num_workers=1) for j in jobs]
+        config["jobs"].update({j.name: j.to_dict() for j in report_jobs})
         config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
-        config["workflows"]["run_tests"]["jobs"].append({final_job.job_name: {"requires": [j.job_name for j in jobs]}})
+        for j in jobs:
+            config["workflows"]["run_tests"]["jobs"].append({f"{j.job_name}_report": {"requires": [j.job_name]}})
         with open(os.path.join(folder, "generated_config.yml"), "w") as f:
             f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
 
