@@ -127,6 +127,39 @@ BRIDGETOWER_INPUTS_DOCSTRING = r"""
 """
 
 
+@dataclass
+class BridgeTowerModelOutput(ModelOutput):
+    """
+    Output type of [`BridgeTowerModel`].
+
+    Args:
+        text_features (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_size)`):
+            Sequence of hidden-states at the text output of the last layer of the model.
+        image_features (`torch.FloatTensor` of shape `(batch_size, image_sequence_length, hidden_size)`):
+            Sequence of hidden-states at the image output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size x 2)`):
+            Concatenation of last layer hidden-state of the first token of the text and image sequence (classification
+            token), respectively, after further processing through layers used for auxiliary pretraining tasks.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    text_features: torch.FloatTensor = None
+    image_features: torch.FloatTensor = None
+    pooler_output: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class BridgeTowerResidualAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -197,7 +230,7 @@ class BridgeTowerTransformer(nn.Module):
         return hidden_states
 
 
-class BridgeTowerVisualTransformer(nn.Module):
+class BridgeTowerVisionTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -370,6 +403,7 @@ class BridgeTowerPooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->BridgeTower
 class BridgeTowerSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -700,6 +734,7 @@ class BridgeTowerTextLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaEncoder with Roberta->BridgeTowerText
 class BridgeTowerTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -884,6 +919,7 @@ class BridgeTowerTextEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
+# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -898,39 +934,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
-
-
-@dataclass
-class BridgeTowerModelOutput(ModelOutput):
-    """
-    Output type of [`BridgeTowerModel`].
-
-    Args:
-        text_features (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_size)`):
-            Sequence of hidden-states at the text output of the last layer of the model.
-        image_features (`torch.FloatTensor` of shape `(batch_size, image_sequence_length, hidden_size)`):
-            Sequence of hidden-states at the image output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size x 2)`):
-            Concatenation of last layer hidden-state of the first token of the text and image sequence (classification
-            token), respectively, after further processing through layers used for auxiliary pretraining tasks.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    text_features: torch.FloatTensor = None
-    image_features: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class BridgeTowerPreTrainedModel(PreTrainedModel):
@@ -974,7 +977,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = BridgeTowerVisualTransformer(config)
+        self.visual = BridgeTowerVisionTransformer(config)
 
     @property
     def dtype(self):
