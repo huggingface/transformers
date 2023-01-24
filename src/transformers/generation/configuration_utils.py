@@ -284,6 +284,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Additional attributes without default values
         if not self._from_model_config:
+            # we don't want to copy values from the model config if we're initializing a `GenerationConfig` from a model's default configuration file
             for key, value in kwargs.items():
                 try:
                     setattr(self, key, value)
