@@ -301,9 +301,9 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+        beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-            `(batch_size*num_return_sequences, input_ids.shape[-1])`.
+            `(batch_size*num_return_sequences, sequence_length)`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -338,10 +338,9 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+        beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-            `(batch_size*num_return_sequences, max_length-1)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            `(batch_size*num_return_sequences, sequence_length)`.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -387,9 +386,9 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+        beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-            `(batch_size*num_return_sequences, input_ids.shape[-1])`.
+            `(batch_size*num_return_sequences, sequence_length)`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -426,7 +425,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
             with each tensor of shape `(batch_size*num_beams, config.vocab_size)`).
         beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-            `(batch_size*num_return_sequences, max_length-1)`.
+            `(batch_size*num_return_sequences, sequence_length)`.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -937,9 +936,9 @@ class GenerationMixin:
                 of log probabilities of tokens conditioned on log softmax of previously generated tokens Tuple of
                 `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token), with
                 each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
-            beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*):
+            beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-                `(batch_size*num_return_sequences, input_ids.shape[-1])`. Only required if a `num_beams>1` at
+                `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
                 generate-time.
             normalize_logits (`bool`, *optional*, defaults to `False`):
                 Whether to normalize the logits (which, for legacy reasons, may be unnormalized).
@@ -1020,8 +1019,7 @@ class GenerationMixin:
         beam_indices = beam_indices[:, :max_beam_length]
         beam_indices_mask = beam_indices_mask[:, :max_beam_length]
 
-        # 5. Set indices of beams that finished early to 0
-        # such indices will be masked correctly afterwards
+        # 5. Set indices of beams that finished early to 0; such indices will be masked correctly afterwards
         beam_indices[beam_indices_mask] = 0
 
         # 6. multiply beam_indices with vocab size to gather correctly from scores

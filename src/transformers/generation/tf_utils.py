@@ -210,6 +210,9 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
             beam. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
+        beam_indices (`tf.Tensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `tf.Tensor` of shape
+            `(batch_size*num_return_sequences, sequence_length)`.
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -221,6 +224,7 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
     sequences: tf.Tensor = None
     sequences_scores: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
+    beam_indices: Optional[tf.Tensor] = None
     attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
     hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
 
@@ -243,7 +247,9 @@ class TFBeamSearchEncoderDecoderOutput(ModelOutput):
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
             beam. `Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
-        attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+        beam_indices (`tf.Tensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `tf.Tensor` of shape
+            `(batch_size*num_return_sequences, sequence_length)`.
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -265,6 +271,7 @@ class TFBeamSearchEncoderDecoderOutput(ModelOutput):
     sequences: tf.Tensor = None
     sequences_scores: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
+    beam_indices: Optional[tf.Tensor] = None
     encoder_attentions: Optional[Tuple[tf.Tensor]] = None
     encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
@@ -288,6 +295,9 @@ class TFBeamSampleDecoderOnlyOutput(ModelOutput):
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
             beam. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
+        beam_indices (`tf.Tensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `tf.Tensor` of shape
+            `(batch_size*num_return_sequences, sequence_length)`.
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -299,6 +309,7 @@ class TFBeamSampleDecoderOnlyOutput(ModelOutput):
     sequences: tf.Tensor = None
     sequences_scores: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
+    beam_indices: Optional[tf.Tensor] = None
     attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
     hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
 
@@ -321,6 +332,9 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
             beam. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+        beam_indices (`tf.Tensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `tf.Tensor` of shape
+            `(batch_size*num_return_sequences, sequence_length)`.
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -341,6 +355,7 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
     sequences: tf.Tensor = None
     sequences_scores: Optional[tf.Tensor] = None
     scores: Optional[Tuple[tf.Tensor]] = None
+    beam_indices: Optional[tf.Tensor] = None
     encoder_attentions: Optional[Tuple[tf.Tensor]] = None
     encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
@@ -479,6 +494,122 @@ class TFGenerationMixin:
             return tf.where(vocab_range != forced_eos_token_id, -1e8, logits)
         else:
             return logits
+
+    def compute_transition_scores(
+        self,
+        sequences: tf.Tensor,
+        scores: Tuple[tf.Tensor],
+        beam_indices: Optional[tf.Tensor] = None,
+        normalize_logits: bool = False,
+    ) -> tf.Tensor:
+        """
+        Computes the transition scores of sequences given the generation scores (and beam indices, if beam search was
+        used). This is a convenient method to quicky obtain the scores of the selected tokens at generation time.
+
+        Parameters:
+            sequences (`tf.Tensor`):
+                The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
+                shorter if all batches finished early due to the `eos_token_id`.
+            scores (`tuple(tf.Tensor)`):
+                Transition scores for each vocabulary token at each generation step. Beam transition scores consisting
+                of log probabilities of tokens conditioned on log softmax of previously generated tokens Tuple of
+                `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token), with
+                each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+            beam_indices (`tf.Tensor`, *optional*):
+                Beam indices of generated token id at each generation step. `tf.Tensor` of shape
+                `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
+                generate-time.
+            normalize_logits (`bool`, *optional*, defaults to `False`):
+                Whether to normalize the logits (which, for legacy reasons, may be unnormalized).
+
+        Return:
+            `tf.Tensor`: A `tf.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)` containing
+                the transition scores (logits)
+
+        Examples:
+
+        ```python
+        >>> from transformers import GPT2Tokenizer, TFAutoModelForCausalLM
+        >>> import numpy as np
+
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+        >>> tokenizer.pad_token_id = tokenizer.eos_token_id
+        >>> inputs = tokenizer(["Today is"], return_tensors="tf")
+
+        >>> # Example 1: Print the scores for each token generated with Greedy Search
+        >>> outputs = model.generate(**inputs, max_new_tokens=5, return_dict_in_generate=True, output_scores=True)
+        >>> transition_scores = model.compute_transition_scores(
+        ...     outputs.sequences, outputs.scores, normalize_logits=True
+        ... )
+        >>> input_length = inputs.input_ids.shape[1]
+        >>> generated_tokens = outputs.sequences[:, input_length:]
+        >>> for tok, score in zip(generated_tokens[0], transition_scores[0]):
+        ...     # | token | token string | logits | probability
+        ...     print(f"| {tok:5d} | {tokenizer.decode(tok):8s} | {score.numpy():.3f} | {np.exp(score.numpy()):.2%}")
+        |   262 |  the     | -1.413 | 24.33%
+        |  1110 |  day     | -2.609 | 7.36%
+        |   618 |  when    | -2.009 | 13.41%
+        |   356 |  we      | -1.859 | 15.58%
+        |   460 |  can     | -2.508 | 8.14%
+
+        >>> # Example 2: Reconstruct the sequence scores from Beam Search
+        >>> outputs = model.generate(
+        ...     **inputs,
+        ...     max_new_tokens=5,
+        ...     num_beams=4,
+        ...     num_return_sequences=4,
+        ...     return_dict_in_generate=True,
+        ...     output_scores=True,
+        ... )
+        >>> transition_scores = model.compute_transition_scores(
+        ...     outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False
+        ... )
+        >>> # If you sum the generated tokens' scores and apply the length penalty, you'll get the sequence scores.
+        >>> # Tip: set `normalize_logits=True` to recompute the scores from the normalized logits.
+        >>> output_length = inputs.input_ids.shape[1] + np.sum(transition_scores.numpy() < 0, axis=1)
+        >>> length_penalty = model.generation_config.length_penalty
+        >>> reconstructed_scores = transition_scores.sum(axis=1) / (output_length**length_penalty)
+        >>> print(np.allclose(outputs.sequences_scores, reconstructed_scores))
+        True
+        ```"""
+        # 1. In absence of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
+        # to a beam search approach were the first (and only) beam is always selected
+        if beam_indices is None:
+            beam_indices = tf.tile(tf.expand_dims(tf.range(scores[0].shape[0]), axis=1), [1, len(scores)])
+
+        # 2. reshape scores as [batch_size, vocab_size, # generation steps] with # generation steps being
+        # seq_len - input_length
+        scores = tf.transpose(tf.reshape(tf.stack(scores), (len(scores), -1)), (1, 0))
+        scores = tf.reshape(scores, (-1, self.config.vocab_size, scores.shape[-1]))
+
+        # 3. Optionally normalize the logits (across the vocab dimension)
+        if normalize_logits:
+            scores = tf.nn.log_softmax(scores, axis=1)
+
+        # 4. cut beam_indices to longest beam length
+        beam_indices_mask = beam_indices < 0
+        max_beam_length = tf.math.reduce_max(tf.math.reduce_sum((1 - tf.cast(beam_indices_mask, dtype=tf.int32)), axis=-1))
+        beam_indices = beam_indices[:, :max_beam_length]
+        beam_indices_mask = beam_indices_mask[:, :max_beam_length]
+
+        # 5. Set indices of beams that finished early to 0; such indices will be masked correctly afterwards
+        beam_indices = tf.where(beam_indices_mask, 0, beam_indices)
+
+        # 6. Define which indices contributed to scores
+        cut_idx = sequences.shape[-1] - max_beam_length
+        token_indices = sequences[:, cut_idx:]
+        batch_idx = tf.broadcast_to(tf.expand_dims(tf.range(scores.shape[0]), 1), token_indices.shape)
+        gen_step_idx = tf.broadcast_to(tf.range(scores.shape[-1]), token_indices.shape)
+        indices = tf.stack([batch_idx, token_indices, gen_step_idx], axis=-1)
+
+        # 7. Compute scores
+        transition_scores = tf.gather_nd(scores, indices)
+
+        # 8. Mask out transition_scores of beams that stopped early
+        transition_scores = tf.where(beam_indices_mask, 0, transition_scores)
+
+        return transition_scores
 
     def _validate_model_class(self):
         """
@@ -866,6 +997,7 @@ class TFGenerationMixin:
                 length_penalty=generation_config.length_penalty,
                 early_stopping=generation_config.early_stopping,
                 logits_processor=logits_processor,
+                output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 num_return_sequences=generation_config.num_return_sequences,
                 **model_kwargs,
@@ -906,6 +1038,7 @@ class TFGenerationMixin:
                 early_stopping=generation_config.early_stopping,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
+                output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 num_return_sequences=generation_config.num_return_sequences,
                 **model_kwargs,
@@ -2066,7 +2199,8 @@ class TFGenerationMixin:
         needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
 
         # 2. init `attentions`, `hidden_states`, and `scores` tuples
-        scores = [] if (return_dict_in_generate and output_scores) else None
+        all_scores = [] if (return_dict_in_generate and output_scores) else None
+        beam_indices = [] if (return_dict_in_generate and output_scores) else None
         decoder_attentions = [] if (return_dict_in_generate and output_attentions) else None
         cross_attentions = [] if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
@@ -2165,22 +2299,6 @@ class TFGenerationMixin:
             )
             logits = unflatten_beam_dim(model_outputs.logits[:, -1], num_beams)
 
-            # Store scores, attentions and hidden_states when required
-            if not use_xla and return_dict_in_generate:
-                if output_scores:
-                    scores.append(model_outputs.logits[:, -1])
-                if output_attentions and self.config.is_encoder_decoder:
-                    decoder_attentions.append(model_outputs.decoder_attentions)
-                elif output_attentions and not self.config.is_encoder_decoder:
-                    decoder_attentions.append(model_outputs.attentions)
-                    if self.config.is_encoder_decoder:
-                        cross_attentions.append(model_outputs.cross_attentions)
-
-                if output_hidden_states and self.config.is_encoder_decoder:
-                    decoder_hidden_states.append(model_outputs.decoder_hidden_states)
-                elif output_hidden_states and self.config.is_encoder_decoder:
-                    decoder_hidden_states.append(model_outputs.hidden_states)
-
             # 2. Compute log probs
             # get log probabilities from logits, process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
@@ -2246,9 +2364,27 @@ class TFGenerationMixin:
             # Determine the top k beam indices (from top 2*k beams) from log probs and gather top k beams
             # (from top 2*k beams).
             next_topk_indices = tf.math.top_k(running_topk_log_probs, k=num_beams)[1]
+            next_beam_indices = tf.gather(topk_beam_indices, next_topk_indices, axis=1, batch_dims=1) # todo: gather from the selected tokens
             next_running_sequences, next_running_scores = self._gather_beams(
                 [topk_sequences, running_topk_log_probs], next_topk_indices
             )
+
+            # Store scores, attentions and hidden_states when required
+            if not use_xla and return_dict_in_generate:
+                if output_scores:
+                    beam_indices.append(next_beam_indices)
+                    all_scores.append(model_outputs.logits[:, -1])
+                if output_attentions and self.config.is_encoder_decoder:
+                    decoder_attentions.append(model_outputs.decoder_attentions)
+                elif output_attentions and not self.config.is_encoder_decoder:
+                    decoder_attentions.append(model_outputs.attentions)
+                    if self.config.is_encoder_decoder:
+                        cross_attentions.append(model_outputs.cross_attentions)
+
+                if output_hidden_states and self.config.is_encoder_decoder:
+                    decoder_hidden_states.append(model_outputs.decoder_hidden_states)
+                elif output_hidden_states and self.config.is_encoder_decoder:
+                    decoder_hidden_states.append(model_outputs.hidden_states)
 
             # 6. Process topk logits
             # Further process log probs:
@@ -2361,6 +2497,8 @@ class TFGenerationMixin:
             sequences = sequences[:, :cur_len]
 
         if return_dict_in_generate:
+            beam_indices = tf.transpose(tf.concat(beam_indices, axis=0))
+            breakpoint()
             if self.config.is_encoder_decoder:
                 # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
                 encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
@@ -2371,7 +2509,9 @@ class TFGenerationMixin:
                 output_cls = TFBeamSampleEncoderDecoderOutput if do_sample else TFBeamSearchEncoderDecoderOutput
                 return output_cls(
                     sequences=sequences,
-                    scores=scores,
+                    sequences_scores=scores,
+                    scores=all_scores,
+                    beam_indices=beam_indices,
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -2382,7 +2522,9 @@ class TFGenerationMixin:
                 output_cls = TFBeamSampleDecoderOnlyOutput if do_sample else TFBeamSearchDecoderOnlyOutput
                 return output_cls(
                     sequences=sequences,
-                    scores=scores,
+                    sequences_scores=scores,
+                    scores=all_scores,
+                    beam_indices=beam_indices,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
