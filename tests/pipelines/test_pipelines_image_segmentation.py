@@ -639,7 +639,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
 
         # Different task
-        outputs = image_segmenter(file, threshold=0.99, subtask="instance")
+        outputs = image_segmenter(file, threshold=0.01, subtask="instance")
         # Shortening by hashing
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
@@ -648,14 +648,24 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             nested_simplify(outputs, decimals=4),
             [
                 {
-                    "score": 0.9991,
-                    "label": "sky",
-                    "mask": {"hash": "1aa52da2f8", "white_pixels": 230103, "shape": (512, 683)},
+                    "score": 0.5194,
+                    "label": "street lamp",
+                    "mask": {"hash": "53bc0addd0", "white_pixels": 1110, "shape": (512, 683)},
                 },
                 {
-                    "score": 0.9982,
-                    "label": "grass",
-                    "mask": {"hash": "646d4f729e", "white_pixels": 119593, "shape": (512, 683)},
+                    "score": 0.1131,
+                    "label": "fence",
+                    "mask": {"hash": "fb9c3338f4", "white_pixels": 3815, "shape": (512, 683)},
+                },
+                {
+                    "score": 0.0599,
+                    "label": "flower",
+                    "mask": {"hash": "546e938fb6", "white_pixels": 3149, "shape": (512, 683)},
+                },
+                {
+                    "score": 0.0524,
+                    "label": "step, stair",
+                    "mask": {"hash": "abd0166a58", "white_pixels": 195, "shape": (512, 683)},
                 },
             ],
         )
@@ -672,42 +682,42 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {
                     "score": None,
                     "label": "wall",
-                    "mask": {"hash": "fa2e0b962a", "white_pixels": 14269, "shape": (512, 683)},
+                    "mask": {"hash": "a9c95a10a8", "white_pixels": 14270, "shape": (512, 683)},
                 },
                 {
                     "score": None,
                     "label": "building",
-                    "mask": {"hash": "7f9feef024", "white_pixels": 124293, "shape": (512, 683)},
+                    "mask": {"hash": "72d8ea3807", "white_pixels": 124553, "shape": (512, 683)},
                 },
                 {
                     "score": None,
                     "label": "sky",
-                    "mask": {"hash": "d56ef95fd7", "white_pixels": 135299, "shape": (512, 683)},
+                    "mask": {"hash": "2d79540404", "white_pixels": 135307, "shape": (512, 683)},
                 },
                 {
                     "score": None,
                     "label": "tree",
-                    "mask": {"hash": "d9e2205eaa", "white_pixels": 15803, "shape": (512, 683)},
+                    "mask": {"hash": "a01681085c", "white_pixels": 15766, "shape": (512, 683)},
                 },
                 {
                     "score": None,
                     "label": "road, route",
-                    "mask": {"hash": "ed69d17ac4", "white_pixels": 2143, "shape": (512, 683)},
+                    "mask": {"hash": "d16eee4668", "white_pixels": 2144, "shape": (512, 683)},
                 },
                 {
                     "score": None,
                     "label": "grass",
-                    "mask": {"hash": "bf758c2119", "white_pixels": 52850, "shape": (512, 683)},
+                    "mask": {"hash": "8b30cf552e", "white_pixels": 52869, "shape": (512, 683)},
                 },
                 {
                     "score": None,
                     "label": "plant",
-                    "mask": {"hash": "3b9e56fa06", "white_pixels": 4588, "shape": (512, 683)},
+                    "mask": {"hash": "0cff2dda4e", "white_pixels": 4583, "shape": (512, 683)},
                 },
                 {
                     "score": None,
                     "label": "house",
-                    "mask": {"hash": "d3db10d26d", "white_pixels": 451, "shape": (512, 683)},
+                    "mask": {"hash": "83e2a657f9", "white_pixels": 204, "shape": (512, 683)},
                 },
             ],
         )

@@ -998,14 +998,18 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
         def get_input_ids(task_input: str) -> List[int]:
             if task_input == "semantic":
-                # this task is semantic
+                # Encoding of "this task is semantic"
                 return [49406, 589, 10549, 533, 29119, 1550, 49407]
             elif task_input == "panoptic":
-                # this task is panoptic
+                # Encoding of "this task is panoptic"
                 return [49406, 589, 10549, 533, 1072, 24755, 49407]
             elif task_input == "instance":
-                # this task is instance
+                # Encoding of "this task is instance"
                 return [49406, 589, 10549, 533, 34572, 49407]
+            else:
+                raise ValueError(
+                    f"Task input {task_input} is not valid, please use `semantic`, `panoptic` or `instance`"
+                )
 
         task_input_ids = torch.zeros(len(task_inputs), 77, dtype=torch.int)
         for i, task_input in enumerate(task_inputs):
