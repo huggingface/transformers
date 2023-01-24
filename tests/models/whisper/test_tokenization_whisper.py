@@ -266,8 +266,14 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             ],
         )
         # test `decode_with_offsets`
-        output = multilingual_tokenizer.decode(INPUT_TOKENS, decode_with_timestamps=True)["offsets"]
-        self.assertEqual(output, "")
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, decode_with_timestamps=True)
+        self.assertEqual(
+            output,
+            "<|startoftranscript|><|en|><|transcribe|><|0.00|> Lennils, pictures are a sort of upguards and atom"
+            " paintings, and Mason's exquisite idles<|7.20|><|7.20|> are as national as a jingo poem. Mr. Birkut"
+            " Foster's landscapes smile at one much in the<|15.16|><|15.16|> same way that Mr. Carker used to flash"
+            " his teeth. And Mr. John Colier gives his<|21.70|><|21.70|><|endoftext|>",
+        )
         # test a single sequence with timestamps
         # fmt: off
         INPUT_TOKENS = [

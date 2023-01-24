@@ -507,7 +507,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs]
+        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
         return "".join(outputs)
 
     def _compute_offsets(self, token_ids, time_precision=0.02):
