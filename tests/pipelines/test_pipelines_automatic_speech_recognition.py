@@ -300,6 +300,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             chunk_length_s=8,
             stride_length_s=1,
         )
+        # TODO have to push the generation_config for this
         data = load_dataset("librispeech_asr", "clean", split="test", streaming=True)
         sample = next(iter(data))
         pipe.model.config.forced_decoder_ids = pipe.tokenizer.get_decoder_prompt_ids(language="en", task="transcribe")
@@ -523,10 +524,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 "chunks": [{"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 4.26)}],
             },
         )
-        pipe = pipeline(
-            model="openai/whisper-small",
-            return_timestamps=True,
-        )
 
         output = pipe(array, chunk_length_s=10)
         self.assertDictEqual(
@@ -712,6 +709,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output_2 = speech_recognizer_2(filename)
         self.assertEqual(output, output_2)
 
+        # TODO update this based on the generation_config!
         processor = WhisperProcessor(feature_extractor, tokenizer)
         model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", language="it")
         speech_translator = AutomaticSpeechRecognitionPipeline(

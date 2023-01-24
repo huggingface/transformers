@@ -265,7 +265,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
                 },
             ],
         )
-
+        # test `decode_with_offsets`
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, decode_with_timestamps=True)["offsets"]
+        self.assertEqual(output, "")
         # test a single sequence with timestamps
         # fmt: off
         INPUT_TOKENS = [
