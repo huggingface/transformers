@@ -20,7 +20,7 @@ import unittest
 
 from huggingface_hub import hf_hub_download
 from transformers import ConvNextConfig, UperNetConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -197,6 +197,11 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="UperNet does not have a base model")
     def test_save_load_fast_init_to_base(self):
+        pass
+
+    @require_torch_multi_gpu
+    @unittest.skip(reason="UperNet has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_hidden_states_output(self):
