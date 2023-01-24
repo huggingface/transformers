@@ -78,6 +78,20 @@ class GenerationConfigTest(unittest.TestCase):
         # `.update()` returns a dictionary of unused kwargs
         self.assertEqual(unused_kwargs, {"foo": "bar"})
 
+    def test_initialize_new_kwargs(self):
+        generation_config = GenerationConfig()
+        generation_config.foo = "bar"
+
+        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+
+            new_config = GenerationConfig.from_pretrained(tmp_dir)
+        # update_kwargs was used to update the config on valid attributes
+        self.assertEqual(new_config.foo, "bar")
+
+        generation_config = GenerationConfig.from_model_config(new_config)
+        assert not hasattr(generation_config, "foo")  # no new kwargs should be initialized if from config
+
 
 @is_staging_test
 class ConfigPushToHubTester(unittest.TestCase):
