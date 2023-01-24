@@ -163,6 +163,11 @@ class MixedInt8Test(BaseMixedInt8Test):
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
 
+@require_bitsandbytes
+@require_accelerate
+@require_torch
+@require_torch_gpu
+@slow
 class MixedInt8T5Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
