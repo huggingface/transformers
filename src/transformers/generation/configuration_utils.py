@@ -656,6 +656,7 @@ class GenerationConfig(PushToHubMixin):
             [`GenerationConfig`]: The configuration object instantiated from those parameters.
         """
         config_dict = model_config.to_dict()
+        config_dict.pop("_from_model_config")
         config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
