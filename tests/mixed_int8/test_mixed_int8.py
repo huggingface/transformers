@@ -163,6 +163,70 @@ class MixedInt8Test(BaseMixedInt8Test):
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
 
+@require_bitsandbytes
+@require_accelerate
+@require_torch
+@require_torch_gpu
+@slow
+class MixedInt8T5Test(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.model_name = "t5-small"
+        cls.dense_act_model_name = "google/flan-t5-small"  # flan-t5 uses dense-act instead of dense-relu-dense
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.input_text = "Translate in German: Hello, my dog is cute"
+
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the GPU memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def test_inference_without_keep_in_fp32(self):
+        r"""
+        Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        both cases.
+        """
+        from transformers import T5ForConditionalGeneration
+
+        T5ForConditionalGeneration._keep_in_fp32_modules = None
+
+        # test with `t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        _ = model.generate(**encoded_input)
+
+        # test with `flan-t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.dense_act_model_name, load_in_8bit=True, device_map="auto"
+        )
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        _ = model.generate(**encoded_input)
+
+    def test_inference_with_keep_in_fp32(self):
+        r"""
+        Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        both cases.
+        """
+        from transformers import T5ForConditionalGeneration
+
+        # test with `t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        _ = model.generate(**encoded_input)
+
+        # test with `flan-t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.dense_act_model_name, load_in_8bit=True, device_map="auto"
+        )
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        _ = model.generate(**encoded_input)
+
+
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
