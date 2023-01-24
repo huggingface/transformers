@@ -416,7 +416,7 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
         )
 
-    collate_fn = DefaultDataCollator(return_tensors="tf")
+    collate_fn = DefaultDataCollator(return_tensors="np")
 
     # Load the accuracy metric from the datasets package
     metric = evaluate.load("accuracy")
