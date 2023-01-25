@@ -1278,6 +1278,7 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
         >>> import numpy as np
         >>> import torch
 
+        >>> num_frames = 8
         >>> images = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
         >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
