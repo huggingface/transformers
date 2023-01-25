@@ -945,11 +945,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
         generated_ids = model.generate(
-            input_features,
-            do_sample=False,
-            max_length=20,
+            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -971,26 +968,25 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
-        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
+        generated_ids = model.generate(
+            input_features, do_sample=False, max_length=20, language="<|ja|>", task="transcribe"
+        )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
         generated_ids = model.generate(
-            input_features,
-            do_sample=False,
-            max_length=20,
+            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " Kimura-san called me."
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
-        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
+        generated_ids = model.generate(
+            input_features, do_sample=False, max_length=20, language="<|ja|>", task="translate"
+        )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
