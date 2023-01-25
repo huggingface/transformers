@@ -60,7 +60,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(len(vocab_keys), 50364)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 50257)
+        self.assertEqual(self.get_tokenizer().vocab_size, 50258)
 
     def test_full_tokenizer(self):
         tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
