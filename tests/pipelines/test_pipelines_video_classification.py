@@ -35,7 +35,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
         example_video_filepath = hf_hub_download(
             repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
         )

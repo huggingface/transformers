@@ -51,7 +51,7 @@ else:
 class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
         object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 

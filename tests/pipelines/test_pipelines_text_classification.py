@@ -129,7 +129,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("Birds are a type of animal")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
         return text_classifier, ["HuggingFace is in", "This is another test"]
 

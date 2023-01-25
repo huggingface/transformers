@@ -27,7 +27,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
         audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=feature_extractor)
 
         # test with a raw waveform
