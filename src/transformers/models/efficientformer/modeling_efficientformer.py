@@ -136,7 +136,7 @@ class EfficientFormerSelfAttention(nn.Module):
         # set `model.to(torch_device)` won't change `self.ab.device`, if there is no follow-up `train` or `eval` call.
         # Let's do it manually here, so users won't have to do this everytime.
         if not self.training:
-            self.ab = self.ab.to(self.attention_bias_idxs.device)
+            self.ab = self.ab.to(self.attention_biases.device)
         attention_probs = (torch.matmul(query_layer, key_layer.transpose(-2, -1))) * self.scale + (
             self.attention_biases[:, self.attention_bias_idxs] if self.training else self.ab
         )
