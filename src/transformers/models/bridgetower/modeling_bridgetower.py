@@ -268,18 +268,6 @@ class BridgeTowerVisionTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        # self.conv1 = nn.Conv2d(
-        #     in_channels=3,
-        #     out_channels=config.hidden_size,
-        #     kernel_size=config.patch_size,
-        #     stride=config.patch_size,
-        #     bias=False,
-        # )
-        # scale = config.hidden_size**-0.5
-        # self.class_embedding = nn.Parameter(scale * torch.randn(config.hidden_size))
-        # self.positional_embedding = nn.Parameter(
-            # scale * torch.randn((config.image_size // config.patch_size) ** 2 + 1, config.hidden_size)
-        # )
         self.embeddings = BridgeTowerVisionEmbeddings(config)
         self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.transformer = BridgeTowerTransformer(config)
@@ -291,18 +279,6 @@ class BridgeTowerVisionTransformer(nn.Module):
             )
 
     def forward(self, pixel_values: torch.Tensor, attention_mask):
-        # shape = [*, hidden_size, grid, grid]
-        # visual_output = self.conv1(hidden_state)
-        # # shape = [*, hidden_size, grid ** 2]
-        # visual_output = visual_output.reshape(visual_output.shape[0], visual_output.shape[1], -1)
-        # # shape = [*, grid ** 2, hidden_size]
-        # visual_output = visual_output.permute(0, 2, 1)
-        # t = self.class_embedding.to(visual_output.dtype) + torch.zeros(
-        #     visual_output.shape[0], 1, visual_output.shape[-1], dtype=visual_output.dtype, device=visual_output.device
-        # )
-        # # shape = [*, grid ** 2 + 1, hidden_size]
-        # visual_output = torch.cat([t, visual_output], dim=1)
-        # visual_output = visual_output + self.positional_embedding.to(visual_output.dtype)
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
@@ -325,22 +301,6 @@ class BridgeTowerVisionTransformer(nn.Module):
         return hidden_states
 
     def forward_pre(self, pixel_values: torch.Tensor):
-        # # shape = [*, hidden_size, grid, grid]
-        # visual_outputs_pre = self.conv1(hidden_state)
-        # # shape = [*, hidden_size, grid ** 2]
-        # visual_outputs_pre = visual_outputs_pre.reshape(visual_outputs_pre.shape[0], visual_outputs_pre.shape[1], -1)
-        # # shape = [*, grid ** 2, hidden_size]
-        # visual_outputs_pre = visual_outputs_pre.permute(0, 2, 1)
-        # embeddings_to = self.class_embedding.to(visual_outputs_pre.dtype) + torch.zeros(
-        #     visual_outputs_pre.shape[0],
-        #     1,
-        #     visual_outputs_pre.shape[-1],
-        #     dtype=visual_outputs_pre.dtype,
-        #     device=visual_outputs_pre.device,
-        # )
-        # # shape = [*, grid ** 2 + 1, hidden_size]
-        # visual_outputs_pre = torch.cat([embeddings_to, visual_outputs_pre], dim=1)
-        # visual_outputs_pre = visual_outputs_pre + self.positional_embedding.to(visual_outputs_pre.dtype)
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
