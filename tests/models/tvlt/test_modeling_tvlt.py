@@ -98,7 +98,7 @@ class TvltModelTester:
         self.image_size = image_size
         self.audio_size = audio_size
         self.feature_size = feature_size
-        self.pixel_patch_size = pixel_patch_size
+        self.image_patch_size = image_patch_size
         self.audio_patch_size = audio_patch_size
         self.num_pixel_channels = num_pixel_channels
         self.num_audio_channels = num_audio_channels
