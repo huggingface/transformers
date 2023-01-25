@@ -81,7 +81,7 @@ class TvltConfig(PretrainedConfig):
             Dimensionality of the decoder.
         decoder_num_hidden_layers (`int`, *optional*, defaults to 8):
             Number of hidden layers in the decoder.
-        decoder_intermediate_size (`int`, *optional*, defaults to 1536):
+        decoder_intermediate_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
         pixel_mask_ratio (`float`, *optional*, defaults to 0.75):
             Pixel patch masking ratio.
