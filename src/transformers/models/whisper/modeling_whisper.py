@@ -1343,7 +1343,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         forced_decoder_ids = []
 
-        if generation_config.is_multilingual:
+        if hasattr(generation_config, "is_multilingual") and generation_config.is_multilingual:
             if hasattr(generation_config, "language"):
                 forced_decoder_ids.append((1, generation_config.lang_to_id[generation_config.language]))
             else:
@@ -1354,7 +1354,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             else:
                 forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
 
-        if generation_config.return_timestamps or return_timestamps:
+        if (
+            hasattr(generation_config, "return_timestamps") and generation_config.return_timestamps
+        ) or return_timestamps:
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
         else:
             if forced_decoder_ids and forced_decoder_ids[-1][0] != generation_config.no_timestamps_token_id:
