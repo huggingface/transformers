@@ -41,6 +41,8 @@ from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, Causa
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_h3 import H3Config
+
+# custom kernel
 from .src.models.h3 import H3
 
 

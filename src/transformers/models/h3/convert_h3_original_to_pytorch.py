@@ -12,7 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert OpenAI GPT checkpoint."""
+"""Convert H3 checkpoints from the original repository.
+
+URL: https://github.com/HazyResearch/H3/tree/main
+"""
 
 
 import argparse
