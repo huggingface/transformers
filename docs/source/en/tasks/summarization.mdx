@@ -33,7 +33,7 @@ See the summarization [task page](https://huggingface.co/tasks/summarization) fo
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate
+pip install transformers datasets evaluate rouge_score
 ```
 
 We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
@@ -81,7 +81,8 @@ The next step is to load a T5 tokenizer to process `text` and `summary`:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
+>>> checkpoint = "t5-small"
+>>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 ```
 
 The preprocessing function you want to create needs to:
@@ -117,14 +118,14 @@ Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It's more effic
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model)
+>>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
 </pt>
 <tf>
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, return_tensors="tf")
+>>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
 ```
 </tf>
 </frameworkcontent>
@@ -175,7 +176,7 @@ You're ready to start training your model now! Load T5 with [`AutoModelForSeq2Se
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2SeqTrainer
 
->>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
 ```
 
 At this point, only three steps remain:
@@ -237,7 +238,7 @@ Then you can load T5 with [`TFAutoModelForSeq2SeqLM`]:
 ```py
 >>> from transformers import TFAutoModelForSeq2SeqLM
 
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> model = TFAutoModelForSeq2SeqLM.from_pretrained(checkpoint)
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
