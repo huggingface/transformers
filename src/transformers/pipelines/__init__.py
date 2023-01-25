@@ -331,7 +331,7 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
-        "type": "image",
+        "type": "multimodal",
     },
     "image-to-text": {
         "impl": ImageToTextPipeline,

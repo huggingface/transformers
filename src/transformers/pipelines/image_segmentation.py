@@ -87,9 +87,11 @@ class ImageSegmentationPipeline(Pipeline):
         )
 
     def _sanitize_parameters(self, **kwargs):
+        preprocessor_kwargs = {}
         postprocess_kwargs = {}
         if "subtask" in kwargs:
             postprocess_kwargs["subtask"] = kwargs["subtask"]
+            preprocessor_kwargs["subtask"] = kwargs["subtask"]
         if "threshold" in kwargs:
             postprocess_kwargs["threshold"] = kwargs["threshold"]
         if "mask_threshold" in kwargs:
@@ -97,7 +99,7 @@ class ImageSegmentationPipeline(Pipeline):
         if "overlap_mask_area_threshold" in kwargs:
             postprocess_kwargs["overlap_mask_area_threshold"] = kwargs["overlap_mask_area_threshold"]
 
-        return {}, {}, postprocess_kwargs
+        return preprocessor_kwargs, {}, postprocess_kwargs
 
     def __call__(self, images, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
@@ -140,10 +142,23 @@ class ImageSegmentationPipeline(Pipeline):
         """
         return super().__call__(images, **kwargs)
 
-    def preprocess(self, image):
+    def preprocess(self, image, subtask=None):
         image = load_image(image)
         target_size = [(image.height, image.width)]
-        inputs = self.image_processor(images=[image], return_tensors="pt")
+        if self.model.config.__class__.__name__ == "OneFormerConfig":
+            if subtask is None:
+                kwargs = {}
+            else:
+                kwargs = {"task_inputs": [subtask]}
+            inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
+            inputs["task_inputs"] = self.tokenizer(
+                inputs["task_inputs"],
+                padding="max_length",
+                max_length=self.model.config.task_seq_len,
+                return_tensors=self.framework,
+            )["input_ids"]
+        else:
+            inputs = self.image_processor(images=[image], return_tensors="pt")
         inputs["target_size"] = target_size
         return inputs
 
