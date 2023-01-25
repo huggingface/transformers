@@ -825,7 +825,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     reached.
 
     Args:
-        exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
+        exponential_decay_length_penalty (`tuple(int, float)`):
             This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
             starts and `decay_factor` represents the factor of exponential decay
         eos_token_id (`Union[int, List[int]]`):
@@ -835,7 +835,10 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     """
 
     def __init__(
-        self, exponential_decay_length_penalty: Tuple, eos_token_id: Union[int, List[int]], input_ids_seq_length: int
+        self,
+        exponential_decay_length_penalty: Tuple[int, float],
+        eos_token_id: Union[int, List[int]],
+        input_ids_seq_length: int,
     ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
