@@ -66,7 +66,7 @@ class TvltModelTester:
         feature_size=16,
         image_patch_size=2,
         audio_patch_size=[2, 2],
-        num_pixel_channels=3,
+        num_image_channels=3,
         num_audio_channels=1,
         num_frames=2,
         hidden_size=128,
