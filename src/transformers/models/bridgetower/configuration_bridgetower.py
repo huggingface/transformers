@@ -80,6 +80,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         self,
         hidden_size=768,
         num_hidden_layers=12,
+        num_channels=3,
         patch_size=16,
         image_size=288,
         initializer_factor=1,
@@ -92,6 +93,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
+        self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_factor = initializer_factor

@@ -27,8 +27,9 @@ _import_structure = {
         "BridgeTowerConfig",
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
-    ]
+    ],
 }
+_import_structure["processing_bridgetower"] = ["BridgeTowerProcessor"]
 
 try:
     if not is_vision_available():
@@ -37,7 +38,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_bridgetower"] = ["BridgeTowerImageProcessor"]
-_import_structure["processing_bridgetower"] = ["BridgeTowerProcessor"]
 
 try:
     if not is_torch_available():
