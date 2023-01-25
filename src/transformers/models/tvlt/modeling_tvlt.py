@@ -675,7 +675,7 @@ TVLT_INPUTS_DOCSTRING = r"""
             details.
 
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
+            Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Pixel values mixed can be
             obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
         pixel_masks_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
