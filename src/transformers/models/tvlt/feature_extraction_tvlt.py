@@ -36,16 +36,16 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
     should refer to this superclass for more information regarding those methods.
 
     Args:
-        audio_size (`Dict[str, int]` *optional*, defaults to `2048`):
+        audio_size (`Dict[str, int]` *optional*, defaults to 2048):
             Time length of the output audio spectrogram.
-        num_channels (`int` *optional*, defaults to `1`):
+        num_channels (`int` *optional*, defaults to 1):
             Number of audio channels.
         patch_size (`List[int]` *optional*, defaults to `[16, 16]`):
             The patch size of audio patch embedding.
         feature_size (`int`, defaults to 128):
             The feature dimension of the extracted audio spectrogram.
-        masking_type (`str`, defaults to 'frame-level'):
-            The masking type of MAE on audio with choices in ['frame-level', 'patch-level']
+        masking_type (`str`, defaults to '"frame-level"'):
+            The masking type of MAE on audio with choices in `['frame-level', 'patch-level']`
         sampling_rate (`int`, defaults to 41000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         hop_length_to_sampling_rate (`int`, defaults to 86):
