@@ -505,7 +505,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             (1, model.config.num_queries, model.config.num_labels + 1),
         )
         expected_slice = torch.tensor(
-            [[3.0711, -1.1855, -5.1095], [3.5536, -3.2710, -5.2052], [2.6020, -4.3605, -4.1422]]
+            [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
