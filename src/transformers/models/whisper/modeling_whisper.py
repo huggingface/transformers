@@ -625,8 +625,8 @@ WHISPER_INPUTS_DOCSTRING = r"""
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing *SpecAugment* data augmentation on padding token indices. Mask values selected in `[0,
-            1]`:
+            Mask to avoid performing *SpecAugment* data augmentation on padding token indices. Mask values selected in
+            `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
