@@ -61,7 +61,7 @@ from utils_qa import postprocess_qa_predictions
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.26.0.dev0")
+check_min_version("4.27.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset

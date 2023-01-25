@@ -27,6 +27,13 @@ _import_structure = {
     ],
 }
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_mask2former"] = ["Mask2FormerImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -43,6 +50,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_mask2former import Mask2FormerImageProcessor
 
     try:
         if not is_torch_available():
