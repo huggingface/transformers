@@ -386,9 +386,8 @@ class SegformerImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
 
         images = make_list_of_images(images)
-        segmentation_maps = (
-            make_list_of_images(segmentation_maps, expected_ndims=2) if segmentation_maps is not None else None
-        )
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(

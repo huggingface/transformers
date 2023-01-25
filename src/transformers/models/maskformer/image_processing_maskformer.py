@@ -718,9 +718,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             )
 
         images = make_list_of_images(images)
-        segmentation_maps = (
-            make_list_of_images(segmentation_maps, expected_ndims=2) if segmentation_maps is not None else None
-        )
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")

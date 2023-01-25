@@ -439,9 +439,8 @@ class BeitImageProcessor(BaseImageProcessor):
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
         images = make_list_of_images(images)
-        segmentation_maps = (
-            make_list_of_images(segmentation_maps, expected_ndims=2) if segmentation_maps is not None else None
-        )
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(
