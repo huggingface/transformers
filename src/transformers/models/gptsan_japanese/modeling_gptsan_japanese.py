@@ -753,7 +753,7 @@ class GPTSANSentenceGenerator:
 
         >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese")
         >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
-        >>> x_tok = tokenizer.encode("武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。")
+        >>> x_tok = tokenizer.encode("武田信玄は、&lt;|inputmask|&gt;時代ファンならぜひ押さえ&lt;|inputmask|&gt;きたい名将の一人。")
         >>> model = model.cuda()
         >>> res = model.generator.predict_mlm(x_tok, tokenizer)
         >>> res[0]

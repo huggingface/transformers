@@ -70,11 +70,11 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
 class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     """
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications
-    - Decoding <|byte0|>~<|byte255|> tokens correctly
-    - Added <|bagofword|> token handling
-    The <|bagofword|> token represents a repetition of the previous token and is converted to 3 consecutive tokens when
-    decoding In addition, the original Japanese special Sub-Word-Encoding has been released in this repository
-    (https://github.com/tanreinama/Japanese-BPEEncoder_V2).
+    - Decoding &lt;|byte0|&gt;~&lt;|byte255|&gt; tokens correctly
+    - Added &lt;|bagofword|&gt; token handling
+    The &lt;|bagofword|&gt; token represents a repetition of the previous token and is converted to 3 consecutive
+    tokens when decoding In addition, the original Japanese special Sub-Word-Encoding has been released in this
+    repository (https://github.com/tanreinama/Japanese-BPEEncoder_V2).
 
     Example:
 
@@ -98,16 +98,16 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
             File containing the emoji.
         breakline (`str`, *optional*, defaults to `"\\n"`):
             Charactor to replace <BR> token.
-        unk_token (`str`, *optional*, defaults to `"<|nottoken|>"`):
+        unk_token (`str`, *optional*, defaults to `"&lt;|nottoken|&gt;"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
+        pad_token (`str`, *optional*, defaults to `"&lt;|separator|&gt;"`):
             The token used for padding
-        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
+        bos_token (`str`, *optional*, defaults to `"&lt;|startoftext|&gt;"`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+        eos_token (`str`, *optional*, defaults to `"&lt;|endoftext|&gt;"`):
             The end of sequence token.
-        mask_token (`str`, *optional*, defaults to `"<|inputmask|>"`):
+        mask_token (`str`, *optional*, defaults to `"&lt;|inputmask|&gt;"`):
             The mask token for mlm.
         do_clean_text (`bool`, *optional*, defaults to `False`):
             Whether or not to clean text for URL, EMAIL, TEL, Japanese DATE and Japanese PRICE.
@@ -258,8 +258,8 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
 class SubWordJapaneseTokenizer(object):
     """
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications
-    - Decoding <|byte0|>~<|byte255|> tokens correctly
-    - Added <|bagofword|> token handling
+    - Decoding &lt;|byte0|&gt;~&lt;|byte255|&gt; tokens correctly
+    - Added &lt;|bagofword|&gt; token handling
 
     https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
     original repository.
