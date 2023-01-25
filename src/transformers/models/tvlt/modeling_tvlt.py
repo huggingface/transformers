@@ -445,7 +445,6 @@ class TvltSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -498,7 +497,6 @@ class TvltIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -521,20 +519,43 @@ class TvltOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltOutput with Vilt->Tvlt and ViLT->TVLT
+# Copied from transformers.models.vilt.modeling_vilt.ViltLayer with Vilt->Tvlt
 class TvltLayer(nn.Module):
-    def __init__(self, config: TvltConfig) -> None:
+    """This corresponds to the Block class in the timm implementation."""
+
+    def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
+        self.attention = TvltAttention(config)
+        self.intermediate = TvltIntermediate(config)
+        self.output = TvltOutput(config)
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+        self_attention_outputs = self.attention(
+            self.layernorm_before(hidden_states),  # in ViLT, layernorm is applied before self-attention
+            attention_mask,
+            head_mask,
+            output_attentions=output_attentions,
+        )
+        attention_output = self_attention_outputs[0]
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        hidden_states = hidden_states + input_tensor
+        # first residual connection
+        hidden_states = attention_output + hidden_states.to(attention_output.device)
 
-        return hidden_states
+        # in ViLT, layernorm is also applied after self-attention
+        layer_output = self.layernorm_after(hidden_states)
+        layer_output = self.intermediate(layer_output)
+
+        # second residual connection is done here
+        layer_output = self.output(layer_output, hidden_states)
+
+        outputs = (layer_output,) + outputs
+
+        return outputs
 
 
 # Copied from transformers.models.vilt.modeling_vilt.ViltEncoder with Vilt->Tvlt
