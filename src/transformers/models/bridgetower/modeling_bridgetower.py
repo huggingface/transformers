@@ -229,7 +229,7 @@ class BridgeTowerTransformer(nn.Module):
                 hidden_states.append(hidden_state)
         return hidden_states
 
-
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->BridgeTower
 class BridgeTowerVisionEmbeddings(nn.Module):
     def __init__(self, config: BridgeTowerVisionConfig):
         super().__init__()
@@ -960,8 +960,8 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * self.config.initializer_factor)
                 nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * self.config.initializer_factor)
 
-            nn.init.normal_(module.visual.class_embedding, std=attn_std * self.config.initializer_factor)
-            nn.init.normal_(module.visual.positional_embedding, std=attn_std * self.config.initializer_factor)
+            nn.init.normal_(module.visual.embeddings.class_embedding, std=attn_std * self.config.initializer_factor)
+            nn.init.normal_(module.visual.embeddings.position_embedding, std=attn_std * self.config.initializer_factor)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=0.05 * self.config.initializer_factor)
         elif isinstance(module, nn.LayerNorm):
