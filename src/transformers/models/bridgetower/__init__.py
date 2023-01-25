@@ -28,8 +28,8 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
+    "processing_bridgetower": ["BridgeTowerProcessor"],
 }
-_import_structure["processing_bridgetower"] = ["BridgeTowerProcessor"]
 
 try:
     if not is_vision_available():
@@ -61,6 +61,7 @@ if TYPE_CHECKING:
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
     )
+    from .processing_bridgetower import BridgeTowerProcessor
 
     try:
         if not is_vision_available():
@@ -69,7 +70,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_bridgetower import BridgeTowerImageProcessor
-    from .processing_bridgetower import BridgeTowerProcessor
 
     try:
         if not is_torch_available():
