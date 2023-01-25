@@ -112,7 +112,7 @@ class TvltConfig(PretrainedConfig):
 
     def __init__(
         self,
-        pixel_size=224,
+        image_size=224,
         audio_size=2048,
         feature_size=128,
         pixel_patch_size=16,
