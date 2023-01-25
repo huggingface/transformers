@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,12 +61,12 @@ class TvltModelTester:
         self,
         parent,
         batch_size=2,
-        image_size=32,
+        pixel_size=32,
         audio_size=32,
         feature_size=16,
-        image_patch_size=2,
+        pixel_patch_size=2,
         audio_patch_size=[2, 2],
-        num_image_channels=3,
+        num_pixel_channels=3,
         num_audio_channels=1,
         num_frames=2,
         hidden_size=128,
@@ -95,12 +95,12 @@ class TvltModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.image_size = image_size
+        self.pixel_size = pixel_size
         self.audio_size = audio_size
         self.feature_size = feature_size
-        self.image_patch_size = image_patch_size
+        self.pixel_patch_size = pixel_patch_size
         self.audio_patch_size = audio_patch_size
-        self.num_image_channels = num_image_channels
+        self.num_pixel_channels = num_pixel_channels
         self.num_audio_channels = num_audio_channels
         self.num_frames = num_frames
 
@@ -129,13 +129,13 @@ class TvltModelTester:
         self.num_qa_labels = num_qa_labels
         self.num_labels = num_labels
 
-        self.expected_pixel_seq_len = (self.image_size // self.image_patch_size) ** 2 * self.num_frames
+        self.expected_pixel_seq_len = (self.pixel_size // self.pixel_patch_size) ** 2 * self.num_frames
         self.expected_audio_seq_len = (self.audio_size // self.audio_patch_size[0]) * (
             self.feature_size // self.audio_patch_size[1]
         )
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of number of image/video patches + number of audio patches
-        self.expected_seq_len = self.expected_image_seq_len + self.expected_audio_seq_len + 1
+        self.expected_seq_len = self.expected_pixel_seq_len + self.expected_audio_seq_len + 1
 
         self.pixel_mae_output_dim = pixel_patch_size**2 * num_pixel_channels
         self.audio_mae_output_dim = audio_patch_size[0] * audio_patch_size[1] * num_audio_channels
@@ -143,7 +143,7 @@ class TvltModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_image_channels, self.image_size, self.image_size]
+            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
         )
         audio_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_size, self.feature_size])
 
