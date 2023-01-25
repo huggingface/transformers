@@ -24,10 +24,9 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+# TODO create soft dependency
 from flash_attn.modules.block import Block
 from flash_attn.modules.embedding import GPT2Embeddings
-
-# TODO create soft dependency
 from flash_attn.modules.mha import MHA
 from flash_attn.modules.mlp import FusedMLP, Mlp
 from flash_attn.utils.generation import GenerationMixin
@@ -44,7 +43,7 @@ except ImportError:
     dropout_add_layer_norm = None
 
 # TODO add custom kernel
-from src.models.ssm.h3 import H3
+from src.models.h3 import H3
 
 
 logger = logging.get_logger(__name__)
