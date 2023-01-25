@@ -200,7 +200,6 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
