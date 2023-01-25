@@ -44,7 +44,7 @@ class InformerConfig(PretrainedConfig):
             num_feat_static_cat: int = 0,  # num_static_categorical_features
             cardinality: Optional[List[int]] = None,
             embedding_dimension: Optional[List[int]] = None,
-            dim_feedforward: int = 32,  # decoder_ffn_dim & encoder_ffn_dim
+            dim_feedforward: int = 2048,  # decoder_ffn_dim & encoder_ffn_dim
             nhead: int = 8,  # Eli: how much attention heads?
             num_encoder_layers: int = 2,  # encoder_layers
             num_decoder_layers: int = 1,  # decoder_layers
