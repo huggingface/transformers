@@ -383,6 +383,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
             expected_arg_names = [
                 "input_features",
+                "attention_mask",
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
