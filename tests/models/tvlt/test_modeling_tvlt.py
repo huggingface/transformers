@@ -61,7 +61,7 @@ class TvltModelTester:
         self,
         parent,
         batch_size=2,
-        pixel_size=32,
+        image_size=32,
         audio_size=32,
         feature_size=16,
         pixel_patch_size=2,
