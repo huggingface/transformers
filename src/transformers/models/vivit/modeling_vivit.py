@@ -54,14 +54,14 @@ class VivitTubeletEmbeddings(nn.Module):
     """
 
     def __init__(self, config):
-        # video_size, tubelet_size, num_channels = 3, embed_dim = 768)
         super().__init__()
-        self.video_size = config.video_size
+        self.num_frames = config.num_frames
+        self.image_size = config.image_size
         self.patch_size = config.tubelet_size
         self.num_patches = (
-            (self.video_size[2] // self.patch_size[2])
-            * (self.video_size[1] // self.patch_size[1])
-            * (self.video_size[0] // self.patch_size[0])
+            (self.image_size // self.patch_size[2])
+            * (self.image_size // self.patch_size[1])
+            * (self.num_frames // self.patch_size[0])
         )
         self.embed_dim = config.hidden_size
 
@@ -69,10 +69,10 @@ class VivitTubeletEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        if height != self.video_size[-2] or width != self.video_size[-1]:
+        if height != self.image_size or width != self.image_size:
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.video_size[-2]}*{self.video_size[-1]})."
+                f" ({self.image_size}*{self.image_size})."
             )
 
         # permute to (batch_size, num_channels, num_frames, height, width)
