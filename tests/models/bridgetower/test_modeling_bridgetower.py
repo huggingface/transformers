@@ -85,8 +85,8 @@ class BridgeTowerModelTester:
         self.seq_length = 4
         self.num_image_features = 325
         self.batch_size = 1
-        self.is_training = False
         self.image_size = image_size
+        self.is_training = False
         self.expected_num_hidden_layers = 32
         self.output_hidden_states = output_hidden_states
 
