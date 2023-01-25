@@ -24,8 +24,6 @@ https://github.com/elisim/Informer2020/tree/hf
 
 See also: https://github.com/elisim/Informer2020/blob/hf/create_checkpoint_from_offical_colab.ipynb
 """
-
-
 import argparse
 import os
 from pathlib import Path
@@ -57,6 +55,12 @@ mnli_rename_keys = [
 
 
 def _create_informer_args():
+    """
+    Arguments are taken from the offical colab example:
+    https://colab.research.google.com/drive/1_X7O2BkFLvqyCdZzDZvV2MB0aAvYALLC
+
+    I only comment arguments that are not needed for the model creation (e.g. data_path, use_gpu)
+    """
     class dotdict(dict):
         """dot.notation access to dictionary attributes"""
         __getattr__ = dict.get
@@ -67,10 +71,10 @@ def _create_informer_args():
 
     ### BoilerCode
     args.model = 'informer'  # model of experiment, options: [informer, informerstack, informerlight(TBD)]
-    args.data = 'ETTh1'  # data
-    args.root_path = './ETDataset/ETT-small/'  # root path of data file
-    args.data_path = 'ETTh1.csv'  # data file
-    args.checkpoints = './informer_checkpoints'  # location of model checkpoints
+    # args.data = 'ETTh1'  # data
+    # args.root_path = './ETDataset/ETT-small/'  # root path of data file
+    # args.data_path = 'ETTh1.csv'  # data file
+    # args.checkpoints = './informer_checkpoints'  # location of model checkpoints
 
     ### TS
     args.features = 'M'  # forecasting task, options:[M, S, MS]
@@ -117,11 +121,11 @@ def _create_informer_args():
     args.patience = 3
     args.des = 'exp'
 
-    args.use_gpu = False  # True if torch.cuda.is_available() else False
-    args.gpu = 0
-
-    args.use_multi_gpu = False
-    args.devices = '0,1,2,3'
+    # args.use_gpu = False  # True if torch.cuda.is_available() else False
+    # args.gpu = 0
+    #
+    # args.use_multi_gpu = False
+    # args.devices = '0,1,2,3'
 
     args.detail_freq = args.freq  # the actual freq
     args.freq = args.freq[-1:]  # Not important
@@ -209,10 +213,10 @@ def make_linear_from_emb(emb):
 if __name__ == "__main__":
     informer_checkpoint_default_path = "./Informer2020/informer_checkpoints/informer_ETTh1_ftM_sl96_ll48_pl24_dm512_nh8_el2_dl1_df2048_atprob_fc5_ebtimeF_dtTrue_mxTrue_exp_0/checkpoint.pth"
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("informer_path", default=None, type=str, help="a path to a model.pth on local filesystem.")
-    parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("informer_path", default=None, type=str, help="a path to a model.pth on local filesystem.")
+    # parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    # args = parser.parse_args()
 
     # convert_informer_checkpoint(args.informer_path, args.pytorch_dump_folder_path)
     informer = load_informer_checkpoint(informer_checkpoint_default_path)
