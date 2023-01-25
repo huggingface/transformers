@@ -31,7 +31,6 @@ import sys
 import time
 import warnings
 from collections.abc import Mapping
-from copy import deepcopy
 from distutils.util import strtobool
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
