@@ -1195,7 +1195,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
 
 class TvltPooler(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.activation = nn.Tanh()
