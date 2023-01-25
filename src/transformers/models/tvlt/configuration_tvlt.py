@@ -75,7 +75,7 @@ class TvltConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         use_mean_pooling (`bool`, *optional*, defaults to `False`):
             Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 6):
+        decoder_num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the decoder.
         decoder_hidden_size (`int`, *optional*, defaults to 384):
             Dimensionality of the decoder.
