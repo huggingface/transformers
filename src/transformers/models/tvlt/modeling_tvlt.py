@@ -1245,7 +1245,7 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
         # Classifier head
         self.classifier = nn.Sequential(
             nn.Linear(config.hidden_size, config.hidden_size * 2),
-            nn.LayerNorm(config.hidden_size * 2),
+            nn.LayerNorm(config.hidden_size * 2, eps=config.layer_norm_eps),
             nn.GELU(),
             nn.Linear(config.hidden_size * 2, config.num_labels),
         )
