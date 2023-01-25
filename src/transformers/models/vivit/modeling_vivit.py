@@ -53,18 +53,19 @@ class VivitTubeletEmbeddings(nn.Module):
     (width // tubelet_size[2]).
     """
 
-    def __init__(self, video_size, tubelet_size, num_channels=3, embed_dim=768):
+    def __init__(self, config):
+        # video_size, tubelet_size, num_channels = 3, embed_dim = 768)
         super().__init__()
-        self.video_size = video_size
-        self.patch_size = tubelet_size
+        self.video_size = config.video_size
+        self.patch_size = config.tubelet_size
         self.num_patches = (
-            (video_size[2] // tubelet_size[2])
-            * (video_size[1] // tubelet_size[1])
-            * (video_size[0] // tubelet_size[0])
+            (self.video_size[2] // self.patch_size[2])
+            * (self.video_size[1] // self.patch_size[1])
+            * (self.video_size[0] // self.patch_size[0])
         )
-        self.embed_dim = embed_dim
+        self.embed_dim = config.hidden_size
 
-        self.projection = nn.Conv3d(num_channels, embed_dim, kernel_size=tubelet_size, stride=tubelet_size)
+        self.projection = nn.Conv3d(config.num_channels, config.hidden_size, kernel_size=config.tubelet_size, stride=config.tubelet_size)
 
     def forward(self, pixel_values):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
@@ -87,7 +88,7 @@ class VivitEmbeddings(nn.Module):
     """
     Vivit Embeddings.
 
-    Creates embeddings from a video using TubeletEmbeddings, adds CLS token and positional embeddings.
+    Creates embeddings from a video using VivitTubeletEmbeddings, adds CLS token and positional embeddings.
 
     """
 
@@ -95,9 +96,7 @@ class VivitEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embeddings = TubeletEmbeddings(
-            config.video_size, config.tubelet_size, config.num_channels, config.hidden_size
-        )
+        self.patch_embeddings = VivitTubeletEmbeddings(config)
 
         self.position_embeddings = nn.Parameter(
             torch.zeros(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
