@@ -65,9 +65,9 @@ class BridgeTowerImageProcessingTester(unittest.TestCase):
         self.image_std = image_std
         self.do_pad = do_pad
         self.batch_size = batch_size
+        self.num_channels = num_channels
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
-        self.num_channels = num_channels
 
     def prepare_image_processor_dict(self):
         return {
