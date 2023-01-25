@@ -72,13 +72,11 @@ class TvltProcessor(ProcessorMixin):
                 audio, *args, sampling_rate=sampling_rate, mask_audio=mask_audio, **kwargs
             )
 
-        if audio is None:
-            output_dict = images_dict
-        elif images is None:
-            output_dict = audio_dict
-            return output_dict
-        else:
-            output_dict = dict(images_dict.items() + audio.items())
+        output_dict = {}
+        if audio is not None:
+            output_dict.update(audio_dict)
+        if images is not None:
+            output_dict.update(images_dict)
         if images_mixed_dict is not None:
             output_dict.update(images_mixed_dict)
         return output_dict
