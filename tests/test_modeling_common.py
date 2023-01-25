@@ -113,7 +113,6 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         AdaptiveEmbedding,
         AutoModelForCausalLM,
@@ -880,7 +879,7 @@ class ModelTesterMixin:
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
 
-                    if isinstance(model, tuple(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values())) and (
+                    if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
                         not hasattr(model.config, "problem_type") or model.config.problem_type is None
                     ):
                         model.config.problem_type = "single_label_classification"
