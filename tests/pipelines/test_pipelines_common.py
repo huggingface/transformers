@@ -227,6 +227,13 @@ class PipelineTestCaseMeta(type):
                 " modeling file",
             )
             def test(self):
+                if ModelClass.__name__ == "WhisperForConditionalGeneration":
+                    # TODO: address this
+                    self.skipTest(
+                        "Cannot test Whisper generation with tiny config, because it does not have configuration"
+                        " defaults for generation"
+                    )
+
                 if ModelClass.__name__.endswith("ForCausalLM"):
                     tiny_config.is_encoder_decoder = False
                     if hasattr(tiny_config, "encoder_no_repeat_ngram_size"):
@@ -244,6 +251,7 @@ class PipelineTestCaseMeta(type):
                     )
                 if hasattr(model, "eval"):
                     model = model.eval()
+
                 if tokenizer_class is not None:
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
