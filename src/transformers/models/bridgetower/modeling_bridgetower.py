@@ -229,6 +229,7 @@ class BridgeTowerTransformer(nn.Module):
                 hidden_states.append(hidden_state)
         return hidden_states
 
+
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->BridgeTower
 class BridgeTowerVisionEmbeddings(nn.Module):
     def __init__(self, config: BridgeTowerVisionConfig):
