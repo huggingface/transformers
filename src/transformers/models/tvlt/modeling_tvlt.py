@@ -521,6 +521,7 @@ class TvltOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vilt.modeling_vilt.ViltOutput with Vilt->Tvlt and ViLT->TVLT
 class TvltLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
