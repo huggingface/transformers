@@ -679,7 +679,7 @@ TVLT_INPUTS_DOCSTRING = r"""
             obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
         pixel_masks_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltProcessor`]. See
+            Pixel masks of pixel_values_mixed. Pixel masks mixed can be obtained using [`TvltProcessor`]. See
             [`TvltProcessor.__call__`] for details.
 
         pixel_mask_position_permutation (`torch.LongTensor` of shape `(batch_size, num_pixel_patches)`):
