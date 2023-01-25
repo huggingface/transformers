@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EfficientFormerConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "efficientformer-l1-300"
+_CHECKPOINT_FOR_DOC = "snap-research/efficientformer-l1-300"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
@@ -51,7 +51,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/efficientformer-l1-300",
+    "snap-research/efficientformer-l1-300",
     # See all EfficientFormer models at https://huggingface.co/models?filter=efficientformer
 ]
 
