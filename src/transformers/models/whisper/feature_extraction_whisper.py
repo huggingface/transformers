@@ -340,8 +340,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         # zero-mean and unit-variance normalization
         if do_normalize:
-            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_values"], attention_mask=None, padding_value=self.padding_value
+            padded_inputs["input_features"] = self.zero_mean_unit_var_norm(
+                padded_inputs["input_features"], attention_mask=None, padding_value=self.padding_value
             )
 
         input_features = [self._np_extract_fbank_features(waveform) for waveform in input_features[0]]
