@@ -768,7 +768,7 @@ class TvltModel(TvltPreTrainedModel):
         >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TvltModel.from_pretrained("TVLT/tvlt-base")
 
-        >>> input_dict = processor(pixel, audio, sampling_rate=44100, return_tensors="pt")
+        >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
 
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss
