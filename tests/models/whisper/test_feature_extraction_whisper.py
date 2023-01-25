@@ -21,6 +21,7 @@ import tempfile
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers import is_speech_available
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
@@ -223,3 +224,16 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feaure_extractor = WhisperFeatureExtractor()
         input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+
+    def _check_zero_mean_unit_variance(self, input_vector):
+
+        self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
+
+    def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        audio = self._load_datasamples(1)[0]
+        audio = ((audio - audio.min()) / (audio.max() - audio.min())) * 65535  # Rescale to [0, 65535] to show issue
+        audio = feat_extract.zero_mean_unit_var_norm([audio], attention_mask=None)[0]
+
+        self.assertTrue(np.all(np.mean(audio) < 1e-3))
+        self.assertTrue(np.all(np.abs(np.var(audio) - 1) < 1e-3))
