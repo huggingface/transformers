@@ -83,7 +83,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.freq_len = feature_size // self.patch_size[1]
-        self.masking_type = "frame-level"
+        self.masking_type = masking_type
         self.n_fft = n_fft
         self.hop_length = sampling_rate // hop_length_to_sampling_rate
         self.sampling_rate = sampling_rate
