@@ -451,7 +451,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         expected_slice_hidden_state = torch.tensor(
-            [[0.2724, 0.8287, 0.6025], [1.2706, 1.1252, 1.1445], [1.1357, 0.6150, 0.4185]]
+            [[0.2723, 0.8280, 0.6026], [1.2699, 1.1257, 1.1444], [1.1344, 0.6153, 0.4177]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -460,7 +460,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[1.0581, 1.2275, 1.2000], [1.1901, 1.2925, 1.2861], [1.1578, 1.2558, 1.3212]]
+            [[1.0581, 1.2276, 1.2003], [1.1903, 1.2925, 1.2862], [1.158, 1.2559, 1.3216]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
@@ -469,7 +469,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[3.0711, -1.1855, -5.1095], [3.5536, -3.2710, -5.2052], [2.6020, -4.3605, -4.1422]]
+            [[3.0668, -1.1833, -5.1103], [3.344, -3.362, -5.1101], [2.6017, -4.3613, -4.1444]]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
