@@ -5,7 +5,7 @@ import torch.nn as nn
 
 
 class OptimModule(nn.Module):
-    """ Interface for Module that allows registering buffers/parameters with configurable optimizer hyperparameters"""
+    """Interface for Module that allows registering buffers/parameters with configurable optimizer hyperparameters"""
 
     def register(self, name, tensor, lr=None):
         """Register a tensor with a configurable learning rate and 0 weight decay"""
@@ -16,5 +16,6 @@ class OptimModule(nn.Module):
             self.register_parameter(name, nn.Parameter(tensor))
 
             optim = {"weight_decay": 0.0}
-            if lr is not None: optim["lr"] = lr
+            if lr is not None:
+                optim["lr"] = lr
             setattr(getattr(self, name), "_optim", optim)

@@ -42,8 +42,7 @@ try:
 except ImportError:
     dropout_add_layer_norm = None
 
-# TODO add custom kernel
-from src.models.h3 import H3
+from .src.models.h3 import H3
 
 
 logger = logging.get_logger(__name__)

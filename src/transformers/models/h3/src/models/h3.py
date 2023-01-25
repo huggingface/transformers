@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from einops import rearrange
-
 from src.models.ss_kernel import SSKernel
+
 
 try:
     from src.ops.fftconv import fftconv_func
@@ -18,20 +18,20 @@ def mul_sum(q, y):
 
 
 class H3(nn.Module):
-
     def __init__(
-            self,
-            d_model,
-            d_state=64,
-            l_max=None,
-            head_dim=1,
-            use_fast_fftconv=False,
-            dropout=0.0,   # Just to absorb the kwarg
-            layer_idx=None,
-            device=None, dtype=None,
-            # SSM Kernel arguments
-            **kernel_args,
-        ):
+        self,
+        d_model,
+        d_state=64,
+        l_max=None,
+        head_dim=1,
+        use_fast_fftconv=False,
+        dropout=0.0,  # Just to absorb the kwarg
+        layer_idx=None,
+        device=None,
+        dtype=None,
+        # SSM Kernel arguments
+        **kernel_args,
+    ):
         """
         d_state: the dimension of the state, also denoted by N l_max: the maximum kernel length, also denoted by L. Set
         l_max=None to always use a global kernel
@@ -41,7 +41,7 @@ class H3(nn.Module):
 
         Other options are all experimental and should not need to be configured
         """
-        factory_kwargs = {'device': device, 'dtype': dtype}
+        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.d_model = d_model
         self.head_dim = head_dim
@@ -52,15 +52,14 @@ class H3(nn.Module):
         self.layer_idx = layer_idx
         self.use_fast_fftconv = use_fast_fftconv
         if self.use_fast_fftconv:
-            assert fftconv_func is not None, 'Need to install fftconv'
+            assert fftconv_func is not None, "Need to install fftconv"
 
         self.q_proj = nn.Linear(self.d_model, self.d_model, **factory_kwargs)
         self.k_proj = nn.Linear(self.d_model, self.d_model, **factory_kwargs)
         self.v_proj = nn.Linear(self.d_model, self.d_model, **factory_kwargs)
 
         # TODO: SSKernel doesn't take device argument yet
-        self.ssm_k_kernel = SSKernel(self.d_model, N=d_state, L=self.L, mode='shift',
-                                     lr=kernel_args.get('lr', None))
+        self.ssm_k_kernel = SSKernel(self.d_model, N=d_state, L=self.L, mode="shift", lr=kernel_args.get("lr", None))
         self.ssm_k_D = nn.Parameter(torch.randn(self.d_model))
         # S4D Kernel
         self.kernel = SSKernel(self.H, N=self.N, L=self.L, channels=1, **kernel_args)
@@ -105,27 +104,26 @@ class H3(nn.Module):
             return y
 
         # Compute SS Kernel
-        L_kernel = L if self.L is None else min(L, self.L )
-        ssm_kernel, k_state = self.kernel(L=L_kernel, state=state, rate=1.0) # (C H L) (B C H L)
-        ssm_kernel = rearrange(ssm_kernel, '1 h l -> h l')
+        L_kernel = L if self.L is None else min(L, self.L)
+        ssm_kernel, k_state = self.kernel(L=L_kernel, state=state, rate=1.0)  # (C H L) (B C H L)
+        ssm_kernel = rearrange(ssm_kernel, "1 h l -> h l")
 
-        u = rearrange(u, 'b l h -> (b l) h')
-        dtype = (self.q_proj.weight.dtype if not torch.is_autocast_enabled()
-                 else torch.get_autocast_gpu_dtype())
+        u = rearrange(u, "b l h -> (b l) h")
+        dtype = self.q_proj.weight.dtype if not torch.is_autocast_enabled() else torch.get_autocast_gpu_dtype()
         q = self.q_proj.weight @ u.T + self.q_proj.bias.to(dtype).unsqueeze(-1)
         k = self.k_proj.weight @ u.T + self.k_proj.bias.to(dtype).unsqueeze(-1)
         v = self.v_proj.weight @ u.T + self.v_proj.bias.to(dtype).unsqueeze(-1)
-        q, k, v = [rearrange(x, 'h (b l) -> b h l', l=L) for x in [q, k, v]]
+        q, k, v = [rearrange(x, "h (b l) -> b h l", l=L) for x in [q, k, v]]
 
         k_og = k
-        ssm_k_kernel, _ = self.ssm_k_kernel(L=L_kernel, state=state_k, rate=1.0) # (C H L) (B C H L)
-        ssm_k_kernel = rearrange(ssm_k_kernel, '1 h l -> h l')
+        ssm_k_kernel, _ = self.ssm_k_kernel(L=L_kernel, state=state_k, rate=1.0)  # (C H L) (B C H L)
+        ssm_k_kernel = rearrange(ssm_k_kernel, "1 h l -> h l")
         if not use_fast_fftconv:
             fft_size = L_kernel + L
-            ssm_k_kernel_f = torch.fft.rfft(ssm_k_kernel, n=fft_size) # (H 2L)
-            k_f = torch.fft.rfft(k.to(ssm_kernel.dtype), n=fft_size) # (B H 2L)
+            ssm_k_kernel_f = torch.fft.rfft(ssm_k_kernel, n=fft_size)  # (H 2L)
+            k_f = torch.fft.rfft(k.to(ssm_kernel.dtype), n=fft_size)  # (B H 2L)
             shift_k_out = torch.fft.irfft(ssm_k_kernel_f * k_f, n=fft_size)[..., :L]
-            k = shift_k_out + rearrange(self.ssm_k_D, 'h -> h 1') * k
+            k = shift_k_out + rearrange(self.ssm_k_D, "h -> h 1") * k
         else:
             dropout_mask = None
             # No GeLU after the SSM
@@ -136,33 +134,34 @@ class H3(nn.Module):
             # for the case batch_size=1. In that case k has stride (L, L, 1), but q and v has
             # stride (H * L, L, 1). The two strides are equivalent because batch_size=1, but
             # the C++ code doesn't like that.
-            k = rearrange(rearrange(k, 'b h l -> h b l'), 'h b l -> b h l')
+            k = rearrange(rearrange(k, "b h l -> h b l"), "h b l -> b h l")
 
         if not use_fast_fftconv:
             fft_size = L_kernel + L
             # kv = k * v
-            kv = (rearrange(k, 'b (h d1) l -> b d1 1 h l', d1=self.head_dim)
-                    * rearrange(v, 'b (h d2) l -> b 1 d2 h l', d2=self.head_dim))  # b d1 d2 h l
+            kv = rearrange(k, "b (h d1) l -> b d1 1 h l", d1=self.head_dim) * rearrange(
+                v, "b (h d2) l -> b 1 d2 h l", d2=self.head_dim
+            )  # b d1 d2 h l
             kv_f = torch.fft.rfft(kv.to(dtype=ssm_kernel.dtype), n=fft_size) / fft_size
             ssm_kernel_f = torch.fft.rfft(ssm_kernel, n=fft_size)  # h L+1
-            y = torch.fft.irfft(kv_f * ssm_kernel_f, n=fft_size, norm='forward')[..., :L]  # b d1 d2 h l
+            y = torch.fft.irfft(kv_f * ssm_kernel_f, n=fft_size, norm="forward")[..., :L]  # b d1 d2 h l
             y = y + kv * self.D.unsqueeze(-1)  # b d1 d2 h l
-            q = rearrange(q, 'b (h d1) l -> b d1 1 h l', d1=self.head_dim)
+            q = rearrange(q, "b (h d1) l -> b d1 1 h l", d1=self.head_dim)
             # einsum is way slower than multiply and then sum.
             if self.head_dim > 1:
                 y = mul_sum(y, q)
-                y = rearrange(y, 'b d h l -> b (d h) l')
+                y = rearrange(y, "b d h l -> b (d h) l")
             else:
-                y = rearrange(y * q, 'b 1 1 h l -> b h l')
+                y = rearrange(y * q, "b 1 1 h l -> b h l")
         else:
             dropout_mask = None
             # No GeLU after the SSM
             # Set output_hbl_layout=True since we'll be doing a matmul right after
-            y = fftconv_func(k, ssm_kernel, self.D,
-                             dropout_mask, False, torch.is_autocast_enabled(), True,
-                             v, self.head_dim, q)
+            y = fftconv_func(
+                k, ssm_kernel, self.D, dropout_mask, False, torch.is_autocast_enabled(), True, v, self.head_dim, q
+            )
 
-        y = rearrange(y, 'b h l -> b l h')
+        y = rearrange(y, "b h l -> b l h")
 
         if state is not None:
             assert inference_params is not None
@@ -173,7 +172,7 @@ class H3(nn.Module):
                 self.ssm_k_kernel.forward_state(k_og, state_k)
             )
             inference_params.key_value_memory_dict[self.layer_idx][1].copy_(
-                self.kernel.forward_state(rearrange(kv, 'b d1 d2 h l -> (b d1 d2) h l'), state)
+                self.kernel.forward_state(rearrange(kv, "b d1 d2 h l -> (b d1 d2) h l"), state)
             )
 
         # y could be in fp32 because of the SSMs
@@ -187,20 +186,20 @@ class H3(nn.Module):
 
     def step(self, u, state_k, state):
         q, k, v = self.q_proj(u), self.k_proj(u), self.v_proj(u)
-        shift_k, next_state_k = self.ssm_k_kernel.step(rearrange(k, 'b 1 h -> b h'), state_k)
+        shift_k, next_state_k = self.ssm_k_kernel.step(rearrange(k, "b 1 h -> b h"), state_k)
         k = shift_k + k * self.ssm_k_D
         # kv = k * v
-        kv = (rearrange(k, 'b 1 (h d1) -> b d1 1 h', d1=self.head_dim)
-                * rearrange(v, 'b 1 (h d2) -> b 1 d2 h', d2=self.head_dim))  # b d1 d2 h
-        y, next_state = self.kernel.step(rearrange(kv, 'b d1 d2 h -> (b d1 d2) h'), state)
-        y = (rearrange(y, '(b d1 d2) 1 h -> b d1 d2 h', d1=self.head_dim, d2=self.head_dim)
-                + kv * self.D)
-        q = rearrange(q, 'b 1 (h d1) -> b d1 1 h', d1=self.head_dim)
+        kv = rearrange(k, "b 1 (h d1) -> b d1 1 h", d1=self.head_dim) * rearrange(
+            v, "b 1 (h d2) -> b 1 d2 h", d2=self.head_dim
+        )  # b d1 d2 h
+        y, next_state = self.kernel.step(rearrange(kv, "b d1 d2 h -> (b d1 d2) h"), state)
+        y = rearrange(y, "(b d1 d2) 1 h -> b d1 d2 h", d1=self.head_dim, d2=self.head_dim) + kv * self.D
+        q = rearrange(q, "b 1 (h d1) -> b d1 1 h", d1=self.head_dim)
         if self.head_dim > 1:
             y = mul_sum(y, q)
-            y = rearrange(y, 'b d h l -> b (d h) l')
+            y = rearrange(y, "b d h l -> b (d h) l")
         else:
-            y = rearrange(y * q, 'b 1 1 h -> b 1 h')
+            y = rearrange(y * q, "b 1 1 h -> b 1 h")
         # y could be in fp32 because of the SSMs
         if not torch.is_autocast_enabled():
             y = y.to(dtype=self.output_linear.weight.dtype)

@@ -6,26 +6,24 @@
 """
 
 import math
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from einops import rearrange, repeat
 from opt_einsum import contract
-
-from src.models.ss_kernel_diag import SSKernelDiag, EMAKernel
-from src.models.ss_kernel_shift import SSKernelShift
-
-from src.models import hippo
 from src.models import dplr
+from src.models.ss_kernel_diag import EMAKernel, SSKernelDiag
+from src.models.ss_kernel_shift import SSKernelShift
 from src.ops.krylov import power
-
 from src.utils.utils import get_logger
+
 
 log = get_logger(__name__)
 
 
-_conj = lambda x: torch.cat([x, x.conj()], dim=-1)
+def _conj(x):
+    return torch.cat([x, x.conj()], dim=-1)
 
 
 class SSKernel(nn.Module):
@@ -85,9 +83,7 @@ class SSKernel(nn.Module):
         if deterministic:
             log_dt = torch.exp(torch.linspace(math.log(dt_min), math.log(dt_max), H))
         else:
-            log_dt = torch.rand(self.H, dtype=dtype) * (
-                math.log(dt_max) - math.log(dt_min)
-            ) + math.log(dt_min)
+            log_dt = torch.rand(self.H, dtype=dtype) * (math.log(dt_max) - math.log(dt_min)) + math.log(dt_min)
 
         # Compute the preprocessed representation
         if mode == "ema":
@@ -98,39 +94,45 @@ class SSKernel(nn.Module):
             # Broadcast C to have H channels
             if deterministic:
                 C = torch.zeros(channels, self.n_ssm, self.N, dtype=cdtype)
-                C[:, :, :1] = 1.
-                C = contract('hmn, chn -> chm', V.conj().transpose(-1, -2), C) # V^* C
-                C = repeat(C, 'c t n -> c (v t) n', v=self.n_ssm // C.size(-2)).clone().contiguous()
+                C[:, :, :1] = 1.0
+                C = contract("hmn, chn -> chm", V.conj().transpose(-1, -2), C)  # V^* C
+                C = repeat(C, "c t n -> c (v t) n", v=self.n_ssm // C.size(-2)).clone().contiguous()
             else:
-                C = torch.randn(channels, self.H, self.N//2, dtype=cdtype)
+                C = torch.randn(channels, self.H, self.N // 2, dtype=cdtype)
 
             # Broadcast other parameters to have n_ssm copies
-            assert self.n_ssm % B.size(-2) == 0 \
-                    and self.n_ssm % P.size(-2) == 0 \
-                    and self.n_ssm % w.size(-2) == 0
+            assert self.n_ssm % B.size(-2) == 0 and self.n_ssm % P.size(-2) == 0 and self.n_ssm % w.size(-2) == 0
             # Broadcast tensors to n_ssm copies
             # These will be the parameters, so make sure tensors are materialized and contiguous
-            B = repeat(B, 't n -> (v t) n', v=self.n_ssm // B.size(-2)).clone().contiguous()
-            P = repeat(P, 'r t n -> r (v t) n', v=self.n_ssm // P.size(-2)).clone().contiguous()
-            w = repeat(w, 't n -> (v t) n', v=self.n_ssm // w.size(-2)).clone().contiguous()
+            B = repeat(B, "t n -> (v t) n", v=self.n_ssm // B.size(-2)).clone().contiguous()
+            P = repeat(P, "r t n -> r (v t) n", v=self.n_ssm // P.size(-2)).clone().contiguous()
+            w = repeat(w, "t n -> (v t) n", v=self.n_ssm // w.size(-2)).clone().contiguous()
 
             if mode == "diag":
                 if not measure.startswith("diag"):
-                    log.warning("Diagonal kernel (S4D) activated but initialization is not intended for S4D. Set `measure` to 'diag-lin', 'diag-inv', or 'diag-legs' for the main variants, or 'diag' for a combination of S4D-Lin and S4D-Inv.")
-                C = C * repeat(B, 't n -> (v t) n', v=H//self.n_ssm)
+                    log.warning(
+                        "Diagonal kernel (S4D) activated but initialization is not intended for S4D. Set `measure` to"
+                        " 'diag-lin', 'diag-inv', or 'diag-legs' for the main variants, or 'diag' for a combination of"
+                        " S4D-Lin and S4D-Inv."
+                    )
+                C = C * repeat(B, "t n -> (v t) n", v=H // self.n_ssm)
                 self.kernel = SSKernelDiag(
-                    w, B, C, log_dt, L=L,
+                    w,
+                    B,
+                    C,
+                    log_dt,
+                    L=L,
                     lr=lr,
                     **kernel_args,
                 )
-            elif mode == 'shift':
+            elif mode == "shift":
                 # Initializing B to be e_1
                 B = torch.zeros(self.H, self.N)
                 B[..., 0] = 1.0
                 # Match torch.Conv1d init
                 C = torch.randn(self.H, self.channels, self.N)
                 nn.init.kaiming_uniform_(C, a=math.sqrt(5))
-                C = rearrange(C, 'h c n -> c h n')
+                C = rearrange(C, "h c n -> c h n")
                 self.kernel = SSKernelShift(B, C, L=L, lr=lr, **kernel_args)
             else:
                 raise NotImplementedError(f"{mode=} is not valid")
@@ -140,7 +142,7 @@ class SSKernel(nn.Module):
 
     @torch.no_grad()
     def forward_state(self, u, state):
-        """ Forward the state through a sequence, i.e. computes the state after passing chunk through SSM
+        """Forward the state through a sequence, i.e. computes the state after passing chunk through SSM
 
         state: (B, H, N) u: (B, H, L)
 
@@ -150,18 +152,20 @@ class SSKernel(nn.Module):
         if hasattr(self.kernel, "forward_state"):
             return self.kernel.forward_state(u, state)
 
-        dA, dB = self.kernel._setup_state() # Construct dA, dB matrices
+        dA, dB = self.kernel._setup_state()  # Construct dA, dB matrices
         # dA, dB = self.kernel.dA, self.kernel.dB # (H N N) (H N)
 
         conj = state.size(-1) != dA.size(-1)
-        if conj: state = _conj(state)
+        if conj:
+            state = _conj(state)
 
-        v = contract('h n, b h l -> b h n l', dB, u.flip(-1)) # dB.unsqueeze(-1) * u.flip(-1).unsqueeze(-2)
+        v = contract("h n, b h l -> b h n l", dB, u.flip(-1))  # dB.unsqueeze(-1) * u.flip(-1).unsqueeze(-2)
         AL, v = power(u.size(-1), dA, v)
         next_state = contract("h m n, b h n -> b h m", AL, state)
         next_state = next_state + v
 
-        if conj: next_state = next_state[..., : next_state.size(-1) // 2]
+        if conj:
+            next_state = next_state[..., : next_state.size(-1) // 2]
         return next_state
 
     def _setup_step(self, **kwargs):

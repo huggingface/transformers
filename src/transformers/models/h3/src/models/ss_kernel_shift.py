@@ -4,19 +4,16 @@
 
 """SSKernelDiag is the S4D kernel, a simpler algorithm for computing the kernel for the case of diagonal state matrices A.
 """
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from einops import rearrange, repeat
+from einops import rearrange
 from opt_einsum import contract
-
 from src.models.ssm_utils import OptimModule
 
 
 class SSKernelShift(OptimModule):
-
     def __init__(self, B, C, L=None, lr=None, **kwargs):
         """
         B: (H, d), real C: (channel, H, d), real
@@ -27,9 +24,11 @@ class SSKernelShift(OptimModule):
         self.H = B.shape[0]
 
         # Register parameters
-        if lr is None or isinstance(lr, float): lr_dict = {}
-        else: lr_dict, lr = lr, None
-        self.register("B", B, lr_dict.get('B', lr))
+        if lr is None or isinstance(lr, float):
+            lr_dict = {}
+        else:
+            lr_dict, lr = lr, None
+        self.register("B", B, lr_dict.get("B", lr))
         self.C = nn.Parameter(C)
 
     def forward(self, state=None, rate=1.0, L=None):
@@ -41,11 +40,12 @@ class SSKernelShift(OptimModule):
         # Augment B with state
         B = self.B
         if state is not None:
-            B = rearrange(torch.cat([rearrange(B, 'h n -> 1 h n'), state], dim=-3),
-                          'bp1 h n -> bp1 1 h n')  # (1 + B, 1, H, N)
-        B_f = torch.fft.rfft(B, n=2*self.N)
-        C_f = torch.fft.rfft(self.C, n=2*self.N)
-        k = torch.fft.irfft(B_f.conj() * C_f, n=2*self.N)[..., :min(self.N, L)]
+            B = rearrange(
+                torch.cat([rearrange(B, "h n -> 1 h n"), state], dim=-3), "bp1 h n -> bp1 1 h n"
+            )  # (1 + B, 1, H, N)
+        B_f = torch.fft.rfft(B, n=2 * self.N)
+        C_f = torch.fft.rfft(self.C, n=2 * self.N)
+        k = torch.fft.irfft(B_f.conj() * C_f, n=2 * self.N)[..., : min(self.N, L)]
         # If self.N < L, need to pad with zeros to reach length L
         if self.N < L:
             k = F.pad(k, (0, L - self.N))
@@ -73,8 +73,8 @@ class SSKernelShift(OptimModule):
         """u: (B, H, L), state: (B, H, N)"""
         L = u.shape[-1]
         B_f = torch.fft.rfft(self.B, n=2 * self.N)
-        u_f = torch.fft.rfft(u[..., -self.N:].flip(-1).to(dtype=self.B.dtype), n=2 * self.N)
-        v = torch.fft.irfft(B_f * u_f, n=2 * self.N)[..., :self.N]
+        u_f = torch.fft.rfft(u[..., -self.N :].flip(-1).to(dtype=self.B.dtype), n=2 * self.N)
+        v = torch.fft.irfft(B_f * u_f, n=2 * self.N)[..., : self.N]
         if L < self.N:
             next_state = F.pad(state, (L, -L)) + v
         else:
