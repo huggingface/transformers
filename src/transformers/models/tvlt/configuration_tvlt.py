@@ -117,7 +117,7 @@ class TvltConfig(PretrainedConfig):
         feature_size=128,
         image_patch_size=16,
         audio_patch_size=[16, 16],
-        num_pixel_channels=3,
+        num_image_channels=3,
         num_audio_channels=1,
         num_frames=8,
         hidden_size=768,
