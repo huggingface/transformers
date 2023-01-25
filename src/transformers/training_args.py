@@ -407,21 +407,28 @@ class TrainingArguments:
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
         fsdp_min_num_params (`int`, *optional*, defaults to `0`):
-            FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
-        fsdp_backward_prefetch (`str`, *optional*)
-            FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when `fsdp`
-            field is passed).
+            This argument is deprecated. Use fsdp_config instead
+        fsdp_config (`str` or `dict`, *optional*):
+            Config to be used with fsdp (Pytorch Distributed Parallel Training). The  value is either the location of
+            deepspeed json config file (e.g., `ds_config.json`) or an already loaded  json file as `dict`.
 
-            A list of options along the following:
+            A List of config  and its options:
+                - fsdp_min_num_params (`int`, *optional*, defaults to `0`):
+                    FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
+                - fsdp_backward_prefetch (`str`, *optional*)
+                    FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when `fsdp`
+                    field is passed).
 
-            - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's gradient
-                computation.
-            - `"backward_pos"` : This prefetches the next set of parameters after the current set of parameter’s
-                gradient computation.
-        fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
-            FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
-             If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the forward
-             pass.
+                    A list of options along the following:
+
+                    - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's gradient
+                        computation.
+                    - `"backward_pos"` : This prefetches the next set of parameters after the current set of parameter’s
+                        gradient computation.
+                - fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
+                    FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
+                     If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the forward
+                     pass.
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -880,6 +887,15 @@ class TrainingArguments:
             ),
         },
     )
+    fsdp_config: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Config to be used with fsdp (Pytorch Distributed Parallel Training). The  value is either the of "
+                "deepspeed json config file (e.g., `ds_config.json`) or an already loaded  json file as `dict`."
+            )
+        },
+    )
     fsdp_backward_prefetch: str = field(
         default="backward_pre",
         metadata={
@@ -902,7 +918,7 @@ class TrainingArguments:
         default=0,
         metadata={
             "help": (
-                "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
+                "This parameter is deprecatetd. FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
                 " passed)."
             )
         },
