@@ -67,6 +67,12 @@ class ImageSegmentationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        if self.image_processor is None and self.feature_extractor is not None:
+            # Backward compatible change, if users called
+            # ImageSegmentationPipeline(.., feature_extractor=MyFeatureExtractor())
+            # then we should keep working
+            self.image_processor = self.feature_extractor
+
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
@@ -137,7 +143,7 @@ class ImageSegmentationPipeline(Pipeline):
     def preprocess(self, image):
         image = load_image(image)
         target_size = [(image.height, image.width)]
-        inputs = self.feature_extractor(images=[image], return_tensors="pt")
+        inputs = self.image_processor(images=[image], return_tensors="pt")
         inputs["target_size"] = target_size
         return inputs
 
@@ -152,10 +158,10 @@ class ImageSegmentationPipeline(Pipeline):
     ):
 
         fn = None
-        if subtask in {"panoptic", None} and hasattr(self.feature_extractor, "post_process_panoptic_segmentation"):
-            fn = self.feature_extractor.post_process_panoptic_segmentation
-        elif subtask in {"instance", None} and hasattr(self.feature_extractor, "post_process_instance_segmentation"):
-            fn = self.feature_extractor.post_process_instance_segmentation
+        if subtask in {"panoptic", None} and hasattr(self.image_processor, "post_process_panoptic_segmentation"):
+            fn = self.image_processor.post_process_panoptic_segmentation
+        elif subtask in {"instance", None} and hasattr(self.image_processor, "post_process_instance_segmentation"):
+            fn = self.image_processor.post_process_instance_segmentation
 
         if fn is not None:
             outputs = fn(
@@ -176,8 +182,8 @@ class ImageSegmentationPipeline(Pipeline):
                 score = segment["score"]
                 annotation.append({"score": score, "label": label, "mask": mask})
 
-        elif subtask in {"semantic", None} and hasattr(self.feature_extractor, "post_process_semantic_segmentation"):
-            outputs = self.feature_extractor.post_process_semantic_segmentation(
+        elif subtask in {"semantic", None} and hasattr(self.image_processor, "post_process_semantic_segmentation"):
+            outputs = self.image_processor.post_process_semantic_segmentation(
                 model_outputs, target_sizes=model_outputs["target_size"]
             )[0]
 

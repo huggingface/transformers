@@ -93,7 +93,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using an image processor (e.g. if you use ViT as the encoder,
-            you should use [`ViTImageProcessor`]). See [`ViTImageProcessor.__call__`] for details.
+            you should use [`AutoImageProcessor`]). See [`ViTImageProcessor.__call__`] for details.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -248,12 +248,12 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import VisionEncoderDecoderModel, ViTImageProcessor, GPT2Tokenizer
+        >>> from transformers import VisionEncoderDecoderModel, AutoImageProcessor, AutoTokenizer
         >>> from PIL import Image
         >>> import requests
 
-        >>> image_processor = ViTImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
-        >>> decoder_tokenizer = GPT2Tokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> image_processor = AutoImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> decoder_tokenizer = AutoTokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
         >>> model = VisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -539,12 +539,12 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+        >>> from transformers import AutoProcessor, VisionEncoderDecoderModel
         >>> import requests
         >>> from PIL import Image
         >>> import torch
 
-        >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/trocr-base-handwritten")
         >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
         >>> # load image from the IAM dataset
