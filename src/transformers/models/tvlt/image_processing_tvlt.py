@@ -29,6 +29,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -129,8 +131,8 @@ class TvltImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = [0.5, 0.5, 0.5],
-        image_std: Optional[Union[float, List[float]]] = [0.5, 0.5, 0.5],
+        image_mean: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_MEAN,
+        image_std: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_STD,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
