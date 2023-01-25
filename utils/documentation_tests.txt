@@ -108,6 +108,8 @@ src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
+src/transformers/models/maskformer/configuration_mask2former.py
+src/transformers/models/maskformer/modeling_mask2former.py
 src/transformers/models/maskformer/configuration_maskformer.py
 src/transformers/models/maskformer/modeling_maskformer.py
 src/transformers/models/mbart/configuration_mbart.py

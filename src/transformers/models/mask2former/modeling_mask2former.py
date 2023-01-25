@@ -2238,23 +2238,24 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoImageProcessor, Mask2FormerModel
 
-        >>> # download texting image
+        >>> # load image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> # Load image preprocessor and Mask2FormerModel trained on ADE20K instance segmentation dataset
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-instance")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-instance")
+        >>> # load image preprocessor and Mask2FormerModel trained on COCO instance segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-coco-instance")
+        >>> model = Mask2FormerModel.from_pretrained("facebook/mask2former-swin-small-coco-instance")
         >>> inputs = image_processor(image, return_tensors="pt")
 
+        >>> # forward pass
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
+
+        >>> # model outputs last hidden states of shape (batch_size, num_queries, hidden_size)
+        >>> print(outputs.transformer_decoder_last_hidden_state.shape)
+        torch.Size([1, 100, 256])
         ```
         """
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2387,15 +2388,51 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             `Mask2FormerUniversalSegmentationOutput`
 
         Examples:
+
+        Instance segmentation example:
+
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import requests
         >>> import torch
 
-        >>> # Load Mask2Former trained on ADE20K panoptic segmentation dataset
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-panoptic")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-panoptic")
+        >>> # Load Mask2Former trained on COCO instance segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-coco-instance")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained(
+        ...     "facebook/mask2former-swin-small-coco-instance"
+        ... )
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = image_processor(image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # Model predicts class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+
+        >>> # Perform post-processing to get instance segmentation map
+        >>> pred_instance_map = image_processor.post_process_semantic_segmentation(
+        ...     outputs, target_sizes=[image.size[::-1]]
+        ... )[0]
+        >>> print(pred_instance_map.shape)
+        torch.Size([480, 640])
+        ```
+
+        Semantic segmentation example:
+        ```python
+        >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> # Load Mask2Former trained on ADE20k semantic segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-semantic")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-semantic")
 
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
@@ -2411,16 +2448,46 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> class_queries_logits = outputs.class_queries_logits
         >>> masks_queries_logits = outputs.masks_queries_logits
 
-        >>> # Perform post-processing to get semantic, instance or panoptic segmentation maps
+        >>> # Perform post-processing to get semantic segmentation map
         >>> pred_semantic_map = image_processor.post_process_semantic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]
-        >>> pred_instance_map = image_processor.post_process_instance_segmentation(
-        ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]["segmentation"]
+        >>> print(pred_semantic_map.shape)
+        torch.Size([512, 683])
+        ```
+
+        Panoptic segmentation example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> # Load Mask2Former trained on CityScapes panoptic segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-cityscapes-panoptic")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained(
+        ...     "facebook/mask2former-swin-small-cityscapes-panoptic"
+        ... )
+
+        >>> url = "https://cdn-media.huggingface.co/Inference-API/Sample-results-on-the-Cityscapes-dataset-The-above-images-show-how-our-method-can-handle.png"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = image_processor(image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # Model predicts class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+
+        >>> # Perform post-processing to get panoptic segmentation map
         >>> pred_panoptic_map = image_processor.post_process_panoptic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
+        >>> print(pred_panoptic_map.shape)
+        torch.Size([338, 676])
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
