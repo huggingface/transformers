@@ -252,7 +252,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-            return_attention_mask (`bool`, *optional*):
+            return_attention_mask (`bool`, *optional*, default to `True`):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default. [What are attention masks?](../glossary#attention-mask)
 
@@ -267,9 +267,9 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline. Current model supports sampling rate 16000 and 44100.
-            resample (`bool`, *optional*):
+            resample (`bool`, *optional*, defaults to `False`):
                 If the sampling rate is not matched, resample the input audio to match.
-            mask_audio (`bool`, *optional*):
+            mask_audio (`bool`, *optional*, defaults to `False`):
                 Whether or not to mask input audio for MAE task.
 
         Returns:
