@@ -128,7 +128,7 @@ class TvltImageProcessorTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class TvltImageProcessorTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class TvltImageProcessorTest(ImageProcessingSavingTestMixin, unittest.TestCase):
     feature_extraction_class = TvltImageProcessor if is_vision_available() else None
 
     def setUp(self):
