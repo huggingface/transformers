@@ -44,6 +44,7 @@ from transformers import (
     logging,
 )
 from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -550,7 +551,8 @@ class ModelTesterMixin:
             config.return_dict = True
 
             if (
-                model_class in [*get_values(MODEL_MAPPING), *get_values(MODEL_FOR_BACKBONE_MAPPING)]
+                model_class.__name__
+                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
