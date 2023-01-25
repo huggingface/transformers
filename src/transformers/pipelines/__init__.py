@@ -40,6 +40,7 @@ from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     is_kenlm_available,
+    is_offline_mode,
     is_pyctcdecode_available,
     is_tf_available,
     is_torch_available,
@@ -398,6 +399,8 @@ def get_supported_tasks() -> List[str]:
 
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
+    if is_offline_mode():
+        raise RuntimeError(f"You cannot infer task automatically within `pipeline` when using offline mode")
     try:
         info = model_info(model, token=use_auth_token)
     except Exception as e:
@@ -424,10 +427,16 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"audio-classification"`
             - `"automatic-speech-recognition"`
             - `"conversational"`
+            - `"depth-estimation"`
+            - `"document-question-answering"`
             - `"feature-extraction"`
             - `"fill-mask"`
             - `"image-classification"`
+            - `"image-segmentation"`
+            - `"image-to-text"`
+            - `"object-detection"`
             - `"question-answering"`
+            - `"summarization"`
             - `"table-question-answering"`
             - `"text2text-generation"`
             - `"text-classification"` (alias `"sentiment-analysis"` available)
@@ -435,9 +444,11 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"token-classification"` (alias `"ner"` available)
             - `"translation"`
             - `"translation_xx_to_yy"`
-            - `"summarization"`
+            - `"video-classification"`
+            - `"visual-question-answering"`
             - `"zero-shot-classification"`
             - `"zero-shot-image-classification"`
+            - `"zero-shot-object-detection"`
 
     Returns:
         (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None)) The normalized task name
@@ -499,10 +510,16 @@ def pipeline(
             - `"audio-classification"`: will return a [`AudioClassificationPipeline`].
             - `"automatic-speech-recognition"`: will return a [`AutomaticSpeechRecognitionPipeline`].
             - `"conversational"`: will return a [`ConversationalPipeline`].
+            - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
+            - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
             - `"fill-mask"`: will return a [`FillMaskPipeline`]:.
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
+            - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
+            - `"image-to-text"`: will return a [`ImageToTextPipeline`].
+            - `"object-detection"`: will return a [`ObjectDetectionPipeline`].
             - `"question-answering"`: will return a [`QuestionAnsweringPipeline`].
+            - `"summarization"`: will return a [`SummarizationPipeline`].
             - `"table-question-answering"`: will return a [`TableQuestionAnsweringPipeline`].
             - `"text2text-generation"`: will return a [`Text2TextGenerationPipeline`].
             - `"text-classification"` (alias `"sentiment-analysis"` available): will return a
@@ -511,8 +528,11 @@ def pipeline(
             - `"token-classification"` (alias `"ner"` available): will return a [`TokenClassificationPipeline`].
             - `"translation"`: will return a [`TranslationPipeline`].
             - `"translation_xx_to_yy"`: will return a [`TranslationPipeline`].
-            - `"summarization"`: will return a [`SummarizationPipeline`].
+            - `"video-classification"`: will return a [`VideoClassificationPipeline`].
+            - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
+            - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
+            - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
 
         model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
@@ -846,8 +866,8 @@ def pipeline(
                             BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*"
                         )
                         alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
-                        allow_regex = [language_model_glob, alphabet_filename]
-                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_regex=allow_regex)
+                        allow_patterns = [language_model_glob, alphabet_filename]
+                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_patterns=allow_patterns)
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:

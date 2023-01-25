@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     CONFIG_MAPPING,
@@ -282,7 +282,8 @@ class ProcessorPushToHubTester(unittest.TestCase):
         processor = CustomProcessor(feature_extractor, tokenizer)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-processor", use_auth_token=self._token)
+            create_repo(f"{USER}/test-dynamic-processor", token=self._token)
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-processor", token=self._token)
             processor.save_pretrained(tmp_dir)
 
             # This has added the proper auto_map field to the feature extractor config

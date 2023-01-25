@@ -51,20 +51,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-pegasus-large-arxiv"
 _CONFIG_FOR_DOC = "BigBirdPegasusConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizerFast"
-
-# Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
-
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-bigbird_pegasus"
-_SEQ_CLASS_EXPECTED_LOSS = 0.69
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-
-# QuestionAsnwering docstring
-_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-bigbird_pegasus"
-_QA_EXPECTED_LOSS = 3.96
-_QA_EXPECTED_OUTPUT = "''"
 
 
 BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1649,10 +1636,10 @@ BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration
+    >>> from transformers import AutoTokenizer, BigBirdPegasusForConditionalGeneration
 
     >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained("google/bigbird-pegasus-large-arxiv")
-    >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "The dominant sequence transduction models are based on complex recurrent or convolutional neural "
@@ -1677,7 +1664,7 @@ BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1828,7 +1815,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -2154,7 +2141,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -2355,7 +2342,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
     "The bare BigBirdPegasus Model outputting raw hidden-states without any specific head on top.",
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_bart.BartModel with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -2387,12 +2373,12 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartModel.forward with Bart->BigBirdPegasus
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2665,7 +2651,6 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     """,
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -2683,13 +2668,11 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2795,7 +2778,6 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     """,
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -2812,13 +2794,11 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_QA,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_loss=_QA_EXPECTED_LOSS,
-        expected_output=_QA_EXPECTED_OUTPUT,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(
         self,
         input_ids: torch.Tensor = None,
@@ -2985,7 +2965,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -3050,9 +3030,9 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import PegasusTokenizer, BigBirdPegasusForCausalLM
+        >>> from transformers import AutoTokenizer, BigBirdPegasusForCausalLM
 
-        >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
         >>> model = BigBirdPegasusForCausalLM.from_pretrained(
         ...     "google/bigbird-pegasus-large-arxiv", add_cross_attention=False
         ... )

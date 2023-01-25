@@ -23,7 +23,7 @@ from transformers.utils import is_torch_available, is_torch_tensor, is_vision_av
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -119,11 +119,20 @@ class SegformerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_reduce_labels = do_reduce_labels
 
+    @property
+    def reduce_labels(self):
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in a v4.27. Please use "
+            "`do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
+
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
-        is created using from_dict and kwargs e.g. `SegformerImageProcessor.from_pretrained(checkpoint,
+        Overrides the `from_dict` method from the base class to make sure `do_reduce_labels` is updated if image
+        processor is created using from_dict and kwargs e.g. `SegformerImageProcessor.from_pretrained(checkpoint,
         reduce_labels=True)`
         """
         image_processor_dict = image_processor_dict.copy()
@@ -158,30 +167,6 @@ class SegformerImageProcessor(BaseImageProcessor):
         return resize(
             image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
         )
-
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ) -> np.ndarray:
-        """
-        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
-        any edge, the image is padded with 0's and then center cropped.
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
         self,

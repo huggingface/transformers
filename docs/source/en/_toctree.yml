@@ -44,6 +44,8 @@
       title: Use tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: Inference for multilingual models
+    - local: generation_strategies
+      title: Text generation strategies
     - sections:
       - local: tasks/sequence_classification
         title: Text classification
@@ -109,6 +111,8 @@
       title: Debugging
     - local: hpo_train
       title: Hyperparameter Search using Trainer API
+    - local: tf_xla
+      title: XLA Integration for TensorFlow Models
     title: Performance and scalability
   - sections:
     - local: contributing
@@ -139,7 +143,7 @@
   - local: glossary
     title: Glossary
   - local: task_summary
-    title: Summary of the tasks
+    title: What 🤗 Transformers can do
   - local: model_summary
     title: Summary of the models
   - local: tokenizer_summary
@@ -418,12 +422,16 @@
         title: DiT
       - local: model_doc/dpt
         title: DPT
+      - local: model_doc/efficientformer
+        title: EfficientFormer
       - local: model_doc/glpn
         title: GLPN
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/mask2former
+        title: Mask2Former
       - local: model_doc/maskformer
         title: MaskFormer
       - local: model_doc/mobilenet_v1
@@ -452,6 +460,8 @@
         title: Table Transformer
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/upernet
+        title: UperNet
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
@@ -532,6 +542,8 @@
         title: LayoutXLM
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/oneformer
+        title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/perceiver
@@ -563,6 +575,11 @@
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
+    - isExpanded: false
+      sections:
+      - local: model_doc/graphormer
+        title: Graphormer
+      title: Graph models
     title: Models
   - sections:
     - local: internal/modeling_utils

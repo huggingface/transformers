@@ -1345,9 +1345,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if collate_fn is None:
             if tokenizer is None:
-                collate_fn = DefaultDataCollator(return_tensors="tf")
+                collate_fn = DefaultDataCollator(return_tensors="np")
             else:
-                collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
+                collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="np")
         if collate_fn_args is None:
             collate_fn_args = dict()
 
@@ -2306,6 +2306,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             custom_object_save(self, save_directory, config=self.config)
 
         self.config.save_pretrained(save_directory)
+        if self.can_generate():
+            self.generation_config.save_pretrained(save_directory)
 
         # If we save using the predefined names, we can load using `from_pretrained`
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else TF2_WEIGHTS_NAME

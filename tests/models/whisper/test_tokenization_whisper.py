@@ -227,3 +227,71 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         batch_encoding = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
         transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
         self.assertListEqual(batch, transcription)
+
+    def test_offset_decoding(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        # fmt: off
+        INPUT_TOKENS = [
+            50258, 50259, 50359, 50364, 441, 1857, 4174, 11, 5242, 366,
+            257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
+            293, 25730, 311, 454, 34152, 4496, 904, 50724, 50724, 366,
+            382, 4048, 382, 257, 361, 18459, 13065, 13, 2221, 13,
+            7145, 74, 325, 38756, 311, 29822, 7563, 412, 472, 709,
+            294, 264, 51122, 51122, 912, 636, 300, 2221, 13, 2741,
+            5767, 1143, 281, 7319, 702, 7798, 13, 400, 2221, 13,
+            2619, 4004, 811, 2709, 702, 51449, 51449, 50257
+        ]
+        # fmt: on
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+
+        self.assertEqual(
+            output,
+            [
+                {
+                    "text": (
+                        " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles"
+                    ),
+                    "timestamp": (0.0, 7.2),
+                },
+                {
+                    "text": (
+                        " are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the"
+                    ),
+                    "timestamp": (7.2, 15.16),
+                },
+                {
+                    "text": " same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his",
+                    "timestamp": (15.16, 21.7),
+                },
+            ],
+        )
+
+        # test a single sequence with timestamps
+        # fmt: off
+        INPUT_TOKENS = [
+            50364, 441, 1857, 4174, 11, 5242, 366,
+            257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
+            293, 25730, 311, 454, 34152, 4496, 904, 50724
+        ]
+        # fmt: on
+
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        self.assertEqual(
+            output[0],
+            {
+                "text": " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles",
+                "timestamp": (0.0, 7.2),
+            },
+        )
+
+        # test a sequence without a single timestamps
+        # fmt: off
+        INPUT_TOKENS = [
+            441, 1857, 4174, 11, 5242, 366,
+            257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
+            293, 25730, 311, 454, 34152, 4496, 904, 50724
+        ]
+        # fmt: on
+
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        self.assertEqual(output, [])

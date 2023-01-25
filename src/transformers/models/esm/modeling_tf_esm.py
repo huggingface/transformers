@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
-_TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/esm2_t6_8M_UR50D",
@@ -202,7 +201,7 @@ class TFEsmEmbeddings(Layer):
         self.padding_idx = config.pad_token_id
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
-        self.vocab_size = config.vocab_size
+        self.config = config
 
     def call(
         self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -219,10 +218,10 @@ class TFEsmEmbeddings(Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = self.word_embeddings(input_ids)
@@ -730,7 +729,7 @@ ESM_INPUTS_DOCSTRING = r"""
         input_ids (`tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`EsmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -995,7 +994,6 @@ class TFEsmModel(TFEsmPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1119,7 +1117,6 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1222,13 +1219,13 @@ class TFEsmLMHead(Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="decoder",
         )
-        self.vocab_size = config.vocab_size
+        self.config = config
 
     def build(self, input_shape):
         super().build(input_shape)
         # Separate bias to match the PT model and allow weight cross-loading to work
         # Put it in the build so it gets the right name when adding it as a weight
-        self.bias = self.add_weight("bias", shape=(self.vocab_size,), initializer="zeros", trainable=True)
+        self.bias = self.add_weight("bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
 
     def get_bias(self):
         return {"bias": self.bias}
@@ -1265,7 +1262,6 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1361,7 +1357,6 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

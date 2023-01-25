@@ -131,6 +131,15 @@ class BeitImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_reduce_labels = do_reduce_labels
 
+    @property
+    def reduce_labels(self) -> bool:
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in v4.27. Please use"
+            " `do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
+
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """

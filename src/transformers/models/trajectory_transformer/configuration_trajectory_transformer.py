@@ -45,8 +45,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 100):
             Vocabulary size of the TrajectoryTransformer model. Defines the number of different tokens that can be
             represented by the `trajectories` passed when calling [`TrajectoryTransformerModel`]
-        batch_size (`int`, *optional*, defaults to 256):
-            Size of the batch of trajectories passed to the model.
         action_weight (`int`, *optional*, defaults to 5):
             Weight of the action in the loss function
         reward_weight (`int`, *optional*, defaults to 1):
@@ -115,7 +113,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=100,
-        batch_size=256,
         action_weight=5,
         reward_weight=1,
         value_weight=1,
@@ -142,7 +139,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         **kwargs
     ):
         self.vocab_size = vocab_size
-        self.batch_size = batch_size
         self.action_weight = action_weight
         self.reward_weight = reward_weight
         self.value_weight = value_weight

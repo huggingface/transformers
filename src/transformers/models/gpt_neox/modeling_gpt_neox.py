@@ -36,9 +36,9 @@ from .configuration_gpt_neox import GPTNeoXConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "gpt-neox-20b"
+_CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
+_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
 _CONFIG_FOR_DOC = "GPTNeoXConfig"
-_TOKENIZER_FOR_DOC = "GPTNeoXTokenizerFast"
 
 GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-neox-20b",
@@ -364,7 +364,7 @@ GPT_NEOX_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTNeoXTokenizerFast`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -435,8 +435,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -636,10 +636,10 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPTNeoXTokenizerFast, GPTNeoXForCausalLM, GPTNeoXConfig
+        >>> from transformers import AutoTokenizer, GPTNeoXForCausalLM, GPTNeoXConfig
         >>> import torch
 
-        >>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
         >>> config = GPTNeoXConfig.from_pretrained("EleutherAI/gpt-neox-20b")
         >>> config.is_decoder = True
         >>> model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", config=config)

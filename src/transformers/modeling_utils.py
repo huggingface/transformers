@@ -1655,6 +1655,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the config
         if is_main_process:
             model_to_save.config.save_pretrained(save_directory)
+            if self.can_generate():
+                model_to_save.generation_config.save_pretrained(save_directory)
 
         # Save the model
         if state_dict is None:
@@ -2629,7 +2631,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
         if low_cpu_mem_usage:
             for key in missing_keys:
-                if key.startswith(prefix):
+                if key in list(model_state_dict.keys()):
+                    key = key
+                elif f"{prefix}.key" in list(model_state_dict.keys()):
+                    key = f"{prefix}.key"
+                elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict.keys()):
                     key = ".".join(key.split(".")[1:])
                 param = model_state_dict[key]
 

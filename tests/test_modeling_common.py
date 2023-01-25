@@ -63,6 +63,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    CONFIG_NAME,
+    GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -275,6 +277,13 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
+
+                # the config file (and the generation config file, if it can generate) should be saved
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                self.assertEqual(
+                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                )
+
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
                 with torch.no_grad():
@@ -3165,6 +3174,27 @@ class ModelUtilsTest(TestCasePlus):
                 ValueError, "The state dictionary of the model you are trying to load is corrupted."
             ):
                 _ = ModelWithHead.from_pretrained(tmp_dir)
+
+    @require_torch_gpu
+    def test_pretrained_low_mem_new_config(self):
+        # Checking for 1 model(the same one which was described in the issue) .
+        model_ids = ["gpt2"]
+
+        for model_id in model_ids:
+            model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path=model_id)
+            model_config.n_layer = 48
+            model_config.n_head = 25
+            model_config.n_embd = 1600
+            model = AutoModelForCausalLM.from_pretrained(
+                pretrained_model_name_or_path=model_id,
+                config=model_config,
+                ignore_mismatched_sizes=True,
+                torch_dtype=torch.float16,
+                low_cpu_mem_usage=True,
+            )
+            model_ref = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id)
+
+            self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
 
 
 @require_torch
