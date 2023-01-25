@@ -719,17 +719,8 @@ class InformerModel(InformerPreTrainedModel):
         self.post_init()
 
     @property
-    def _number_of_features(self) -> int:
-        return (
-            sum(self.embedding_dimension)
-            + self.num_feat_dynamic_real
-            + self.num_feat_static_real
-            + self.input_size  # the log(scale)
-        )
-
-    @property
     def _past_length(self) -> int:
-        return self.context_length + max(self.lags_seq)
+        return self.config.context_length + max(self.config.lags_seq)
 
     def get_lagged_subsequences(
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
@@ -767,44 +758,27 @@ class InformerModel(InformerPreTrainedModel):
             lagged_values.append(sequence[:, begin_index:end_index, ...])
         return torch.stack(lagged_values, dim=-1)
 
-    def _check_shapes(
-        self,
-        prior_input: torch.Tensor,
-        inputs: torch.Tensor,
-        features: Optional[torch.Tensor],
-    ) -> None:
-        assert len(prior_input.shape) == len(inputs.shape)
-        assert (
-            len(prior_input.shape) == 2 and self.input_size == 1
-        ) or prior_input.shape[2] == self.input_size
-        assert (len(inputs.shape) == 2 and self.input_size == 1) or inputs.shape[
-            -1
-        ] == self.input_size
-        assert (
-            features is None or features.shape[2] == self._number_of_features
-        ), f"{features.shape[2]}, expected {self._number_of_features}"
-
     def create_network_inputs(
         self,
         feat_static_cat: torch.Tensor,
         feat_static_real: torch.Tensor,
-        past_time_feat: torch.Tensor,
+        past_time_features: torch.Tensor,
         past_target: torch.Tensor,
         past_observed_values: torch.Tensor,
-        future_time_feat: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
         future_target: Optional[torch.Tensor] = None,
     ):
         # time feature
         time_feat = (
             torch.cat(
                 (
-                    past_time_feat[:, self._past_length - self.context_length :, ...],
-                    future_time_feat,
+                    past_time_features[:, self._past_length - self.config.context_length:, ...],
+                    future_time_features,
                 ),
                 dim=1,
             )
             if future_target is not None
-            else past_time_feat[:, self._past_length - self.context_length :, ...]
+            else past_time_features[:, self._past_length - self.context_length:, ...]
         )
 
         # target
@@ -844,8 +818,6 @@ class InformerModel(InformerPreTrainedModel):
 
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
 
-        # self._check_shapes(prior_input, inputs, features)
-
         # sequence = torch.cat((prior_input, inputs), dim=1)
         lagged_sequence = self.get_lagged_subsequences(
             sequence=inputs,
@@ -861,23 +833,20 @@ class InformerModel(InformerPreTrainedModel):
 
         return transformer_inputs, scale, static_feat
 
-    def output_params(self, transformer_inputs):
-        enc_input = transformer_inputs[:, : self.context_length, ...]
-        dec_input = transformer_inputs[:, self.context_length :, ...]
+    def enc_dec_outputs(self, transformer_inputs):
+        enc_input = transformer_inputs[:, : self.config.context_length, ...]
+        dec_input = transformer_inputs[:, self.config.context_length :, ...]
 
         enc_out, _ = self.encoder(enc_input)
         dec_output = self.decoder(dec_input, enc_out)
 
         return self.param_proj(dec_output)
 
-    @torch.jit.ignore
-    def output_distribution(
-        self, params, scale=None, trailing_n=None
-    ) -> torch.distributions.Distribution:
-        sliced_params = params
-        if trailing_n is not None:
-            sliced_params = [p[:, -trailing_n:] for p in params]
-        return self.distr_output.distribution(sliced_params, scale=scale)
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
 
     # for prediction
     def forward(
@@ -929,7 +898,6 @@ class InformerModel(InformerPreTrainedModel):
 
         # greedy decoding
         for k in range(self.prediction_length):
-            # self._check_shapes(repeated_past_target, next_sample, next_features)
             # sequence = torch.cat((repeated_past_target, next_sample), dim=1)
 
             lagged_sequence = self.get_lagged_subsequences(
@@ -962,3 +930,22 @@ class InformerModel(InformerPreTrainedModel):
         return concat_future_samples.reshape(
             (-1, self.num_parallel_samples, self.prediction_length) + self.target_shape,
         )
+
+
+class InformerForPrediction(InformerPreTrainedModel):
+    def __init__(self):
+        pass
+
+    @torch.jit.ignore
+    def output_distribution(self, params, scale=None, trailing_n=None) -> torch.distributions.Distribution:
+        sliced_params = params
+        if trailing_n is not None:
+            sliced_params = [p[:, -trailing_n:] for p in params]
+        return self.distr_output.distribution(sliced_params, scale=scale)
+
+
+
+class InformerForPointPrediction(InformerPreTrainedModel):
+    pass
+
+
