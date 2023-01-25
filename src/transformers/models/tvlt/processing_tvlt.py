@@ -62,9 +62,9 @@ class TvltProcessor(ProcessorMixin):
         if images is None and audio is None:
             raise ValueError("You need to specify either an `images` or `audio` input to process.")
 
+        images_mixed_dict = None
         if images is not None:
             images_dict = self.image_processor(images, mask_pixel=mask_pixel, *args, **kwargs)
-            images_mixed_dict = None
         if images_mixed is not None:
             images_mixed_dict = self.image_processor(images_mixed, is_mixed=True, *args, **kwargs)
         if audio is not None:

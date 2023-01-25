@@ -84,7 +84,7 @@ class TvltConfig(PretrainedConfig):
         decoder_intermediate_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
         pixel_mask_ratio (`float`, *optional*, defaults to 0.75):
-            Pixel patch masking ratio.
+            image patch masking ratio.
         audio_mask_ratio (`float`, *optional*, defaults to 0.15):
             Audio patch masking ratio.
         task_matching (`bool`, *optional*, defaults to `True`):
@@ -144,12 +144,12 @@ class TvltConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        self.pixel_size = pixel_size
+        self.image_size = image_size
         self.audio_size = audio_size
         self.feature_size = feature_size
-        self.pixel_patch_size = pixel_patch_size
+        self.image_patch_size = image_patch_size
         self.audio_patch_size = audio_patch_size
-        self.num_pixel_channels = num_pixel_channels
+        self.num_image_channels = num_image_channels
         self.num_audio_channels = num_audio_channels
         self.num_frames = num_frames
 

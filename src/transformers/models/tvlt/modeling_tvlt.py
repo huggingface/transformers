@@ -126,10 +126,10 @@ class TvltForPreTrainingOutput(ModelOutput):
         matching_logits (`torch.FloatTensor` of shape `(batch_size, 1)`):
             Matching objective logits.
         pixel_logits (`torch.FloatTensor` of shape
-            `(batch_size, pixel_patch_length, pixel_patch_size ** 3 * pixel_num_channels)`): Pixel reconstruction
+            `(batch_size, pixel_patch_length, image_patch_size ** 3 * pixel_num_channels)`): Pixel reconstruction
             logits.
         audio_logits (`torch.FloatTensor` of shape
-            `(batch_size, audio_patch_length, pixel_patch_size[0] * pixel_patch_size[1])`): Audio reconstruction
+            `(batch_size, audio_patch_length, image_patch_size[0] * image_patch_size[1])`): Audio reconstruction
             logits.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -445,7 +445,6 @@ class TvltSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -498,7 +497,6 @@ class TvltIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -523,39 +521,18 @@ class TvltOutput(nn.Module):
 
 # Copied from transformers.models.vilt.modeling_vilt.ViltOutput with Vilt->Tvlt and ViLT->TVLT
 class TvltLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TvltConfig) -> None:
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = TvltAttention(config)
-        self.intermediate = TvltIntermediate(config)
-        self.output = TvltOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in TVLT, layernorm is applied before self-attention
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
-        )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
-        # first residual connection
-        hidden_states = attention_output + hidden_states.to(attention_output.device)
+        hidden_states = hidden_states + input_tensor
 
-        # in TVLT, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
-
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return hidden_states
 
 
 # Copied from transformers.models.vilt.modeling_vilt.ViltEncoder with Vilt->Tvlt
@@ -676,8 +653,8 @@ TVLT_INPUTS_DOCSTRING = r"""
             details.
 
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Pixel values mixed can be
-            obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
+            Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Pixel values mixed can
+            be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
         pixel_masks_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel masks of pixel_values_mixed. Pixel masks mixed can be obtained using [`TvltProcessor`]. See
@@ -944,7 +921,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
             self.decoder_freq_embed = nn.Parameter(torch.zeros(1, num_freq_patches, decoder_hidden_size))
             self.decoder_audio_type_embed = nn.Parameter(torch.zeros(1, 1, decoder_hidden_size))
 
-            pixel_mae_output_dim = self.config.pixel_patch_size**2 * self.config.num_pixel_channels
+            pixel_mae_output_dim = self.config.image_patch_size**2 * self.config.num_image_channels
             self.pixel_mae_head = TvltMAEHead(config, pixel_mae_output_dim)
             audio_mae_output_dim = (
                 self.config.audio_patch_size[0] * self.config.audio_patch_size[1] * self.config.num_audio_channels
@@ -954,7 +931,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
             self.num_frames = num_frames
             self.num_patches_per_image = num_patches_per_image
             self.num_freq_patches = num_freq_patches
-            self.pixel_patch_size = config.pixel_patch_size
+            self.image_patch_size = config.image_patch_size
             self.audio_patch_size = config.audio_patch_size
 
         # Initialize weights and apply final processing
@@ -965,17 +942,17 @@ class TvltForPreTraining(TvltPreTrainedModel):
         pixel_values: [batch_size, num_frames, 3, height, width]
         """
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        num_patches_height = pixel_values.shape[3] // self.pixel_patch_size
-        num_patches_width = pixel_values.shape[4] // self.pixel_patch_size
+        num_patches_height = pixel_values.shape[3] // self.image_patch_size
+        num_patches_width = pixel_values.shape[4] // self.image_patch_size
         patchified_pixel_values = pixel_values.reshape(
             shape=(
                 batch_size,
                 num_frames,
                 num_channels,
                 num_patches_height,
-                self.pixel_patch_size,
+                self.image_patch_size,
                 num_patches_width,
-                self.pixel_patch_size,
+                self.image_patch_size,
             )
         )
         patchified_pixel_values = torch.einsum("ntchpwq->nthwpqc", patchified_pixel_values)
@@ -983,7 +960,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
             shape=(
                 batch_size,
                 num_patches_height * num_patches_width * num_frames,
-                self.pixel_patch_size**2 * num_channels,
+                self.image_patch_size**2 * num_channels,
             )
         )
         return patchified_pixel_values
@@ -1196,7 +1173,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
 class TvltPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
     def forward(self, hidden_states):
@@ -1209,7 +1186,7 @@ class TvltPooler(nn.Module):
 class TvltMatchingHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.pooler = TvltPooler(config.hidden_size)
+        self.pooler = TvltPooler(config)
         self.fc = nn.Linear(config.hidden_size, 1)
 
     def forward(self, hidden_states):
