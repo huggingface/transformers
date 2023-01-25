@@ -50,7 +50,7 @@ class TvltConfig(PretrainedConfig):
             The number of input image channels.
         num_audio_channels (`int`, *optional*, defaults to 1):
             The number of input audio channels.
-        num_frames (`int`, *optional*, defaults to 16):
+        num_frames (`int`, *optional*, defaults to 8):
             The maximum number of frames for an input video.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
