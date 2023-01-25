@@ -489,7 +489,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # masks_queries_logitsq
+        # masks_queries_logits
         masks_queries_logits = outputs.masks_queries_logits
         self.assertEqual(
             masks_queries_logits.shape,
