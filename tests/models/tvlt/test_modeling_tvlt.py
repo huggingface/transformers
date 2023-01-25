@@ -143,7 +143,7 @@ class TvltModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+            [self.batch_size, self.num_frames, self.num_image_channels, self.image_size, self.image_size]
         )
         audio_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_size, self.feature_size])
 
