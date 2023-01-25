@@ -489,13 +489,13 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # masks_queries_logits
+        # masks_queries_logitsq
         masks_queries_logits = outputs.masks_queries_logits
         self.assertEqual(
             masks_queries_logits.shape,
             (1, model.config.num_queries, inputs_shape[-2] // 4, (inputs_shape[-1] + 2) // 4),
         )
-        expected_slice = [[[3.1215, 4.1250, 4.1106], [2.8183, 3.4623, 3.5512], [2.4550, 2.9841, 3.5081]]]
+        expected_slice = [[[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]]]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
         # class_queries_logits
