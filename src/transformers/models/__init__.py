@@ -82,6 +82,7 @@ from . import (
     git,
     glpn,
     gpt2,
+    h3,
     gpt_neo,
     gpt_neox,
     gpt_neox_japanese,
