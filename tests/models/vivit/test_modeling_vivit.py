@@ -51,7 +51,8 @@ class VivitModelTester:
         is_training=True,
         use_labels=True,
         num_labels=10,
-        video_size=[8, 224, 224],  # decreased, because default 32 takes too much RAM at inference
+        image_size=224,
+        num_frames=8, # decreased, because default 32 takes too much RAM at inference
         tubelet_size=[2, 16, 16],
         num_channels=3,
         hidden_size=768,
@@ -81,20 +82,21 @@ class VivitModelTester:
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
-        self.video_size = video_size
+        self.image_size = image_size
+        self.num_frames = num_frames
         self.tubelet_size = tubelet_size
         self.scope = scope
         self.num_labels = num_labels
 
         self.seq_length = (
-            (self.video_size[2] // self.tubelet_size[2])
-            * (self.video_size[1] // self.tubelet_size[1])
-            * (self.video_size[0] // self.tubelet_size[0])
+            (self.image_size // self.tubelet_size[2])
+            * (self.image_size // self.tubelet_size[1])
+            * (self.num_frames // self.tubelet_size[0])
         ) + 1  # CLS token
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
-            [self.batch_size, self.video_size[0], self.num_channels, self.video_size[1], self.video_size[2]]
+            [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
         )
 
         labels = None
@@ -107,7 +109,8 @@ class VivitModelTester:
 
     def get_config(self):
         config = VivitConfig(
-            video_size=self.video_size,
+            num_frames=self.num_frames,
+            image_size=self.image_size,
             tubelet_size=self.tubelet_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,

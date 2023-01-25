@@ -39,8 +39,10 @@ class VivitConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        video_size (`List[int]`, *optional*, defaults to [32, 224, 224]):
-            The size (resolution) of a video in the format `[number_of_frames, width, height]`.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        num_frames (`int`, *optional*, defaults to 16):
+            The number of frames in each video.
         tubelet_size (`List[int]`, *optional*, defaults to [2, 16, 16]):
             The size (resolution) of each tubelet.
         num_channels (`int`, *optional*, defaults to 3):
@@ -85,7 +87,8 @@ class VivitConfig(PretrainedConfig):
 
     def __init__(
         self,
-        video_size=[32, 224, 224],
+        image_size=224,
+        num_frames=16,
         tubelet_size=[2, 16, 16],
         num_channels=3,
         hidden_size=768,
@@ -110,7 +113,8 @@ class VivitConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
 
-        self.video_size = video_size
+        self.image_size = image_size
+        self.num_frames = num_frames
         self.tubelet_size = tubelet_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
