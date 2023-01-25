@@ -95,7 +95,7 @@ class TvltModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.pixel_size = pixel_size
+        self.image_size = image_size
         self.audio_size = audio_size
         self.feature_size = feature_size
         self.pixel_patch_size = pixel_patch_size
