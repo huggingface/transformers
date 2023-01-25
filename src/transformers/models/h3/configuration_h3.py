@@ -61,6 +61,10 @@ class H3Config(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rescale_prenorm_residual (`bool`, *optional*, defaults to `True`):
+            Whether to (...).
+        glu_act (`bool`, *optional*, defaults to `False`):
+            Whether to (...).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -96,6 +100,8 @@ class H3Config(PretrainedConfig):
         residual_in_fp32=False,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
+        rescale_prenorm_residual=True,
+        glu_act=False,
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
@@ -113,6 +119,8 @@ class H3Config(PretrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
+        self.rescale_prenorm_residual = rescale_prenorm_residual
+        self.glu_act = glu_act
         self.use_cache = use_cache
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

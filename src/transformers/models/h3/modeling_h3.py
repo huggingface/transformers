@@ -34,7 +34,6 @@ from flash_attn.utils.generation import GenerationMixin
 
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_h3 import H3Config
 
@@ -121,33 +120,46 @@ class H3PreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
-    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel._init_weights with GPT2->H3,gpt2->h3,OpenAI GPT-2->H3
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            nn.init.normal_(module.weight, std=self.config.initializer_range)
 
-        # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-        #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-        #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-        #
-        # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        for name, p in module.named_parameters():
-            if name == "c_proj.weight":
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+        if self.config.rescale_prenorm_residual:
+            # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+            #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+            #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+            #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+            #
+            # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
+            for name, p in module.named_parameters():
+                if name in ["out_proj.weight", "fc2.weight"]:
+                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                    nn.init.normal_(
+                        p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers)
+                    )
+                # If using GLU activation for now, we scale the std by 2
+                elif name in ["output_linear.0.weight"]:
+                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                    if not self.config.glu_act:
+                        nn.init.normal_(
+                            p,
+                            mean=0.0,
+                            std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers),
+                        )
+                    else:
+                        out_features = p.shape[0]
+                        # Multiplying the first half of the matrix by 2 since sigmoid scales it down by 0.5
+                        # on average.
+                        nn.init.normal_(
+                            p[: out_features // 2],
+                            mean=0.0,
+                            std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers) * 2,
+                        )
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, H3Model):
@@ -199,14 +211,7 @@ H3_INPUTS_DOCSTRING = r"""
             `len(past_key_values) + len(input_ids)`
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
 
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -245,8 +250,8 @@ class H3Model(H3PreTrainedModel):
         self.embeddings = GPT2Embeddings(config.hidden_size, config.vocab_size, 0)
         self.residual_in_fp32 = config.residual_in_fp32
 
-        self.drop = nn.Dropout(config.embd_pdrop)
         self.h3 = nn.ModuleList([create_block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.final_dropout = nn.Dropout(config.residual_dropout)
         self.final_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Initialize weights and apply final processing
@@ -269,7 +274,6 @@ class H3Model(H3PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -289,59 +293,18 @@ class H3Model(H3PreTrainedModel):
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
-            batch_size = input_ids.shape[0]
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size = inputs_embeds.shape[0]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
-        if position_ids is not None:
-            position_ids = position_ids.view(-1, input_shape[-1])
-
         if past_key_values is None:
-            past_length = 0
             past_key_values = tuple([None] * len(self.h))
-        else:
-            past_length = past_key_values[0][0].size(-2)
-        if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
-
-        # H3Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            attention_mask = attention_mask.view(batch_size, -1)
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
-
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         if inputs_embeds is None:
-            inputs_embeds = self.wte(input_ids)
-        position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds + position_embeds
-
-        if token_type_ids is not None:
-            token_type_embeds = self.wte(token_type_ids)
-            hidden_states = hidden_states + token_type_embeds
-
-        hidden_states = self.drop(hidden_states)
+            hidden_states = self.embeddings(input_ids, position_ids=position_ids)
+        else:
+            hidden_states = inputs_embeds
 
         output_shape = input_shape + (hidden_states.size(-1),)
 
@@ -408,6 +371,7 @@ class H3Model(H3PreTrainedModel):
                 if v is not None
             )
 
+        # TODO use class without cross-attentions
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=presents,
@@ -419,13 +383,12 @@ class H3Model(H3PreTrainedModel):
 
 @add_start_docstrings(
     """
-    The H3 model with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
+    The H3 model with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """,
     H3_START_DOCSTRING,
 )
 class H3ForCausalLM(H3PreTrainedModel, GenerationMixin):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -442,12 +405,9 @@ class H3ForCausalLM(H3PreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
@@ -466,7 +426,6 @@ class H3ForCausalLM(H3PreTrainedModel, GenerationMixin):
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
         }
 
     @add_start_docstrings_to_model_forward(H3_INPUTS_DOCSTRING)
@@ -480,7 +439,6 @@ class H3ForCausalLM(H3PreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -501,7 +459,6 @@ class H3ForCausalLM(H3PreTrainedModel, GenerationMixin):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -526,6 +483,7 @@ class H3ForCausalLM(H3PreTrainedModel, GenerationMixin):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
+        # TODO use class without cross-attentions
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=lm_logits,
