@@ -37,13 +37,13 @@ try:
 except ImportError:
     dropout_add_layer_norm = None
 
+# custom kernel
+from src.models.h3 import H3
+
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_h3 import H3Config
-
-# custom kernel
-from .src.models.h3 import H3
 
 
 logger = logging.get_logger(__name__)
