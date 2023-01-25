@@ -135,7 +135,7 @@ class TvltModelTester:
         )
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of number of image/video patches + number of audio patches
-        self.expected_seq_len = self.expected_pixel_seq_len + self.expected_audio_seq_len + 1
+        self.expected_seq_len = self.expected_image_seq_len + self.expected_audio_seq_len + 1
 
         self.pixel_mae_output_dim = pixel_patch_size**2 * num_pixel_channels
         self.audio_mae_output_dim = audio_patch_size[0] * audio_patch_size[1] * num_audio_channels
