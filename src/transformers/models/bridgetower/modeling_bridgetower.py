@@ -962,7 +962,9 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * self.config.initializer_factor)
 
             nn.init.normal_(module.visual.embeddings.class_embedding, std=attn_std * self.config.initializer_factor)
-            nn.init.normal_(module.visual.embeddings.position_embedding, std=attn_std * self.config.initializer_factor)
+            nn.init.normal_(
+                module.visual.embeddings.position_embedding.weight, std=attn_std * self.config.initializer_factor
+            )
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=0.05 * self.config.initializer_factor)
         elif isinstance(module, nn.LayerNorm):
