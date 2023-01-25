@@ -918,8 +918,8 @@ class TrainingArguments:
         default=0,
         metadata={
             "help": (
-                "This parameter is deprecatetd. FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
-                " passed)."
+                "This parameter is deprecatetd. FSDP's minimum number of parameters for Default Auto Wrapping. (useful"
+                " only when `fsdp` field is passed)."
             )
         },
     )
