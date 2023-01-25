@@ -850,7 +850,7 @@ class TvltDecoder(nn.Module):
             [TvltLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
         )
 
-        self.norm = nn.LayerNorm(config.decoder_hidden_size)
+        self.norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
         self.config = config
@@ -1085,15 +1085,13 @@ class TvltForPreTraining(TvltPreTrainedModel):
         >>> import torch
 
         >>> num_frames = 8
-        >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
-        >>> pixel_mixed = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> images = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> images_mixed = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
-
         >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TvltForPreTraining.from_pretrained("TVLT/tvlt-base")
-
         >>> input_dict = processor(
-        ...     pixel, audio, pixel_mixed, sampling_rate=44100, mask_pixel=True, mask_audio=True, return_tensors="pt"
+        ...     images, audio, images_mixed, sampling_rate=44100, mask_pixel=True, mask_audio=True, return_tensors="pt"
         ... )
 
         >>> outputs = model(**input_dict)
@@ -1280,14 +1278,11 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
         >>> import numpy as np
         >>> import torch
 
-        >>> num_frames = 8
-        >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> images = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
-
         >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TvltForQuestionAnswering.from_pretrained("TVLT/tvlt-base")
-
-        >>> input_dict = processor(pixel, audio, sampling_rate=44100, return_tensors="pt")
+        >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
 
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss
@@ -1375,13 +1370,11 @@ class TvltForVideoClassification(TvltPreTrainedModel):
         >>> import torch
 
         >>> num_frames = 8
-        >>> pixel = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> images = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
-
         >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
         >>> model = TvltForVideoClassification.from_pretrained("TVLT/tvlt-base")
-
-        >>> input_dict = processor(pixel, audio, sampling_rate=44100, return_tensors="pt")
+        >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
 
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss
