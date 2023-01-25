@@ -1218,13 +1218,6 @@ class WhisperModel(WhisperPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
-            # todo: init in model config
-            self.config.mask_time_prob = 0.5
-            self.config.mask_time_length = 10
-            self.config.mask_time_min_masks = 2
-            self.config.mask_feature_prob = 0.5
-            self.config.mask_feature_length = 10
-            self.config.mask_feature_min_masks = 2
             input_features = self._mask_input_features(input_features, attention_mask=attention_mask)
 
             encoder_outputs = self.encoder(
