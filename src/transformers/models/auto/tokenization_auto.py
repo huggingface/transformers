@@ -79,6 +79,7 @@ else:
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
             ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
+            ("bridgetower", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("byt5", ("ByT5Tokenizer", None)),
             (
                 "camembert",

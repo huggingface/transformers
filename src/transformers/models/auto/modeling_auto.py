@@ -43,6 +43,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("blip", "BlipModel"),
         ("bloom", "BloomModel"),
+        ("bridgetower", "BridgeTowerModel"),
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
         ("chinese_clip", "ChineseCLIPModel"),
