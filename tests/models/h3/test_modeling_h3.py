@@ -31,12 +31,12 @@ if is_torch_available():
 
     from transformers import (
         H3_PRETRAINED_MODEL_ARCHIVE_LIST,
+        GPT2Tokenizer,
         H3DoubleHeadsModel,
         H3ForSequenceClassification,
         H3ForTokenClassification,
         H3LMHeadModel,
         H3Model,
-        GPT2Tokenizer,
     )
 
 

@@ -18,17 +18,11 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_keras_nlp_available,
-    is_tensorflow_text_available,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_h3": ["H3_PRETRAINED_CONFIG_ARCHIVE_MAP", "H3Config", "H3OnnxConfig"],
+    "configuration_h3": ["H3_PRETRAINED_CONFIG_ARCHIVE_MAP", "H3Config"],
 }
 
 try:
@@ -39,25 +33,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_h3"] = [
         "H3_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "H3DoubleHeadsModel",
-        "H3ForSequenceClassification",
-        "H3ForTokenClassification",
-        "H3LMHeadModel",
+        "H3ForCausalLM",
         "H3Model",
         "H3PreTrainedModel",
-        "load_tf_weights_in_h3",
     ]
 
-try:
-    if not is_keras_nlp_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_h3_tf"] = ["TFGPT2Tokenizer"]
-
 if TYPE_CHECKING:
-    from .configuration_h3 import H3_PRETRAINED_CONFIG_ARCHIVE_MAP, H3Config, H3OnnxConfig
+    from .configuration_h3 import H3_PRETRAINED_CONFIG_ARCHIVE_MAP, H3Config
 
     try:
         if not is_torch_available():
@@ -65,23 +47,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_h3 import (
-            H3_PRETRAINED_MODEL_ARCHIVE_LIST,
-            H3DoubleHeadsModel,
-            H3ForSequenceClassification,
-            H3ForTokenClassification,
-            H3LMHeadModel,
-            H3Model,
-            H3PreTrainedModel,
-            load_tf_weights_in_h3,
-        )
-
-    try:
-        if not is_keras_nlp_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
+        from .modeling_h3 import H3_PRETRAINED_MODEL_ARCHIVE_LIST, H3ForCausalLM, H3Model, H3PreTrainedModel
 
 else:
     import sys

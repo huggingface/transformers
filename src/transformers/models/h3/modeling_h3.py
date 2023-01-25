@@ -25,19 +25,10 @@ from torch.cuda.amp import autocast
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-)
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_h3 import H3Config
 
 
@@ -50,7 +41,6 @@ H3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "stanford/H3-125m",
     # See all H3 models at https://huggingface.co/models?filter=h3
 ]
-
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Attention with GPT2->H3
@@ -371,7 +361,6 @@ class H3Block(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel with GPT2->H3,gpt2->h3,OpenAI GPT-2->H3
 class H3PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -387,6 +376,7 @@ class H3PreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
+    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel._init_weights with GPT2->H3,gpt2->h3,OpenAI GPT-2->H3
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, Conv1D)):
@@ -403,7 +393,7 @@ class H3PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        # Reinitialize selected weights subject to the H3 Paper Scheme:
+        # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
         #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
@@ -417,7 +407,6 @@ class H3PreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, H3Model):
             module.gradient_checkpointing = value
-
 
 
 H3_START_DOCSTRING = r"""

@@ -31,7 +31,6 @@ H3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class H3Config(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`H3Model`] or a [`TFH3Model`]. It is used to
@@ -87,8 +86,7 @@ class H3Config(PretrainedConfig):
 
             Whether or not to add a projection after the vector extraction.
         summary_activation (`str`, *optional*):
-            Argument used when doing sequence summary. Used in for the multiple choice head in
-            [`H3DoubleHeadsModel`].
+            Argument used when doing sequence summary. Used in for the multiple choice head in [`H3DoubleHeadsModel`].
 
             Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
         summary_proj_to_labels (`bool`, *optional*, defaults to `True`):

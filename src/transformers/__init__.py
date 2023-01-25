@@ -298,7 +298,6 @@ _import_structure = {
     "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
-    "models.h3": ["H3_PRETRAINED_CONFIG_ARCHIVE_MAP", "H3Config"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
@@ -316,6 +315,7 @@ _import_structure = {
         "GroupViTTextConfig",
         "GroupViTVisionConfig",
     ],
+    "models.h3": ["H3_PRETRAINED_CONFIG_ARCHIVE_MAP", "H3Config"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
@@ -1630,18 +1630,6 @@ else:
             "load_tf_weights_in_gpt2",
         ]
     )
-    _import_structure["models.h3"].extend(
-        [
-            "H3_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "H3DoubleHeadsModel",
-            "H3ForSequenceClassification",
-            "H3ForTokenClassification",
-            "H3LMHeadModel",
-            "H3Model",
-            "H3PreTrainedModel",
-            "load_tf_weights_in_h3",
-        ]
-    )
     _import_structure["models.gpt_neo"].extend(
         [
             "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1703,6 +1691,14 @@ else:
             "GroupViTPreTrainedModel",
             "GroupViTTextModel",
             "GroupViTVisionModel",
+        ]
+    )
+    _import_structure["models.h3"].extend(
+        [
+            "H3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "H3ForCausalLM",
+            "H3Model",
+            "H3PreTrainedModel",
         ]
     )
     _import_structure["models.hubert"].extend(
@@ -3933,7 +3929,6 @@ if TYPE_CHECKING:
     from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
-    from .models.h3 import H3_PRETRAINED_CONFIG_ARCHIVE_MAP, H3Config
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
@@ -3950,6 +3945,7 @@ if TYPE_CHECKING:
         GroupViTTextConfig,
         GroupViTVisionConfig,
     )
+    from .models.h3 import H3_PRETRAINED_CONFIG_ARCHIVE_MAP, H3Config
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
@@ -5073,16 +5069,6 @@ if TYPE_CHECKING:
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
         )
-        from .models.h3 import (
-            H3_PRETRAINED_MODEL_ARCHIVE_LIST,
-            H3DoubleHeadsModel,
-            H3ForSequenceClassification,
-            H3ForTokenClassification,
-            H3LMHeadModel,
-            H3Model,
-            H3PreTrainedModel,
-            load_tf_weights_in_h3,
-        )
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
@@ -5132,6 +5118,7 @@ if TYPE_CHECKING:
             GroupViTTextModel,
             GroupViTVisionModel,
         )
+        from .models.h3 import H3_PRETRAINED_MODEL_ARCHIVE_LIST, H3ForCausalLM, H3Model, H3PreTrainedModel
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,

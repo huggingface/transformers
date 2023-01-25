@@ -3360,6 +3360,30 @@ class GroupViTVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+H3_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class H3ForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class H3Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class H3PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
