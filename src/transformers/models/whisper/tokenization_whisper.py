@@ -493,6 +493,23 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
+    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
+        """
+        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
+        given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
+        """
+        timestamp_begin = self.all_special_ids[-1] + 1
+        outputs = [[]]
+        for token in token_ids:
+            if token >= timestamp_begin:
+                timestamp = f"<|{(token - timestamp_begin) * time_precision:.2f}|>"
+                outputs.append(timestamp)
+                outputs.append([])
+            else:
+                outputs[-1].append(token)
+        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
+        return "".join(outputs)
+
     def _compute_offsets(self, token_ids, time_precision=0.02):
         """
         Compute offsets for a given tokenized input
@@ -544,6 +561,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces: bool = True,
         output_offsets: bool = False,
         time_precision=0.02,
+        decode_with_timestamps: bool = False,
         **kwargs
     ) -> str:
         """
@@ -561,7 +579,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 Whether or not to clean up the tokenization spaces.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
-
+            output_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output the offsets of the tokens. This should only be set if the model predicted
+                timestamps.
+            decode_with_timestamps (`bool`, *optional*, defaults to `False`):
+                WHether or not to decode with timestamps included in the raw text.
         Returns:
             `str`: The decoded sentence.
         """
@@ -571,6 +593,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+        if decode_with_timestamps:
+            text = self._decode_with_timestamps(token_ids, time_precision=time_precision)
         # retrieve offsets
         if output_offsets:
             offsets = None
