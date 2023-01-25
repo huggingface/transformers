@@ -544,7 +544,7 @@ BLENDERBOT_GENERATION_EXAMPLE = r"""
     >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
     >>> next_reply_ids = model.generate(**inputs)
     >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
-    Bot:   That's too bad. Have you tried encouraging them to change their eating habits?
+    Bot:   I see. Well, it's good that they're trying to change their eating habits.
     ```
 """
 
