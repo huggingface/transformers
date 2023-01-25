@@ -33,37 +33,12 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] H3Config
 
-## H3 specific outputs
-
-[[autodoc]] models.h3.modeling_h3.H3DoubleHeadsModelOutput
-
-[[autodoc]] models.h3.modeling_tf_h3.TFH3DoubleHeadsModelOutput
-
 ## H3Model
 
 [[autodoc]] H3Model
     - forward
-    - parallelize
-    - deparallelize
 
-## H3LMHeadModel
+## H3ForCausalLM
 
-[[autodoc]] H3LMHeadModel
-    - forward
-    - parallelize
-    - deparallelize
-
-## H3DoubleHeadsModel
-
-[[autodoc]] H3DoubleHeadsModel
-    - forward
-
-## H3ForSequenceClassification
-
-[[autodoc]] H3ForSequenceClassification
-    - forward
-
-## H3ForTokenClassification
-
-[[autodoc]] H3ForTokenClassification
+[[autodoc]] H3ForCausalLM
     - forward

@@ -369,7 +369,6 @@ class H3PreTrainedModel(PreTrainedModel):
 
     config_class = H3Config
     base_model_prefix = "transformer"
-    is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["H3Block"]
 
@@ -513,11 +512,6 @@ class H3Model(H3PreTrainedModel):
         self.h = nn.ModuleList([H3Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-        self.gradient_checkpointing = False
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -646,18 +640,6 @@ class H3Model(H3PreTrainedModel):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure layer_past is on same device as hidden_states (might not be correct)
-                if layer_past is not None:
-                    layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if isinstance(head_mask, torch.Tensor):
-                    head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -706,12 +688,6 @@ class H3Model(H3PreTrainedModel):
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
 
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
-
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
@@ -749,10 +725,6 @@ class H3ForCausalLM(H3PreTrainedModel):
         super().__init__(config)
         self.transformer = H3Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -838,11 +810,6 @@ class H3ForCausalLM(H3PreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
-
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         lm_logits = self.lm_head(hidden_states)
 

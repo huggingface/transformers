@@ -29,15 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 if is_torch_available():
     import torch
 
-    from transformers import (
-        H3_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2Tokenizer,
-        H3DoubleHeadsModel,
-        H3ForSequenceClassification,
-        H3ForTokenClassification,
-        H3LMHeadModel,
-        H3Model,
-    )
+    from transformers import H3_PRETRAINED_MODEL_ARCHIVE_LIST, GPT2Tokenizer, H3ForCausalLM, H3Model
 
 
 class H3ModelTester:
@@ -329,7 +321,7 @@ class H3ModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-        model = H3LMHeadModel(config)
+        model = H3ForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
@@ -340,7 +332,7 @@ class H3ModelTester:
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
     ):
-        model = H3LMHeadModel(config)
+        model = H3ForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -349,52 +341,6 @@ class H3ModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
-
-    def create_and_check_double_lm_head_model(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
-    ):
-        model = H3DoubleHeadsModel(config)
-        model.to(torch_device)
-        model.eval()
-
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-
-        inputs = {
-            "input_ids": multiple_choice_inputs_ids,
-            "mc_token_ids": mc_token_ids,
-            "attention_mask": multiple_choice_input_mask,
-            "token_type_ids": multiple_choice_token_type_ids,
-            "labels": multiple_choice_inputs_ids,
-        }
-
-        result = model(**inputs)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
-        )
-        self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
-
-    def create_and_check_h3_for_sequence_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
-    ):
-        config.num_labels = self.num_labels
-        model = H3ForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_h3_for_token_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
-    ):
-        config.num_labels = self.num_labels
-        model = H3ForTokenClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_h3_weight_initialization(self, config, *args):
         model = H3Model(config)
@@ -432,38 +378,17 @@ class H3ModelTester:
 class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (H3Model, H3LMHeadModel, H3DoubleHeadsModel, H3ForSequenceClassification, H3ForTokenClassification)
+        (
+            H3Model,
+            H3ForCausalLM,
+        )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (H3LMHeadModel, H3DoubleHeadsModel) if is_torch_available() else ()
-    all_parallelizable_model_classes = (H3LMHeadModel, H3DoubleHeadsModel) if is_torch_available() else ()
+    all_generative_model_classes = (H3ForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = True
-
-    # special case for DoubleHeads model
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class.__name__ == "H3DoubleHeadsModel":
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.num_choices, self.model_tester.seq_length),
-                    dtype=torch.long,
-                    device=torch_device,
-                )
-                inputs_dict["input_ids"] = inputs_dict["labels"]
-                inputs_dict["token_type_ids"] = inputs_dict["labels"]
-                inputs_dict["mc_token_ids"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.num_choices),
-                    dtype=torch.long,
-                    device=torch_device,
-                )
-                inputs_dict["mc_labels"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-        return inputs_dict
 
     def setUp(self):
         self.model_tester = H3ModelTester(self)
@@ -522,72 +447,12 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @slow
     def test_batch_generation(self):
-        model = H3LMHeadModel.from_pretrained("h3")
+        model = H3ForCausalLM.from_pretrained("h3")
         model.to(torch_device)
         tokenizer = GPT2Tokenizer.from_pretrained("h3")
 
         tokenizer.padding_side = "left"
 
-        # Define PAD Token = EOS Token = 50256
-        tokenizer.pad_token = tokenizer.eos_token
-        model.config.pad_token_id = model.config.eos_token_id
-
-        # use different length sentences to test batching
-        sentences = [
-            "Hello, my dog is a little",
-            "Today, I",
-        ]
-
-        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
-        input_ids = inputs["input_ids"].to(torch_device)
-        token_type_ids = torch.cat(
-            [
-                input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-                input_ids.new_full((input_ids.shape[0], 1), 500),
-            ],
-            dim=-1,
-        )
-
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-        )
-
-        outputs_tt = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-            token_type_ids=token_type_ids,
-        )
-
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
-
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
-        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
-
-        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
-        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
-
-        expected_output_sentence = [
-            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-            "Today, I'm going to be doing a lot of research on this. I",
-        ]
-        self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @slow
-    def test_batch_generation_2heads(self):
-        model = H3DoubleHeadsModel.from_pretrained("h3")
-        model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("h3")
-
-        tokenizer.padding_side = "left"
-
-        # This tokenizer has no pad token, so we have to set it in some way
         # Define PAD Token = EOS Token = 50256
         tokenizer.pad_token = tokenizer.eos_token
         model.config.pad_token_id = model.config.eos_token_id
@@ -655,7 +520,7 @@ class H3ModelLanguageGenerationTest(unittest.TestCase):
         scale_attn_by_inverse_layer_idx=False,
         verify_outputs=True,
     ):
-        model = H3LMHeadModel.from_pretrained(
+        model = H3ForCausalLM.from_pretrained(
             "h3",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
@@ -698,7 +563,7 @@ class H3ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_h3_sample(self):
         tokenizer = GPT2Tokenizer.from_pretrained("h3")
-        model = H3LMHeadModel.from_pretrained("h3")
+        model = H3ForCausalLM.from_pretrained("h3")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -726,7 +591,7 @@ class H3ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_h3_sample_max_time(self):
         tokenizer = GPT2Tokenizer.from_pretrained("h3")
-        model = H3LMHeadModel.from_pretrained("h3")
+        model = H3ForCausalLM.from_pretrained("h3")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -772,7 +637,7 @@ class H3ModelLanguageGenerationTest(unittest.TestCase):
         )
 
         h3_tokenizer = GPT2Tokenizer.from_pretrained("h3-large")
-        h3_model = H3LMHeadModel.from_pretrained("h3-large").to(torch_device)
+        h3_model = H3ForCausalLM.from_pretrained("h3-large").to(torch_device)
         input_ids = h3_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = h3_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
