@@ -1294,9 +1294,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
             task (`bool`, *optional*):
-                Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids` will be updated accordingly.
+                Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
+                will be updated accordingly.
             language (`bool`, *optional*):
-                Language token to use for generation, should be in the form `<|en|>`. You can find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
+                Language token to use for generation, should be in the form `<|en|>`. You can find all the possible
+                language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
             kwargs:
