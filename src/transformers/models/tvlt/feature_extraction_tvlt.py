@@ -55,6 +55,8 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        seed (`int`, *optional*, defaults to 1):
+            The seed of random generator for creating masked audio_mask_position_permutation
     """
 
     model_input_names = ["audio_values", "audio_masks", "audio_mask_position_permutation"]
@@ -70,6 +72,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         hop_length_to_sampling_rate=86,
         n_fft=2048,
         padding_value=0.0,
+        seed=1,
         **kwargs
     ):
         super().__init__(
