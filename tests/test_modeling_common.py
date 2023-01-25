@@ -64,7 +64,6 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-
 from transformers.testing_utils import (
     TOKEN,
     USER,
