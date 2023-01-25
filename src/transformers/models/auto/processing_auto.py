@@ -49,6 +49,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("flava", "FlavaProcessor"),
         ("git", "GITProcessor"),
         ("groupvit", "CLIPProcessor"),
+        ("hubert", "Wav2Vec2Processor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
