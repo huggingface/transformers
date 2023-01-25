@@ -31,17 +31,16 @@ from flash_attn.modules.mha import MHA
 from flash_attn.modules.mlp import FusedMLP, Mlp
 from flash_attn.utils.generation import GenerationMixin
 
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_h3 import H3Config
-
 
 try:
     from flash_attn.ops.layer_norm import dropout_add_layer_norm
 except ImportError:
     dropout_add_layer_norm = None
 
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from .configuration_h3 import H3Config
 from .src.models.h3 import H3
 
 
