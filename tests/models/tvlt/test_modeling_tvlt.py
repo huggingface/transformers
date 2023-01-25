@@ -129,7 +129,7 @@ class TvltModelTester:
         self.num_qa_labels = num_qa_labels
         self.num_labels = num_labels
 
-        self.expected_pixel_seq_len = (self.pixel_size // self.pixel_patch_size) ** 2 * self.num_frames
+        self.expected_pixel_seq_len = (self.image_size // self.image_patch_size) ** 2 * self.num_frames
         self.expected_audio_seq_len = (self.audio_size // self.audio_patch_size[0]) * (
             self.feature_size // self.audio_patch_size[1]
         )
