@@ -115,6 +115,7 @@ class BridgeTowerModelTester:
             num_hidden_layers=self.num_hidden_layers,
             tie_word_embeddings=self.tie_word_embeddings,
             init_layernorm_from_vision_encoder=self.init_layernorm_from_vision_encoder,
+            num_channels=self.num_channels,
             output_hidden_states=self.output_hidden_states,
         )
 
