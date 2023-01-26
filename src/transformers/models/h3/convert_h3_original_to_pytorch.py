@@ -22,51 +22,102 @@ import argparse
 
 import torch
 
-from transformers import H3Config, H3Model, load_tf_weights_in_h3
-from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
+from huggingface_hub import hf_hub_download
+from transformers import AutoTokenizer, H3Config, H3ForCausalLM
 
 
-logging.set_verbosity_info()
+def rename_key(name):
+    if "backbone.embeddings" in name:
+        name = name.replace("backbone", "h3")
+    if "backbone.layers" in name:
+        name = name.replace("backbone.layers", "h3.blocks")
+    if "backbone.ln_f" in name:
+        name = name.replace("backbone.ln_f", "h3.final_layernorm")
+
+    return name
 
 
-def convert_h3_checkpoint_to_pytorch(h3_checkpoint_path, h3_config_file, pytorch_dump_folder_path):
-    # Construct model
-    if h3_config_file == "":
-        config = H3Config()
-    else:
-        config = H3Config.from_json_file(h3_config_file)
-    model = H3Model(config)
+def convert_state_dict(orig_state_dict):
+    for key in orig_state_dict.copy().keys():
+        val = orig_state_dict.pop(key)
+        orig_state_dict[rename_key(key)] = val
 
-    # Load weights from numpy
-    load_tf_weights_in_h3(model, config, h3_checkpoint_path)
+    return orig_state_dict
 
-    # Save pytorch-model
-    pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
-    pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
-    print(f"Save PyTorch model to {pytorch_weights_dump_path}")
-    torch.save(model.state_dict(), pytorch_weights_dump_path)
-    print(f"Save configuration file to {pytorch_config_dump_path}")
-    with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
-        f.write(config.to_json_string())
+
+def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_to_hub=False):
+    # Load original state dict
+    model_name_to_repo_id = {
+        "H3-125m": "danfu09/H3-125M",
+    }
+    filepath = hf_hub_download(repo_id=model_name_to_repo_id[model_name], filename="model.pt")
+    state_dict = torch.load(filepath, map_location="cpu")
+    if "pytorch-lightning_version" in state_dict:
+        state_dict = {k[len("model.") :]: v for k, v in state_dict["state_dict"].items() if k.startswith("model.")}
+
+    config = H3Config()
+
+    # Update state dict
+    if "backbone.ln_0.weight" in state_dict:
+        n_layers = config.num_hidden_layers
+        ln_weight = state_dict.pop(f"backbone.layers.{n_layers - 1}.norm2.weight")
+        ln_bias = state_dict.pop(f"backbone.layers.{n_layers - 1}.norm2.bias")
+        state_dict["backbone.ln_f.weight"] = ln_weight
+        state_dict["backbone.ln_f.bias"] = ln_bias
+        for l in reversed(range(n_layers)):
+            ln_weight = state_dict.pop(f"backbone.layers.{l}.norm1.weight")
+            ln_bias = state_dict.pop(f"backbone.layers.{l}.norm1.bias")
+            state_dict[f"backbone.layers.{l}.norm2.weight"] = ln_weight
+            state_dict[f"backbone.layers.{l}.norm2.bias"] = ln_bias
+            if l > 0:
+                ln_weight = state_dict.pop(f"backbone.layers.{l - 1}.norm2.weight")
+                ln_bias = state_dict.pop(f"backbone.layers.{l - 1}.norm2.bias")
+                state_dict[f"backbone.layers.{l}.norm1.weight"] = ln_weight
+                state_dict[f"backbone.layers.{l}.norm1.bias"] = ln_bias
+        ln_weight = state_dict.pop("backbone.ln_0.weight")
+        ln_bias = state_dict.pop("backbone.ln_0.bias")
+        state_dict["h3.blocks.0.norm1.weight"] = ln_weight
+        state_dict["h3.blocks.0.norm1.bias"] = ln_bias
+
+    state_dict = convert_state_dict(state_dict)
+
+    # Load HF model, equip with weights
+    # TODO remove caching?
+    config.use_cache = False
+    model = H3ForCausalLM(config)
+    model.load_state_dict(state_dict)
+
+    # TODO assert values
+    print("Generating text...")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    inputs = tokenizer("I enjoy walking with my cute dog", return_tensors="pt").to(device)
+    input_ids = inputs.input_ids
+    max_length = input_ids.shape[1] + 128
+
+    model.to(device)
+    outputs = model.generate(input_ids=input_ids, max_length=max_length)
+
+    print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+
+    if pytorch_dump_folder_path is not None:
+        print(f"Saving PyTorch model to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        print(f"Pushing {model_name} to the hub...")
+        model.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--h3_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--model_name", default="H3-125m", type=str, help="Name of the H3 model you'd like to convert."
     )
+    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
-    )
-    parser.add_argument(
-        "--h3_config_file",
-        default="",
-        type=str,
-        help=(
-            "An optional config json file corresponding to the pre-trained OpenAI model. \n"
-            "This specifies the model architecture."
-        ),
+        "--push_to_hub", action="store_true", help="Whether to push the model to the hub after converting."
     )
     args = parser.parse_args()
-    convert_h3_checkpoint_to_pytorch(args.h3_checkpoint_path, args.h3_config_file, args.pytorch_dump_folder_path)
+    convert_h3_checkpoint_to_pytorch(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

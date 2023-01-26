@@ -47,10 +47,10 @@ class H3Config(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. If not set, will set it to 4 times the `hidden_size`.
-        residual_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        residual_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the residual connections inside each block.
         embedding_dropout (`int`, *optional*, defaults to 0.1):
-            The dropout ratio for the embeddings.
+            The dropout probability for the embeddings.
         fused_mlp (`bool`, *optional*, defaults to `False`):
             Whether to leverage a fused MLP.
         fused_dropout_add_ln (`bool`, *optional*, defaults to `False`):
@@ -97,7 +97,7 @@ class H3Config(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=16,
         n_inner=None,
-        residual_dropout=0.1,
+        residual_dropout=0.0,
         embedding_dropout=0.1,
         fused_mlp=False,
         fused_dropout_add_ln=False,

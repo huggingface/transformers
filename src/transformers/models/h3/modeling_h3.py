@@ -74,13 +74,13 @@ def create_mlp_cls(config):
     inner_dim = config.n_inner if config.n_inner is not None else 4 * config.hidden_size
     if not config.fused_mlp:
         mlp_cls = partial(Mlp, hidden_features=inner_dim, activation=partial(nn.functional.gelu, approximate="tanh"))
+        print("MLP class:", mlp_cls)
     else:
         mlp_cls = partial(FusedMLP, hidden_features=inner_dim)
     return mlp_cls
 
 
 def create_block(config, layer_idx):
-    # a block consists of a mixer class, an MLP and a layernorm class
     # d_model, n_inner=None,
     # ssm_cfg=None, attn_layer_idx=None,
     # attn_cfg=None, layer_norm_epsilon=1e-5,
@@ -90,6 +90,7 @@ def create_block(config, layer_idx):
     if fused_dropout_add_ln and dropout_add_layer_norm is None:
         raise ImportError("dropout_add_layer_norm is not installed")
 
+    # a block consists of a mixer class, an MLP and a layernorm class
     mixer_cls = create_mixer_cls(config, layer_idx=layer_idx)
     mlp_cls = create_mlp_cls(config)
     norm_cls = partial(nn.LayerNorm, eps=config.layer_norm_epsilon)
@@ -251,9 +252,11 @@ class H3Model(H3PreTrainedModel):
         self.embeddings = GPT2Embeddings(config.hidden_size, config.vocab_size, 0)
         self.residual_in_fp32 = config.residual_in_fp32
 
-        self.h3 = nn.ModuleList([create_block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.blocks = nn.ModuleList([create_block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.final_dropout = nn.Dropout(config.residual_dropout)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -299,20 +302,20 @@ class H3Model(H3PreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if past_key_values is None:
-            past_key_values = tuple([None] * len(self.h))
+        # if past_key_values is None:
+        #     past_key_values = tuple([None] * len(self.h))
 
         if inputs_embeds is None:
             hidden_states = self.embeddings(input_ids, position_ids=position_ids)
         else:
             hidden_states = inputs_embeds
 
-        output_shape = input_shape + (hidden_states.size(-1),)
+        residual = None
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
-        for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+        for block in self.blocks:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -338,24 +341,35 @@ class H3Model(H3PreTrainedModel):
                     attention_mask,
                 )
             else:
-                outputs = block(
-                    hidden_states,
-                    layer_past=layer_past,
-                    attention_mask=attention_mask,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+                print("Hidden states before block:", hidden_states.shape)
+                print("Residual before block:", residual)
+                hidden_states, residual = block(hidden_states, residual, mixer_kwargs=None)
 
-            hidden_states = outputs[0]
+            # hidden_states = outputs[0]
             if use_cache is True:
                 presents = presents + (outputs[1],)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
-        hidden_states = self.ln_f(hidden_states)
+        if not self.fused_dropout_add_ln:
+            dropped = self.final_dropout(hidden_states)
+            residual = (dropped + residual) if residual is not None else dropped
+            hidden_states = self.final_layernorm(residual.to(dtype=self.ln_f.weight.dtype))
+        else:
+            # Set prenorm=False here since we don't need the residual
+            hidden_states = dropout_add_layer_norm(
+                hidden_states,
+                residual,
+                self.final_layernorm.weight,
+                self.final_layernorm.bias,
+                self.drop_f.p if self.training else 0.0,
+                self.final_layernorm.eps,
+                prenorm=False,
+                residual_in_fp32=self.residual_in_fp32,
+            )
 
-        hidden_states = hidden_states.view(output_shape)
+        # hidden_states = hidden_states.view(output_shape)
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
