@@ -1334,7 +1334,6 @@ class TrainingArguments:
             with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
 
-
         self.fsdp_config["fsdp_min_num_params"] = max(
             getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
         )
