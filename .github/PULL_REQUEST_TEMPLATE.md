@@ -42,6 +42,7 @@ Models:
 - text models: @ArthurZucker and @younesbelkada
 - vision models: @amyeroberts and @NielsRogge
 - speech models: @sanchit-gandhi
+- graph models: @clefourrier
 
 Library:
 
@@ -54,10 +55,10 @@ Library:
 
 Integrations:
 
-- deepspeed: @stas00
+- deepspeed: HF Trainer: @stas00, Accelerate: @pacman100
 - ray/raytune: @richardliaw, @amogkam
 
-Documentation: @sgugger and @stevhliu
+Documentation: @sgugger, @stevhliu and @MKhalusova
 
 HF projects:
 

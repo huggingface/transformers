@@ -42,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
 _CONFIG_FOR_DOC = "LxmertConfig"
-_TOKENIZER_FOR_DOC = "LxmertTokenizer"
 
 LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "unc-nlp/lxmert-base-uncased",
@@ -739,7 +738,7 @@ class LxmertVisualObjHead(nn.Module):
             visual_losses["obj"] = {"shape": (-1,), "num": config.num_object_labels}
         if config.visual_attr_loss:
             visual_losses["attr"] = {"shape": (-1,), "num": config.num_attr_labels}
-        if config.visual_obj_loss:
+        if config.visual_feat_loss:
             visual_losses["feat"] = {
                 "shape": (-1, config.visual_feat_dim),
                 "num": config.visual_feat_dim,
@@ -827,7 +826,7 @@ LXMERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`LxmertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -900,7 +899,6 @@ class LxmertModel(LxmertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LxmertModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1072,7 +1070,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 "num": config.num_attr_labels,
                 "loss": "visual_ce",
             }
-        if config.visual_obj_loss:
+        if config.visual_feat_loss:
             visual_losses["feat"] = {
                 "shape": (-1, config.visual_feat_dim),
                 "num": config.visual_feat_dim,
@@ -1386,7 +1384,6 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LxmertForQuestionAnsweringOutput,
         config_class=_CONFIG_FOR_DOC,

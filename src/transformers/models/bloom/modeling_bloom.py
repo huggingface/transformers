@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bigscience/bloom-560m"
 _CONFIG_FOR_DOC = "BloomConfig"
-_TOKENIZER_FOR_DOC = "BloomTokenizerFast"
 
 BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bigscience-small-testing",
@@ -570,7 +569,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`BloomTokenizerFast`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -672,7 +671,6 @@ class BloomModel(BloomPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -842,28 +840,27 @@ class BloomForCausalLM(BloomPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past: Optional[torch.Tensor] = None,
+        past_key_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs
     ) -> dict:
         # only last token for input_ids if past is not None
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
             # the cache may be in the stardard format (e.g. in contrastive search), convert to bloom's format if needed
-            if past[0][0].shape[0] == input_ids.shape[0]:
-                past = self._convert_to_bloom_cache(past)
+            if past_key_values[0][0].shape[0] == input_ids.shape[0]:
+                past_key_values = self._convert_to_bloom_cache(past_key_values)
 
         return {
             "input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "attention_mask": attention_mask,
         }
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -994,7 +991,6 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -1131,7 +1127,6 @@ class BloomForTokenClassification(BloomPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

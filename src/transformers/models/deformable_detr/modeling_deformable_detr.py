@@ -43,6 +43,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
+from ..auto import AutoBackbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
@@ -241,7 +242,7 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoImageProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -371,45 +372,57 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DeformableDetrTimmConvEncoder(nn.Module):
+class DeformableDetrConvEncoder(nn.Module):
     """
-    Convolutional encoder (backbone) from the timm library.
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by DeformableDetrFrozenBatchNorm2d as defined above.
+
     """
 
     def __init__(self, config):
         super().__init__()
 
-        kwargs = {}
-        if config.dilation:
-            kwargs["output_stride"] = 16
+        self.config = config
 
-        requires_backends(self, ["timm"])
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = AutoBackbone.from_config(config.backbone_config)
 
-        out_indices = (2, 3, 4) if config.num_feature_levels > 1 else (4,)
-        backbone = create_model(
-            config.backbone, pretrained=True, features_only=True, out_indices=out_indices, **kwargs
-        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.feature_info.channels()
-        self.strides = self.model.feature_info.reduction()
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
-        if "resnet" in config.backbone:
+        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                    parameter.requires_grad_(False)
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
 
+    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DeformableDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        """
-        Outputs feature maps of latter stages C_3 through C_5 in ResNet if `config.num_feature_levels > 1`, otherwise
-        outputs feature maps of C_5.
-        """
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values)
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -1073,7 +1086,8 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`] for details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DeformableDetrImageProcessor.__call__`]
+            for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1438,13 +1452,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DeformableDetrTimmConvEncoder(config)
+        backbone = DeformableDetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DeformableDetrConvModel(backbone, position_embeddings)
 
         # Create input projection layers
         if config.num_feature_levels > 1:
-            num_backbone_outs = len(backbone.strides)
+            num_backbone_outs = len(backbone.intermediate_channel_sizes)
             input_proj_list = []
             for _ in range(num_backbone_outs):
                 in_channels = backbone.intermediate_channel_sizes[_]
@@ -1509,8 +1523,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
-        valid_height = torch.sum(~mask[:, :, 0], 1)
-        valid_width = torch.sum(~mask[:, 0, :], 1)
+        valid_height = torch.sum(mask[:, :, 0], 1)
+        valid_width = torch.sum(mask[:, 0, :], 1)
         valid_ratio_heigth = valid_height.float() / height
         valid_ratio_width = valid_width.float() / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
@@ -1687,9 +1701,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
-
-        # revert valid_ratios
-        valid_ratios = ~valid_ratios.bool()
         valid_ratios = valid_ratios.float()
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
@@ -1968,9 +1979,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
-                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
-                outputs_class = self.class_embed(intermediate)
-                outputs_coord = self.bbox_embed(intermediate).sigmoid()
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
             if self.config.two_stage:

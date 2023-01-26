@@ -60,7 +60,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -244,7 +244,7 @@ class Trainer:
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
         tokenizer ([`PreTrainedTokenizerBase`], *optional*):
-            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
+            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
@@ -1020,11 +1020,15 @@ class Trainer:
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in opt_model.named_parameters() if n in decay_parameters],
+                    "params": [
+                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
+                    ],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in opt_model.named_parameters() if n not in decay_parameters],
+                    "params": [
+                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
+                    ],
                     "weight_decay": 0.0,
                 },
             ]
@@ -1044,10 +1048,14 @@ class Trainer:
 
                     manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
 
+                    skipped = 0
                     for module in opt_model.modules():
                         if isinstance(module, nn.Embedding):
+                            skipped += sum(dict((p.data_ptr(), p.numel()) for p in module.parameters()).values())
+                            print(f"skipped {module}: {skipped/2**20}M params")
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.debug(f"bitsandbytes: will optimize {module} in fp32")
+                    print(f"skipped: {skipped/2**20}M params")
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
@@ -1309,8 +1317,9 @@ class Trainer:
 
         if not training:
             model.eval()
+            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
             # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
-            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False)
+            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
         else:
             if not model.training:
                 model.train()
@@ -1919,8 +1928,8 @@ class Trainer:
         run_dir = self._get_output_dir(trial)
         checkpoints_sorted = self._sorted_checkpoints(use_mtime=False, output_dir=run_dir)
 
-        # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint.
-        if self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
+        # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint and process allowed to save.
+        if self.args.should_save and self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
             for checkpoint in checkpoints_sorted:
                 if checkpoint != self.state.best_model_checkpoint:
                     logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
@@ -2776,7 +2785,7 @@ class Trainer:
         checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
         for checkpoint in checkpoints_to_be_deleted:
             logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
-            shutil.rmtree(checkpoint)
+            shutil.rmtree(checkpoint, ignore_errors=True)
 
     def evaluate(
         self,
@@ -3310,7 +3319,6 @@ class Trainer:
         """
         if not self.is_world_process_zero():
             return
-        use_auth_token = True if self.args.hub_token is None else self.args.hub_token
         if self.args.hub_model_id is None:
             repo_name = Path(self.args.output_dir).absolute().name
         else:
@@ -3318,22 +3326,15 @@ class Trainer:
         if "/" not in repo_name:
             repo_name = get_full_repo_name(repo_name, token=self.args.hub_token)
 
+        # Make sure the repo exists.
+        create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
         try:
-            self.repo = Repository(
-                self.args.output_dir,
-                clone_from=repo_name,
-                use_auth_token=use_auth_token,
-                private=self.args.hub_private_repo,
-            )
+            self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
         except EnvironmentError:
             if self.args.overwrite_output_dir and at_init:
                 # Try again after wiping output_dir
                 shutil.rmtree(self.args.output_dir)
-                self.repo = Repository(
-                    self.args.output_dir,
-                    clone_from=repo_name,
-                    use_auth_token=use_auth_token,
-                )
+                self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
             else:
                 raise
 

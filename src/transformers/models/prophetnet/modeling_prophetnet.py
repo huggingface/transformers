@@ -41,7 +41,6 @@ from .configuration_prophetnet import ProphetNetConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ProphenetConfig"
-_TOKENIZER_FOR_DOC = "ProphetNetTokenizer"
 _CHECKPOINT_FOR_DOC = "microsoft/prophetnet-large-uncased"
 
 PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -75,7 +74,7 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`ProphetNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -89,7 +88,7 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`ProphetNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -148,7 +147,7 @@ PROPHETNET_STANDALONE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`ProphetNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1306,10 +1305,10 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ProphetNetTokenizer, ProphetNetEncoder
+        >>> from transformers import AutoTokenizer, ProphetNetEncoder
         >>> import torch
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = ProphetNetEncoder.from_pretrained("patrickvonplaten/prophetnet-large-uncased-standalone")
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1483,10 +1482,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ProphetNetTokenizer, ProphetNetDecoder
+        >>> from transformers import AutoTokenizer, ProphetNetDecoder
         >>> import torch
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = ProphetNetDecoder.from_pretrained("microsoft/prophetnet-large-uncased", add_cross_attention=False)
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1829,9 +1828,9 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ProphetNetTokenizer, ProphetNetModel
+        >>> from transformers import AutoTokenizer, ProphetNetModel
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = ProphetNetModel.from_pretrained("microsoft/prophetnet-large-uncased")
 
         >>> input_ids = tokenizer(
@@ -1957,9 +1956,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ProphetNetTokenizer, ProphetNetForConditionalGeneration
+        >>> from transformers import AutoTokenizer, ProphetNetForConditionalGeneration
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased")
 
         >>> input_ids = tokenizer(
@@ -2062,7 +2061,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -2073,13 +2072,13 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     ):
         assert encoder_outputs is not None, "`encoder_outputs` have to be passed for generation."
 
-        if past:
+        if past_key_values:
             decoder_input_ids = decoder_input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -2205,10 +2204,10 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ProphetNetTokenizer, ProphetNetForCausalLM
+        >>> from transformers import AutoTokenizer, ProphetNetForCausalLM
         >>> import torch
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = ProphetNetForCausalLM.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -2217,11 +2216,11 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         >>> logits = outputs.logits
 
         >>> # Model can also be used with EncoderDecoder framework
-        >>> from transformers import BertTokenizer, EncoderDecoderModel, ProphetNetTokenizer
+        >>> from transformers import BertTokenizer, EncoderDecoderModel, AutoTokenizer
         >>> import torch
 
         >>> tokenizer_enc = BertTokenizer.from_pretrained("bert-large-uncased")
-        >>> tokenizer_dec = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> tokenizer_dec = AutoTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "bert-large-uncased", "microsoft/prophetnet-large-uncased"
         ... )
@@ -2316,7 +2315,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         use_cache=None,
@@ -2326,14 +2325,14 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
             "head_mask": head_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 

@@ -53,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 _CONFIG_FOR_DOC = "MarianConfig"
-_TOKENIZER_FOR_DOC = "MarianTokenizer"
 
 
 MARIAN_START_DOCSTRING = r"""
@@ -96,7 +95,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -110,7 +109,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -147,7 +146,7 @@ MARIAN_ENCODE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -176,7 +175,7 @@ MARIAN_DECODE_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -381,7 +380,7 @@ class FlaxMarianAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -981,9 +980,9 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+        >>> from transformers import AutoTokenizer, FlaxMarianMTModel
 
-        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
         >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> text = "My friends are cool but they eat too many carbs."
@@ -1049,9 +1048,9 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
 
         ```python
         >>> import jax.numpy as jnp
-        >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+        >>> from transformers import AutoTokenizer, FlaxMarianMTModel
 
-        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
         >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> text = "My friends are cool but they eat too many carbs."
@@ -1210,9 +1209,7 @@ class FlaxMarianModel(FlaxMarianPreTrainedModel):
     module_class = FlaxMarianModule
 
 
-append_call_sample_docstring(
-    FlaxMarianModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxMarianModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxMarianMTModule(nn.Module):
@@ -1318,10 +1315,10 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
 
         ```python
         >>> import jax.numpy as jnp
-        >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+        >>> from transformers import AutoTokenizer, FlaxMarianMTModel
 
         >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=64, return_tensors="jax")
@@ -1479,10 +1476,10 @@ FLAX_MARIAN_MT_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+    >>> from transformers import AutoTokenizer, FlaxMarianMTModel
 
     >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-    >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+    >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
     >>> text = "My friends are cool but they eat too many carbs."
     >>> input_ids = tokenizer(text, max_length=64, return_tensors="jax").input_ids

@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
-_TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-base-4096",
@@ -1470,7 +1469,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`LongformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1672,10 +1671,10 @@ class LongformerModel(LongformerPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import LongformerModel, LongformerTokenizer
+        >>> from transformers import LongformerModel, AutoTokenizer
 
         >>> model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
 
         >>> SAMPLE_TEXT = " ".join(["Hello world! "] * 1000)  # long input document
         >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
@@ -1821,9 +1820,9 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         Mask filling example:
 
         ```python
-        >>> from transformers import LongformerTokenizer, LongformerForMaskedLM
+        >>> from transformers import AutoTokenizer, LongformerForMaskedLM
 
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
         >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
         ```
 
@@ -1903,7 +1902,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="jpwahle/longformer-base-plagiarism-detection",
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2061,10 +2059,10 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LongformerTokenizer, LongformerForQuestionAnswering
+        >>> from transformers import AutoTokenizer, LongformerForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
         >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -2172,7 +2170,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="brad1141/Longformer-finetuned-norm",
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2260,7 +2257,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,

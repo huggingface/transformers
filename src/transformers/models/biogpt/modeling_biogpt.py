@@ -35,7 +35,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/biogpt"
 _CONFIG_FOR_DOC = "BioGptConfig"
-_TOKENIZER_FOR_DOC = "BioGptTokenizer"
 
 BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/biogpt",
@@ -385,7 +384,7 @@ BIOGPT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BioGptTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -487,7 +486,6 @@ class BioGptModel(BioGptPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -644,7 +642,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -706,16 +703,16 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask, past=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask, past_key_values=None, **kwargs):
 
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
         }
 
