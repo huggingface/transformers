@@ -1,12 +1,7 @@
-import time
+from datetime import datetime
 
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
-import torch.nn.functional as F
-from skimage.color import lab2rgb, rgb2lab
-from torch import nn
-from datetime import datetime
 
 
 def freeze_module(module):
@@ -20,9 +15,11 @@ def get_device():
         device = "mps"
     if device == "mps":
         print(
-            "WARNING: MPS currently doesn't seem to work, and messes up backpropagation without any visible torch errors. I recommend using CUDA on a colab notebook or CPU instead if you're facing inexplicable issues with generations."
+            "WARNING: MPS currently doesn't seem to work, and messes up backpropagation without any visible torch"
+            " errors. I recommend using CUDA on a colab notebook or CPU instead if you're facing inexplicable issues"
+            " with generations."
         )
-    return (device)
+    return device
 
 
 def show_pil(img):

@@ -1,12 +1,9 @@
-import io
-
 import numpy as np
 import PIL
-import requests
 import torch
 import torchvision.transforms as T
 import torchvision.transforms.functional as TF
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 
 def preprocess(img, target_image_size=256):
@@ -52,4 +49,3 @@ def get_pil(x):
 def loop_post_process(x):
     x = get_pil(x.squeeze())
     return x.permute(2, 0, 1).unsqueeze(0)
-

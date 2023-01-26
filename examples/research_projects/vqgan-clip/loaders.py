@@ -1,12 +1,10 @@
 import importlib
-import numpy as np
-import taming
+
 import torch
+
 import yaml
 from omegaconf import OmegaConf
-from PIL import Image
 from taming.models.vqgan import VQModel
-from utils import get_device
 
 
 def load_config(config_path, display=False):
@@ -20,7 +18,7 @@ def load_vqgan(device, conf_path=None, ckpt_path=None):
     if conf_path is None:
         conf_path = "./model_checkpoints/vqgan_only.yaml"
     config = load_config(conf_path, display=False)
-    model = taming.models.vqgan.VQModel(**config.model.params)
+    model = VQModel(**config.model.params)
     if ckpt_path is None:
         ckpt_path = "./model_checkpoints/vqgan_only.pt"
     sd = torch.load(ckpt_path, map_location=device)
@@ -73,7 +71,5 @@ def load_model(config, ckpt, gpu, eval_mode):
     else:
         pl_sd = {"state_dict": None}
         global_step = None
-    model = load_model_from_config(
-        config.model, pl_sd["state_dict"], gpu=gpu, eval_mode=eval_mode
-    )["model"]
+    model = load_model_from_config(config.model, pl_sd["state_dict"], gpu=gpu, eval_mode=eval_mode)["model"]
     return model, global_step
