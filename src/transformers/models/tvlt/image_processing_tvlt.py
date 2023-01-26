@@ -109,6 +109,9 @@ class TvltImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        init_mask_generator (`bool`, *optional*, defaults to False):
+            Whether to initialize random generator for creating masked audio_mask_position_permutation, set to true
+            when using from_pretrained.
         seed (`int`, *optional*, defaults to 1):
             The seed of random generator for creating masked pixel_mask_position_permutation
     """
@@ -135,6 +138,7 @@ class TvltImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_MEAN,
         image_std: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_STD,
+        init_mask_generator=False,
         seed=1,
         **kwargs
     ) -> None:
@@ -156,7 +160,8 @@ class TvltImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.random_generator = np.random.default_rng(seed=seed)
+        if init_mask_generator:
+            self.random_generator = np.random.default_rng(seed=seed)
 
     def resize(
         self,

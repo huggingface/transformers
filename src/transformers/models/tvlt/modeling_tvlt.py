@@ -1090,7 +1090,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
         >>> images = list(np.random.randn(num_frames, 3, 224, 224))
         >>> images_mixed = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
-        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base", init_mask_generator=True)
         >>> model = TvltForPreTraining.from_pretrained("TVLT/tvlt-base")
         >>> input_dict = processor(
         ...     images, audio, images_mixed, sampling_rate=44100, mask_pixel=True, mask_audio=True, return_tensors="pt"
@@ -1375,7 +1375,7 @@ class TvltForVideoClassification(TvltPreTrainedModel):
         >>> num_frames = 8
         >>> images = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
-        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base", init_mask_generator=True)
         >>> model = TvltForVideoClassification.from_pretrained("TVLT/tvlt-base")
         >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
 

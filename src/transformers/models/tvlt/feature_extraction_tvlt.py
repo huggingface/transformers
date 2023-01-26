@@ -55,6 +55,9 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        init_mask_generator (`bool`, *optional*, defaults to False):
+            Whether to initialize random generator for creating masked audio_mask_position_permutation, set to true
+            when using from_pretrained.
         seed (`int`, *optional*, defaults to 1):
             The seed of random generator for creating masked audio_mask_position_permutation
     """
@@ -72,6 +75,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         hop_length_to_sampling_rate=86,
         n_fft=2048,
         padding_value=0.0,
+        init_mask_generator=False,
         seed=1,
         **kwargs
     ):
@@ -92,7 +96,8 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.padding_value = padding_value
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
-        self.random_generator = np.random.default_rng(seed=seed)
+        if init_mask_generator:
+            self.random_generator = np.random.default_rng(seed=seed)
 
     # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.get_mel_filters with 45.245640471924965->59.99247463746737
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
