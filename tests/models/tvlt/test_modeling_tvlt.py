@@ -579,7 +579,10 @@ class TvltModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         # logits were tested with a different mean and std, so we use the same here
-        return (TvltImageProcessor() if is_vision_available() else None, TvltFeatureExtractor())
+        return (
+            TvltImageProcessor(init_mask_generator=True) if is_vision_available() else None,
+            TvltFeatureExtractor(init_mask_generator=True),
+        )
 
     def test_inference_for_question_answering(self):
         model = TvltForQuestionAnswering.from_pretrained("TVLT/tvlt-base").to(torch_device)

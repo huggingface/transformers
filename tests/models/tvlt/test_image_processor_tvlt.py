@@ -152,13 +152,11 @@ class TvltImageProcessorTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_and_save_pretrained(self):
         image_processor_first = self.image_processing_class(**self.image_processor_dict)
-        delattr(image_processor_first, "random_generator")
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
             check_json_file_has_correct_format(saved_file)
-            image_processor_second = self.image_processing_class.from_pretrained(tmpdirname, random_generator=None)
-            delattr(image_processor_second, "random_generator")
+            image_processor_second = self.image_processing_class.from_pretrained(tmpdirname)
 
         dict_first = image_processor_first.to_dict()
         dict_second = image_processor_second.to_dict()
@@ -166,13 +164,11 @@ class TvltImageProcessorTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     def test_image_processor_to_json_file(self):
         image_processor_first = self.image_processing_class(**self.image_processor_dict)
-        delattr(image_processor_first, "random_generator")
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             json_file_path = os.path.join(tmpdirname, "image_processor.json")
             image_processor_first.to_json_file(json_file_path)
             image_processor_second = self.image_processing_class.from_json_file(json_file_path)
-            delattr(image_processor_second, "random_generator")
 
         dict_first = image_processor_first.to_dict()
         dict_second = image_processor_second.to_dict()
@@ -180,7 +176,6 @@ class TvltImageProcessorTest(ImageProcessingSavingTestMixin, unittest.TestCase):
 
     def test_image_processor_to_json_string(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
-        delattr(image_processor, "random_generator")
         obj = json.loads(image_processor.to_json_string())
         for key, value in self.image_processor_dict.items():
             self.assertEqual(obj[key], value)

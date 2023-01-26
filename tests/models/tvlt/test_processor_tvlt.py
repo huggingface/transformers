@@ -17,6 +17,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 
 from transformers import is_speech_available, is_vision_available
 from transformers.testing_utils import require_torch
@@ -46,6 +47,17 @@ class TvltProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    def test_save_load_pretrained_default(self):
+        image_processor = self.get_image_processor()
+        feature_extractor = self.get_feature_extractor()
+
+        processor = TvltProcessor(image_processor=image_processor, feature_extractor=feature_extractor)
+        processor.save_pretrained(self.tmpdirname, init_mask_generator=False)
+        processor = TvltProcessor.from_pretrained(self.tmpdirname)
+
+        self.assertIsInstance(processor.feature_extractor, TvltFeatureExtractor)
+        self.assertIsInstance(processor.image_processor, TvltImageProcessor)
+
     def test_feature_extractor(self):
         image_processor = self.get_image_processor()
         feature_extractor = self.get_feature_extractor()
@@ -73,6 +85,23 @@ class TvltProcessorTest(unittest.TestCase):
 
         for key in image_dict.keys():
             self.assertAlmostEqual(image_dict[key].sum(), input_processor[key].sum(), delta=1e-2)
+
+    def test_processor(self):
+        image_processor = self.get_image_processor()
+        feature_extractor = self.get_feature_extractor()
+
+        processor = TvltProcessor(image_processor=image_processor, feature_extractor=feature_extractor)
+
+        audio = np.ones([12000])
+        images = np.ones([3, 224, 224])
+
+        inputs = processor(audio=audio, images=images)
+
+        self.assertListEqual(list(inputs.keys()), ["audio_values", "audio_masks", "pixel_values", "pixel_masks"])
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
 
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
