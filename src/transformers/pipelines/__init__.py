@@ -31,8 +31,10 @@ from huggingface_hub import model_info
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
@@ -329,7 +331,7 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
-        "type": "image",
+        "type": "multimodal",
     },
     "image-to-text": {
         "impl": ImageToTextPipeline,
@@ -374,6 +376,7 @@ SUPPORTED_TASKS = {
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
+NO_IMAGE_PROCESSOR_TASKS = set()
 NO_TOKENIZER_TASKS = set()
 # Those model configs are special, they are generic over their task, meaning
 # any tokenizer/feature_extractor might be use for a given model so we cannot
@@ -383,6 +386,7 @@ MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
+        NO_IMAGE_PROCESSOR_TASKS.add(task)
     elif values["type"] in {"audio", "image", "video"}:
         NO_TOKENIZER_TASKS.add(task)
     elif values["type"] != "multimodal":
@@ -427,10 +431,16 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"audio-classification"`
             - `"automatic-speech-recognition"`
             - `"conversational"`
+            - `"depth-estimation"`
+            - `"document-question-answering"`
             - `"feature-extraction"`
             - `"fill-mask"`
             - `"image-classification"`
+            - `"image-segmentation"`
+            - `"image-to-text"`
+            - `"object-detection"`
             - `"question-answering"`
+            - `"summarization"`
             - `"table-question-answering"`
             - `"text2text-generation"`
             - `"text-classification"` (alias `"sentiment-analysis"` available)
@@ -438,9 +448,11 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"token-classification"` (alias `"ner"` available)
             - `"translation"`
             - `"translation_xx_to_yy"`
-            - `"summarization"`
+            - `"video-classification"`
+            - `"visual-question-answering"`
             - `"zero-shot-classification"`
             - `"zero-shot-image-classification"`
+            - `"zero-shot-object-detection"`
 
     Returns:
         (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None)) The normalized task name
@@ -474,6 +486,7 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer, PreTrainedTokenizerFast]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
+    image_processor: Optional[Union[str, BaseImageProcessor]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
@@ -502,10 +515,16 @@ def pipeline(
             - `"audio-classification"`: will return a [`AudioClassificationPipeline`].
             - `"automatic-speech-recognition"`: will return a [`AutomaticSpeechRecognitionPipeline`].
             - `"conversational"`: will return a [`ConversationalPipeline`].
+            - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
+            - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
             - `"fill-mask"`: will return a [`FillMaskPipeline`]:.
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
+            - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
+            - `"image-to-text"`: will return a [`ImageToTextPipeline`].
+            - `"object-detection"`: will return a [`ObjectDetectionPipeline`].
             - `"question-answering"`: will return a [`QuestionAnsweringPipeline`].
+            - `"summarization"`: will return a [`SummarizationPipeline`].
             - `"table-question-answering"`: will return a [`TableQuestionAnsweringPipeline`].
             - `"text2text-generation"`: will return a [`Text2TextGenerationPipeline`].
             - `"text-classification"` (alias `"sentiment-analysis"` available): will return a
@@ -514,8 +533,11 @@ def pipeline(
             - `"token-classification"` (alias `"ner"` available): will return a [`TokenClassificationPipeline`].
             - `"translation"`: will return a [`TranslationPipeline`].
             - `"translation_xx_to_yy"`: will return a [`TranslationPipeline`].
-            - `"summarization"`: will return a [`SummarizationPipeline`].
+            - `"video-classification"`: will return a [`VideoClassificationPipeline`].
+            - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
+            - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
+            - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
 
         model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
@@ -749,6 +771,7 @@ def pipeline(
 
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+    load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
     if (
         tokenizer is None
@@ -782,6 +805,8 @@ def pipeline(
 
     if task in NO_FEATURE_EXTRACTOR_TASKS:
         load_feature_extractor = False
+    if task in NO_IMAGE_PROCESSOR_TASKS:
+        load_image_processor = False
 
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)
@@ -810,6 +835,27 @@ def pipeline(
 
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
+            )
+
+    if load_image_processor:
+        # Try to infer image processor from model or config name (if provided as str)
+        if image_processor is None:
+            if isinstance(model_name, str):
+                image_processor = model_name
+            elif isinstance(config, str):
+                image_processor = config
+            else:
+                # Impossible to guess what is the right image_processor here
+                raise Exception(
+                    "Impossible to guess which image processor to use. "
+                    "Please provide a PreTrainedImageProcessor class or a path/identifier "
+                    "to a pretrained image processor."
+                )
+
+        # Instantiate image_processor if needed
+        if isinstance(image_processor, (str, tuple)):
+            image_processor = AutoImageProcessor.from_pretrained(
+                image_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs
             )
 
     if load_feature_extractor:
@@ -879,6 +925,9 @@ def pipeline(
 
     if torch_dtype is not None:
         kwargs["torch_dtype"] = torch_dtype
+
+    if image_processor is not None:
+        kwargs["image_processor"] = image_processor
 
     if device is not None:
         kwargs["device"] = device

@@ -594,7 +594,7 @@ OWLVIT_START_DOCSTRING = r"""
 OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
@@ -629,7 +629,7 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
 OWLVIT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -656,7 +656,7 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids).
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
@@ -894,10 +894,10 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import OwlViTProcessor, OwlViTTextModel
+        >>> from transformers import AutoProcessor, OwlViTTextModel
 
         >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -1003,10 +1003,10 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTVisionModel
+        >>> from transformers import AutoProcessor, OwlViTVisionModel
 
         >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -1076,10 +1076,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -1112,10 +1112,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(images=image, return_tensors="pt")
@@ -1160,10 +1160,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
@@ -1535,9 +1535,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
-        >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+        >>> from transformers import AutoProcessor, OwlViTForObjectDetection
 
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch16")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1631,9 +1631,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
-        >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+        >>> from transformers import AutoProcessor, OwlViTForObjectDetection
 
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

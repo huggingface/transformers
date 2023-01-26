@@ -47,7 +47,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.26.0.dev0")
+check_min_version("4.27.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -345,9 +345,9 @@ def main():
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
     if data_args.pad_to_max_length:
-        data_collator = DefaultDataCollator(return_tensors="tf")
+        data_collator = DefaultDataCollator(return_tensors="np")
     else:
-        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
+        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="np")
     # endregion
 
     # region Metric function
