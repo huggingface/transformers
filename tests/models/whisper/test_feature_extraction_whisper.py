@@ -224,9 +224,6 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
-    def _check_zero_mean_unit_variance(self, input_vector):
-
-        self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
 
     def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
