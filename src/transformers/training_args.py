@@ -736,7 +736,7 @@ class TrainingArguments:
         default="auto",
         metadata={
             "help": "The backend to be used for half precision.",
-            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+            "choices": ["auto", "cuda_amp", "apex", "cpu_amp", "no_amp"],
         },
     )
     bf16_full_eval: bool = field(

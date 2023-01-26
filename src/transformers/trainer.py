@@ -570,7 +570,8 @@ class Trainer:
             if args.half_precision_backend == "cuda_amp":
                 self.use_cuda_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
-                self.do_grad_scaling = True
+                if self.amp_dtype == torch.float16:
+                    self.do_grad_scaling = True
                 if self.sharded_ddp is not None:
                     self.scaler = ShardedGradScaler()
                 elif self.fsdp is not None:
@@ -594,6 +595,9 @@ class Trainer:
             elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
+            elif args.half_precision_backend == "no_amp":
+                self.use_cuda_amp = False
+                self.use_cpu_amp = False
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -1141,6 +1145,16 @@ class Trainer:
                         ),
                     }
                 )
+
+                # optimizer_kwargs.update({
+                #     'use_kahan_summation': 1,
+                #     'momentum_dtype': torch.bfloat16,
+                #     'variance_dtype': torch.bfloat16,
+                #     'compensation_buffer_dtype': torch.bfloat16
+                # })
+
+                print(optimizer_kwargs)
+                # die
             except ImportError:
                 raise ValueError("Please install https://github.com/pytorch/torchdistx")
         elif args.optim == OptimizerNames.SGD:
@@ -1628,6 +1642,9 @@ class Trainer:
             self.model.gradient_checkpointing_enable()
 
         model = self._wrap_model(self.model_wrapped)
+
+        if args.half_precision_backend == "no_amp" and args.bf16:
+            model = model.to(dtype=torch.bfloat16)
 
         if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
             self._load_from_checkpoint(resume_from_checkpoint, model)
@@ -2535,8 +2552,11 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        with self.compute_loss_context_manager():
+        if self.args.half_precision_backend == "no_amp":
             loss = self.compute_loss(model, inputs)
+        else:
+            with self.compute_loss_context_manager():
+                loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
