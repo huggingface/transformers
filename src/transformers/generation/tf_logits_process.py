@@ -586,3 +586,131 @@ class TFForceTokensLogitsProcessor(TFLogitsProcessor):
             ),
         )
         return scores
+
+
+class WhisperTimeStampLogitsProcessor(TFLogitsProcessor):
+    r"""
+    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
+    probs to `inf` so that they are sampled at their corresponding index.
+
+    Args:
+        generate_config (`GenerateConfig`):
+            The generate config used to generate the output. The following parameters are required:
+                eos_token_id (`int`, *optional*, defaults to 50257):
+                    The id of the *end-of-sequence* token.
+                no_timestamps_token_id (`int`, *optional*, defaults to 50363):
+                    The id of the `"<|notimestamps|>"` token.
+                max_initial_timestamp_index (`int`, *optional*, defaults to 1):
+                    Used to set the maximum value of the initial timestamp. This is used to prevent the model from
+                    predicting timestamps that are too far in the future.
+    """
+
+    def __init__(self, generate_config):  # support for the kwargs
+        self.eos_token_id = generate_config.eos_token_id
+        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
+        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+
+        self.begin_index = len(generate_config.forced_decoder_ids) + 2
+        if generate_config.forced_decoder_ids[-1][1] == self.no_timestamps_token_id:
+            self.begin_index -= 1
+        self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
+
+    def __call__(self, input_ids, scores, cur_len):
+        def _un_force_token(current_token):
+            # scores[:,current_tokens ] = -float("inf")
+            batch_size = scores.shape[0]
+            new_scores = tf.identity(scores, dtype=scores.dtype)
+            indices = tf.stack((tf.range(batch_size), tf.tile([current_token], [batch_size])), axis=1)
+            updates = tf.ones((batch_size,), dtype=scores.dtype) * -float("inf")
+            new_scores = tf.tensor_scatter_nd_update(new_scores, indices, updates)
+            return new_scores
+
+        def _force_tokens(current_tokens):
+            # scores[:, :] = -float("inf")
+            # scores[:,current_tokens ] = 0
+            batch_size = scores.shape[0]
+            new_scores = tf.ones_like(scores, dtype=scores.dtype) * -float("inf")
+            indices = tf.stack((tf.range(batch_size), tf.tile([current_tokens], [batch_size])), axis=1)
+            updates = tf.zeros((batch_size,), dtype=scores.dtype)
+            new_scores = tf.tensor_scatter_nd_update(new_scores, indices, updates)
+            return new_scores
+
+        # suppress <|notimestamps|> which is handled by without_timestamps
+        scores = _un_force_token(
+            self.no_timestamps_token_id, -float("inf")
+        )  # scores[:, self.no_timestamps_token_id] = -float("inf")
+        tf.cond(
+            cur_len == self.begin_index - 1, lambda: _force_tokens(self.timestamp_begin), lambda: tf.identity(scores)
+        )
+
+        last_was_timestamps = (
+            np.sum(np.where(input_ids[:, self.begin_idx :] != self.eos_token_id, axis=0))
+            >= 1 & input_ids[:, -1]
+            >= self.timestamp_begin
+        )
+        penultimate_was_timestamp = (
+            np.sum(np.where(input_ids[:, self.begin_idx :] != self.eos_token_id, axis=0))
+            < 2 & input_ids[:, -2]
+            >= self.timestamp_begin
+        )
+
+        # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
+        # for k in range(input_ids.shape[0]):
+        #     seq = [t for t in input_ids[k, self.begin_index :].tolist()]
+        #     last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
+        #     penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
+        #     if last_was_timestamp:
+        #          if penultimate_was_timestamp:  # has to be non-timestamp
+        #               scores[k, self.timestamp_begin :] = -float("inf")
+        #          else:  # cannot be normal text tokens
+        #               scores[k, : self.eos_token_id] = -float("inf")
+
+        def _update_slices(batch_idx_to_modify, idx0, idx1):
+            # TODO most important function hahaahh
+            new_scores = tf.identity(scores, dtype=scores.dtype)
+            mod = tf.tile(range(idx0, idx1), [len(indices_1)])
+            batch = tf.repeat(batch_idx_to_modify, self.timestamp_begin)
+            final_idx = tf.stack((batch, mod), axis=1)
+            updates = tf.ones_like((self.timestamp_begin,), dtype=scores.dtype) * -float("inf")
+            new_scores = tf.tensor_scatter_nd_update(new_scores, final_idx, updates)
+            return new_scores
+
+        max_idx = scores.shape[1]
+        indices_1 = np.argwhere(last_was_timestamps & penultimate_was_timestamp)[1, 3]
+        indices_2 = np.argwhere(last_was_timestamps & (not penultimate_was_timestamp))[0]
+
+        mod = tf.tile(range(max_idx - self.timestamp_begin), [len(indices_1)])
+        batch = tf.repeat(indices_1, max_idx - self.timestamp_begin)
+        final_idx = tf.stack((batch, mod), axis=1)
+
+        updates = tf.ones_like((max_idx - self.timestamp_begin,), dtype=scores.dtype) * -float("inf")
+        scores = tf.tensor_scatter_nd_update(scores, final_idx, updates)
+
+        mod = tf.tile(range(self.timestamp_begin), [len(indices_1)])
+        batch = tf.repeat(indices_2, self.timestamp_begin)
+        final_idx = tf.stack((batch, mod), axis=1)
+        updates = tf.ones_like((self.timestamp_begin,), dtype=scores.dtype) * -float("inf")
+        scores = tf.tensor_scatter_nd_update(scores, final_idx, updates)
+
+        tf.cond(
+            cur_len == self.begin_index and self.max_initial_timestamp_index is not None,
+            lambda: _update_slices(
+                range(scores.shape[0]), self.timestamp_begin + self.max_initial_timestamp_index + 1, max_idx
+            ),
+            lambda: tf.identity(scores),
+        )
+
+        ####################################################################################################
+        # Still left to do:
+        # logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
+        # for k in range(input_ids.shape[0]):
+        #     timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
+        #     max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
+        #     if timestamp_logprob > max_text_token_logprob:
+        #         scores[k, : self.timestamp_begin] = -float("inf")
+        logprobs = tf.log_softmax(scores.float(), dim=-1)
+        timestamp_logprob = logprobs[:, self.timestamp_begin :].logsumexp(dim=-1)
+        max_text_token_logprob = logprobs[:, : self.timestamp_begin].max()
+        indices_3 = np.where(timestamp_logprob > max_text_token_logprob)
+        scores = _update_slices(indices_3, 0, self.timestamp_begin, -float("inf"))
+        return scores
