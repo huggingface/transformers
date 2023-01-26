@@ -59,9 +59,6 @@ spec = importlib.util.spec_from_file_location(
 )
 transformers_module = spec.loader.load_module()
 
-
-# ................................................................................
-
 TASK_GUIDE_TO_MODELS = {"asr.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_CTC_MAPPING_NAMES,
                         "audio_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
                         "image_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
@@ -71,10 +68,10 @@ TASK_GUIDE_TO_MODELS = {"asr.mdx": transformers_module.models.auto.modeling_auto
                         "question_answering.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
                         "semantic_segmentation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
                         "sequence_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
-                        "summarization.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-                        "token_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-                        "translation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-                        "video_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
+                        "summarization.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+                        "token_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+                        "translation.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+                        "video_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
                         }
 
 # Language modeling doc has two parts: causal LM and masked LM. MODEL_FOR_CAUSAL_LM_MAPPING_NAMES ,MODEL_FOR_MASKED_LM_MAPPING_NAMES
@@ -89,7 +86,7 @@ def get_model_list_for_task(task_guide):
         for code, name in transformers_module.MODEL_NAMES_MAPPING.items()
         if code in config_maping_names
     }
-    return ", ".join([f"[{name}](model_doc/{code})" for code, name in model_names.items()]) + "\n"
+    return ", ".join([f"[{name}](../model_doc/{code})" for code, name in model_names.items()]) + "\n"
 
 
 
