@@ -14,16 +14,14 @@
 # limitations under the License.
 
 import argparse
-import collections
 import importlib.util
 import os
-import re
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_task_guides.py
-TRANSFORMERS_PATH = "../src/transformers"
-PATH_TO_TASK_GUIDES = "../docs/source/en/tasks"
+TRANSFORMERS_PATH = "src/transformers"
+PATH_TO_TASK_GUIDES = "docs/source/en/tasks"
 REPO_PATH = "../../../Downloads"
 
 
