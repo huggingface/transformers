@@ -302,17 +302,19 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_image_classification.py
-            --model_name_or_path google/vit-base-patch16-224-in21k
-            --dataset_name beans
-            --output_dir {tmp_dir}
+            --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --model_name_or_path microsoft/resnet-18
             --do_train
             --do_eval
+            --learning_rate 1e-4
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 1
+            --output_dir {tmp_dir}
             --overwrite_output_dir
-            --learning_rate 2e-5
-            --per_device_train_batch_size 8
-            --per_device_eval_batch_size 8
-            --max_steps 10
-            --seed 1337
+            --dataloader_num_workers 16
+            --num_train_epochs 2
+            --train_val_split 0.1
+            --seed 42
             --ignore_mismatched_sizes True
             """.split()
 
