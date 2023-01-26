@@ -260,8 +260,6 @@ class BridgeTowerConfig(PretrainedConfig):
     Args:
         share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
             Whether cross modal transformer layers are shared.
-        drop_rate (`float`, *optional*, defaults to 0.1):
-            Drop out probability.
         head_hidden_scale (`int`, *optional*, defaults to 2):
             Scale of hidden layers head.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -311,7 +309,6 @@ class BridgeTowerConfig(PretrainedConfig):
     def __init__(
         self,
         share_cross_modal_transformer_layers=True,
-        drop_rate=0.1,
         head_hidden_scale=2,
         hidden_act="gelu",
         hidden_size=768,
@@ -329,7 +326,6 @@ class BridgeTowerConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
-        self.drop_rate = drop_rate
         self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
