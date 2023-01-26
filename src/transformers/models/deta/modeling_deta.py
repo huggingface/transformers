@@ -33,12 +33,11 @@ from ...file_utils import (
     is_scipy_available,
     is_vision_available,
     replace_return_docstrings,
-    requires_backends,
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_torchvision_available, logging
+from ...utils import is_torchvision_available, logging, requires_backends
 from ..auto import AutoBackbone
 from .configuration_deta import DetaConfig
 
@@ -1364,6 +1363,9 @@ class DetaDecoder(DetaPreTrainedModel):
 class DetaModel(DetaPreTrainedModel):
     def __init__(self, config: DetaConfig):
         super().__init__(config)
+
+        if config.two_stage:
+            requires_backends(self, ["torchvision"])
 
         # Create backbone with positional encoding
         self.backbone = DetaBackboneWithPositionalEncodings(config)
