@@ -74,7 +74,6 @@ def create_mlp_cls(config):
     inner_dim = config.n_inner if config.n_inner is not None else 4 * config.hidden_size
     if not config.fused_mlp:
         mlp_cls = partial(Mlp, hidden_features=inner_dim, activation=partial(nn.functional.gelu, approximate="tanh"))
-        print("MLP class:", mlp_cls)
     else:
         mlp_cls = partial(FusedMLP, hidden_features=inner_dim)
     return mlp_cls
@@ -341,21 +340,21 @@ class H3Model(H3PreTrainedModel):
                     attention_mask,
                 )
             else:
-                print("Hidden states before block:", hidden_states.shape)
-                print("Residual before block:", residual)
+                # print("Hidden states before block:", hidden_states.shape)
+                # print("Residual before block:", residual)
                 hidden_states, residual = block(hidden_states, residual, mixer_kwargs=None)
 
             # hidden_states = outputs[0]
-            if use_cache is True:
-                presents = presents + (outputs[1],)
+            # if use_cache is True:
+            #     presents = presents + (outputs[1],)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
-        if not self.fused_dropout_add_ln:
+        if not self.config.fused_dropout_add_ln:
             dropped = self.final_dropout(hidden_states)
             residual = (dropped + residual) if residual is not None else dropped
-            hidden_states = self.final_layernorm(residual.to(dtype=self.ln_f.weight.dtype))
+            hidden_states = self.final_layernorm(residual.to(dtype=self.final_layernorm.weight.dtype))
         else:
             # Set prenorm=False here since we don't need the residual
             hidden_states = dropout_add_layer_norm(
