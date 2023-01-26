@@ -176,8 +176,6 @@ class XCLIPVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"`, `"gelu_new"` and ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -221,7 +219,6 @@ class XCLIPVisionConfig(PretrainedConfig):
         num_frames=8,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
-        dropout=0.0,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
@@ -232,7 +229,6 @@ class XCLIPVisionConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.mit_hidden_size = mit_hidden_size
