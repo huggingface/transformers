@@ -1321,11 +1321,11 @@ class TrainingArguments:
         if self.fsdp_config is None:
             self.fsdp_config = {}
 
-        if isinstance(self.args.fsdp_config, str):
-            with io.open(self.args.fsdp_config, "r", encoding="utf-8") as f:
+        if isinstance(self.fsdp_config, str):
+            with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
 
-        if "fsdp_min_num_params" in self.args.fsdp_config:
+        if "fsdp_min_num_params" in self.fsdp_config:
             self.fsdp_config["fsdp_min_num_params"] = max(
                 getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
             )
