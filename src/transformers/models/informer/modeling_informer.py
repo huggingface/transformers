@@ -726,14 +726,13 @@ class InformerModel(InformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    # for prediction
     def forward(
         self,
-        feat_static_cat: torch.Tensor,
-        feat_static_real: torch.Tensor,
+        past_values: torch.Tensor,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
         past_time_feat: torch.Tensor,
         past_target: torch.Tensor,
-        past_observed_values: torch.Tensor,
         future_time_feat: torch.Tensor,
         num_parallel_samples: Optional[int] = None,
     ) -> torch.Tensor:
@@ -742,11 +741,11 @@ class InformerModel(InformerPreTrainedModel):
             num_parallel_samples = self.num_parallel_samples
 
         encoder_inputs, scale, static_feat = self.create_network_inputs(
-            feat_static_cat,
-            feat_static_real,
+            static_categorical_features,
+            static_real_features,
             past_time_feat,
             past_target,
-            past_observed_values,
+            past_values,
         )
 
         enc_out, _ = self.encoder(encoder_inputs)
@@ -808,6 +807,7 @@ class InformerModel(InformerPreTrainedModel):
         return concat_future_samples.reshape(
             (-1, self.num_parallel_samples, self.prediction_length) + self.target_shape,
         )
+    # for prediction
 
 
 class InformerForPrediction(InformerPreTrainedModel):
@@ -820,7 +820,6 @@ class InformerForPrediction(InformerPreTrainedModel):
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distr_output.distribution(sliced_params, scale=scale)
-
 
 
 class InformerForPointPrediction(InformerPreTrainedModel):
