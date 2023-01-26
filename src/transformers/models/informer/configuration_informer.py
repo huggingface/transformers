@@ -56,11 +56,7 @@ class InformerConfig(PretrainedConfig):
             distil: bool = True,
             num_parallel_samples: int = 100,
             init_std: float = 0.02,
-            embedding_type: str = "timeF",  # This can be set to timeF, fixed, learned
             d_model: int = 512,  # because of the informer embedding
-            enc_in: int = 7,
-            dec_in: int = 7,
-            freq: str = "h",
             use_cache=True,
             **kwargs
     ):
@@ -115,10 +111,6 @@ class InformerConfig(PretrainedConfig):
         self.distil = distil
         self.init_std = init_std
         self.use_cache = use_cache
-        self.embedding_type = embedding_type
-        self.enc_in = enc_in
-        self.dec_in = dec_in
-        self.freq = freq
 
         # self.param_proj = distr_output.get_args_proj(d_model)
 
