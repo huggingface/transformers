@@ -79,8 +79,6 @@ class AltCLIPTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         project_dim (`int`, *optional*, defaults to 768):
             The dimentions of the teacher model before the mapping layer.
-        pooler_fn (`str`, *optional*, defaults to `"cls"`):
-            Type of pooler we use. We take the first token as pooled output.
 
     Examples:
 
@@ -119,7 +117,6 @@ class AltCLIPTextConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         project_dim=768,
-        pooler_fn="cls",
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -140,7 +137,6 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.project_dim = project_dim
-        self.pooler_fn = pooler_fn
 
 
 class AltCLIPVisionConfig(PretrainedConfig):
