@@ -1430,6 +1430,8 @@ class ClearMLCallback(TrainerCallback):
     def setup(self, args, state, model, tokenizer, **kwargs):
         if self._clearml is None:
             return
+        if self._initialized:
+            return
         if state.is_world_process_zero:
             logger.info("Automatic ClearML logging enabled.")
             if self._clearml_task is None:
@@ -1437,6 +1439,7 @@ class ClearMLCallback(TrainerCallback):
                 # from outside of Hugging Face
                 if self._clearml.Task.current_task():
                     self._clearml_task = self._clearml.Task.current_task()
+                    self._initialized = True
                     logger.info("External ClearML Task has been connected.")
                 else:
                     self._clearml_task = self._clearml.Task.init(
