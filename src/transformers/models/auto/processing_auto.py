@@ -57,6 +57,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("owlvit", "OwlViTProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
+        ("speech-encoder-decoder", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("trocr", "TrOCRProcessor"),
