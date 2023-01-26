@@ -65,6 +65,10 @@ class H3Config(PretrainedConfig):
             Whether to (...).
         glu_act (`bool`, *optional*, defaults to `False`):
             Whether to (...).
+        ssm_mode (`str`, *optional*, defaults to `diag`):
+            SSM mode to use.
+        ssm_measure (`str`, *optional*, defaults to `diag-lin`):
+            SSM measure to use.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -102,6 +106,9 @@ class H3Config(PretrainedConfig):
         initializer_range=0.02,
         rescale_prenorm_residual=True,
         glu_act=False,
+        ssm_mode="diag",
+        ssm_measure="diag-lin",
+        attn_layer_idx=[6],
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
@@ -121,6 +128,9 @@ class H3Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.glu_act = glu_act
+        self.ssm_mode = ssm_mode
+        self.ssm_measure = ssm_measure
+        self.attn_layer_idx = attn_layer_idx
         self.use_cache = use_cache
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

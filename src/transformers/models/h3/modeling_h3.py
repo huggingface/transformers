@@ -58,7 +58,9 @@ H3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def create_mixer_cls(config, layer_idx=None):
-    ssm_cfg, attn_layer_idx, attn_cfg = config.ssm_cfg, config.attn_layer_idx, config.attn_cfg
+    ssm_cfg = dict(mode=config.ssm_mode, measure=config.ssm_measure)
+    attn_layer_idx = config.attn_layer_idx
+    attn_cfg = dict(num_heads=config.num_attention_heads)
 
     if attn_layer_idx is not None and layer_idx in attn_layer_idx:
         causal = True if attn_cfg is None else attn_cfg.pop("causal", True)
@@ -251,7 +253,7 @@ class H3Model(H3PreTrainedModel):
 
         self.h3 = nn.ModuleList([create_block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.final_dropout = nn.Dropout(config.residual_dropout)
-        self.final_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -402,6 +404,9 @@ class H3ForCausalLM(H3PreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def tie_weights(self):
+        self.lm_head.weight = self.h3.embeddings.word_embeddings.weight
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs

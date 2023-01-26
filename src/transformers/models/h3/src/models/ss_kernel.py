@@ -5,6 +5,7 @@
 """SSM convolution kernels. SSKernel wraps different kernels with common options and handles the initialization.
 """
 
+import logging
 import math
 
 import torch
@@ -16,10 +17,12 @@ from src.models import dplr
 from src.models.ss_kernel_diag import EMAKernel, SSKernelDiag
 from src.models.ss_kernel_shift import SSKernelShift
 from src.ops.krylov import power
-from src.utils.utils import get_logger
 
 
-log = get_logger(__name__)
+# from src.utils.utils import get_logger
+# log = get_logger(__name__)
+
+log = logging.getLogger()
 
 
 def _conj(x):

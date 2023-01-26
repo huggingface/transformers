@@ -4,6 +4,7 @@
 
 """SSKernelDiag is the S4D kernel, a simpler algorithm for computing the kernel for the case of diagonal state matrices A.
 """
+import logging
 import math
 
 import torch
@@ -16,23 +17,25 @@ from src.models.ssm_utils import OptimModule
 
 # This could be None if the CUDA import fails
 from src.ops.vandermonde import log_vandermonde_fast
-from src.utils.utils import get_logger
 
 
-log = get_logger(__name__)
+# from src.utils import get_logger
+# logger = get_logger(__name__)
+
+logger = logging.getLogger()
 
 
 try:
     from src.ops.vandermonde import log_vandermonde, log_vandermonde_transpose
 
     has_pykeops = True
-    log.info("Pykeops installation found.")
+    logger.info("Pykeops installation found.")
 except ImportError:
     has_pykeops = False
     from src.ops.vandermonde import log_vandermonde_naive as log_vandermonde
     from src.ops.vandermonde import log_vandermonde_transpose_naive as log_vandermonde_transpose
 
-    log.warning("Falling back on slow Vandermonde kernel. Install pykeops for improved memory efficiency.")
+    logger.warning("Falling back on slow Vandermonde kernel. Install pykeops for improved memory efficiency.")
 
 
 _c2r = torch.view_as_real
