@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,12 +61,12 @@ class TvltModelTester:
         self,
         parent,
         batch_size=2,
-        pixel_size=32,
+        image_size=32,
         audio_size=32,
         feature_size=16,
-        pixel_patch_size=2,
+        image_patch_size=2,
         audio_patch_size=[2, 2],
-        num_pixel_channels=3,
+        num_image_channels=3,
         num_audio_channels=1,
         num_frames=2,
         hidden_size=128,
@@ -85,7 +85,7 @@ class TvltModelTester:
         decoder_num_hidden_layers=2,
         decoder_intermediate_size=128,
         norm_pix_loss=True,
-        pixel_mask_ratio=0.75,
+        image_mask_ratio=0.75,
         audio_mask_ratio=0.15,
         task_matching=True,
         task_mae=True,
@@ -95,12 +95,12 @@ class TvltModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.pixel_size = pixel_size
+        self.image_size = image_size
         self.audio_size = audio_size
         self.feature_size = feature_size
-        self.pixel_patch_size = pixel_patch_size
+        self.image_patch_size = image_patch_size
         self.audio_patch_size = audio_patch_size
-        self.num_pixel_channels = num_pixel_channels
+        self.num_image_channels = num_image_channels
         self.num_audio_channels = num_audio_channels
         self.num_frames = num_frames
 
@@ -121,7 +121,7 @@ class TvltModelTester:
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.decoder_intermediate_size = decoder_intermediate_size
         self.norm_pix_loss = norm_pix_loss
-        self.pixel_mask_ratio = pixel_mask_ratio
+        self.image_mask_ratio = image_mask_ratio
         self.audio_mask_ratio = audio_mask_ratio
 
         self.task_matching = task_matching
@@ -129,7 +129,7 @@ class TvltModelTester:
         self.num_qa_labels = num_qa_labels
         self.num_labels = num_labels
 
-        self.expected_pixel_seq_len = (self.pixel_size // self.pixel_patch_size) ** 2 * self.num_frames
+        self.expected_pixel_seq_len = (self.image_size // self.image_patch_size) ** 2 * self.num_frames
         self.expected_audio_seq_len = (self.audio_size // self.audio_patch_size[0]) * (
             self.feature_size // self.audio_patch_size[1]
         )
@@ -137,13 +137,13 @@ class TvltModelTester:
         # this is equal to the seq length of number of image/video patches + number of audio patches
         self.expected_seq_len = self.expected_pixel_seq_len + self.expected_audio_seq_len + 1
 
-        self.pixel_mae_output_dim = pixel_patch_size**2 * num_pixel_channels
+        self.image_mae_output_dim = image_patch_size**2 * num_image_channels
         self.audio_mae_output_dim = audio_patch_size[0] * audio_patch_size[1] * num_audio_channels
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+            [self.batch_size, self.num_frames, self.num_image_channels, self.image_size, self.image_size]
         )
         audio_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_size, self.feature_size])
 
@@ -156,7 +156,7 @@ class TvltModelTester:
 
     def prepare_config_and_inputs_for_pretraining(self):
         pixel_values = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+            [self.batch_size, self.num_frames, self.num_image_channels, self.image_size, self.image_size]
         )
         audio_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_size, self.feature_size])
 
@@ -173,7 +173,7 @@ class TvltModelTester:
         )
 
         pixel_values_mixed = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+            [self.batch_size, self.num_frames, self.num_image_channels, self.image_size, self.image_size]
         )
         pixel_masks_mixed = floats_tensor([self.batch_size, self.expected_pixel_seq_len])
         labels = floats_tensor([self.batch_size])
@@ -194,12 +194,12 @@ class TvltModelTester:
 
     def get_config(self):
         return TvltConfig(
-            pixel_size=self.pixel_size,
+            image_size=self.image_size,
             audio_size=self.audio_size,
             feature_size=self.feature_size,
-            pixel_patch_size=self.pixel_patch_size,
+            image_patch_size=self.image_patch_size,
             audio_patch_size=self.audio_patch_size,
-            num_pixel_channels=self.num_pixel_channels,
+            num_image_channels=self.num_image_channels,
             num_audio_channels=self.num_audio_channels,
             num_frames=self.num_frames,
             hidden_size=self.hidden_size,
@@ -218,7 +218,7 @@ class TvltModelTester:
             decoder_num_hidden_layers=self.decoder_num_hidden_layers,
             decoder_intermediate_size=self.decoder_intermediate_size,
             norm_pix_loss=self.norm_pix_loss,
-            pixel_mask_ratio=self.pixel_mask_ratio,
+            image_mask_ratio=self.image_mask_ratio,
             audio_mask_ratio=self.audio_mask_ratio,
             task_matching=self.task_matching,
             task_mae=self.task_mae,
@@ -280,7 +280,7 @@ class TvltModelTester:
             labels=labels,
         )
         self.parent.assertEqual(
-            result.pixel_logits.shape, (self.batch_size, self.expected_pixel_seq_len, self.pixel_mae_output_dim)
+            result.pixel_logits.shape, (self.batch_size, self.expected_pixel_seq_len, self.image_mae_output_dim)
         )
         self.parent.assertEqual(
             result.audio_logits.shape, (self.batch_size, self.expected_audio_seq_len, self.audio_mae_output_dim)
@@ -299,7 +299,7 @@ class TvltModelTester:
 
     def prepare_pixel_values(self):
         return floats_tensor(
-            [self.batch_size, self.num_frames, self.num_pixel_channels, self.pixel_size, self.pixel_size]
+            [self.batch_size, self.num_frames, self.num_image_channels, self.image_size, self.image_size]
         )
 
     def prepare_audio_values(self):
@@ -359,9 +359,9 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
                     (
                         self.model_tester.batch_size,
                         self.model_tester.num_frames,
-                        self.model_tester.num_pixel_channels,
-                        self.model_tester.pixel_size,
-                        self.model_tester.pixel_size,
+                        self.model_tester.num_image_channels,
+                        self.model_tester.image_size,
+                        self.model_tester.image_size,
                     ),
                     dtype=torch.float,
                     device=torch_device,
