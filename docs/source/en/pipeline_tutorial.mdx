@@ -156,10 +156,10 @@ def data():
         yield f"My example {i}"
 
 
-pipe = pipe(model="gpt2", device=0)
+pipe = pipeline(model="gpt2", device=0)
 generated_characters = 0
 for out in pipe(data()):
-    generated_characters += len(out["generated_text"])
+    generated_characters += len(out[0]["generated_text"])
 ```
 
 The iterator `data()` yields each result, and the pipeline automatically
@@ -175,11 +175,12 @@ The simplest way to iterate over a dataset is to just load one from 🤗 [Datase
 ```py
 # KeyDataset is a util that will just output the item we're interested in.
 from transformers.pipelines.pt_utils import KeyDataset
+from datasets import load_dataset
 
 pipe = pipeline(model="hf-internal-testing/tiny-random-wav2vec2", device=0)
 dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:10]")
 
-for out in pipe(KeyDataset(dataset["audio"])):
+for out in pipe(KeyDataset(dataset, "audio")):
     print(out)
 ```
 
@@ -246,3 +247,14 @@ For example, if you use this [invoice image](https://huggingface.co/spaces/impir
 ... )
 [{'score': 0.42514941096305847, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
+
+<Tip>
+
+To run the example above you need to have [`pytesseract`](https://pypi.org/project/pytesseract/) installed in addition to 🤗 Transformers:
+
+```bash
+sudo apt install -y tesseract-ocr
+pip install pytesseract
+```
+
+</Tip>
