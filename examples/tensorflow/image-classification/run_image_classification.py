@@ -390,7 +390,7 @@ def main():
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = dataset["validation"]
         if data_args.max_eval_samples is not None:
-            eval_dataset = eval_dataset.shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
         # Set the validation transforms
         eval_dataset = eval_dataset.map(
             val_transforms,
@@ -405,9 +405,7 @@ def main():
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = dataset["test"]
         if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.shuffle(seed=training_args.seed).select(
-                range(data_args.max_predict_samples)
-            )
+            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
         # Set the test transforms
         predict_dataset = predict_dataset.map(
             val_transforms,
@@ -509,7 +507,7 @@ def main():
         push_to_hub_model_id = training_args.push_to_hub_model_id
         if not push_to_hub_model_id:
             model_name = model_args.model_name_or_path.split("/")[-1]
-            push_to_hub_model_id = f"{model_name}-finetuned-image-classification-push-to-hub-test"
+            push_to_hub_model_id = f"{model_name}-finetuned-image-classification"
 
         model_card_kwargs = {
             "finetuned_from": model_args.model_name_or_path,
@@ -541,22 +539,26 @@ def main():
             )
 
         if training_args.do_eval:
-            eval_predictions = model.predict(eval_dataset, steps=len(eval_dataset))
-            eval_metrics = compute_metrics((eval_predictions.logits, dataset["validation"]["labels"]))
+            n_eval_batches = len(eval_dataset)
+            eval_predictions = model.predict(eval_dataset, steps=n_eval_batches)
+            eval_labels = dataset["validation"]["labels"][: n_eval_batches * total_eval_batch_size]
+            eval_metrics = compute_metrics((eval_predictions.logits, eval_labels))
             logging.info("Eval metrics:")
-            for metric, value in eval_metrics.items():
-                logging.info(f"{metric}: {value:.3f}")
+            for metric_name, value in eval_metrics.items():
+                logging.info(f"{metric_name}: {value:.3f}")
 
         if training_args.output_dir is not None:
             with open(os.path.join(training_args.output_dir, "all_results.json"), "w") as f:
                 f.write(json.dumps(eval_metrics))
 
         if training_args.do_predict:
-            test_predictions = model.predict(predict_dataset, steps=len(predict_dataset))
-            test_metrics = compute_metrics((test_predictions.logits, dataset["validation"]["labels"]))
+            n_predict_batches = len(predict_dataset)
+            test_predictions = model.predict(predict_dataset, steps=n_predict_batches)
+            test_labels = dataset["validation"]["labels"][: n_predict_batches * total_eval_batch_size]
+            test_metrics = compute_metrics((test_predictions.logits, test_labels))
             logging.info("Test metrics:")
-            for metric, value in test_metrics.items():
-                logging.info(f"{metric}: {value:.3f}")
+            for metric_name, value in test_metrics.items():
+                logging.info(f"{metric_name}: {value:.3f}")
 
         if training_args.output_dir is not None and not training_args.push_to_hub:
             # If we're not pushing to hub, at least save a local copy when we're done

@@ -28,7 +28,7 @@ Based on the script [`run_image_classification.py`](https://github.com/huggingfa
 
 ### Using datasets from Hub
 
-Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/beans) dataset, to classify the disease type of bean leaves.
+Here we show how to fine-tune a Vision Transformer (`ViT`) on the [beans](https://huggingface.co/datasets/beans) dataset, to classify the disease type of bean leaves. The following will train a model and push it to the `amyeroberts/vit-base-beans` repo.
 
 ```bash
 python run_image_classification.py \
@@ -38,7 +38,7 @@ python run_image_classification.py \
     --do_train \
     --do_eval \
     --push_to_hub \
-    --push_to_hub_model_id vit-base-beans \
+    --hub_model_id amyeroberts/vit-base-beans \
     --learning_rate 2e-5 \
     --num_train_epochs 5 \
     --per_device_train_batch_size 8 \
