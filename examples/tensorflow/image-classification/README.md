@@ -99,7 +99,7 @@ Internally, the script will use the [`ImageFolder`](https://huggingface.co/docs/
 
 #### Upload your data to the hub, as a (possibly private) repo
 
-It's very easy (and convenient) to upload your image dataset to the hub using the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature available in 🤗 Datasets. Simply do the following:
+To upload your image dataset to the hub you can use the [`ImageFolder`](https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder) feature available in 🤗 Datasets. Simply do the following:
 
 ```python
 from datasets import load_dataset
