@@ -419,20 +419,12 @@ class Trainer:
             elif FSDPOption.NO_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.NO_SHARD
 
-            if isinstance(self.args.fsdp_config, dict):
-                self.fsdp_config = self.args.fsdp_config
-            elif isinstance(self.args.fsdp_config, str):
-                with io.open(self.args.fsdp_config, "r", encoding="utf-8") as f:
-                    self.fsdp_config = json.load(f)
-            else:
-                self.fsdp_config = {}
-
             self.backward_prefetch = BackwardPrefetch.BACKWARD_PRE
-            if "backward_prefetch" in self.fsdp_config and "backward_pos" not in self.backward_prefetch:
+            if "backward_prefetch" in self.args.fsdp_config and "backward_pos" not in self.backward_prefetch:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
             self.forword_prefetch = False
-            if "forword_prefetch" in self.fsdp_config and self.backward_prefetch:
+            if "forword_prefetch" in self.args.fsdp_config and self.backward_prefetch:
                 self.forword_prefetch = True
 
         # one place to sort out whether to place the model on device or not
@@ -1416,13 +1408,10 @@ class Trainer:
 
             auto_wrap_policy = None
 
-            self.fsdp_min_num_params = self.args.fsdp_min_num_params
-            if "fsdp_min_num_params" in self.args.fsdp_config:
-                self.fsdp_min_num_params = max(self.args.fsdp_config["fsdp_min_num_params"], self.fsdp_min_num_params)
             if FSDPOption.AUTO_WRAP in self.args.fsdp:
-                if self.fsdp_min_num_params > 0:
+                if self.args.fsdp_config["fsdp_min_num_params"] > 0:
                     auto_wrap_policy = functools.partial(
-                        size_based_auto_wrap_policy, min_num_params=self.fsdp_min_num_params
+                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                     )
                 elif self.args.fsdp_transformer_layer_cls_to_wrap is not None:
                     transformer_cls_to_wrap = get_module_class_from_name(

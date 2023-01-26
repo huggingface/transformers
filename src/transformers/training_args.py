@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+import io
 import json
 import math
 import os
@@ -406,8 +407,6 @@ class TrainingArguments:
             - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
-        fsdp_min_num_params (`int`, *optional*, defaults to `0`):
-            This argument is deprecated. Use fsdp_config instead
         fsdp_config (`str` or `dict`, *optional*):
             Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either the location of
             deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.
@@ -894,7 +893,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with fsdp (Pytorch Distributed Parallel Training). The  value is either the of "
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The  value is either the of "
                 "deepspeed json config file (e.g., `ds_config.json`) or an already loaded  json file as `dict`."
             )
         },
@@ -915,15 +914,6 @@ class TrainingArguments:
                 "If True, then FSDP explicitly prefetches the next upcoming all-gather"
                 "while executing in the forward pass"
             ),
-        },
-    )
-    fsdp_min_num_params: int = field(
-        default=0,
-        metadata={
-            "help": (
-                "This parameter is deprecatetd. FSDP's minimum number of parameters for Default Auto Wrapping. (useful"
-                " only when `fsdp` field is passed)."
-            )
         },
     )
     fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
@@ -1328,13 +1318,29 @@ class TrainingArguments:
         elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
 
-        if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
+        if self.fsdp_config is None:
+            self.fsdp_config = {}
+
+        if isinstance(self.args.fsdp_config, str):
+            with io.open(self.args.fsdp_config, "r", encoding="utf-8") as f:
+                self.fsdp_config = json.load(f)
+
+        if "fsdp_min_num_params" in self.args.fsdp_config:
+            self.fsdp_config["fsdp_min_num_params"] = max(
+                getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
+            )
+
+        if len(self.fsdp) == 0 and self.fsdp_config["fsdp_min_num_params"] > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
 
         if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
             warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
-        if len(self.fsdp) > 0 and self.fsdp_min_num_params > 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+        if (
+            len(self.fsdp) > 0
+            and self.fsdp_config["fsdp_min_num_params"] > 0
+            and self.fsdp_transformer_layer_cls_to_wrap is not None
+        ):
             raise ValueError(
                 "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
             )
