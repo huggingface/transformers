@@ -703,10 +703,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
+        hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
-
-        hidden_states = self.layer_norm(hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
