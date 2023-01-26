@@ -316,7 +316,6 @@ class BridgeTowerConfig(PretrainedConfig):
         hidden_act="gelu",
         hidden_size=768,
         initializer_factor=1,
-        is_encoder_decoder=False,
         layer_norm_eps=1e-05,
         share_link_tower_layers=False,
         link_tower_type="add",
@@ -335,7 +334,6 @@ class BridgeTowerConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
         self.initializer_factor = initializer_factor
-        self.is_encoder_decoder = is_encoder_decoder
         self.layer_norm_eps = layer_norm_eps
         self.share_link_tower_layers = share_link_tower_layers
         self.link_tower_type = link_tower_type

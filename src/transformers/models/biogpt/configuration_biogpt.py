@@ -111,7 +111,6 @@ class BioGptConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         scale_embedding=True,
         use_cache=True,
-        is_encoder_decoder=False,
         layerdrop=0.0,
         activation_dropout=0.0,
         pad_token_id=1,
@@ -132,7 +131,6 @@ class BioGptConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.scale_embedding = scale_embedding
         self.use_cache = use_cache
-        self.is_encoder_decoder = is_encoder_decoder
         self.layerdrop = layerdrop
         self.activation_dropout = activation_dropout
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

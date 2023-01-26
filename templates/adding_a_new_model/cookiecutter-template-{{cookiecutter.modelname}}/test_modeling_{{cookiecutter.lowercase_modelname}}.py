@@ -872,7 +872,6 @@ class {{cookiecutter.camelcase_modelname}}StandaloneDecoderModelTester:
         encoder_attention_heads=4,
         decoder_attention_heads=4,
         max_position_embeddings=30,
-        is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
