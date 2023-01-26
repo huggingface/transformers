@@ -1,6 +1,8 @@
 - sections:
   - local: index
     title: 🤗 Transformers
+  - local: quicktour
+    title: 둘러보기
   - local: installation
     title: 설치방법
   title: 시작하기
