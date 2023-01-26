@@ -183,8 +183,6 @@ class GitConfig(PretrainedConfig):
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         num_image_with_embedding (`int`, *optional*):
             The number of temporal embeddings to add, in case the model is used for video captioning/VQA.
 
@@ -221,7 +219,6 @@ class GitConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         tie_word_embeddings=False,
         bos_token_id=101,
         eos_token_id=102,
@@ -248,7 +245,6 @@ class GitConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.tie_word_embeddings = tie_word_embeddings
         self.num_image_with_embedding = num_image_with_embedding
 

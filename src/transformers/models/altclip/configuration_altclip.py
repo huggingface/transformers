@@ -77,8 +77,6 @@ class AltCLIPTextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         project_dim (`int`, *optional*, defaults to 768):
             The dimentions of the teacher model before the mapping layer.
         pooler_fn (`str`, *optional*, defaults to `"cls"`):
@@ -120,7 +118,6 @@ class AltCLIPTextConfig(PretrainedConfig):
         eos_token_id=2,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         project_dim=768,
         pooler_fn="cls",
         **kwargs
@@ -142,7 +139,6 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.project_dim = project_dim
         self.pooler_fn = pooler_fn
 
