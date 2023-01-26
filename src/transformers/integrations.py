@@ -1433,14 +1433,20 @@ class ClearMLCallback(TrainerCallback):
         if state.is_world_process_zero:
             logger.info("Automatic ClearML logging enabled.")
             if self._clearml_task is None:
-                self._clearml_task = self._clearml.Task.init(
-                    project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
-                    auto_connect_frameworks={"tensorboard": False, "pytorch": False},
-                    output_uri=True,
-                )
-                self._initialized = True
-                logger.info("ClearML Task has been initialized.")
+                # This might happen when running inside of a pipeline, where the task is already initialized
+                # from outside of Hugging Face
+                if self._clearml.Task.current_task():
+                    self._clearml_task = self._clearml.Task.current_task()
+                    logger.info("External ClearML Task has been connected.")
+                else:
+                    self._clearml_task = self._clearml.Task.init(
+                        project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                        task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                        auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                        output_uri=True,
+                    )
+                    self._initialized = True
+                    logger.info("ClearML Task has been initialized.")
 
             self._clearml_task.connect(args, "Args")
             if hasattr(model, "config") and model.config is not None:
