@@ -44,6 +44,26 @@ from transformers import (
     logging,
 )
 from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES,
+    MODEL_FOR_BACKBONE_MAPPING_NAMES,
+    MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES,
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
+    MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
+    MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_MAPPING_NAMES,
+)
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -93,23 +113,6 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
-        MODEL_FOR_AUDIO_XVECTOR_MAPPING,
-        MODEL_FOR_BACKBONE_MAPPING,
-        MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
-        MODEL_FOR_CAUSAL_LM_MAPPING,
-        MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
-        MODEL_FOR_MASKED_LM_MAPPING,
-        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
-        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         AdaptiveEmbedding,
         AutoModelForCausalLM,
@@ -199,22 +202,22 @@ class ModelTesterMixin:
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
-        if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+        if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
             inputs_dict = {
                 k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
                 if isinstance(v, torch.Tensor) and v.ndim > 1
                 else v
                 for k, v in inputs_dict.items()
             }
-        elif model_class in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING):
+        elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
             inputs_dict.pop("attention_mask")
 
         if return_labels:
-            if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+            if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
                 inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
-            elif model_class in [
-                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
-                *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+            elif model_class.__name__ in [
+                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
+                *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
             ]:
                 inputs_dict["start_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
@@ -222,32 +225,32 @@ class ModelTesterMixin:
                 inputs_dict["end_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif model_class in [
-                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING),
+            elif model_class.__name__ in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif model_class in [
-                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING),
-                *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING),
-                *get_values(MODEL_FOR_MASKED_LM_MAPPING),
-                *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
+            elif model_class.__name__ in [
+                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES),
+                *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
-            elif model_class in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING):
+            elif model_class.__name__ in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
                 inputs_dict["bool_masked_pos"] = torch.zeros(
                     (self.model_tester.batch_size, num_patches**2), dtype=torch.long, device=torch_device
                 )
-            elif model_class in get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING):
+            elif model_class.__name__ in get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES):
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
                 inputs_dict["labels"] = torch.zeros(
                     [self.model_tester.batch_size, height, width], device=torch_device
@@ -527,9 +530,9 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class in [
-                *get_values(MODEL_MAPPING),
-                *get_values(MODEL_FOR_BACKBONE_MAPPING),
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
             ]:
                 continue
 
@@ -550,7 +553,8 @@ class ModelTesterMixin:
             config.return_dict = True
 
             if (
-                model_class in [*get_values(MODEL_MAPPING), *get_values(MODEL_FOR_BACKBONE_MAPPING)]
+                model_class.__name__
+                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -620,9 +624,9 @@ class ModelTesterMixin:
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Question Answering model returns start_logits and end_logits
-                if model_class in [
-                    *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
-                    *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+                if model_class.__name__ in [
+                    *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
                 ]:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                 if "past_key_values" in outputs:
@@ -875,7 +879,7 @@ class ModelTesterMixin:
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
 
-                    if isinstance(model, tuple(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values())) and (
+                    if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
                         not hasattr(model.config, "problem_type") or model.config.problem_type is None
                     ):
                         model.config.problem_type = "single_label_classification"
@@ -2532,9 +2536,9 @@ class ModelTesterMixin:
         ]
 
         for model_class in self.all_model_classes:
-            if model_class not in [
-                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            if model_class.__name__ not in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
             ]:
                 continue
 
@@ -2575,7 +2579,7 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
                 continue
 
             with self.subTest(msg=f"Testing {model_class}"):
