@@ -38,7 +38,7 @@ from transformers.image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     valid_images,
 )
 from transformers.utils import (
@@ -676,9 +676,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if not is_batched(images):
-            images = [images]
-            segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
+        images = make_list_of_images(images)
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")

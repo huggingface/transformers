@@ -30,7 +30,14 @@ from ...image_transforms import (
     resize,
     to_channel_dimension_format,
 )
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, to_numpy_array, valid_images
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import logging
 from ...utils.import_utils import is_vision_available
 
@@ -286,8 +293,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

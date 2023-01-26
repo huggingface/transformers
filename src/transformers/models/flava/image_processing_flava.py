@@ -26,7 +26,14 @@ from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, to_numpy_array, valid_images
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import logging
 
 
@@ -647,8 +654,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else self.codebook_image_mean
         codebook_image_std = codebook_image_std if codebook_image_std is not None else self.codebook_image_std
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

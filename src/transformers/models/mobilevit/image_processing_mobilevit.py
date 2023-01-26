@@ -28,7 +28,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -284,8 +284,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
