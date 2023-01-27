@@ -24,7 +24,7 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...generation.configuration_utils import GenerationConfig
-from ...generation.tf_logits_process import TFWhisperTimeStampLogitsProcessor
+from ...generation.tf_logits_process import TFLogitsProcessorList, TFWhisperTimeStampLogitsProcessor
 from ...generation.tf_utils import TFGenerateOutput
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
@@ -1343,6 +1343,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         self,
         input_ids: Optional[tf.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
         seed=None,
         return_timestamps=None,
         task=None,
