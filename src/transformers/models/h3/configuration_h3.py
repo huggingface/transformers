@@ -51,10 +51,6 @@ class H3Config(PretrainedConfig):
             The dropout probability for the residual connections inside each block.
         embedding_dropout (`int`, *optional*, defaults to 0.1):
             The dropout probability for the embeddings.
-        fused_mlp (`bool`, *optional*, defaults to `False`):
-            Whether to leverage a fused MLP.
-        fused_dropout_add_ln (`bool`, *optional*, defaults to `False`):
-            Whether to leverage a fused version of dropout + add + layer_norm.
         residual_in_fp32 (`bool`, *optional*, defaults to `False`):
             Whether apply the residual in floating point 32.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
@@ -99,8 +95,6 @@ class H3Config(PretrainedConfig):
         n_inner=None,
         residual_dropout=0.0,
         embedding_dropout=0.1,
-        fused_mlp=False,
-        fused_dropout_add_ln=False,
         residual_in_fp32=False,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
@@ -121,8 +115,6 @@ class H3Config(PretrainedConfig):
         self.n_inner = n_inner
         self.residual_dropout = residual_dropout
         self.embedding_dropout = embedding_dropout
-        self.fused_mlp = fused_mlp
-        self.fused_dropout_add_ln = fused_dropout_add_ln
         self.residual_in_fp32 = residual_in_fp32
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range

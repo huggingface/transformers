@@ -24,26 +24,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-# TODO remove torchvision dependency
-# from torchvision.ops import StochasticDepth
-
 # TODO remove einops dependency
 from einops import rearrange
-
-
-# TODO create soft dependency
-# from flash_attn.modules.block import Block
-# from flash_attn.modules.embedding import GPT2Embeddings
-
-# from flash_attn.modules.mha import MHA
-# from flash_attn.modules.mlp import FusedMLP, Mlp
-# from flash_attn.utils.generation import GenerationMixin
-
-
-try:
-    from flash_attn.ops.layer_norm import dropout_add_layer_norm
-except ImportError:
-    dropout_add_layer_norm = None
 
 # custom kernel
 from src.models.h3 import H3
@@ -601,22 +583,10 @@ class H3Model(H3PreTrainedModel):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
-        if not self.config.fused_dropout_add_ln:
-            dropped = self.final_dropout(hidden_states)
-            residual = (dropped + residual) if residual is not None else dropped
-            hidden_states = self.final_layernorm(residual.to(dtype=self.final_layernorm.weight.dtype))
-        else:
-            # Set prenorm=False here since we don't need the residual
-            hidden_states = dropout_add_layer_norm(
-                hidden_states,
-                residual,
-                self.final_layernorm.weight,
-                self.final_layernorm.bias,
-                self.drop_f.p if self.training else 0.0,
-                self.final_layernorm.eps,
-                prenorm=False,
-                residual_in_fp32=self.residual_in_fp32,
-            )
+        
+        dropped = self.final_dropout(hidden_states)
+        residual = (dropped + residual) if residual is not None else dropped
+        hidden_states = self.final_layernorm(residual.to(dtype=self.final_layernorm.weight.dtype))
 
         # hidden_states = hidden_states.view(output_shape)
         # Add last hidden state
