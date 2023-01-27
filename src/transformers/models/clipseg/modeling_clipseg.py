@@ -1173,7 +1173,6 @@ class CLIPSegDecoderLayer(nn.Module):
     self-attention/MLP, rather than before.
     """
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer.__init__ with CLIP->CLIPSeg
     def __init__(self, config: CLIPSegConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -1182,6 +1181,7 @@ class CLIPSegDecoderLayer(nn.Module):
         self.mlp = CLIPSegMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.vision_config.layer_norm_eps)
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer.forward with CLIP->CLIPSeg
     def forward(
         self,
         hidden_states: torch.Tensor,
