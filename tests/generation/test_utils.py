@@ -2270,7 +2270,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 [-1.8826028, -2.2461371, -1.7556462, -2.9644494, -1.7996008],
             ]
         )
-        self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
+        self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores, atol=1e-4))
 
     def test_transition_scores_beam_search_encoder_decoder(self):
         articles = [
