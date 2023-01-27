@@ -207,6 +207,7 @@ PYTORCH_EXPORT_MODELS = {
     ("mobilenet_v1", "google/mobilenet_v1_0.75_192"),
     ("mobilenet_v2", "google/mobilenet_v2_0.35_96"),
     ("mobilevit", "apple/mobilevit-small"),
+    ("nystromformer", "uw-madison/nystromformer-4096"),
     ("owlvit", "google/owlvit-base-patch32"),
     ("perceiver", "hf-internal-testing/tiny-random-PerceiverModel", ("masked-lm", "sequence-classification")),
     ("perceiver", "hf-internal-testing/tiny-random-PerceiverModel", ("image-classification",)),

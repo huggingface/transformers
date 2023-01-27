@@ -14,6 +14,10 @@
 # limitations under the License.
 """ Nystromformer model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from transformers.onnx.config import OnnxConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -131,3 +135,19 @@ class NystromformerConfig(PretrainedConfig):
         self.inv_coeff_init_option = inv_coeff_init_option
         self.layer_norm_eps = layer_norm_eps
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+class NystromformerOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
+            ]
+        )
+
