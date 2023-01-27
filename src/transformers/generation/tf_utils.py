@@ -1243,7 +1243,8 @@ class TFGenerationMixin:
         if generation_config.forced_decoder_ids is not None:
             processors.append(TFForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
 
-        processors.extend(logits_processor)
+        if logits_processor is not None and len(processors) > 0:
+            processors.extend(logits_processor)
         return processors
 
     def greedy_search(
