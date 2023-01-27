@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 # TODO remove torchvision dependency
-from torchvision.ops import StochasticDepth
+# from torchvision.ops import StochasticDepth
 
 # TODO remove einops dependency
 from einops import rearrange
@@ -63,6 +63,59 @@ H3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "stanford/H3-125m",
     # See all H3 models at https://huggingface.co/models?filter=h3
 ]
+
+
+def stochastic_depth(input: torch.Tensor, p: float, mode: str, training: bool = True) -> torch.Tensor:
+    """
+    Implements the Stochastic Depth from `"Deep Networks with Stochastic Depth"
+    <https://arxiv.org/abs/1603.09382>`_ used for randomly dropping residual
+    branches of residual architectures.
+    Args:
+        input (Tensor[N, ...]): The input tensor or arbitrary dimensions with the first one
+                    being its batch i.e. a batch with ``N`` rows.
+        p (float): probability of the input to be zeroed.
+        mode (str): ``"batch"`` or ``"row"``.
+                    ``"batch"`` randomly zeroes the entire input, ``"row"`` zeroes
+                    randomly selected rows from the batch.
+        training: apply stochastic depth if is ``True``. Default: ``True``
+    Returns:
+        Tensor[N, ...]: The randomly zeroed tensor.
+    """
+    if p < 0.0 or p > 1.0:
+        raise ValueError(f"drop probability has to be between 0 and 1, but got {p}")
+    if mode not in ["batch", "row"]:
+        raise ValueError(f"mode has to be either 'batch' or 'row', but got {mode}")
+    if not training or p == 0.0:
+        return input
+
+    survival_rate = 1.0 - p
+    if mode == "row":
+        size = [input.shape[0]] + [1] * (input.ndim - 1)
+    else:
+        size = [1] * input.ndim
+    noise = torch.empty(size, dtype=input.dtype, device=input.device)
+    noise = noise.bernoulli_(survival_rate)
+    if survival_rate > 0.0:
+        noise.div_(survival_rate)
+    return input * noise
+
+
+class H3StochasticDepth(nn.Module):
+    """
+    Stochastic depth implementation, taken from Torchvision's op: https://github.com/pytorch/vision/blob/main/torchvision/ops/stochastic_depth.py.
+    """
+
+    def __init__(self, p: float, mode: str) -> None:
+        super().__init__()
+        self.p = p
+        self.mode = mode
+
+    def forward(self, input):
+        return stochastic_depth(input, self.p, self.mode, self.training)
+
+    def __repr__(self) -> str:
+        s = f"{self.__class__.__name__}(p={self.p}, mode={self.mode})"
+        return s
 
 
 class H3Embeddings(nn.Module):
@@ -205,7 +258,7 @@ class H3Block(nn.Module):
                 d_model=config.hidden_size, layer_idx=layer_idx, mode=config.ssm_mode, measure=config.ssm_measure
             )
         self.dropout1 = nn.Dropout(resid_dropout1)
-        self.drop_path1 = StochasticDepth(drop_path1, mode="row")
+        self.drop_path1 = H3StochasticDepth(drop_path1, mode="row")
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.hidden_size
         self.mlp = H3MLP(
@@ -214,7 +267,7 @@ class H3Block(nn.Module):
             activation=partial(nn.functional.gelu, approximate="tanh"),
         )
         self.dropout2 = nn.Dropout(resid_dropout2)
-        self.drop_path2 = StochasticDepth(drop_path2, mode="row")
+        self.drop_path2 = H3StochasticDepth(drop_path2, mode="row")
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
     def forward(self, hidden_states, residual):
