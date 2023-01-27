@@ -101,7 +101,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         chunk_len, stride_left, stride_right = stride
         sequence = sequence.squeeze(0)
         # get rid of the `forced_decoder_idx` that are use to parametrize the generation
-        begin_idx = np.where(sequence == timestamp_begin)[0].item() if timestamp_begin in sequence else 0
+        begin_idx = np.where(sequence == timestamp_begin)[0][0] if timestamp_begin in sequence else 0
         sequence = sequence[begin_idx:]
 
         timestamp_tokens = sequence >= timestamp_begin
