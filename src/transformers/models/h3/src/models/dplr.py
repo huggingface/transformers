@@ -6,7 +6,7 @@ import math
 import torch
 
 from einops import repeat
-from src.models import hippo
+from transformers.models.h3.src.models import hippo
 
 
 def dplr(

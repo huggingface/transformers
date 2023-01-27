@@ -13,10 +13,10 @@ import torch.nn as nn
 
 from einops import rearrange, repeat
 from opt_einsum import contract
-from src.models import dplr
-from src.models.ss_kernel_diag import EMAKernel, SSKernelDiag
-from src.models.ss_kernel_shift import SSKernelShift
-from src.ops.krylov import power
+from transformers.models.h3.src.models import dplr
+from transformers.models.h3.src.models.ss_kernel_diag import EMAKernel, SSKernelDiag
+from transformers.models.h3.src.models.ss_kernel_shift import SSKernelShift
+from transformers.models.h3.src.ops.krylov import power
 
 
 # from src.utils.utils import get_logger

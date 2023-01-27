@@ -24,8 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-# custom kernel
-from src.models.h3 import H3
+from transformers.models.h3.src.models.h3 import H3
 
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
@@ -46,20 +45,20 @@ H3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def stochastic_depth(input: torch.Tensor, p: float, mode: str, training: bool = True) -> torch.Tensor:
     """
-    Implements the Stochastic Depth from [Deep Networks with Stochastic Depth](https://arxiv.org/abs/1603.09382)
-    used for randomly dropping residual branches of residual architectures.
-    
+    Implements the Stochastic Depth from [Deep Networks with Stochastic Depth](https://arxiv.org/abs/1603.09382) used
+    for randomly dropping residual branches of residual architectures.
+
     Args:
         input (`torch.FloatTensor` of shape `(N, ...)`):
             The input tensor or arbitrary dimensions with the first one being its batch i.e. a batch with `N` rows.
         p (`float`):
             Probability of the input to be zeroed.
         mode (`str`):
-            Could be `"batch"` or `"row"`. `"batch"` randomly zeroes the entire input,
-            `"row"` zeroes randomly selected rows from the batch.
+            Could be `"batch"` or `"row"`. `"batch"` randomly zeroes the entire input, `"row"` zeroes randomly selected
+            rows from the batch.
         training (`bool`, *optional*, defaults to `True`):
             Apply stochastic depth if is `True`.
-    
+
     Returns:
         Tensor[N, ...]: The randomly zeroed tensor.
     """
@@ -84,7 +83,8 @@ def stochastic_depth(input: torch.Tensor, p: float, mode: str, training: bool = 
 
 class H3StochasticDepth(nn.Module):
     """
-    Stochastic depth implementation, taken from Torchvision's op: https://github.com/pytorch/vision/blob/main/torchvision/ops/stochastic_depth.py.
+    Stochastic depth implementation, taken from Torchvision's op:
+    https://github.com/pytorch/vision/blob/main/torchvision/ops/stochastic_depth.py.
     """
 
     def __init__(self, p: float, mode: str) -> None:
@@ -135,7 +135,7 @@ def attention_pytorch(qkv, dropout_p=0.0, causal=True):
     Args:
         qkv: (batch_size, seqlen, 3, nheads, head_dim)
         dropout_p: float
-    
+
     Returns:
         output: (batch_size, seqlen, nheads, head_dim)
     """
@@ -146,11 +146,11 @@ def attention_pytorch(qkv, dropout_p=0.0, causal=True):
     # permute queries from (batch_size, seq_len, num_heads, head_dim) to (batch_size, num_heads, seq_len, head_dim)
     batch_size, seq_len, num_heads, head_dim = queries.shape
     queries = queries.permute(0, 2, 1, 3)
-    queries = queries.reshape(batch_size*num_heads, seq_len, head_dim)
+    queries = queries.reshape(batch_size * num_heads, seq_len, head_dim)
     # permute keys from (batch_size, seq_len, num_heads, head_dim) to (batch_size, num_heads, head_dim, seq_len)
     keys = keys.permute(0, 2, 3, 1)
-    keys = keys.reshape(batch_size*num_heads, head_dim, seq_len)
-    
+    keys = keys.reshape(batch_size * num_heads, head_dim, seq_len)
+
     softmax_scale = 1.0 / math.sqrt(d)
     # Preallocate attn_weights for `baddbmm`
     scores = torch.empty(batch_size * nheads, seqlen, seqlen, dtype=qkv.dtype, device=qkv.device)
@@ -560,7 +560,7 @@ class H3Model(H3PreTrainedModel):
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
-        for i, block in enumerate(self.blocks):
+        for block in self.blocks:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -598,7 +598,6 @@ class H3Model(H3PreTrainedModel):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
-        
         dropped = self.final_dropout(hidden_states)
         residual = (dropped + residual) if residual is not None else dropped
         hidden_states = self.final_layernorm(residual.to(dtype=self.final_layernorm.weight.dtype))

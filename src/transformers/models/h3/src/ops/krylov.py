@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 
 from einops import rearrange
-from src.ops.toeplitz import causal_convolution
+from transformers.models.h3.src.ops.toeplitz import causal_convolution
 
 
 def krylov_sequential(L, A, b, c=None):

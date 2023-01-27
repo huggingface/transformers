@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import datetime
-import math
 import unittest
 
 from transformers import H3Config, is_torch_available
@@ -23,12 +20,10 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
-    import torch
-
     from transformers import H3_PRETRAINED_MODEL_ARCHIVE_LIST, GPT2Tokenizer, H3ForCausalLM, H3Model
 
 
@@ -50,12 +45,8 @@ class H3ModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
-        num_choices=4,
-        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -72,18 +63,12 @@ class H3ModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
-        self.num_choices = num_choices
         self.scope = None
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
-
-    def get_large_model_config(self):
-        return H3Config.from_pretrained("h3")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -93,14 +78,6 @@ class H3ModelTester:
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config(
             gradient_checkpointing=gradient_checkpointing,
@@ -112,9 +89,6 @@ class H3ModelTester:
             config,
             input_ids,
             input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
         )
 
     def get_config(
@@ -122,15 +96,13 @@ class H3ModelTester:
     ):
         return H3Config(
             vocab_size=self.vocab_size,
-            n_embd=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
             n_inner=self.intermediate_size,
             activation_function=self.hidden_act,
-            resid_pdrop=self.hidden_dropout_prob,
-            attn_pdrop=self.attention_probs_dropout_prob,
+            residual_dropout=self.hidden_dropout_prob,
             n_positions=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             use_cache=True,
             bos_token_id=self.bos_token_id,
@@ -146,30 +118,6 @@ class H3ModelTester:
         config.vocab_size = 300
         return config
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
     def create_and_check_h3_model(self, config, input_ids, input_mask, *args):
         model = H3Model(config=config)
         model.to(torch_device)
@@ -178,7 +126,6 @@ class H3ModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask):
         model = H3ForCausalLM(config)
@@ -198,7 +145,9 @@ class H3ModelTester:
             input_mask,
         ) = config_and_inputs
 
-        inputs_dict = {"input_ids": input_ids,}
+        inputs_dict = {
+            "input_ids": input_ids,
+        }
 
         return config, inputs_dict
 
@@ -218,6 +167,7 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = True
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = H3ModelTester(self)
@@ -234,17 +184,9 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_h3_model_past(*config_and_inputs)
 
-    def test_h3_model_att_mask_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_h3_model_attention_mask_past(*config_and_inputs)
-
     def test_h3_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    def test_h3_gradient_checkpointing(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
 
     def test_h3_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

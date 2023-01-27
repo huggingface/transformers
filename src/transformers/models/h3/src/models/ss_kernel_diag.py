@@ -13,10 +13,10 @@ import torch.nn.functional as F
 
 from einops import rearrange, repeat
 from opt_einsum import contract
-from src.models.ssm_utils import OptimModule
+from transformers.models.h3.src.models.ssm_utils import OptimModule
 
 # This could be None if the CUDA import fails
-from src.ops.vandermonde import log_vandermonde_fast
+from transformers.models.h3.src.ops.vandermonde import log_vandermonde_fast
 
 
 # from src.utils import get_logger
@@ -26,14 +26,14 @@ logger = logging.getLogger()
 
 
 try:
-    from src.ops.vandermonde import log_vandermonde, log_vandermonde_transpose
+    from transformers.models.h3.src.ops.vandermonde import log_vandermonde, log_vandermonde_transpose
 
     has_pykeops = True
     logger.info("Pykeops installation found.")
 except ImportError:
     has_pykeops = False
-    from src.ops.vandermonde import log_vandermonde_naive as log_vandermonde
-    from src.ops.vandermonde import log_vandermonde_transpose_naive as log_vandermonde_transpose
+    from transformers.models.h3.src.ops.vandermonde import log_vandermonde_naive as log_vandermonde
+    from transformers.models.h3.src.ops.vandermonde import log_vandermonde_transpose_naive as log_vandermonde_transpose
 
     logger.warning("Falling back on slow Vandermonde kernel. Install pykeops for improved memory efficiency.")
 
