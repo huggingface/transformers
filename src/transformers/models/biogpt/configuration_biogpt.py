@@ -68,8 +68,6 @@ class BioGptConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        is_encoder_decoder (`bool`, *optional*, defaults to `False`):
-            Whether this is an encoder/decoder model.
         layerdrop (`float`, *optional*, defaults to 0.0):
             Please refer to the paper about LayerDrop: https://arxiv.org/abs/1909.11556 for further details
         activation_dropout (`float`, *optional*, defaults to 0.0):

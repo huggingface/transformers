@@ -269,8 +269,6 @@ class BridgeTowerConfig(PretrainedConfig):
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        is_encoder_decoder (`bool`, *optional*, defaults to `False`):
-            Whether this is an encoder/decoder model
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         share_link_tower_layers (`bool`, *optional*, defaults to `False`):
