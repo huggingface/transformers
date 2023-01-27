@@ -22,7 +22,11 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_nystromformer": ["NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "NystromformerConfig"],
+    "configuration_nystromformer": [
+        "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", 
+        "NystromformerConfig",
+        "NystromformerOnnxConfig",
+        ],
 }
 
 try:

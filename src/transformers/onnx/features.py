@@ -437,6 +437,15 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.m2m_100.M2M100OnnxConfig",
         ),
+        "nystromformer": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "multiple-choice",
+            "question-answering",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.nystromformer.NystromformerOnnxConfig",
+        ),
         "owlvit": supported_features_mapping(
             "default",
             onnx_config_cls="models.owlvit.OwlViTOnnxConfig",
