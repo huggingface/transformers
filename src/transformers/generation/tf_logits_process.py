@@ -664,11 +664,11 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
 
         def _update_slices(batch_idx_to_modify, idx0, idx1):
             # TODO most important function hahaahh
-            new_scores = tf.identity(scores, dtype=scores.dtype)
-            mod = tf.tile(range(idx0, idx1), [len(indices_1)])
-            batch = tf.repeat(batch_idx_to_modify, self.timestamp_begin)
-            final_idx = tf.stack((batch, mod), axis=1)
-            updates = tf.ones_like((self.timestamp_begin,), dtype=scores.dtype) * -float("inf")
+            new_scores = tf.identity(scores)
+            mod = tf.tile(range(idx0, idx1), [len(batch_idx_to_modify)])
+            batch = tf.repeat(batch_idx_to_modify, idx1 - idx0)
+            final_idx = tf.stack((tf.cast(batch, mod.dtype), mod), axis=1)
+            updates = tf.ones(((idx1 - idx0) * len(batch_idx_to_modify),), dtype=scores.dtype) * -float("inf")
             new_scores = tf.tensor_scatter_nd_update(new_scores, final_idx, updates)
             return new_scores
 
@@ -679,16 +679,27 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         # correct until here
         mod = tf.tile(range(max_idx - self.timestamp_begin), [len(indices_1)])
         batch = tf.repeat(indices_1, max_idx - self.timestamp_begin)
-        final_idx = tf.stack((batch, mod), axis=1)
+        final_idx = tf.stack((tf.cast(batch, mod.dtype), mod), axis=1)
+        updates = tf.ones((max_idx - self.timestamp_begin,), dtype=scores.dtype) * -float("inf")
+        scores = tf.cond(
+            len(final_idx) > 0,
+            lambda: tf.tensor_scatter_nd_update(scores, final_idx, updates),
+            lambda: tf.identity(scores),
+        )
 
-        updates = tf.ones_like((max_idx - self.timestamp_begin,), dtype=scores.dtype) * -float("inf")
-        scores = tf.tensor_scatter_nd_update(scores, final_idx, updates)
-
-        mod = tf.tile(range(self.timestamp_begin), [len(indices_1)])
+        mod = tf.tile(range(self.timestamp_begin), [len(indices_2)])
         batch = tf.repeat(indices_2, self.timestamp_begin)
-        final_idx = tf.stack((batch, mod), axis=1)
-        updates = tf.ones_like((self.timestamp_begin,), dtype=scores.dtype) * -float("inf")
-        scores = tf.tensor_scatter_nd_update(scores, final_idx, updates)
+        final_idx = tf.stack((tf.cast(batch, mod.dtype), mod), axis=1)
+        updates = tf.ones((self.timestamp_begin,), dtype=scores.dtype) * -float("inf")
+        scores = tf.cond(
+            len(final_idx) > 0,
+            lambda: tf.tensor_scatter_nd_update(scores, final_idx, updates),
+            lambda: tf.identity(scores),
+        )
+
+        # if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
+        #     last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+        #     scores[:, last_allowed + 1 :] = -float("inf")
 
         tf.cond(
             cur_len == self.begin_index and self.max_initial_timestamp_index is not None,
@@ -706,9 +717,13 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         #     max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
         #     if timestamp_logprob > max_text_token_logprob:
         #         scores[k, : self.timestamp_begin] = -float("inf")
-        logprobs = tf.log_softmax(scores.float(), dim=-1)
-        timestamp_logprob = logprobs[:, self.timestamp_begin :].logsumexp(dim=-1)
-        max_text_token_logprob = logprobs[:, : self.timestamp_begin].max()
-        indices_3 = np.where(timestamp_logprob > max_text_token_logprob)
-        scores = _update_slices(indices_3, 0, self.timestamp_begin, -float("inf"))
+
+        logprobs = tf.nn.log_softmax(tf.cast(scores, dtype=tf.float32), axis=-1)
+        timestamp_logprob = tf.reduce_logsumexp(logprobs[:, self.timestamp_begin :], axis=-1)
+        max_text_token_logprob = tf.reduce_max(logprobs[:, : self.timestamp_begin], axis=-1)
+        indices_3 = np.argwhere(timestamp_logprob > max_text_token_logprob)
+        scores = tf.cond(
+            len(indices_3) > 0, lambda: _update_slices(indices_3, 0, self.timestamp_begin), lambda: tf.identity(scores)
+        )
+
         return scores
