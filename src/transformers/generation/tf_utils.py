@@ -533,6 +533,7 @@ class TFGenerationMixin:
         input_ids: Optional[tf.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         seed=None,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
         **kwargs,
     ) -> Union[TFGenerateOutput, tf.Tensor]:
         r"""
@@ -752,6 +753,7 @@ class TFGenerationMixin:
 
         # 9. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
+            logits_processor=logits_processor,
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
         )
@@ -1191,6 +1193,7 @@ class TFGenerationMixin:
 
     def _get_logits_processor(
         self,
+        logits_processor: Optional[TFLogitsProcessorList],
         generation_config: GenerationConfig,
         input_ids_seq_length: int,
     ) -> TFLogitsProcessorList:
@@ -1239,6 +1242,8 @@ class TFGenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(TFForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
+
+        processors.extend(logits_processor)
         return processors
 
     def greedy_search(

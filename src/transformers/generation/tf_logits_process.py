@@ -588,7 +588,7 @@ class TFForceTokensLogitsProcessor(TFLogitsProcessor):
         return scores
 
 
-class WhisperTimeStampLogitsProcessor(TFLogitsProcessor):
+class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
     r"""
     Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
     probs to `inf` so that they are sampled at their corresponding index.
@@ -619,7 +619,7 @@ class WhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         def _un_force_token(current_token):
             # scores[:,current_tokens ] = -float("inf")
             batch_size = scores.shape[0]
-            new_scores = tf.identity(scores, dtype=scores.dtype)
+            new_scores = tf.identity(scores)
             indices = tf.stack((tf.range(batch_size), tf.tile([current_token], [batch_size])), axis=1)
             updates = tf.ones((batch_size,), dtype=scores.dtype) * -float("inf")
             new_scores = tf.tensor_scatter_nd_update(new_scores, indices, updates)
@@ -636,23 +636,20 @@ class WhisperTimeStampLogitsProcessor(TFLogitsProcessor):
             return new_scores
 
         # suppress <|notimestamps|> which is handled by without_timestamps
-        scores = _un_force_token(
-            self.no_timestamps_token_id, -float("inf")
-        )  # scores[:, self.no_timestamps_token_id] = -float("inf")
-        tf.cond(
-            cur_len == self.begin_index - 1, lambda: _force_tokens(self.timestamp_begin), lambda: tf.identity(scores)
+        scores = _un_force_token(self.no_timestamps_token_id)  # scores[:, self.no_timestamps_token_id] = -float("inf")
+        scores = tf.cond(
+            tf.equal(cur_len, self.begin_index - 1),
+            lambda: _force_tokens(self.timestamp_begin),
+            lambda: tf.identity(scores),
         )
+        if cur_len == self.begin_index - 1:
+            return scores
 
-        last_was_timestamps = (
-            np.sum(np.where(input_ids[:, self.begin_idx :] != self.eos_token_id, axis=0))
-            >= 1 & input_ids[:, -1]
-            >= self.timestamp_begin
-        )
-        penultimate_was_timestamp = (
-            np.sum(np.where(input_ids[:, self.begin_idx :] != self.eos_token_id, axis=0))
-            < 2 & input_ids[:, -2]
-            >= self.timestamp_begin
-        )
+        not_eos = np.sum((input_ids[:, self.begin_index : cur_len + 1] != self.eos_token_id), axis=-1) >= 1
+        last_was_timestamps = not_eos & (input_ids[:, cur_len - 1] >= self.timestamp_begin).numpy()
+
+        not_eos = np.sum((input_ids[:, self.begin_index : cur_len + 1] != self.eos_token_id), axis=-1) >= 2
+        penultimate_was_timestamp = not_eos & (input_ids[:, -2] >= self.timestamp_begin).numpy()
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         # for k in range(input_ids.shape[0]):
@@ -676,9 +673,10 @@ class WhisperTimeStampLogitsProcessor(TFLogitsProcessor):
             return new_scores
 
         max_idx = scores.shape[1]
-        indices_1 = np.argwhere(last_was_timestamps & penultimate_was_timestamp)[1, 3]
-        indices_2 = np.argwhere(last_was_timestamps & (not penultimate_was_timestamp))[0]
+        indices_1 = np.argwhere(last_was_timestamps & penultimate_was_timestamp)
+        indices_2 = np.argwhere(last_was_timestamps & np.logical_not(penultimate_was_timestamp))
 
+        # correct until here
         mod = tf.tile(range(max_idx - self.timestamp_begin), [len(indices_1)])
         batch = tf.repeat(indices_1, max_idx - self.timestamp_begin)
         final_idx = tf.stack((batch, mod), axis=1)

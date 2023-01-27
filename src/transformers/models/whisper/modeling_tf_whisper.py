@@ -23,6 +23,9 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
+from ...generation.configuration_utils import GenerationConfig
+from ...generation.tf_logits_process import TFWhisperTimeStampLogitsProcessor
+from ...generation.tf_utils import TFGenerateOutput
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
@@ -1335,6 +1338,60 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+    def generate(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        generation_config: Optional[GenerationConfig] = None,
+        seed=None,
+        return_timestamps=None,
+        task=None,
+        language=None,
+        is_multilingual=None,
+        **kwargs
+    ) -> Union[TFGenerateOutput, tf.Tensor]:
+
+        if generation_config is None:
+            generation_config = self.generation_config
+
+        if return_timestamps is not None:
+            generation_config.return_timestamps = return_timestamps
+
+        if task is not None:
+            generation_config.task = task
+
+        if is_multilingual is not None:
+            generation_config.is_multilingual = is_multilingual
+
+        if language is not None:
+            generation_config.language = language
+
+        forced_decoder_ids = []
+
+        if hasattr(generation_config, "is_multilingual") and generation_config.is_multilingual:
+            if hasattr(generation_config, "language"):
+                forced_decoder_ids.append((1, generation_config.lang_to_id[generation_config.language]))
+            else:
+                forced_decoder_ids.append((1, None))
+
+            if hasattr(generation_config, "task"):
+                forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
+            else:
+                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
+
+        if (
+            hasattr(generation_config, "return_timestamps") and generation_config.return_timestamps
+        ) or return_timestamps:
+            logits_processor = [TFWhisperTimeStampLogitsProcessor(generation_config)]
+        else:
+            if forced_decoder_ids and forced_decoder_ids[-1][0] != generation_config.no_timestamps_token_id:
+                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
+                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
+
+        if len(forced_decoder_ids) > 0:
+            generation_config.forced_decoder_ids = forced_decoder_ids
+
+        return super().generate(input_ids, generation_config, seed, logits_processor=logits_processor, **kwargs)
 
     def serving_output(self, output):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
