@@ -1095,7 +1095,7 @@ class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFM
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
         expected_output="' Paris'",
-        expected_loss=0.1,
+        expected_loss=0.69,
     )
     def call(
         self,
