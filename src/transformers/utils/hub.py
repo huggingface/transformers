@@ -628,7 +628,7 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
-    ):
+    ) -> str:
         """
         Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
         the token.
