@@ -22,7 +22,6 @@ import os
 # python utils/check_task_guides.py
 TRANSFORMERS_PATH = "src/transformers"
 PATH_TO_TASK_GUIDES = "docs/source/en/tasks"
-REPO_PATH = "../../../Downloads"
 
 
 def _find_text_in_file(filename, start_prompt, end_prompt):
@@ -62,7 +61,7 @@ transformers_module = spec.loader.load_module()
 TASK_GUIDE_TO_MODELS = {
     "asr.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_CTC_MAPPING_NAMES,
     "audio_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
-    "causal_language_modeling.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    "language_modeling.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     "image_classification.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     "masked_language_modeling.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     "multiple_choice.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,

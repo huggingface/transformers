@@ -53,7 +53,7 @@
         title: Token classification
       - local: tasks/question_answering
         title: Question answering
-      - local: tasks/causal_language_modeling
+      - local: tasks/language_modeling
         title: Causal language modeling
       - local: tasks/masked_language_modeling
         title: Masked language modeling

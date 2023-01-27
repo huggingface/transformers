@@ -42,6 +42,7 @@ repo-consistency:
 	python utils/check_config_docstrings.py
 	python utils/tests_fetcher.py --sanity_check
 	python utils/update_metadata.py --check-only
+	python utils/check_task_guides.py
 
 # this target runs checks on all files
 
