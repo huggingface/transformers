@@ -144,8 +144,16 @@ def attention_pytorch(qkv, dropout_p=0.0, causal=True):
     """
     batch_size, seqlen, _, nheads, d = qkv.shape
     q, k, v = qkv.unbind(dim=2)
-    q = rearrange(q, "b t h d -> (b h) t d")
-    k = rearrange(k, "b s h d -> (b h) d s")
+
+    # let's first go from b t h d to b h t d
+    # permute (batch_size, seq_len, num_heads, head_dim) to (batch_size, num_heads, seq_len, head_dim)
+    q = q.permute(0, 2, 1, 3)
+    batch_size, num_heads, seq_len, head_dim = q.shape
+    q = q.reshape(batch_size*num_heads, seq_len, head_dim)
+    k = k.permute(0, 2, 3, 1)
+    k = k.reshape(batch_size*num_heads, head_dim, seq_len)
+    # q = rearrange(q, "b t h d -> (b h) t d")
+    # k = rearrange(k, "b s h d -> (b h) d s")
     softmax_scale = 1.0 / math.sqrt(d)
     # Preallocate attn_weights for `baddbmm`
     scores = torch.empty(batch_size * nheads, seqlen, seqlen, dtype=qkv.dtype, device=qkv.device)
