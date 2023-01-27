@@ -49,17 +49,20 @@ H3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def stochastic_depth(input: torch.Tensor, p: float, mode: str, training: bool = True) -> torch.Tensor:
     """
-    Implements the Stochastic Depth from `"Deep Networks with Stochastic Depth"
-    <https://arxiv.org/abs/1603.09382>`_ used for randomly dropping residual
-    branches of residual architectures.
+    Implements the Stochastic Depth from [Deep Networks with Stochastic Depth](https://arxiv.org/abs/1603.09382)
+    used for randomly dropping residual branches of residual architectures.
+    
     Args:
-        input (Tensor[N, ...]): The input tensor or arbitrary dimensions with the first one
-                    being its batch i.e. a batch with ``N`` rows.
-        p (float): probability of the input to be zeroed.
-        mode (str): ``"batch"`` or ``"row"``.
-                    ``"batch"`` randomly zeroes the entire input, ``"row"`` zeroes
-                    randomly selected rows from the batch.
-        training: apply stochastic depth if is ``True``. Default: ``True``
+        input (`torch.FloatTensor` of shape `(N, ...)`):
+            The input tensor or arbitrary dimensions with the first one being its batch i.e. a batch with `N` rows.
+        p (`float`):
+            Probability of the input to be zeroed.
+        mode (`str`):
+            Could be `"batch"` or `"row"`. `"batch"` randomly zeroes the entire input,
+            `"row"` zeroes randomly selected rows from the batch.
+        training (`bool`, *optional*, defaults to `True`):
+            Apply stochastic depth if is `True`.
+    
     Returns:
         Tensor[N, ...]: The randomly zeroed tensor.
     """
@@ -181,7 +184,9 @@ class MultiHeadAttention(nn.Module):
             hidden_states: (batch, seqlen, hidden_dim) (where hidden_dim = num heads * head dim)
         """
         qkv = self.Wqkv(hidden_states)
-        qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
+        batch_size, seq_len, hidden_size = qkv.shape
+        qkv = qkv.reshape(batch_size, seq_len, 3, self.num_heads, hidden_size // 3 // self.num_heads)
+        # qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
         context, attn_weights = attention_pytorch(qkv, dropout_p=self.attention_dropout, causal=self.causal)
         # TODO support outputting attention weights
         return self.out_proj(rearrange(context, "b s h d -> b s (h d)"))
