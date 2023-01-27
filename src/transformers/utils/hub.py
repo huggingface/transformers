@@ -31,7 +31,6 @@ import huggingface_hub
 import requests
 from huggingface_hub import (
     CommitOperationAdd,
-    HfFolder,
     create_commit,
     create_repo,
     get_hf_file_metadata,
