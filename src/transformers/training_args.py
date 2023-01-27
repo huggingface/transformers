@@ -902,8 +902,8 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The  value is either a
-                "deepspeed json config file (e.g., `ds_config.json`) or an already loaded  json file as `dict`."
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The  value is either a"
+                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded  json file as `dict`."
             )
         },
     )
