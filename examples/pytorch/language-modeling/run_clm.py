@@ -173,7 +173,7 @@ class DataTrainingArguments:
             )
         },
     )
-
+    streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
     block_size: Optional[int] = field(
         default=None,
         metadata={
@@ -279,27 +279,30 @@ def main():
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
     if data_args.dataset_name is not None:
+        kwargs = dict(
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+        if data_args.streaming:
+            kwargs.update(streaming=True)
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
-            cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            **kwargs,
         )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
-                cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                **kwargs,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
-                cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                **kwargs,
             )
     else:
         data_files = {}
@@ -413,9 +416,15 @@ def main():
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
-        column_names = raw_datasets["train"].column_names
+        if data_args.streaming:
+            column_names = raw_datasets["train"].features.keys()
+        else:
+            column_names = raw_datasets["train"].column_names
     else:
-        column_names = raw_datasets["validation"].column_names
+        if data_args.streaming:
+            column_names = raw_datasets["validation"].features.keys()
+        else:
+            column_names = raw_datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
@@ -433,14 +442,18 @@ def main():
         return output
 
     with training_args.main_process_first(desc="dataset map tokenization"):
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
+        kwargs = dict(
             batched=True,
-            num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on dataset",
         )
+        if not data_args.streaming:
+            kwargs.update(
+                num_proc=data_args.preprocessing_num_workers,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc="Running tokenizer on dataset",
+            )
+
+        tokenized_datasets = raw_datasets.map(tokenize_function, **kwargs)
 
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
@@ -483,12 +496,19 @@ def main():
     # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
     with training_args.main_process_first(desc="grouping texts together"):
+        kwargs = dict(
+            batched=True,
+        )
+        if not data_args.streaming:
+            kwargs.update(
+                num_proc=data_args.preprocessing_num_workers,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc=f"Grouping texts in chunks of {block_size}",
+            )
+
         lm_datasets = tokenized_datasets.map(
             group_texts,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc=f"Grouping texts in chunks of {block_size}",
+            **kwargs,
         )
 
     if training_args.do_train:
