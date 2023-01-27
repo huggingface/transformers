@@ -36,7 +36,7 @@ class InformerConfig(PretrainedConfig):
             input_size: int = 1,
             prediction_length: Optional[int] = None,
             context_length: Optional[int] = None,
-            distr_output: str = "student_t",
+            distribution_output: str = "student_t",
             lags_seq: Optional[List[int]] = None,  # used to be freq.
             scaling: bool = True,
             num_feat_dynamic_real: int = 0,  # num_dynamic_real_features
@@ -44,10 +44,10 @@ class InformerConfig(PretrainedConfig):
             num_feat_static_cat: int = 0,  # num_static_categorical_features
             cardinality: Optional[List[int]] = None,
             embedding_dimension: Optional[List[int]] = None,
-            dim_feedforward: int = 2048,  # decoder_ffn_dim & encoder_ffn_dim
-            nhead: int = 8,  # Eli: how much attention heads?
+            dim_feedforward: int = 32,  # decoder_ffn_dim & encoder_ffn_dim
+            nhead: int = 2,  # Eli: how much attention heads?
             num_encoder_layers: int = 2,  # encoder_layers
-            num_decoder_layers: int = 1,  # decoder_layers
+            num_decoder_layers: int = 2,  # decoder_layers
             is_encoder_decoder: bool = True,
             activation: str = "gelu",  # activation_function
             dropout: float = 0.05,
@@ -56,14 +56,13 @@ class InformerConfig(PretrainedConfig):
             distil: bool = True,
             num_parallel_samples: int = 100,
             init_std: float = 0.02,
-            d_model: int = 512,  # because of the informer embedding
             use_cache=True,
             **kwargs
     ):
         # time series specific configuration
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
-        self.distr_output = distr_output  # Eli: change to distribution_output
+        self.distribution_output = distribution_output
         # self.loss = loss # Eli: From vanilla ts transformer
         self.input_size = input_size
         # self.target_shape = distr_output.event_shape  # Eli: I think can be removed
@@ -98,8 +97,7 @@ class InformerConfig(PretrainedConfig):
         # self.history_length = context_length + max(self.lags_seq) # Eli: I think can be removed
 
         # Transformer architecture configuration
-        # self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
-        self.d_model = d_model
+        self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
         self.nhead = nhead
         self.num_encoder_layers = num_encoder_layers  # encoder_layers
         self.num_decoder_layers = num_decoder_layers  # decoder_layers

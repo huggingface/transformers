@@ -50,6 +50,285 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "InformerConfig"
 
 
+class NegativeLogLikelihood:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+
+    def __call__(self, input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+        return -input.log_prob(target)
+
+
+class DistributionOutput:
+    distribution_class: type
+    in_features: int
+    args_dim: Dict[str, int]
+
+    def __init__(self, dim: int = 1) -> None:
+        self.dim = dim
+        self.args_dim = {k: dim * self.args_dim[k] for k in self.args_dim}
+
+    def _base_distribution(self, distr_args):
+        if self.dim == 1:
+            return self.distribution_class(*distr_args)
+        else:
+            return Independent(self.distribution_class(*distr_args), 1)
+
+    def distribution(
+        self,
+        distr_args,
+        loc: Optional[torch.Tensor] = None,
+        scale: Optional[torch.Tensor] = None,
+    ) -> Distribution:
+        distr = self._base_distribution(distr_args)
+        if loc is None and scale is None:
+            return distr
+        else:
+            return AffineTransformed(distr, loc=loc, scale=scale, event_dim=self.event_dim)
+
+    @property
+    def event_shape(self) -> Tuple:
+        r"""
+        Shape of each individual event contemplated by the distributions that this object constructs.
+        """
+        return () if self.dim == 1 else (self.dim,)
+
+    @property
+    def event_dim(self) -> int:
+        r"""
+        Number of event dimensions, i.e., length of the `event_shape` tuple, of the distributions that this object
+        constructs.
+        """
+        return len(self.event_shape)
+
+    @property
+    def value_in_support(self) -> float:
+        r"""
+        A float that will have a valid numeric value when computing the log-loss of the corresponding distribution. By
+        default 0.0. This value will be used when padding data series.
+        """
+        return 0.0
+
+    def get_parameter_projection(self, in_features: int) -> nn.Module:
+        r"""
+        Return the parameter projection layer that maps the input to the appropriate parameters of the distribution.
+        """
+        return ParameterProjection(
+            in_features=in_features,
+            args_dim=self.args_dim,
+            domain_map=LambdaLayer(self.domain_map),
+        )
+
+    def domain_map(self, *args: torch.Tensor):
+        r"""
+        Converts arguments to the right shape and domain. The domain depends on the type of distribution, while the
+        correct shape is obtained by reshaping the trailing axis in such a way that the returned tensors define a
+        distribution of the right event_shape.
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def squareplus(cls, x: torch.Tensor) -> torch.Tensor:
+        r"""
+        Helper to map inputs to the positive orthant by applying the square-plus operation. Reference:
+        https://twitter.com/jon_barron/status/1387167648669048833
+        """
+        return (x + torch.sqrt(torch.square(x) + 4.0)) / 2.0
+
+
+class StudentTOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
+    distribution_class: type = StudentT
+
+    @classmethod
+    def domain_map(cls, df: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
+        scale = cls.squareplus(scale)
+        df = 2.0 + cls.squareplus(df)
+        return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
+
+
+class NormalOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"loc": 1, "scale": 1}
+    distribution_class: type = Normal
+
+    @classmethod
+    def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):
+        scale = cls.squareplus(scale)
+        return loc.squeeze(-1), scale.squeeze(-1)
+
+
+class NegativeBinomialOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"total_count": 1, "logits": 1}
+    distribution_class: type = NegativeBinomial
+
+    @classmethod
+    def domain_map(cls, total_count: torch.Tensor, logits: torch.Tensor):
+        total_count = cls.squareplus(total_count)
+        return total_count.squeeze(-1), logits.squeeze(-1)
+
+    def _base_distribution(self, distr_args) -> Distribution:
+        total_count, logits = distr_args
+        if self.dim == 1:
+            return self.distribution_class(total_count=total_count, logits=logits)
+        else:
+            return Independent(self.distribution_class(total_count=total_count, logits=logits), 1)
+
+    # Overwrites the parent class method. We cannot scale using the affine
+    # transformation since negative binomial should return integers. Instead
+    # we scale the parameters.
+    def distribution(
+        self, distr_args, loc: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None
+    ) -> Distribution:
+        total_count, logits = distr_args
+
+        if scale is not None:
+            # See scaling property of Gamma.
+            logits += scale.log()
+
+        return self._base_distribution((total_count, logits))
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
+@dataclass
+class Seq2SeqTimeSeriesModelOutput(ModelOutput):
+    """
+    Base class for model encoder's outputs that also contains pre-computed hidden states that can speed up sequential
+    decoding.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the optional initial embedding outputs.
+        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the optional initial embedding outputs.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        scale: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            Scaling values of each time series' context window which is used to give the model inputs of the same
+            magnitude and then used to rescale to the original scale.
+        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
+            Static features of each time series' in a batch which are copied to the covariates at inference time.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    scale: Optional[torch.FloatTensor] = None
+    static_features: Optional[torch.FloatTensor] = None
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
+@dataclass
+class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
+    """
+    Base class for model's predictions outputs that also contain the loss as well parameters of the chosen
+    distribution.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when a `future_values` is provided):
+            Distributional loss.
+        params (`torch.FloatTensor` of shape `(batch_size, num_samples, num_params)`):
+            Parameters of the chosen distribution.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        scale: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            Scaling values of each time series' context window which is used to give the model inputs of the same
+            magnitude and then used to rescale to the original scale.
+        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
+            Static features of each time series' in a batch which are copied to the covariates at inference time.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    params: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    scale: Optional[torch.FloatTensor] = None
+    static_features: Optional[torch.FloatTensor] = None
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
+@dataclass
+class SampleTimeSeriesPredictionOutput(ModelOutput):
+    sequences: torch.FloatTensor = None
+
 # Eli: FeatureEmbedder, MeanScaler and NOPScaler are from GlounTS (see the exact source below)
 # source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/feature.py
 class FeatureEmbedder(nn.Module):
@@ -638,74 +917,72 @@ class InformerModel(InformerPreTrainedModel):
 
     def create_network_inputs(
         self,
-        feat_static_cat: torch.Tensor,
-        feat_static_real: torch.Tensor,
+        past_values: torch.Tensor,
         past_time_features: torch.Tensor,
-        past_target: torch.Tensor,
-        past_observed_values: torch.Tensor,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
-        future_target: Optional[torch.Tensor] = None,
     ):
         # time feature
         time_feat = (
             torch.cat(
                 (
-                    past_time_features[:, self._past_length - self.config.context_length:, ...],
+                    past_time_features[:, self._past_length - self.config.context_length :, ...],
                     future_time_features,
                 ),
                 dim=1,
             )
-            if future_target is not None
-            else past_time_features[:, self._past_length - self.context_length:, ...]
+            if future_values is not None
+            else past_time_features[:, self._past_length - self.config.context_length :, ...]
         )
 
         # target
-        context = past_target[:, -self.context_length :]
-        observed_context = past_observed_values[:, -self.context_length :]
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
+        context = past_values[:, -self.config.context_length :]
+        observed_context = past_observed_mask[:, -self.config.context_length :]
         _, scale = self.scaler(context, observed_context)
 
         inputs = (
-            torch.cat((past_target, future_target), dim=1) / scale
-            if future_target is not None
-            else past_target / scale
+            torch.cat((past_values, future_values), dim=1) / scale
+            if future_values is not None
+            else past_values / scale
         )
 
         inputs_length = (
-            self._past_length + self.prediction_length
-            if future_target is not None
-            else self._past_length
+            self._past_length + self.config.prediction_length if future_values is not None else self._past_length
         )
-        assert inputs.shape[1] == inputs_length
+        try:
+            assert inputs.shape[1] == inputs_length, (
+                f"input length {inputs.shape[1]} and dynamic feature lengths {inputs_length} does not match",
+            )
+        except AssertionError as e:
+            e.args += (inputs.shape[1], inputs_length)
+            raise
 
         subsequences_length = (
-            self.context_length + self.prediction_length
-            if future_target is not None
-            else self.context_length
+            self.config.context_length + self.config.prediction_length
+            if future_values is not None
+            else self.config.context_length
         )
 
         # embeddings
-        embedded_cat = self.embedder(feat_static_cat)
-        log_scale = scale.log() if self.input_size == 1 else scale.squeeze(1).log()
-        static_feat = torch.cat(
-            (embedded_cat, feat_static_real, log_scale),
-            dim=1,
-        )
-        expanded_static_feat = static_feat.unsqueeze(1).expand(
-            -1, time_feat.shape[1], -1
-        )
+        embedded_cat = self.embedder(static_categorical_features)
+        # static features
+        log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        static_feat = torch.cat((embedded_cat, static_real_features, log_scale), dim=1)
+        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
 
+        # all features
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
 
-        # sequence = torch.cat((prior_input, inputs), dim=1)
-        lagged_sequence = self.get_lagged_subsequences(
-            sequence=inputs,
-            subsequences_length=subsequences_length,
-        )
+        lagged_sequence = self.get_lagged_subsequences(sequence=inputs, subsequences_length=subsequences_length)
 
         lags_shape = lagged_sequence.shape
-        reshaped_lagged_sequence = lagged_sequence.reshape(
-            lags_shape[0], lags_shape[1], -1
-        )
+        reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
 
         transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
 
@@ -727,102 +1004,343 @@ class InformerModel(InformerPreTrainedModel):
         return self.decoder
 
     def forward(
-        self,
-        past_values: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
-        past_time_feat: torch.Tensor,
-        past_target: torch.Tensor,
-        future_time_feat: torch.Tensor,
-        num_parallel_samples: Optional[int] = None,
-    ) -> torch.Tensor:
+            self,
+            past_values: torch.Tensor,
+            past_time_features: torch.Tensor,
+            past_observed_mask: torch.Tensor,
+            static_categorical_features: torch.Tensor,
+            static_real_features: torch.Tensor,
+            future_values: Optional[torch.Tensor] = None,
+            future_time_features: Optional[torch.Tensor] = None,
+            decoder_attention_mask: Optional[torch.LongTensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            decoder_head_mask: Optional[torch.Tensor] = None,
+            cross_attn_head_mask: Optional[torch.Tensor] = None,
+            encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            output_hidden_states: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            use_cache: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+    ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if num_parallel_samples is None:
-            num_parallel_samples = self.num_parallel_samples
-
-        encoder_inputs, scale, static_feat = self.create_network_inputs(
-            static_categorical_features,
-            static_real_features,
-            past_time_feat,
-            past_target,
-            past_values,
+        transformer_inputs, scale, static_feat = self.create_network_inputs(
+            past_values=past_values,
+            past_time_features=past_time_features,
+            past_observed_mask=past_observed_mask,
+            static_categorical_features=static_categorical_features,
+            static_real_features=static_real_features,
+            future_values=future_values,
+            future_time_features=future_time_features,
         )
 
-        enc_out, _ = self.encoder(encoder_inputs)
-
-        repeated_scale = scale.repeat_interleave(
-            repeats=self.num_parallel_samples, dim=0
-        )
-
-        repeated_past_target = (
-            past_target.repeat_interleave(repeats=self.num_parallel_samples, dim=0)
-            / repeated_scale
-        )
-
-        expanded_static_feat = static_feat.unsqueeze(1).expand(
-            -1, future_time_feat.shape[1], -1
-        )
-        features = torch.cat((expanded_static_feat, future_time_feat), dim=-1)
-        repeated_features = features.repeat_interleave(
-            repeats=self.num_parallel_samples, dim=0
-        )
-
-        repeated_enc_out = enc_out.repeat_interleave(
-            repeats=self.num_parallel_samples, dim=0
-        )
-
-        future_samples = []
-
-        # greedy decoding
-        for k in range(self.prediction_length):
-            # sequence = torch.cat((repeated_past_target, next_sample), dim=1)
-
-            lagged_sequence = self.get_lagged_subsequences(
-                sequence=repeated_past_target,
-                subsequences_length=1 + k,
-                shift=1,
+        if encoder_outputs is None:
+            enc_input = transformer_inputs[:, : self.config.context_length, ...]
+            encoder_outputs = self.encoder(
+                inputs_embeds=enc_input,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-            lags_shape = lagged_sequence.shape
-            reshaped_lagged_sequence = lagged_sequence.reshape(
-                lags_shape[0], lags_shape[1], -1
-            )
-
-            decoder_input = torch.cat(
-                (reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1
-            )
-
-            output = self.decoder(decoder_input, repeated_enc_out)
-
-            params = self.param_proj(output[:, -1:])
-            distr = self.output_distribution(params, scale=repeated_scale)
-            next_sample = distr.sample()
-
-            repeated_past_target = torch.cat(
-                (repeated_past_target, next_sample / repeated_scale), dim=1
-            )
-            future_samples.append(next_sample)
-
-        concat_future_samples = torch.cat(future_samples, dim=1)
-        return concat_future_samples.reshape(
-            (-1, self.num_parallel_samples, self.prediction_length) + self.target_shape,
+        dec_input = transformer_inputs[:, self.config.context_length:, ...]
+        decoder_outputs = self.decoder(
+            inputs_embeds=dec_input,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
-    # for prediction
+
+        if not return_dict:
+            return decoder_outputs + encoder_outputs + (scale, static_feat)
+
+        return Seq2SeqTimeSeriesModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            scale=scale,
+            static_features=static_feat,
+        )
 
 
 class InformerForPrediction(InformerPreTrainedModel):
-    def __init__(self):
-        pass
+    def __init__(self, config: InformerConfig):
+        super().__init__(config)
+        self.model = InformerModel(config)
+        if config.distribution_output == "student_t":
+            self.distribution_output = StudentTOutput(dim=config.input_size)
+        elif config.distribution_output == "normal":
+            self.distribution_output = NormalOutput(dim=config.input_size)
+        elif config.distribution_output == "negative_binomial":
+            self.distribution_output = NegativeBinomialOutput(dim=config.input_size)
+        else:
+            raise ValueError(f"Unknown distribution output {config.distribution_output}")
+
+        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.d_model)
+        self.target_shape = self.distribution_output.event_shape
+
+        if config.loss == "nll":
+            self.loss = NegativeLogLikelihood()
+        else:
+            raise ValueError(f"Unknown loss function {config.loss}")
+
+        # Initialize weights of distribution_output and apply final processing
+        self.post_init()
+
+    def output_params(self, dec_output):
+        return self.parameter_projection(dec_output)
+
+    def get_encoder(self):
+        return self.model.get_encoder()
+
+    def get_decoder(self):
+        return self.model.get_decoder()
 
     @torch.jit.ignore
     def output_distribution(self, params, scale=None, trailing_n=None) -> torch.distributions.Distribution:
         sliced_params = params
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
-        return self.distr_output.distribution(sliced_params, scale=scale)
+        return self.distribution_output.distribution(sliced_params, scale=scale)
 
+    def forward(
+        self,
+        past_values: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_observed_mask: torch.Tensor,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
+        r"""
+        Returns:
 
-class InformerForPointPrediction(InformerPreTrainedModel):
-    pass
+        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
+            This mask is used to filter out missing values for the final loss calculation.
+
+        Examples:
+
+        ```python
+        >>> from huggingface_hub import hf_hub_download
+        >>> import torch
+        >>> from transformers import TimeSeriesTransformerForPrediction
+
+        >>> file = hf_hub_download(
+        ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ... )
+        >>> batch = torch.load(file)
+
+        >>> model = TimeSeriesTransformerForPrediction.from_pretrained(
+        ...     "huggingface/time-series-transformer-tourism-monthly"
+        ... )
+
+        >>> # during training, one provides both past and future values
+        >>> # as well as possible additional features
+        >>> outputs = model(
+        ...     past_values=batch["past_values"],
+        ...     past_time_features=batch["past_time_features"],
+        ...     past_observed_mask=batch["past_observed_mask"],
+        ...     static_categorical_features=batch["static_categorical_features"],
+        ...     static_real_features=batch["static_real_features"],
+        ...     future_values=batch["future_values"],
+        ...     future_time_features=batch["future_time_features"],
+        ... )
+
+        >>> loss = outputs.loss
+        >>> loss.backward()
+
+        >>> # during inference, one only provides past values
+        >>> # as well as possible additional features
+        >>> # the model autoregressively generates future values
+        >>> outputs = model.generate(
+        ...     past_values=batch["past_values"],
+        ...     past_time_features=batch["past_time_features"],
+        ...     past_observed_mask=batch["past_observed_mask"],
+        ...     static_categorical_features=batch["static_categorical_features"],
+        ...     static_real_features=batch["static_real_features"],
+        ...     future_time_features=batch["future_time_features"],
+        ... )
+
+        >>> mean_prediction = outputs.sequences.mean(dim=1)
+        ```"""
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if future_values is not None:
+            use_cache = False
+
+        outputs = self.model(
+            past_values=past_values,
+            past_time_features=past_time_features,
+            past_observed_mask=past_observed_mask,
+            static_categorical_features=static_categorical_features,
+            static_real_features=static_real_features,
+            future_values=future_values,
+            future_time_features=future_time_features,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            return_dict=return_dict,
+        )
+
+        prediction_loss = None
+        params = None
+        if future_values is not None:
+            params = self.output_params(outputs[0])  # outputs.last_hidden_state
+            distribution = self.output_distribution(params, outputs[-2])  # outputs.scale
+
+            loss = self.loss(distribution, future_values)
+
+            if future_observed_mask is None:
+                future_observed_mask = torch.ones_like(future_values)
+
+            if len(self.target_shape) == 0:
+                loss_weights = future_observed_mask
+            else:
+                loss_weights, _ = future_observed_mask.min(dim=-1, keepdim=False)
+
+            prediction_loss = weighted_average(loss, weights=loss_weights)
+
+        if not return_dict:
+            outputs = ((params,) + outputs[1:]) if params is not None else outputs[1:]
+            return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
+
+        return Seq2SeqTimeSeriesPredictionOutput(
+            loss=prediction_loss,
+            params=params,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            scale=outputs.scale,
+            static_features=outputs.static_features,
+        )
+
+    @torch.no_grad()
+    def generate(
+        self,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_values: torch.Tensor,
+        past_observed_mask: torch.Tensor,
+        future_time_features: Optional[torch.Tensor],
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> torch.Tensor:
+        outputs = self(
+            static_categorical_features=static_categorical_features,
+            static_real_features=static_real_features,
+            past_time_features=past_time_features,
+            past_values=past_values,
+            past_observed_mask=past_observed_mask,
+            future_time_features=future_time_features,
+            future_values=None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            use_cache=True,
+        )
+
+        decoder = self.model.get_decoder()
+        enc_last_hidden = outputs.encoder_last_hidden_state
+        scale = outputs.scale
+        static_feat = outputs.static_features
+
+        num_parallel_samples = self.config.num_parallel_samples
+        repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+        repeated_past_values = past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
+
+        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_features.shape[1], -1)
+        features = torch.cat((expanded_static_feat, future_time_features), dim=-1)
+        repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+        repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+        future_samples = []
+
+        # greedy decoding
+        for k in range(self.config.prediction_length):
+            lagged_sequence = self.model.get_lagged_subsequences(
+                sequence=repeated_past_values,
+                subsequences_length=1 + k,
+                shift=1,
+            )
+
+            lags_shape = lagged_sequence.shape
+            reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
+
+            decoder_input = torch.cat((reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1)
+
+            dec_output = decoder(inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden)
+            dec_last_hidden = dec_output.last_hidden_state
+
+            params = self.parameter_projection(dec_last_hidden[:, -1:])
+            distr = self.output_distribution(params, scale=repeated_scale)
+            next_sample = distr.sample()
+
+            repeated_past_values = torch.cat((repeated_past_values, next_sample / repeated_scale), dim=1)
+            future_samples.append(next_sample)
+
+        concat_future_samples = torch.cat(future_samples, dim=1)
+
+        return SampleTimeSeriesPredictionOutput(
+            sequences=concat_future_samples.reshape(
+                (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
+            )
+        )
+
 
 
