@@ -513,8 +513,8 @@ class TFGenerationMixin:
             scores (`tuple(tf.Tensor)`):
                 Transition scores for each vocabulary token at each generation step. Beam transition scores consisting
                 of log probabilities of tokens conditioned on log softmax of previously generated tokens Tuple of
-                `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token), with
-                each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+                `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token), with each
+                tensor of shape `(batch_size*num_beams, config.vocab_size)`.
             beam_indices (`tf.Tensor`, *optional*):
                 Beam indices of generated token id at each generation step. `tf.Tensor` of shape
                 `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
@@ -589,7 +589,9 @@ class TFGenerationMixin:
 
         # 4. cut beam_indices to longest beam length
         beam_indices_mask = beam_indices < 0
-        max_beam_length = tf.math.reduce_max(tf.math.reduce_sum((1 - tf.cast(beam_indices_mask, dtype=tf.int32)), axis=-1))
+        max_beam_length = tf.math.reduce_max(
+            tf.math.reduce_sum((1 - tf.cast(beam_indices_mask, dtype=tf.int32)), axis=-1)
+        )
         beam_indices = beam_indices[:, -max_beam_length:]
         beam_indices_mask = beam_indices_mask[:, -max_beam_length:]
 
@@ -599,9 +601,8 @@ class TFGenerationMixin:
         # 6. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
         token_indices = sequences[:, cut_idx:]
-        batch_idx = tf.broadcast_to(tf.expand_dims(tf.range(scores.shape[0]), 1), token_indices.shape)
         gen_step_idx = tf.broadcast_to(tf.range(scores.shape[-1]), token_indices.shape)
-        indices = tf.stack([batch_idx, token_indices, gen_step_idx], axis=-1)
+        indices = tf.stack([beam_indices, token_indices, gen_step_idx], axis=-1)
 
         # 7. Compute scores
         transition_scores = tf.gather_nd(scores, indices)
@@ -2312,9 +2313,11 @@ class TFGenerationMixin:
             log_probs = tf.nn.log_softmax(logits)
             log_probs = logits_processor(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
             log_probs = unflatten_beam_dim(log_probs, num_beams)
+            scores_to_store = log_probs
             log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
             if do_sample:
                 log_probs = logits_warper(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
+                scores_to_store = log_probs
                 log_probs = unflatten_beam_dim(log_probs, num_beams)
             vocab_size = log_probs.shape[2]
             log_probs = tf.reshape(log_probs, (batch_size, num_beams * vocab_size))
@@ -2322,7 +2325,7 @@ class TFGenerationMixin:
             # Store scores, attentions and hidden_states when required
             if not use_xla and return_dict_in_generate:
                 if output_scores:
-                    all_scores.append(log_probs)
+                    all_scores.append(scores_to_store)
                 if output_attentions and self.config.is_encoder_decoder:
                     decoder_attentions.append(model_outputs.decoder_attentions)
                 elif output_attentions and not self.config.is_encoder_decoder:
@@ -2481,19 +2484,55 @@ class TFGenerationMixin:
             is_sent_finished,
             model_kwargs,
         ) = beam_search_body_fn(
-            cur_len, running_sequences, running_scores, running_beam_indices, sequences, scores, beam_indices, is_sent_finished, model_kwargs
+            cur_len,
+            running_sequences,
+            running_scores,
+            running_beam_indices,
+            sequences,
+            scores,
+            beam_indices,
+            is_sent_finished,
+            model_kwargs,
         )
 
         # 2-to-n generation steps can then be run in autoregressive fashion (only in case 1st generation step does
         # NOT yield EOS token though)
         if beam_search_cond_fn(
-            cur_len, running_sequences, running_scores, running_beam_indices, sequences, scores, beam_indices, is_sent_finished, model_kwargs
+            cur_len,
+            running_sequences,
+            running_scores,
+            running_beam_indices,
+            sequences,
+            scores,
+            beam_indices,
+            is_sent_finished,
+            model_kwargs,
         ):
             maximum_iterations = max_length - cur_len
-            cur_len, running_sequences, running_scores, running_beam_indices, sequences, scores, beam_indices, is_sent_finished, _ = tf.while_loop(
+            (
+                cur_len,
+                running_sequences,
+                running_scores,
+                running_beam_indices,
+                sequences,
+                scores,
+                beam_indices,
+                is_sent_finished,
+                _,
+            ) = tf.while_loop(
                 beam_search_cond_fn,
                 beam_search_body_fn,
-                (cur_len, running_sequences, running_scores, running_beam_indices, sequences, scores, beam_indices, is_sent_finished, model_kwargs),
+                (
+                    cur_len,
+                    running_sequences,
+                    running_scores,
+                    running_beam_indices,
+                    sequences,
+                    scores,
+                    beam_indices,
+                    is_sent_finished,
+                    model_kwargs,
+                ),
                 maximum_iterations=maximum_iterations,
             )
 
@@ -2502,8 +2541,11 @@ class TFGenerationMixin:
         # running sequences for that batch item.
         none_finished = tf.math.reduce_any(is_sent_finished, axis=1)
         sequences = tf.where(none_finished[:, None, None], sequences, running_sequences)
-        scores = tf.where(none_finished[:, None], scores, running_scores)
         beam_indices = tf.where(none_finished[:, None, None], beam_indices, running_beam_indices)
+
+        # Apply the length penalty so that running scores match the finalized scores if they are used
+        running_scores = running_scores / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
+        scores = tf.where(none_finished[:, None], scores, running_scores)
 
         # Take best beams for each batch (the score is sorted in descending order)
         sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
