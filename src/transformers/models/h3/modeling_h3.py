@@ -30,13 +30,14 @@ from torchvision.ops import StochasticDepth
 # TODO remove einops dependency
 from einops import rearrange
 
+
 # TODO create soft dependency
 # from flash_attn.modules.block import Block
-from flash_attn.modules.embedding import GPT2Embeddings
+# from flash_attn.modules.embedding import GPT2Embeddings
 
 # from flash_attn.modules.mha import MHA
 # from flash_attn.modules.mlp import FusedMLP, Mlp
-from flash_attn.utils.generation import GenerationMixin
+# from flash_attn.utils.generation import GenerationMixin
 
 
 try:
@@ -62,6 +63,36 @@ H3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "stanford/H3-125m",
     # See all H3 models at https://huggingface.co/models?filter=h3
 ]
+
+
+class H3Embeddings(nn.Module):
+    def __init__(self, embed_dim, vocab_size, max_position_embeddings, padding_idx=None, word_embed_proj_dim=None):
+        """
+        If max_position_embeddings <= 0, there's no position embeddings. If word_embed_proj_dim is not None (e.g.,
+        OPT-350m), we embed to that dimension the projection up to embed_dim.
+        """
+        super().__init__()
+        if word_embed_proj_dim is None:
+            self.word_embeddings = nn.Embedding(vocab_size, embed_dim, padding_idx=padding_idx)
+            self.project_in = None
+        else:
+            self.word_embeddings = nn.Embedding(vocab_size, word_embed_proj_dim, padding_idx=padding_idx)
+            self.project_in = nn.Linear(word_embed_proj_dim, embed_dim, bias=False)
+        self.max_position_embeddings = max_position_embeddings
+        if self.max_position_embeddings > 0:
+            self.position_embeddings = nn.Embedding(max_position_embeddings, embed_dim)
+
+    def forward(self, input_ids, position_ids=None):
+        seqlen = input_ids.shape[1]
+        embeddings = self.word_embeddings(input_ids)
+        if self.project_in is not None:
+            embeddings = self.project_in(embeddings)
+        if self.max_position_embeddings > 0:
+            if position_ids is None:
+                position_ids = torch.arange(seqlen, dtype=torch.long, device=input_ids.device)
+            position_embeddings = self.position_embeddings(position_ids)
+            embeddings = embeddings + position_embeddings
+        return embeddings
 
 
 def attention_pytorch(qkv, dropout_p=0.0, causal=True):
@@ -211,56 +242,56 @@ class H3Block(nn.Module):
         return hidden_states, residual
 
 
-def create_mixer_cls(config, layer_idx=None):
-    ssm_cfg = dict(mode=config.ssm_mode, measure=config.ssm_measure)
-    attn_layer_idx = config.attn_layer_idx
+# def create_mixer_cls(config, layer_idx=None):
+#     ssm_cfg = dict(mode=config.ssm_mode, measure=config.ssm_measure)
+#     attn_layer_idx = config.attn_layer_idx
 
-    if attn_layer_idx is not None and layer_idx in attn_layer_idx:
-        # attn_cfg = dict(num_heads=config.num_attention_heads)
-        # causal = True if attn_cfg is None else attn_cfg.pop("causal", True)
-        # mixer_cls = partial(MHA, layer_idx=layer_idx, causal=causal, **(attn_cfg if attn_cfg is not None else {}))
-        mixer_cls = partial(MultiHeadAttention(causal=True))
-    else:
-        mixer_cls = partial(H3, layer_idx=layer_idx, **(ssm_cfg if ssm_cfg is not None else {}))
-    return mixer_cls
-
-
-def create_mlp_cls(config):
-    inner_dim = config.n_inner if config.n_inner is not None else 4 * config.hidden_size
-    if not config.fused_mlp:
-        mlp_cls = partial(Mlp, hidden_features=inner_dim, activation=partial(nn.functional.gelu, approximate="tanh"))
-    else:
-        mlp_cls = partial(FusedMLP, hidden_features=inner_dim)
-    return mlp_cls
+#     if attn_layer_idx is not None and layer_idx in attn_layer_idx:
+#         # attn_cfg = dict(num_heads=config.num_attention_heads)
+#         # causal = True if attn_cfg is None else attn_cfg.pop("causal", True)
+#         # mixer_cls = partial(MHA, layer_idx=layer_idx, causal=causal, **(attn_cfg if attn_cfg is not None else {}))
+#         mixer_cls = partial(MultiHeadAttention(causal=True))
+#     else:
+#         mixer_cls = partial(H3, layer_idx=layer_idx, **(ssm_cfg if ssm_cfg is not None else {}))
+#     return mixer_cls
 
 
-def create_block(config, layer_idx):
-    # d_model, n_inner=None,
-    # ssm_cfg=None, attn_layer_idx=None,
-    # attn_cfg=None, layer_norm_epsilon=1e-5,
-    # resid_dropout1=0.0, resid_dropout2=0.0, residual_in_fp32=False,
-    # fused_mlp=False, fused_dropout_add_ln=False, layer_idx=None):
-    fused_dropout_add_ln = config.fused_dropout_add_ln
-    if fused_dropout_add_ln and dropout_add_layer_norm is None:
-        raise ImportError("dropout_add_layer_norm is not installed")
+# def create_mlp_cls(config):
+#     inner_dim = config.n_inner if config.n_inner is not None else 4 * config.hidden_size
+#     if not config.fused_mlp:
+#         mlp_cls = partial(Mlp, hidden_features=inner_dim, activation=partial(nn.functional.gelu, approximate="tanh"))
+#     else:
+#         mlp_cls = partial(FusedMLP, hidden_features=inner_dim)
+#     return mlp_cls
 
-    # a block consists of a mixer class, an MLP and a layernorm class
-    mixer_cls = create_mixer_cls(config, layer_idx=layer_idx)
-    mlp_cls = create_mlp_cls(config)
-    norm_cls = partial(nn.LayerNorm, eps=config.layer_norm_epsilon)
-    block = Block(
-        config.hidden_size,
-        mixer_cls,
-        mlp_cls,
-        norm_cls=norm_cls,
-        prenorm=True,
-        resid_dropout1=config.embedding_dropout if layer_idx == 0 else config.residual_dropout,
-        resid_dropout2=config.residual_dropout,
-        fused_dropout_add_ln=fused_dropout_add_ln,
-        residual_in_fp32=config.residual_in_fp32,
-    )
-    block.layer_idx = layer_idx
-    return block
+
+# def create_block(config, layer_idx):
+#     # d_model, n_inner=None,
+#     # ssm_cfg=None, attn_layer_idx=None,
+#     # attn_cfg=None, layer_norm_epsilon=1e-5,
+#     # resid_dropout1=0.0, resid_dropout2=0.0, residual_in_fp32=False,
+#     # fused_mlp=False, fused_dropout_add_ln=False, layer_idx=None):
+#     fused_dropout_add_ln = config.fused_dropout_add_ln
+#     if fused_dropout_add_ln and dropout_add_layer_norm is None:
+#         raise ImportError("dropout_add_layer_norm is not installed")
+
+#     # a block consists of a mixer class, an MLP and a layernorm class
+#     mixer_cls = create_mixer_cls(config, layer_idx=layer_idx)
+#     mlp_cls = create_mlp_cls(config)
+#     norm_cls = partial(nn.LayerNorm, eps=config.layer_norm_epsilon)
+#     block = Block(
+#         config.hidden_size,
+#         mixer_cls,
+#         mlp_cls,
+#         norm_cls=norm_cls,
+#         prenorm=True,
+#         resid_dropout1=config.embedding_dropout if layer_idx == 0 else config.residual_dropout,
+#         resid_dropout2=config.residual_dropout,
+#         fused_dropout_add_ln=fused_dropout_add_ln,
+#         residual_in_fp32=config.residual_in_fp32,
+#     )
+#     block.layer_idx = layer_idx
+#     return block
 
 
 class H3PreTrainedModel(PreTrainedModel):
@@ -403,7 +434,7 @@ class H3Model(H3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.embeddings = GPT2Embeddings(config.hidden_size, config.vocab_size, 0)
+        self.embeddings = H3Embeddings(config.hidden_size, config.vocab_size, 0)
         self.residual_in_fp32 = config.residual_in_fp32
 
         self.blocks = nn.ModuleList(
@@ -567,7 +598,7 @@ class H3Model(H3PreTrainedModel):
     """,
     H3_START_DOCSTRING,
 )
-class H3ForCausalLM(H3PreTrainedModel, GenerationMixin):
+class H3ForCausalLM(H3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config):
