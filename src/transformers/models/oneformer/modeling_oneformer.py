@@ -1633,7 +1633,9 @@ class OneFormerAttention(nn.Module):
 
 
 class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
-    def __init__(self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False, layer_norm_eps=1e-05):
+    def __init__(
+        self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False, layer_norm_eps=1e-05
+    ):
         super().__init__()
         self.self_attn = OneFormerAttention(embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, is_decoder=True)
 
@@ -1689,7 +1691,9 @@ class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
 
 
 class OneFormerTransformerDecoderCrossAttentionLayer(nn.Module):
-    def __init__(self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False, layer_norm_eps=1e-05):
+    def __init__(
+        self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False, layer_norm_eps=1e-05
+    ):
         super().__init__()
         self.multihead_attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout)
 
@@ -1759,7 +1763,15 @@ class OneFormerTransformerDecoderCrossAttentionLayer(nn.Module):
 
 
 class OneFormerTransformerDecoderFFNLayer(nn.Module):
-    def __init__(self, d_model, dim_feedforward=2048, dropout=0.0, activation="relu", normalize_before=False, layer_norm_eps=1e-05):
+    def __init__(
+        self,
+        d_model,
+        dim_feedforward=2048,
+        dropout=0.0,
+        activation="relu",
+        normalize_before=False,
+        layer_norm_eps=1e-05,
+    ):
         super().__init__()
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
@@ -2487,7 +2499,14 @@ class OneFormerTextTransformerDecoderLayer(nn.Module):
 
 class OneFormerTextContextDecoder(nn.Module):
     def __init__(
-        self, transformer_width=256, transformer_heads=4, transformer_layers=6, visual_dim=1024, dropout=0.1, layer_norm_eps=1e-05, **kwargs
+        self,
+        transformer_width=256,
+        transformer_heads=4,
+        transformer_layers=6,
+        visual_dim=1024,
+        dropout=0.1,
+        layer_norm_eps=1e-05,
+        **kwargs
     ):
         super().__init__()
 
@@ -2509,7 +2528,9 @@ class OneFormerTextContextDecoder(nn.Module):
             ]
         )
 
-        self.out_proj = nn.Sequential(nn.LayerNorm(transformer_width, eps=layer_norm_eps), nn.Linear(transformer_width, visual_dim))
+        self.out_proj = nn.Sequential(
+            nn.LayerNorm(transformer_width, eps=layer_norm_eps), nn.Linear(transformer_width, visual_dim)
+        )
 
     def forward(self, text, visual):
         visual = self.memory_proj(visual)
@@ -2578,11 +2599,21 @@ class OneFormerTextTransformerLayer(nn.Module):
 
 
 class OneFormerTextTransformer(nn.Module):
-    def __init__(self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, use_checkpoint=False, layer_norm_eps=1e-05):
+    def __init__(
+        self,
+        width: int,
+        layers: int,
+        heads: int,
+        attn_mask: torch.Tensor = None,
+        use_checkpoint=False,
+        layer_norm_eps=1e-05,
+    ):
         super().__init__()
         self.width = width
         self.num_layers = layers
-        self.layers = nn.Sequential(*[OneFormerTextTransformerLayer(width, heads, attn_mask, layer_norm_eps) for _ in range(layers)])
+        self.layers = nn.Sequential(
+            *[OneFormerTextTransformerLayer(width, heads, attn_mask, layer_norm_eps) for _ in range(layers)]
+        )
         self.use_checkpoint = use_checkpoint
 
     def forward(self, hidden_states: torch.Tensor):
