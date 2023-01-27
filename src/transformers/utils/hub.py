@@ -630,8 +630,8 @@ class PushToHubMixin:
         organization: Optional[str] = None,
     ):
         """
-        Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves the
-        token.
+        Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
+        the token.
         """
         if repo_url is not None:
             warnings.warn(
