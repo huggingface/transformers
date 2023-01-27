@@ -1067,11 +1067,11 @@ class TFRobertaPreLayerNormLMHead(tf.keras.layers.Layer):
 @add_start_docstrings(
     """RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
 )
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
 class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
 
+    # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM.__init__ with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1097,6 +1097,7 @@ class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFM
         expected_output="' Paris'",
         expected_loss=0.69,
     )
+    # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM.call with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
