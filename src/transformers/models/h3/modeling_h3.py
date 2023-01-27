@@ -24,9 +24,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-# TODO remove einops dependency
-from einops import rearrange
-
 # custom kernel
 from src.models.h3 import H3
 
@@ -153,12 +150,12 @@ def attention_pytorch(qkv, dropout_p=0.0, causal=True):
     # permute keys from (batch_size, seq_len, num_heads, head_dim) to (batch_size, num_heads, head_dim, seq_len)
     keys = keys.permute(0, 2, 3, 1)
     keys = keys.reshape(batch_size*num_heads, head_dim, seq_len)
-    # q = rearrange(q, "b t h d -> (b h) t d")
-    # k = rearrange(k, "b s h d -> (b h) d s")
+    
     softmax_scale = 1.0 / math.sqrt(d)
     # Preallocate attn_weights for `baddbmm`
     scores = torch.empty(batch_size * nheads, seqlen, seqlen, dtype=qkv.dtype, device=qkv.device)
-    scores = rearrange(torch.baddbmm(scores, queries, keys, beta=0, alpha=softmax_scale), "(b h) t s -> b h t s", h=nheads)
+    scores = torch.baddbmm(scores, queries, keys, beta=0, alpha=softmax_scale)
+    scores = scores.reshape(batch_size, num_heads, seq_len, seq_len)
     if causal:
         # "triu_tril_cuda_template" not implemented for 'BFloat16'
         # So we have to construct the mask in float
@@ -195,11 +192,9 @@ class MultiHeadAttention(nn.Module):
         qkv = self.Wqkv(hidden_states)
         batch_size, seq_len, hidden_size = qkv.shape
         qkv = qkv.reshape(batch_size, seq_len, 3, self.num_heads, hidden_size // 3 // self.num_heads)
-        # qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
         context, attn_weights = attention_pytorch(qkv, dropout_p=self.attention_dropout, causal=self.causal)
         # TODO support outputting attention weights
         context = context.reshape(batch_size, seq_len, -1)
-        # output = rearrange(context, "b s h d -> b s (h d)"))
 
         output = self.out_proj(context)
 
