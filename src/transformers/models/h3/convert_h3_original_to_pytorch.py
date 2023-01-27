@@ -86,16 +86,27 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
     config.use_cache = False
     model = H3ForCausalLM(config)
     model.load_state_dict(state_dict)
+    model.eval()
 
-    # TODO assert values
+    # verify logits
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    input_ids = torch.tensor([[101]], device=device)
+    model.to(device)
+
+    with torch.no_grad():
+        outputs = model(input_ids)
+        logits = outputs.logits
+    
+    print("Logits:", logits[0,:3,:3])
+    expected_slice = torch.tensor([[5.9570, 7.0703, 4.4727]], device=device)
+    assert torch.allclose(logits[0,0,:3], expected_slice, atol=1e-2)
+
     print("Generating text...")
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     inputs = tokenizer("I enjoy walking with my cute dog", return_tensors="pt").to(device)
     input_ids = inputs.input_ids
     max_length = input_ids.shape[1] + 128
 
-    model.to(device)
     outputs = model.generate(input_ids=input_ids, max_length=max_length)
 
     print(tokenizer.decode(outputs[0], skip_special_tokens=True))
