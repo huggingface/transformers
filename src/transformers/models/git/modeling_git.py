@@ -1048,7 +1048,8 @@ class GitProjection(nn.Module):
         super().__init__()
         self.config = config
         self.visual_projection = nn.Sequential(
-            nn.Linear(config.vision_config.hidden_size, config.hidden_size), nn.LayerNorm(config.hidden_size, eps=config.vision_config.layer_norm_eps)
+            nn.Linear(config.vision_config.hidden_size, config.hidden_size),
+            nn.LayerNorm(config.hidden_size, eps=config.vision_config.layer_norm_eps),
         )
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
