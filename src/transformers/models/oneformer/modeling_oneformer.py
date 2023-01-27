@@ -2155,6 +2155,7 @@ class OneFormerTransformerDecoder(nn.Module):
             num_decoder_layers=config.query_dec_layers,
             normalize_before=config.pre_norm,
             return_intermediate_dec=False,
+            layer_norm_eps=config.layer_norm_eps,
         )
 
         self.decoder_norm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
@@ -2613,6 +2614,7 @@ class OneFormerTextEncoder(nn.Module):
             heads=heads,
             attn_mask=self.build_attention_mask(),
             use_checkpoint=use_checkpoint,
+            layer_norm_eps=layer_norm_eps,
         )
 
         self.positional_embedding = nn.Parameter(torch.empty(self.context_length, width))
@@ -2647,6 +2649,7 @@ class OneFormerTextMapper(nn.Module):
             width=config.text_encoder_width,
             layers=config.text_encoder_num_layers,
             vocab_size=config.text_encoder_vocab_size,
+            layer_norm_eps=config.layer_norm_eps,
         )
 
         self.text_projector = OneFormerMLPPredictionHead(
