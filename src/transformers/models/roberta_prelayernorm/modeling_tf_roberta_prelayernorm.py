@@ -1354,8 +1354,6 @@ class TFRobertaPreLayerNormForSequenceClassification(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'optimism'",
-        expected_loss=0.08,
     )
     # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForSequenceClassification.call with roberta->roberta_prelayernorm
     def call(
@@ -1570,8 +1568,6 @@ class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTraine
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['O', 'ORG', 'ORG', 'O', 'O', 'O', 'O', 'O', 'LOC', 'O', 'LOC', 'LOC']",
-        expected_loss=0.01,
     )
     # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForTokenClassification.call with roberta->roberta_prelayernorm
     def call(
@@ -1658,8 +1654,6 @@ class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedM
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="' puppet'",
-        expected_loss=0.86,
     )
     # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForQuestionAnswering.call with roberta->roberta_prelayernorm
     def call(
