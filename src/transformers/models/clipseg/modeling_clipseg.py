@@ -1181,7 +1181,6 @@ class CLIPSegDecoderLayer(nn.Module):
         self.mlp = CLIPSegMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.vision_config.layer_norm_eps)
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer.forward with CLIP->CLIPSeg
     def forward(
         self,
         hidden_states: torch.Tensor,
