@@ -189,7 +189,12 @@ class MultiHeadAttention(nn.Module):
         # qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
         context, attn_weights = attention_pytorch(qkv, dropout_p=self.attention_dropout, causal=self.causal)
         # TODO support outputting attention weights
-        return self.out_proj(rearrange(context, "b s h d -> b s (h d)"))
+        context = context.reshape(batch_size, seq_len, -1)
+        # output = rearrange(context, "b s h d -> b s (h d)"))
+
+        output = self.out_proj(context)
+
+        return output
 
 
 class H3MLP(nn.Module):
