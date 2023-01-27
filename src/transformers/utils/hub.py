@@ -625,7 +625,7 @@ class PushToHubMixin:
         self,
         repo_id: str,
         private: Optional[bool] = None,
-        token: Optional[Union[bool, str]] = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
     ):
@@ -649,11 +649,11 @@ class PushToHubMixin:
                     repo_id = repo_id.split("/")[-1]
                 repo_id = f"{organization}/{repo_id}"
 
-        url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
+        url = create_repo(repo_id=repo_id, token=use_auth_token, private=private, exist_ok=True)
 
         # If the namespace is not there, add it or `upload_file` will complain
         if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":
-            repo_id = get_full_repo_name(repo_id, token=token)
+            repo_id = get_full_repo_name(repo_id, token=use_auth_token)
         return repo_id
 
     def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
@@ -768,7 +768,7 @@ class PushToHubMixin:
             working_dir = repo_id.split("/")[-1]
 
         repo_id = self._create_repo(
-            repo_id, private=private, token=use_auth_token, repo_url=repo_url, organization=organization
+            repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
         )
 
         if use_temp_dir is None:
