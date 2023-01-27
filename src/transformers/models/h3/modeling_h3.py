@@ -132,10 +132,11 @@ class H3Embeddings(nn.Module):
 
 def attention_pytorch(qkv, dropout_p=0.0, causal=True):
     """
-    Arguments:
+    Args:
         qkv: (batch_size, seqlen, 3, nheads, head_dim)
         dropout_p: float
-    Output:
+    
+    Returns:
         output: (batch_size, seqlen, nheads, head_dim)
     """
     batch_size, seqlen, _, nheads, d = qkv.shape
