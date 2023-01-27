@@ -178,6 +178,7 @@ jobs:
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
             - run: python utils/update_metadata.py --check-only
+            - run: python utils/check_task_guides.py
 
 workflows:
     version: 2
