@@ -96,10 +96,10 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
     with torch.no_grad():
         outputs = model(input_ids)
         logits = outputs.logits
-    
-    print("Logits:", logits[0,:3,:3])
+
+    print("Logits:", logits[0, :3, :3])
     expected_slice = torch.tensor([[5.9570, 7.0703, 4.4727]], device=device)
-    assert torch.allclose(logits[0,0,:3], expected_slice, atol=1e-2)
+    assert torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-2)
 
     print("Generating text...")
     tokenizer = AutoTokenizer.from_pretrained("gpt2")

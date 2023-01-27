@@ -24,10 +24,17 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+# TODO remove torchvision dependency
+from torchvision.ops import StochasticDepth
+
+# TODO remove einops dependency
+from einops import rearrange
+
 # TODO create soft dependency
 from flash_attn.modules.block import Block
 from flash_attn.modules.embedding import GPT2Embeddings
-from flash_attn.modules.mha import MHA
+
+# from flash_attn.modules.mha import MHA
 from flash_attn.modules.mlp import FusedMLP, Mlp
 from flash_attn.utils.generation import GenerationMixin
 
@@ -57,14 +64,134 @@ H3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+def attention_pytorch(qkv, dropout_p=0.0, causal=True):
+    """
+    Arguments:
+        qkv: (batch_size, seqlen, 3, nheads, head_dim)
+        dropout_p: float
+    Output:
+        output: (batch_size, seqlen, nheads, head_dim)
+    """
+    batch_size, seqlen, _, nheads, d = qkv.shape
+    q, k, v = qkv.unbind(dim=2)
+    q = rearrange(q, "b t h d -> (b h) t d")
+    k = rearrange(k, "b s h d -> (b h) d s")
+    softmax_scale = 1.0 / math.sqrt(d)
+    # Preallocate attn_weights for `baddbmm`
+    scores = torch.empty(batch_size * nheads, seqlen, seqlen, dtype=qkv.dtype, device=qkv.device)
+    scores = rearrange(torch.baddbmm(scores, q, k, beta=0, alpha=softmax_scale), "(b h) t s -> b h t s", h=nheads)
+    if causal:
+        # "triu_tril_cuda_template" not implemented for 'BFloat16'
+        # So we have to construct the mask in float
+        causal_mask = torch.triu(torch.full((seqlen, seqlen), -10000.0, device=scores.device), 1)
+        # TD [2022-09-30]: Adding is faster than masked_fill_ (idk why, just better kernel I guess)
+        scores = scores + causal_mask.to(dtype=scores.dtype)
+    attention = torch.softmax(scores, dim=-1)
+    attention_drop = nn.functional.dropout(attention, dropout_p)
+    output = torch.einsum("bhts,bshd->bthd", attention_drop, v)
+    return output.to(dtype=qkv.dtype), scores
+
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, config, bias=True, attention_dropout=0.0, causal=False):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.attention_dropout = attention_dropout
+        self.num_heads = config.num_attention_heads
+        self.causal = causal
+
+        assert self.embed_dim % self.num_heads == 0, "self.embed_dim must be divisible by num_heads"
+        self.head_dim = self.embed_dim // self.num_heads
+        assert self.head_dim % 8 == 0 and self.head_dim <= 128, "Only support head_dim <= 128 and divisible by 8"
+
+        self.Wqkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=bias)
+        # self.inner_attn = FlashAttention(attention_dropout=attention_dropout, **factory_kwargs)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias)
+
+    def forward(self, hidden_states):
+        """
+        Args:
+            hidden_states: (batch, seqlen, hidden_dim) (where hidden_dim = num heads * head dim)
+        """
+        qkv = self.Wqkv(hidden_states)
+        qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
+        context, attn_weights = attention_pytorch(qkv, dropout_p=self.attention_dropout, causal=self.causal)
+        # TODO support outputting attention weights
+        return self.out_proj(rearrange(context, "b s h d -> b s (h d)"))
+
+
+class H3Block(nn.Module):
+    """
+    Supports either multi-head attention or H3 as mixer class.
+
+    Based on:
+    https://github.com/HazyResearch/flash-attention/blob/6b4a48218edb55fb67e087f4df8d7ba4711e75bb/flash_attn/modules/block.py#L22.
+    """
+
+    def __init__(
+        self,
+        config,
+        layer_idx,
+        resid_dropout1=0.0,
+        resid_dropout2=0.0,
+        drop_path1=0.0,
+        drop_path2=0.0,
+        residual_in_fp32=False,
+    ):
+        super().__init__()
+        self.residual_in_fp32 = residual_in_fp32
+
+        if layer_idx in config.attn_layer_idx:
+            self.mixer = MultiHeadAttention(config, causal=True)
+        else:
+            self.mixer = H3(
+                d_model=config.hidden_size, layer_idx=layer_idx, mode=config.ssm_mode, measure=config.ssm_measure
+            )
+        self.dropout1 = nn.Dropout(resid_dropout1)
+        self.drop_path1 = StochasticDepth(drop_path1, mode="row")
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        inner_dim = config.n_inner if config.n_inner is not None else 4 * config.hidden_size
+        self.mlp = partial(Mlp, hidden_features=inner_dim, activation=partial(nn.functional.gelu, approximate="tanh"))(
+            config.hidden_size
+        )
+        self.dropout2 = nn.Dropout(resid_dropout2)
+        self.drop_path2 = StochasticDepth(drop_path2, mode="row")
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+
+    def forward(self, hidden_states, residual):
+        # 1. apply prenorm
+        dropped = self.drop_path1(self.dropout1(hidden_states))
+        residual = (dropped + residual) if residual is not None else dropped
+        hidden_states = self.norm1(residual.to(dtype=self.norm1.weight.dtype))
+
+        if self.residual_in_fp32:
+            residual = residual.to(torch.float32)
+
+        # 2. apply mixer
+        hidden_states = self.mixer(hidden_states)
+
+        # 3. apply second norm
+        dropped = self.drop_path2(self.dropout2(hidden_states))
+        residual = (dropped + residual) if residual is not None else dropped
+        hidden_states = self.norm2(residual.to(dtype=self.norm2.weight.dtype))
+        if self.residual_in_fp32:
+            residual = residual.to(torch.float32)
+
+        # 4. apply MLP
+        hidden_states = self.mlp(hidden_states)
+
+        return hidden_states, residual
+
+
 def create_mixer_cls(config, layer_idx=None):
     ssm_cfg = dict(mode=config.ssm_mode, measure=config.ssm_measure)
     attn_layer_idx = config.attn_layer_idx
-    attn_cfg = dict(num_heads=config.num_attention_heads)
 
     if attn_layer_idx is not None and layer_idx in attn_layer_idx:
-        causal = True if attn_cfg is None else attn_cfg.pop("causal", True)
-        mixer_cls = partial(MHA, layer_idx=layer_idx, causal=causal, **(attn_cfg if attn_cfg is not None else {}))
+        # attn_cfg = dict(num_heads=config.num_attention_heads)
+        # causal = True if attn_cfg is None else attn_cfg.pop("causal", True)
+        # mixer_cls = partial(MHA, layer_idx=layer_idx, causal=causal, **(attn_cfg if attn_cfg is not None else {}))
+        mixer_cls = partial(MultiHeadAttention(causal=True))
     else:
         mixer_cls = partial(H3, layer_idx=layer_idx, **(ssm_cfg if ssm_cfg is not None else {}))
     return mixer_cls
@@ -251,7 +378,17 @@ class H3Model(H3PreTrainedModel):
         self.embeddings = GPT2Embeddings(config.hidden_size, config.vocab_size, 0)
         self.residual_in_fp32 = config.residual_in_fp32
 
-        self.blocks = nn.ModuleList([create_block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.blocks = nn.ModuleList(
+            [
+                H3Block(
+                    config,
+                    layer_idx=i,
+                    resid_dropout1=config.embedding_dropout if i == 0 else config.residual_dropout,
+                    resid_dropout2=config.residual_dropout,
+                )
+                for i in range(config.num_hidden_layers)
+            ]
+        )
         self.final_dropout = nn.Dropout(config.residual_dropout)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
@@ -314,7 +451,7 @@ class H3Model(H3PreTrainedModel):
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
-        for block in self.blocks:
+        for i, block in enumerate(self.blocks):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -342,7 +479,8 @@ class H3Model(H3PreTrainedModel):
             else:
                 # print("Hidden states before block:", hidden_states.shape)
                 # print("Residual before block:", residual)
-                hidden_states, residual = block(hidden_states, residual, mixer_kwargs=None)
+                # print("Block:", i)
+                hidden_states, residual = block(hidden_states, residual)
 
             # hidden_states = outputs[0]
             # if use_cache is True:
