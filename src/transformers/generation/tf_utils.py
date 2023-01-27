@@ -2313,22 +2313,24 @@ class TFGenerationMixin:
             # 2. Compute log probs
             # get log probabilities from logits, process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
-            log_probs = tf.nn.log_softmax(logits)
-            log_probs = logits_processor(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
-            log_probs = unflatten_beam_dim(log_probs, num_beams)
-            scores_to_store = log_probs
-            log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
+            token_log_probs = tf.nn.log_softmax(logits)
+            token_log_probs = logits_processor(
+                flatten_beam_dim(running_sequences), flatten_beam_dim(token_log_probs), cur_len
+            )
+            token_log_probs = unflatten_beam_dim(token_log_probs, num_beams)
             if do_sample:
-                log_probs = logits_warper(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
-                scores_to_store = log_probs
-                log_probs = unflatten_beam_dim(log_probs, num_beams)
+                token_log_probs = logits_warper(
+                    flatten_beam_dim(running_sequences), flatten_beam_dim(token_log_probs), cur_len
+                )
+                token_log_probs = unflatten_beam_dim(token_log_probs, num_beams)
+            log_probs = token_log_probs + tf.expand_dims(running_scores, axis=2)
             vocab_size = log_probs.shape[2]
             log_probs = tf.reshape(log_probs, (batch_size, num_beams * vocab_size))
 
             # Store scores, attentions and hidden_states when required
             if not use_xla and return_dict_in_generate:
                 if output_scores:
-                    all_scores.append(scores_to_store)
+                    all_scores.append(token_log_probs)
                 if output_attentions and self.config.is_encoder_decoder:
                     decoder_attentions.append(model_outputs.decoder_attentions)
                 elif output_attentions and not self.config.is_encoder_decoder:
@@ -2373,10 +2375,15 @@ class TFGenerationMixin:
                 indices=update_indices,
                 updates=tf.reshape(topk_ids, [batch_size * beams_to_keep]),
             )
+
+            # we want to store the beam indices with batch information -> real beam index = beam index % num beams
+            batch_modified_indices = topk_current_beam_indices + tf.broadcast_to(
+                tf.expand_dims(tf.range(batch_size) * num_beams, axis=1), topk_current_beam_indices.shape
+            )
             topk_beam_indices = tf.tensor_scatter_nd_update(
                 tensor=topk_running_beam_indices,
                 indices=update_indices,
-                updates=tf.reshape(topk_current_beam_indices, [batch_size * beams_to_keep]),
+                updates=tf.reshape(batch_modified_indices, [batch_size * beams_to_keep]),
             )
 
             # 4. Check which sequences have ended

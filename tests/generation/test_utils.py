@@ -2222,10 +2222,10 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     def test_transition_scores_greedy_search(self):
         articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2", padding_side="left")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model = GPT2LMHeadModel.from_pretrained("distilgpt2").to(torch_device)
 
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(
@@ -2240,18 +2240,18 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores)
         expected_scores = np.array(
             [
-                [0.3596273, 0.39646253, 0.46157718, 0.4594633, 0.44866616],
-                [0.34934354, 0.4935004, 0.6373219, 0.5173545, 0.57517034],
+                [-57.8844, -60.45698, -70.16364, -65.50791, -66.35648],
+                [-54.417572, -60.216614, -62.661243, -58.621933, -58.298683],
             ]
         )
         self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
 
     def test_transition_scores_greedy_search_normalized(self):
         articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2", padding_side="left")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model = GPT2LMHeadModel.from_pretrained("distilgpt2").to(torch_device)
 
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(
@@ -2266,8 +2266,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
         expected_scores = np.array(
             [
-                [-6.5532393, -6.5158753, -6.451863, -6.4527144, -6.459402],
-                [-6.5685124, -6.4277077, -6.282607, -6.399295, -6.340927],
+                [-2.538938, -2.2694316, -2.1580915, -1.572299, -2.6719835],
+                [-1.8826028, -2.2461371, -1.7556462, -2.9644494, -1.7996008],
             ]
         )
         self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
