@@ -31,7 +31,6 @@ import huggingface_hub
 import requests
 from huggingface_hub import (
     CommitOperationAdd,
-    HfFolder,
     create_commit,
     create_repo,
     get_hf_file_metadata,
@@ -45,6 +44,7 @@ from huggingface_hub.utils import (
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+    build_hf_headers,
     hf_raise_for_status,
 )
 from requests.exceptions import HTTPError
@@ -583,7 +583,7 @@ def has_file(
     use_auth_token: Optional[Union[bool, str]] = None,
 ):
     """
-    Checks if a repo contains a given file wihtout downloading it. Works for remote repos and local folders.
+    Checks if a repo contains a given file without downloading it. Works for remote repos and local folders.
 
     <Tip warning={false}>
 
@@ -596,15 +596,7 @@ def has_file(
         return os.path.isfile(os.path.join(path_or_repo, filename))
 
     url = hf_hub_url(path_or_repo, filename=filename, revision=revision)
-
-    headers = {"user-agent": http_user_agent()}
-    if isinstance(use_auth_token, str):
-        headers["authorization"] = f"Bearer {use_auth_token}"
-    elif use_auth_token:
-        token = HfFolder.get_token()
-        if token is None:
-            raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
-        headers["authorization"] = f"Bearer {token}"
+    headers = build_hf_headers(use_auth_token=use_auth_token, user_agent=http_user_agent())
 
     r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
     try:
@@ -636,10 +628,10 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
-    ):
+    ) -> str:
         """
-        Create the repo if needed, cleans up repo_id with deprecated kwards `repo_url` and `organization`, retrives the
-        token.
+        Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
+        the token.
         """
         if repo_url is not None:
             warnings.warn(
@@ -657,13 +649,12 @@ class PushToHubMixin:
                     repo_id = repo_id.split("/")[-1]
                 repo_id = f"{organization}/{repo_id}"
 
-        token = HfFolder.get_token() if use_auth_token is True else use_auth_token
-        url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
+        url = create_repo(repo_id=repo_id, token=use_auth_token, private=private, exist_ok=True)
 
         # If the namespace is not there, add it or `upload_file` will complain
         if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":
-            repo_id = get_full_repo_name(repo_id, token=token)
-        return repo_id, token
+            repo_id = get_full_repo_name(repo_id, token=use_auth_token)
+        return repo_id
 
     def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
         """
@@ -677,7 +668,7 @@ class PushToHubMixin:
         repo_id: str,
         files_timestamps: Dict[str, float],
         commit_message: Optional[str] = None,
-        token: Optional[str] = None,
+        token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
     ):
         """
@@ -776,7 +767,7 @@ class PushToHubMixin:
         else:
             working_dir = repo_id.split("/")[-1]
 
-        repo_id, token = self._create_repo(
+        repo_id = self._create_repo(
             repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
         )
 
@@ -790,13 +781,16 @@ class PushToHubMixin:
             self.save_pretrained(work_dir, max_shard_size=max_shard_size)
 
             return self._upload_modified_files(
-                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=token, create_pr=create_pr
+                work_dir,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=use_auth_token,
+                create_pr=create_pr,
             )
 
 
 def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
-    if token is None:
-        token = HfFolder.get_token()
     if organization is None:
         username = whoami(token)["name"]
         return f"{username}/{model_id}"
@@ -1040,8 +1034,6 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
             cache_dir = str(old_cache)
         else:
             cache_dir = new_cache_dir
-    if token is None:
-        token = HfFolder.get_token()
     cached_files = get_all_cached_files(cache_dir=cache_dir)
     logger.info(f"Moving {len(cached_files)} files to the new cache system")
 
@@ -1050,7 +1042,7 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
         url = file_info.pop("url")
         if url not in hub_metadata:
             try:
-                hub_metadata[url] = get_hf_file_metadata(url, use_auth_token=token)
+                hub_metadata[url] = get_hf_file_metadata(url, token=token)
             except requests.HTTPError:
                 continue
 
