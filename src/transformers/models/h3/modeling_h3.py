@@ -31,11 +31,11 @@ from torchvision.ops import StochasticDepth
 from einops import rearrange
 
 # TODO create soft dependency
-from flash_attn.modules.block import Block
+# from flash_attn.modules.block import Block
 from flash_attn.modules.embedding import GPT2Embeddings
 
 # from flash_attn.modules.mha import MHA
-from flash_attn.modules.mlp import FusedMLP, Mlp
+# from flash_attn.modules.mlp import FusedMLP, Mlp
 from flash_attn.utils.generation import GenerationMixin
 
 
@@ -120,6 +120,32 @@ class MultiHeadAttention(nn.Module):
         return self.out_proj(rearrange(context, "b s h d -> b s (h d)"))
 
 
+class H3MLP(nn.Module):
+    def __init__(
+        self,
+        in_features,
+        hidden_features=None,
+        out_features=None,
+        activation=nn.functional.gelu,
+        return_residual=False,
+        device=None,
+        dtype=None,
+    ):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.return_residual = return_residual
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.activation = activation
+        self.fc2 = nn.Linear(hidden_features, out_features)
+
+    def forward(self, x):
+        y = self.fc1(x)
+        y = self.activation(y)
+        y = self.fc2(y)
+        return y if not self.return_residual else (y, x)
+
+
 class H3Block(nn.Module):
     """
     Supports either multi-head attention or H3 as mixer class.
@@ -151,8 +177,10 @@ class H3Block(nn.Module):
         self.drop_path1 = StochasticDepth(drop_path1, mode="row")
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.hidden_size
-        self.mlp = partial(Mlp, hidden_features=inner_dim, activation=partial(nn.functional.gelu, approximate="tanh"))(
-            config.hidden_size
+        self.mlp = H3MLP(
+            in_features=config.hidden_size,
+            hidden_features=inner_dim,
+            activation=partial(nn.functional.gelu, approximate="tanh"),
         )
         self.dropout2 = nn.Dropout(resid_dropout2)
         self.drop_path2 = StochasticDepth(drop_path2, mode="row")
