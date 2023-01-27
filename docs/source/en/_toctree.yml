@@ -44,6 +44,8 @@
       title: Use tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: Inference for multilingual models
+    - local: generation_strategies
+      title: Text generation strategies
     - sections:
       - local: tasks/sequence_classification
         title: Text classification
@@ -73,6 +75,10 @@
       title: Image classification
     - local: tasks/semantic_segmentation
       title: Semantic segmentation
+    - local: tasks/video_classification
+      title: Video classification
+    - local: tasks/object_detection
+      title: Object detection
     title: Computer Vision
   - sections:
     - local: performance
@@ -105,6 +111,8 @@
       title: Debugging
     - local: hpo_train
       title: Hyperparameter Search using Trainer API
+    - local: tf_xla
+      title: XLA Integration for TensorFlow Models
     title: Performance and scalability
   - sections:
     - local: contributing
@@ -135,7 +143,7 @@
   - local: glossary
     title: Glossary
   - local: task_summary
-    title: Summary of the tasks
+    title: What 🤗 Transformers can do
   - local: model_summary
     title: Summary of the models
   - local: tokenizer_summary
@@ -349,6 +357,8 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roberta-prelayernorm
+        title: RoBERTa-PreLayerNorm
       - local: model_doc/roc_bert
         title: RoCBert
       - local: model_doc/roformer
@@ -410,12 +420,16 @@
         title: DiT
       - local: model_doc/dpt
         title: DPT
+      - local: model_doc/efficientformer
+        title: EfficientFormer
       - local: model_doc/glpn
         title: GLPN
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/mask2former
+        title: Mask2Former
       - local: model_doc/maskformer
         title: MaskFormer
       - local: model_doc/mobilenet_v1
@@ -444,6 +458,8 @@
         title: Table Transformer
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/upernet
+        title: UperNet
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
@@ -496,6 +512,12 @@
       title: Audio models
     - isExpanded: false
       sections:
+      - local: model_doc/altclip
+        title: AltCLIP
+      - local: model_doc/blip
+        title: BLIP
+      - local: model_doc/bridgetower
+        title: BridgeTower
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
@@ -508,6 +530,8 @@
         title: Donut
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/git
+        title: GIT
       - local: model_doc/groupvit
         title: GroupViT
       - local: model_doc/layoutlmv2
@@ -518,6 +542,8 @@
         title: LayoutXLM
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/oneformer
+        title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/perceiver
@@ -549,6 +575,11 @@
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
+    - isExpanded: false
+      sections:
+      - local: model_doc/graphormer
+        title: Graphormer
+      title: Graph models
     title: Models
   - sections:
     - local: internal/modeling_utils

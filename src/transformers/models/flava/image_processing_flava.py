@@ -17,7 +17,7 @@
 import math
 import random
 from functools import lru_cache
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -26,7 +26,14 @@ from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, to_numpy_array, valid_images
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import logging
 
 
@@ -292,6 +299,19 @@ class FlavaImageProcessor(BaseImageProcessor):
         self.codebook_image_mean = codebook_image_mean
         self.codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else FLAVA_CODEBOOK_MEAN
         self.codebook_image_std = codebook_image_std if codebook_image_std is not None else FLAVA_CODEBOOK_STD
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
+        created using from_dict and kwargs e.g. `FlavaImageProcessor.from_pretrained(checkpoint, codebook_size=600)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "codebook_size" in kwargs:
+            image_processor_dict["codebook_size"] = kwargs.pop("codebook_size")
+        if "codebook_crop_size" in kwargs:
+            image_processor_dict["codebook_crop_size"] = kwargs.pop("codebook_crop_size")
+        return super().from_dict(image_processor_dict, **kwargs)
 
     @lru_cache()
     def masking_generator(
@@ -634,8 +654,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else self.codebook_image_mean
         codebook_image_std = codebook_image_std if codebook_image_std is not None else self.codebook_image_std
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

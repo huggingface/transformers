@@ -455,6 +455,7 @@ class _BaseAutoModelClass:
             model_class = get_class_from_dynamic_module(
                 pretrained_model_name_or_path, module_file + ".py", class_name, **hub_kwargs, **kwargs
             )
+            model_class.register_for_auto_class(cls.__name__)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )

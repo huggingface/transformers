@@ -26,14 +26,17 @@ from functools import lru_cache
 from pathlib import Path
 from unittest import skipIf
 
+import datasets
 import numpy as np
 
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
@@ -74,6 +77,7 @@ ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS = [
     "LongformerConfig",
     "MarkupLMConfig",
     "RobertaConfig",
+    "RobertaPreLayerNormConfig",
     "XLMRobertaConfig",
 ]
 
@@ -152,8 +156,6 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_
                 feature_extractor = None
         except Exception:
             feature_extractor = None
-    if hasattr(tiny_config, "image_size") and feature_extractor:
-        feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
 
     # Audio Spectogram Transformer specific.
     if feature_extractor.__class__.__name__ == "ASTFeatureExtractor":
@@ -166,7 +168,26 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_
         feature_extractor = feature_extractor.__class__(
             feature_size=tiny_config.input_feat_per_channel, num_mel_bins=tiny_config.input_feat_per_channel
         )
+    # TODO remove this, once those have been moved to `image_processor`.
+    if hasattr(tiny_config, "image_size") and feature_extractor:
+        feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
     return feature_extractor
+
+
+def get_tiny_image_processor_from_checkpoint(checkpoint, tiny_config, image_processor_class):
+    try:
+        image_processor = AutoImageProcessor.from_pretrained(checkpoint)
+    except Exception:
+        try:
+            if image_processor_class is not None:
+                image_processor = image_processor_class()
+            else:
+                image_processor = None
+        except Exception:
+            image_processor = None
+    if hasattr(tiny_config, "image_size") and image_processor:
+        image_processor = image_processor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
+    return image_processor
 
 
 class ANY:
@@ -182,7 +203,9 @@ class ANY:
 
 class PipelineTestCaseMeta(type):
     def __new__(mcs, name, bases, dct):
-        def gen_test(ModelClass, checkpoint, tiny_config, tokenizer_class, feature_extractor_class):
+        def gen_test(
+            ModelClass, checkpoint, tiny_config, tokenizer_class, feature_extractor_class, image_processor_class
+        ):
             @skipIf(
                 tiny_config is None,
                 "TinyConfig does not exist, make sure that you defined a `_CONFIG_FOR_DOC` variable in the modeling"
@@ -229,16 +252,21 @@ class PipelineTestCaseMeta(type):
                         self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
                 else:
                     tokenizer = None
+
                 feature_extractor = get_tiny_feature_extractor_from_checkpoint(
                     checkpoint, tiny_config, feature_extractor_class
                 )
 
-                if tokenizer is None and feature_extractor is None:
+                image_processor = get_tiny_image_processor_from_checkpoint(
+                    checkpoint, tiny_config, image_processor_class
+                )
+
+                if tokenizer is None and feature_extractor is None and image_processor:
                     self.skipTest(
-                        f"Ignoring {ModelClass}, cannot create a tokenizer or feature_extractor (PerceiverConfig with"
-                        " no FastTokenizer ?)"
+                        f"Ignoring {ModelClass}, cannot create a tokenizer or feature_extractor or image_processor"
+                        " (PerceiverConfig with no FastTokenizer ?)"
                     )
-                pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
+                pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor, image_processor)
                 if pipeline is None:
                     # The test can disable itself, but it should be very marginal
                     # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
@@ -281,6 +309,10 @@ class PipelineTestCaseMeta(type):
                         feature_extractor_name = (
                             feature_extractor_class.__name__ if feature_extractor_class else "nofeature_extractor"
                         )
+                        image_processor_class = IMAGE_PROCESSOR_MAPPING.get(configuration, None)
+                        image_processor_name = (
+                            image_processor_class.__name__ if image_processor_class else "noimage_processor"
+                        )
                         if not tokenizer_classes:
                             # We need to test even if there are no tokenizers.
                             tokenizer_classes = [None]
@@ -298,7 +330,7 @@ class PipelineTestCaseMeta(type):
                             else:
                                 tokenizer_name = "notokenizer"
 
-                            test_name = f"test_{prefix}_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_name}_{feature_extractor_name}"
+                            test_name = f"test_{prefix}_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_name}_{feature_extractor_name}_{image_processor_name}"
 
                             if tokenizer_class is not None or feature_extractor_class is not None:
                                 dct[test_name] = gen_test(
@@ -307,6 +339,7 @@ class PipelineTestCaseMeta(type):
                                     tiny_config,
                                     tokenizer_class,
                                     feature_extractor_class,
+                                    image_processor_class,
                                 )
 
         @abstractmethod
@@ -964,6 +997,29 @@ class CustomPipelineTest(unittest.TestCase):
             self.assertEqual(counter.head_request_count, 1)
             self.assertEqual(counter.other_request_count, 0)
 
+    @require_torch
+    def test_chunk_pipeline_batching_single_file(self):
+        # Make sure we have cached the pipeline.
+        pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
+        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
+        # For some reason scoping doesn't work if not using `self.`
+        self.COUNT = 0
+        forward = pipe.model.forward
+
+        def new_forward(*args, **kwargs):
+            self.COUNT += 1
+            return forward(*args, **kwargs)
+
+        pipe.model.forward = new_forward
+
+        for out in pipe(audio, return_timestamps="char", chunk_length_s=3, stride_length_s=[1, 1], batch_size=1024):
+            pass
+
+        self.assertEqual(self.COUNT, 1)
+
 
 @require_torch
 @is_staging_test
@@ -998,7 +1054,8 @@ class DynamicPipelineTester(unittest.TestCase):
         model = BertForSequenceClassification(config).eval()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-pipeline", use_auth_token=self._token)
+            create_repo(f"{USER}/test-dynamic-pipeline", token=self._token)
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-pipeline", token=self._token)
 
             vocab_file = os.path.join(tmp_dir, "vocab.txt")
             with open(vocab_file, "w", encoding="utf-8") as vocab_writer:

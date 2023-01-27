@@ -48,16 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uclanlp/plbart-base"
 _CONFIG_FOR_DOC = "PLBartConfig"
-_TOKENIZER_FOR_DOC = "PLBartTokenizer"
-
-# Base model docstring
-_EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
-
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-plbart"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.69
-
 
 PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uclanlp/plbart-base",
@@ -551,10 +541,10 @@ PLBART_GENERATION_EXAMPLE = r"""
     Mask-filling example:
 
     ```python
-    >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration
+    >>> from transformers import AutoTokenizer, PLBartForConditionalGeneration
 
     >>> model = PLBartForConditionalGeneration.from_pretrained("uclanlp/plbart-base")
-    >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("uclanlp/plbart-base")
 
     >>> # en_XX is the language symbol id <LID> for English
     >>> TXT = "<s> Is 0 the <mask> Fibonacci number ? </s> en_XX"
@@ -576,7 +566,7 @@ PLBART_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PLBartTokenizer`] or [`PLBartMultiTokenizer`] depending on the checkpoint.
+            Indices can be obtained using [`AutoTokenizer`] or [`PLBartMultiTokenizer`] depending on the checkpoint.
             See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -590,7 +580,7 @@ PLBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`PLBartTokenizer`] or [`PLBartMultiTokenizer`] depending on the checkpoint.
+            Indices can be obtained using [`AutoTokenizer`] or [`PLBartMultiTokenizer`] depending on the checkpoint.
             See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -729,7 +719,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PLBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -928,7 +918,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PLBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1161,7 +1151,6 @@ class PLBartModel(PLBartPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(PLBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1375,7 +1364,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids: torch.LongTensor,
-        past: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
@@ -1385,13 +1374,13 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         **kwargs  # TODO: Check if this is needed. It is unused?
     ) -> Dict[str, Any]:
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -1438,12 +1427,9 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(PLBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
@@ -1616,7 +1602,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PLBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1681,9 +1667,9 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import PLBartTokenizer, PLBartForCausalLM
+        >>> from transformers import AutoTokenizer, PLBartForCausalLM
 
-        >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("uclanlp/plbart-base")
         >>> model = PLBartForCausalLM.from_pretrained("uclanlp/plbart-base", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -1737,18 +1723,20 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 

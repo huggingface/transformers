@@ -35,6 +35,7 @@ src/transformers/models/blenderbot/configuration_blenderbot.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
 src/transformers/models/blenderbot_small/configuration_blenderbot_small.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
+src/transformers/models/blip/modeling_blip.py
 src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/camembert/configuration_camembert.py
 src/transformers/models/canine/configuration_canine.py
@@ -80,6 +81,7 @@ src/transformers/models/ernie/configuration_ernie.py
 src/transformers/models/flava/configuration_flava.py
 src/transformers/models/fnet/configuration_fnet.py
 src/transformers/models/fsmt/configuration_fsmt.py
+src/transformers/models/git/modeling_git.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/configuration_gpt2.py
 src/transformers/models/gpt2/modeling_gpt2.py
@@ -106,6 +108,8 @@ src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
+src/transformers/models/mask2former/configuration_mask2former.py
+src/transformers/models/mask2former/modeling_mask2former.py
 src/transformers/models/maskformer/configuration_maskformer.py
 src/transformers/models/maskformer/modeling_maskformer.py
 src/transformers/models/mbart/configuration_mbart.py
@@ -122,6 +126,8 @@ src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/nat/configuration_nat.py
 src/transformers/models/nat/modeling_nat.py
 src/transformers/models/nezha/configuration_nezha.py
+src/transformers/models/oneformer/configuration_oneformer.py
+src/transformers/models/oneformer/modeling_oneformer.py
 src/transformers/models/openai/configuration_openai.py
 src/transformers/models/opt/configuration_opt.py
 src/transformers/models/opt/modeling_opt.py
@@ -146,6 +152,9 @@ src/transformers/models/resnet/modeling_tf_resnet.py
 src/transformers/models/roberta/configuration_roberta.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
+src/transformers/models/roberta_prelayernorm/configuration_roberta_prelayernorm.py
+src/transformers/models/roberta_prelayernorm/modeling_roberta_prelayernorm.py
+src/transformers/models/roberta_prelayernorm/modeling_tf_roberta_prelayernorm.py
 src/transformers/models/roc_bert/modeling_roc_bert.py
 src/transformers/models/roc_bert/tokenization_roc_bert.py
 src/transformers/models/segformer/modeling_segformer.py
@@ -162,6 +171,7 @@ src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/squeezebert/configuration_squeezebert.py
 src/transformers/models/swin/configuration_swin.py
 src/transformers/models/swin/modeling_swin.py
+src/transformers/models/swin2sr/modeling_swin2sr.py
 src/transformers/models/swinv2/configuration_swinv2.py
 src/transformers/models/table_transformer/modeling_table_transformer.py
 src/transformers/models/time_series_transformer/configuration_time_series_transformer.py
@@ -173,6 +183,7 @@ src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/configuration_unispeech.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
+src/transformers/models/upernet/modeling_upernet.py
 src/transformers/models/van/modeling_van.py
 src/transformers/models/videomae/modeling_videomae.py
 src/transformers/models/vilt/modeling_vilt.py

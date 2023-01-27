@@ -255,10 +255,10 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *jnp.ndarray*. See [`Wav2Vec2Processor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `jnp.ndarray`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -497,7 +497,7 @@ class FlaxWav2Vec2Attention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -1065,11 +1065,11 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2Model
+    >>> from transformers import AutoProcessor, FlaxWav2Vec2Model
     >>> from datasets import load_dataset
     >>> import soundfile as sf
 
-    >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
+    >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-large-lv60")
 
 
@@ -1184,11 +1184,11 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
 
     ```python
     >>> import jax.numpy as jnp
-    >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2ForCTC
+    >>> from transformers import AutoProcessor, FlaxWav2Vec2ForCTC
     >>> from datasets import load_dataset
     >>> import soundfile as sf
 
-    >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
+    >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
     >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
 
@@ -1384,12 +1384,12 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
     >>> import optax
     >>> import numpy as np
     >>> import jax.numpy as jnp
-    >>> from transformers import Wav2Vec2FeatureExtractor, FlaxWav2Vec2ForPreTraining
+    >>> from transformers import AutoFeatureExtractor, FlaxWav2Vec2ForPreTraining
     >>> from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices
     >>> from datasets import load_dataset
     >>> import soundfile as sf
 
-    >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-large-lv60")
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-lv60")
 
 

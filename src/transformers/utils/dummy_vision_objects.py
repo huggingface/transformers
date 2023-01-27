@@ -38,6 +38,20 @@ class BitImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class BlipImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class BridgeTowerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ChineseCLIPFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -164,6 +178,13 @@ class DPTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class EfficientFormerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class FlavaFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -255,6 +276,13 @@ class LevitImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Mask2FormerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class MaskFormerFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -305,6 +333,13 @@ class MobileViTFeatureExtractor(metaclass=DummyObject):
 
 
 class MobileViTImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class OneFormerImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

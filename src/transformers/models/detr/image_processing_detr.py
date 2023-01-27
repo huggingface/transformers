@@ -43,7 +43,7 @@ from transformers.image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_coco_detection_annotations,
     valid_coco_panoptic_annotations,
@@ -189,6 +189,7 @@ def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
     return norm_annotation
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.max_across_indices
 def max_across_indices(values: Iterable[Any]) -> List[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
@@ -196,6 +197,7 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.get_max_height_width
 def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -211,6 +213,7 @@ def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     return (max_height, max_width)
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.make_pixel_mask
 def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -794,6 +797,29 @@ class DetrImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
 
+    @property
+    def max_size(self):
+        warnings.warn(
+            "The `max_size` parameter is deprecated and will be removed in v4.27. "
+            "Please specify in `size['longest_edge'] instead`.",
+            FutureWarning,
+        )
+        return self.size["longest_edge"]
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
+        created using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600,
+        max_size=800)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "max_size" in kwargs:
+            image_processor_dict["max_size"] = kwargs.pop("max_size")
+        if "pad_and_return_pixel_mask" in kwargs:
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
+        return super().from_dict(image_processor_dict, **kwargs)
+
     def prepare_annotation(
         self,
         image: np.ndarray,
@@ -1112,9 +1138,9 @@ class DetrImageProcessor(BaseImageProcessor):
         if do_normalize is not None and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        if not is_batched(images):
-            images = [images]
-            annotations = [annotations] if annotations is not None else None
+        images = make_list_of_images(images)
+        if annotations is not None and isinstance(annotations[0], dict):
+            annotations = [annotations]
 
         if annotations is not None and len(images) != len(annotations):
             raise ValueError(
@@ -1219,8 +1245,8 @@ class DetrImageProcessor(BaseImageProcessor):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
-        PyTorch.
+        Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
@@ -1496,8 +1522,8 @@ class DetrImageProcessor(BaseImageProcessor):
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
-        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
-        PyTorch.
+        Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):

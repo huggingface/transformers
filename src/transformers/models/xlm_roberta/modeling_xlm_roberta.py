@@ -50,7 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
-_TOKENIZER_FOR_DOC = "XLMRobertaTokenizer"
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-base",
@@ -286,7 +285,7 @@ class XLMRobertaSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput with Roberta->XLMRoberta
 class XLMRobertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -351,7 +350,7 @@ class XLMRobertaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate
+# Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate with Roberta->XLMRoberta
 class XLMRobertaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -367,7 +366,7 @@ class XLMRobertaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput with Roberta->XLMRoberta
 class XLMRobertaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -567,7 +566,7 @@ class XLMRobertaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler
+# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler with Roberta->XLMRoberta
 class XLMRobertaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -647,7 +646,7 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`XLMRobertaTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -744,7 +743,6 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -960,11 +958,11 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLMRobertaTokenizer, XLMRobertaForCausalLM, XLMRobertaConfig
+        >>> from transformers import AutoTokenizer, XLMRobertaForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("roberta-base")
-        >>> config = XLMRobertaConfig.from_pretrained("roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+        >>> config = AutoConfig.from_pretrained("roberta-base")
         >>> config.is_decoder = True
         >>> model = XLMRobertaForCausalLM.from_pretrained("roberta-base", config=config)
 
@@ -1017,17 +1015,17 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
@@ -1072,7 +1070,6 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1194,7 +1191,6 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="cardiffnlp/twitter-roberta-base-emotion",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1296,7 +1292,6 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
         XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1395,7 +1390,6 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="Jean-Baptiste/roberta-large-ner-english",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1455,7 +1449,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead
+# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->XLMRoberta
 class XLMRobertaClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1502,7 +1496,6 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLM_ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="deepset/roberta-base-squad2",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -22,6 +22,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -44,6 +45,12 @@ class ConditionalDetrConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        use_timm_backbone (`bool`, *optional*, defaults to `True`):
+            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
+            API.
+        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
+            case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 100):
@@ -87,13 +94,14 @@ class ConditionalDetrConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of convolutional backbone to use. Supports any convolutional backbone from the timm package. For a
-            list of all available models, see [this
+            Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
+            backbone from the timm package. For a list of all available models, see [this
             page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone.
+            Whether to use pretrained weights for the backbone. Only supported when `use_timm_backbone` = `True`.
         dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5).
+            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
+            `use_timm_backbone` = `True`.
         class_cost (`float`, *optional*, defaults to 1):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
@@ -136,9 +144,10 @@ class ConditionalDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
+        use_timm_backbone=True,
+        backbone_config=None,
         num_channels=3,
         num_queries=300,
-        max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=2048,
         encoder_attention_heads=8,
@@ -173,9 +182,22 @@ class ConditionalDetrConfig(PretrainedConfig):
         focal_alpha=0.25,
         **kwargs
     ):
+        if backbone_config is not None and use_timm_backbone:
+            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+
+        if not use_timm_backbone:
+            if backbone_config is None:
+                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
+            elif isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.get("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
+
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.num_queries = num_queries
-        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers

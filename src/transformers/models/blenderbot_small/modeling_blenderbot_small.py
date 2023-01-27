@@ -47,8 +47,6 @@ from .configuration_blenderbot_small import BlenderbotSmallConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BlenderbotSmallConfig"
-_TOKENIZER_FOR_DOC = "BlenderbotSmallTokenizer"
-_CHECKPOINT_FOR_DOC = "facebook/blenderbot_small-90M"
 
 
 BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -517,11 +515,11 @@ BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     Conversation example:
 
     ```python
-    >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration
+    >>> from transformers import AutoTokenizer, BlenderbotSmallForConditionalGeneration
 
     >>> mname = "facebook/blenderbot_small-90M"
     >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
-    >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
+    >>> tokenizer = AutoTokenizer.from_pretrained(mname)
     >>> UTTERANCE = "My friends are cool but they eat too many carbs."
     >>> print("Human: ", UTTERANCE)
     Human:  My friends are cool but they eat too many carbs.
@@ -553,7 +551,7 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -567,7 +565,7 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -690,7 +688,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -887,7 +885,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1142,10 +1140,10 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallModel
+        >>> from transformers import AutoTokenizer, BlenderbotSmallModel
 
         >>> model = BlenderbotSmallModel.from_pretrained("facebook/blenderbot_small-90M")
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
         >>> decoder_inputs = tokenizer("Studies show that", return_tensors="pt")  # Batch size 1
@@ -1345,7 +1343,7 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -1355,13 +1353,13 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
         **kwargs
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -1453,7 +1451,7 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1518,9 +1516,9 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForCausalLM
+        >>> from transformers import AutoTokenizer, BlenderbotSmallForCausalLM
 
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
         >>> model = BlenderbotSmallForCausalLM.from_pretrained(
         ...     "facebook/blenderbot_small-90M", add_cross_attention=False
         ... )
@@ -1576,18 +1574,20 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
