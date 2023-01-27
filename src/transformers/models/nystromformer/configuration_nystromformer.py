@@ -18,6 +18,7 @@ from collections import OrderedDict
 from typing import Mapping
 
 from transformers.onnx.config import OnnxConfig
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -136,6 +137,7 @@ class NystromformerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
+
 class NystromformerOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -150,4 +152,3 @@ class NystromformerOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
-

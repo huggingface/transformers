@@ -23,10 +23,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 _import_structure = {
     "configuration_nystromformer": [
-        "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", 
+        "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
         "NystromformerOnnxConfig",
-        ],
+    ],
 }
 
 try:
@@ -49,7 +49,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
+    from .configuration_nystromformer import (
+        NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        NystromformerConfig,
+        NystromformerOnnxConfig,
+    )
 
     try:
         if not is_torch_available():
