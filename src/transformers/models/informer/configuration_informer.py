@@ -31,7 +31,7 @@ INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class InformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InformerModel`]. It is used to
-    instantiate a Informer model according to the specified arguments, defining the model architecture.
+    instantiate an Informer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Time Series
     Transformer
     [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
@@ -106,6 +106,13 @@ class InformerConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
+        attn (`str`, defaults to `prob`):
+            Attention used in encoder. This can be set to prob (informer) or full (transformer)
+        factor (`int`, defaults to 5):
+            ProbSparse attention factor
+        distil (`bool`, defualts to `True`):
+            Whether to use distilling in encoder
+
 
         Example:
 
