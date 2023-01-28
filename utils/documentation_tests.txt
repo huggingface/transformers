@@ -81,6 +81,7 @@ src/transformers/models/ernie/configuration_ernie.py
 src/transformers/models/flava/configuration_flava.py
 src/transformers/models/fnet/configuration_fnet.py
 src/transformers/models/fsmt/configuration_fsmt.py
+src/transformers/models/git/modeling_git.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/configuration_gpt2.py
 src/transformers/models/gpt2/modeling_gpt2.py
@@ -107,6 +108,8 @@ src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
+src/transformers/models/mask2former/configuration_mask2former.py
+src/transformers/models/mask2former/modeling_mask2former.py
 src/transformers/models/maskformer/configuration_maskformer.py
 src/transformers/models/maskformer/modeling_maskformer.py
 src/transformers/models/mbart/configuration_mbart.py
@@ -123,6 +126,8 @@ src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/nat/configuration_nat.py
 src/transformers/models/nat/modeling_nat.py
 src/transformers/models/nezha/configuration_nezha.py
+src/transformers/models/oneformer/configuration_oneformer.py
+src/transformers/models/oneformer/modeling_oneformer.py
 src/transformers/models/openai/configuration_openai.py
 src/transformers/models/opt/configuration_opt.py
 src/transformers/models/opt/modeling_opt.py
@@ -178,6 +183,7 @@ src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/configuration_unispeech.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
+src/transformers/models/upernet/modeling_upernet.py
 src/transformers/models/van/modeling_van.py
 src/transformers/models/videomae/modeling_videomae.py
 src/transformers/models/vilt/modeling_vilt.py

@@ -36,7 +36,7 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
 
     model_mapping = MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
         object_detector = pipeline(
             "zero-shot-object-detection", model="hf-internal-testing/tiny-random-owlvit-object-detection"
         )
@@ -131,7 +131,8 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         object_detector = pipeline("zero-shot-object-detection")
 
         outputs = object_detector(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", candidate_labels=["cat", "remote", "couch"]
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            candidate_labels=["cat", "remote", "couch"],
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),

@@ -49,7 +49,6 @@ from .configuration_longt5 import LongT5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongT5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 _CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
 # TODO: Update before the merge
@@ -277,6 +276,8 @@ class LongT5DenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -1449,11 +1450,6 @@ class LongT5Stack(LongT5PreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(
-                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
-            )
 
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
@@ -1616,7 +1612,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1633,7 +1629,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1711,7 +1707,7 @@ LONGT5_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [LONGT5
@@ -1832,9 +1828,9 @@ class LongT5Model(LongT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, LongT5Model
+        >>> from transformers import AutoTokenizer, LongT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/long-t5-local-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/long-t5-local-base")
         >>> model = LongT5Model.from_pretrained("google/long-t5-local-base")
 
         >>> # Let's try a very long encoder input.
@@ -2093,7 +2089,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -2104,12 +2100,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     ):
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
             "decoder_input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "head_mask": head_mask,

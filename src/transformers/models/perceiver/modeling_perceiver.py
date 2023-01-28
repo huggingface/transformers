@@ -50,7 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "deepmind/language-perceiver"
 _CONFIG_FOR_DOC = "PerceiverConfig"
-_TOKENIZER_FOR_DOC = "PerceiverTokenizer"
 
 PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "deepmind/language-perceiver",
@@ -1007,10 +1006,10 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverTokenizer, PerceiverForMaskedLM
+        >>> from transformers import AutoTokenizer, PerceiverForMaskedLM
         >>> import torch
 
-        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepmind/language-perceiver")
         >>> model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
 
         >>> # training
@@ -1131,9 +1130,9 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverTokenizer, PerceiverForSequenceClassification
+        >>> from transformers import AutoTokenizer, PerceiverForSequenceClassification
 
-        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepmind/language-perceiver")
         >>> model = PerceiverForSequenceClassification.from_pretrained("deepmind/language-perceiver")
 
         >>> text = "hello world"
@@ -1266,14 +1265,14 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationLearned
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationLearned
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-learned")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-learned")
         >>> model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
 
         >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
@@ -1407,14 +1406,14 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationFourier
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationFourier
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-fourier")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-fourier")
         >>> model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
 
         >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
@@ -1548,14 +1547,14 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationConvProcessing
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationConvProcessing
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-conv")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-conv")
         >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
 
         >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
@@ -3203,9 +3202,9 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         if self.prep_type != "patches":
             # move channels to last dimension, as the _build_network_inputs method below expects this
             if inputs.ndim == 4:
-                inputs = torch.permute(inputs, (0, 2, 3, 1))
+                inputs = inputs.permute(0, 2, 3, 1)
             elif inputs.ndim == 5:
-                inputs = torch.permute(inputs, (0, 1, 3, 4, 2))
+                inputs = inputs.permute(0, 1, 3, 4, 2)
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
 

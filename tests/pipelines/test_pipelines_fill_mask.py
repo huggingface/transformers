@@ -206,7 +206,7 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         unmasker.tokenizer.pad_token = None
         self.run_pipeline_test(unmasker, [])
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
         if tokenizer is None or tokenizer.mask_token_id is None:
             self.skipTest("The provided tokenizer has no mask token, (probably reformer or wav2vec2)")
 
