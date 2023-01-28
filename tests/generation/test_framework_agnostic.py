@@ -2,8 +2,9 @@
 Framework agnostic tests for generate()-related methods.
 """
 
-from transformers import AutoTokenizer
 import numpy as np
+
+from transformers import AutoTokenizer
 
 
 class GenerationIntegrationTestsMixin:

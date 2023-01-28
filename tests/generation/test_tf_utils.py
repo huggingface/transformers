@@ -128,11 +128,13 @@ class UtilsFunctionsTest(unittest.TestCase):
 @require_tf
 class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMixin):
 
-    framework_dependent_parameters = {
-        "AutoModelForSeq2SeqLM": TFAutoModelForSeq2SeqLM,
-        "create_tensor": tf.convert_to_tensor,
-        "return_tensors": "tf",
-    }
+    # setting framework_dependent_parameters needs to be gated, just like its contents' imports
+    if is_tf_available():
+        framework_dependent_parameters = {
+            "AutoModelForSeq2SeqLM": TFAutoModelForSeq2SeqLM,
+            "create_tensor": tf.convert_to_tensor,
+            "return_tensors": "tf",
+        }
 
     @slow
     def test_generate_tf_function_export(self):

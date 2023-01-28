@@ -1793,11 +1793,13 @@ class UtilsFunctionsTest(unittest.TestCase):
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMixin):
 
-    framework_dependent_parameters = {
-        "AutoModelForSeq2SeqLM": AutoModelForSeq2SeqLM,
-        "create_tensor": torch.tensor,
-        "return_tensors": "pt",
-    }
+    # setting framework_dependent_parameters needs to be gated, just like its contents' imports
+    if is_torch_available():
+        framework_dependent_parameters = {
+            "AutoModelForSeq2SeqLM": AutoModelForSeq2SeqLM,
+            "create_tensor": torch.tensor,
+            "return_tensors": "pt",
+        }
 
     @slow
     def test_diverse_beam_search(self):
