@@ -36,7 +36,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import is_ninja_available, is_torch_cuda_available, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_ninja_available,
+    is_torch_cuda_available,
+    logging,
+)
 from .configuration_mra import MRAConfig
 
 
@@ -67,7 +74,10 @@ if is_torch_cuda_available() and is_ninja_available():
     try:
         load_cuda_kernels()
     except Exception as e:
-        logger.warning(f"Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of PyTorch and CUDA Toolkit are installed: {e}")
+        logger.warning(
+            "Failed to load CUDA kernels. MRA requires custom CUDA kernels. Please verify that compatible versions of"
+            f" PyTorch and CUDA Toolkit are installed: {e}"
+        )
 else:
     pass
 
@@ -551,15 +561,9 @@ class MRASelfAttention(nn.Module):
         if head_dim < gpu_warp_size:
             pad_size = batch_size * num_heads, seq_len, gpu_warp_size - head_dim
 
-            query_layer = torch.cat(
-                [query_layer, torch.zeros(pad_size, device=query_layer.device)], dim=-1
-            )
-            key_layer = torch.cat(
-                [key_layer, torch.zeros(pad_size, device=key_layer.device)], dim=-1
-            )
-            value_layer = torch.cat(
-                [value_layer, torch.zeros(pad_size, device=value_layer.device)], dim=-1
-            )
+            query_layer = torch.cat([query_layer, torch.zeros(pad_size, device=query_layer.device)], dim=-1)
+            key_layer = torch.cat([key_layer, torch.zeros(pad_size, device=key_layer.device)], dim=-1)
+            value_layer = torch.cat([value_layer, torch.zeros(pad_size, device=value_layer.device)], dim=-1)
 
         context_layer = mra2_attention(
             query_layer.float(),
