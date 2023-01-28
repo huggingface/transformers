@@ -1,5 +1,5 @@
 """
-Framework agnostic tests for the generate()-related methods.
+Framework agnostic tests for generate()-related methods.
 """
 
 from transformers import AutoTokenizer
