@@ -126,15 +126,11 @@ def mm_to_sparse(dense_A, dense_B, indices, block_size=32):
     assert dense_A.size(3) == 32
     assert dense_B.size(3) == 32
 
-    if not dense_A.is_contiguous():
-        dense_A = dense_A.contiguous()
-
-    if not dense_B.is_contiguous():
-        dense_B = dense_B.contiguous()
+    dense_A = dense_A.contiguous()
+    dense_B = dense_B.contiguous()
 
     indices = indices.int()
-    if not indices.is_contiguous():
-        indices = indices.contiguous()
+    indices = indices.contiguous()
 
     assert dense_A.is_contiguous()
     assert dense_B.is_contiguous()
@@ -162,15 +158,11 @@ def sparse_dense_mm(sparse_A, indices, dense_B, A_num_block, block_size=32):
     assert sparse_A.size(3) == 32
     assert dense_B.size(3) == 32
 
-    if not sparse_A.is_contiguous():
-        sparse_A = sparse_A.contiguous()
+    sparse_A = sparse_A.contiguous()
 
     indices = indices.int()
-    if not indices.is_contiguous():
-        indices = indices.contiguous()
-
-    if not dense_B.is_contiguous():
-        dense_B = dense_B.contiguous()
+    indices = indices.contiguous()
+    dense_B = dense_B.contiguous()
 
     assert sparse_A.is_contiguous()
     assert indices.is_contiguous()
@@ -376,7 +368,7 @@ def mra2_attention(
                 Q, K, block_size, mask
             )
     else:
-        raise Exception('config.approx_mode must be "full" or "sparse"')
+        raise Exception('approx_mode must be "full" or "sparse"')
 
     with torch.no_grad():
         low_resolution_logit_normalized = low_resolution_logit - low_resolution_logit_row_max
@@ -557,25 +549,13 @@ class MRASelfAttention(nn.Module):
             pad_size = batch_size * num_heads, seq_len, gpu_warp_size - head_dim
 
             query_layer = torch.cat(
-                [
-                    query_layer,
-                    torch.zeros(pad_size, device=query_layer.device),
-                ],
-                dim=-1,
+                [query_layer, torch.zeros(pad_size, device=query_layer.device)], dim=-1
             )
             key_layer = torch.cat(
-                [
-                    key_layer,
-                    torch.zeros(pad_size, device=key_layer.device),
-                ],
-                dim=-1,
+                [key_layer, torch.zeros(pad_size, device=key_layer.device)], dim=-1
             )
             value_layer = torch.cat(
-                [
-                    value_layer,
-                    torch.zeros(pad_size, device=value_layer.device),
-                ],
-                dim=-1,
+                [value_layer, torch.zeros(pad_size, device=value_layer.device)], dim=-1
             )
 
         context_layer = mra2_attention(
