@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Informer model configuration"""
+"""Informer model configuration"""
 
 from typing import List, Optional
 
@@ -22,41 +22,147 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/time-series-transformer-tourism-monthly": (
-        "https://huggingface.co/huggingface/time-series-transformer-tourism-monthly/resolve/main/config.json"
-    ),
-    # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
+INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "elisim/informer": "https://huggingface.co/elisim/informer/resolve/main/config.json",
 }
 
 
+
 class InformerConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`InformerModel`]. It is used to
+    instantiate a Informer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Time Series
+    Transformer
+    [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
+    architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        prediction_length (`int`):
+            The prediction length for the decoder. In other words, the prediction horizon of the model.
+        context_length (`int`, *optional*, defaults to `prediction_length`):
+            The context length for the encoder. If `None`, the context length will be the same as the
+            `prediction_length`.
+        distribution_output (`string`, *optional*, defaults to `"student_t"`):
+            The distribution emission head for the model. Could be either "student_t", "normal" or "negative_binomial".
+        loss (`string`, *optional*, defaults to `"nll"`):
+            The loss function for the model corresponding to the `distribution_output` head. For parametric
+            distributions it is the negative log likelihood (nll) - which currently is the only supported one.
+        input_size (`int`, *optional*, defaults to 1):
+            The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
+            multivariate targets.
+        scaling (`bool`, *optional* defaults to `True`):
+            Whether to scale the input targets.
+        lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
+            The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
+            5, 6, 7]`.
+        num_time_features (`int`, *optional*, defaults to 0):
+            The number of time features in the input time series.
+        num_dynamic_real_features (`int`, *optional*, defaults to 0):
+            The number of dynamic real valued features.
+        num_static_categorical_features (`int`, *optional*, defaults to 0):
+            The number of static categorical features.
+        num_static_real_features (`int`, *optional*, defaults to 0):
+            The number of static real valued features.
+        cardinality (`list[int]`, *optional*):
+            The cardinality (number of different values) for each of the static categorical features. Should be a list
+            of integers, having the same length as `num_static_categorical_features`. Cannot be `None` if
+            `num_static_categorical_features` is > 0.
+        embedding_dimension (`list[int]`, *optional*):
+            The dimension of the embedding for each of the static categorical features. Should be a list of integers,
+            having the same length as `num_static_categorical_features`. Cannot be `None` if
+            `num_static_categorical_features` is > 0.
+        encoder_layers (`int`, *optional*, defaults to 2):
+            Number of encoder layers.
+        decoder_layers (`int`, *optional*, defaults to 2):
+            Number of decoder layers.
+        encoder_attention_heads (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        encoder_ffn_dim (`int`, *optional*, defaults to 32):
+            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
+        decoder_ffn_dim (`int`, *optional*, defaults to 32):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and decoder. If string, `"gelu"` and
+            `"relu"` are supported.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the encoder, and decoder.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the attention and fully connected layers for each encoder layer.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the attention and fully connected layers for each decoder layer.
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability used between the two layers of the feed-forward networks.
+        num_parallel_samples (`int`, *optional*, defaults to 100):
+            The number of samples to generate in parallel for each time step of inference.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated normal weight initialization distribution.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
+
+        Example:
+
+    ```python
+    >>> from transformers import InformerConfig, InformerModel
+
+    >>> # Initializing a default Informer configuration
+    >>> configuration = InformerConfig()
+
+    >>> # Randomly initializing a model (with random weights) from the configuration
+    >>> model = InformerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+    model_type = "informer"
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "num_hidden_layers": "encoder_layers",
+    }
+
     def __init__(
             self,
             input_size: int = 1,
             prediction_length: Optional[int] = None,
             context_length: Optional[int] = None,
             distribution_output: str = "student_t",
-            lags_seq: Optional[List[int]] = None,  # used to be freq.
+            loss: str = "nll",
+            lags_sequence: List[int] = None,
             scaling: bool = True,
-            num_feat_dynamic_real: int = 0,  # num_dynamic_real_features
-            num_feat_static_real: int = 0,  # num_static_real_features
-            num_feat_static_cat: int = 0,  # num_static_categorical_features
+            num_dynamic_real_features: int = 0,
+            num_static_real_features: int = 0,
+            num_static_categorical_features: int = 0,
+            num_time_features: int = 0,
             cardinality: Optional[List[int]] = None,
             embedding_dimension: Optional[List[int]] = None,
-            dim_feedforward: int = 32,  # decoder_ffn_dim & encoder_ffn_dim
-            nhead: int = 2,  # Eli: how much attention heads?
-            num_encoder_layers: int = 2,  # encoder_layers
-            num_decoder_layers: int = 2,  # decoder_layers
+            encoder_ffn_dim: int = 32,
+            decoder_ffn_dim: int = 32,
+            encoder_attention_heads: int = 2,
+            decoder_attention_heads: int = 2,
+            encoder_layers: int = 2,
+            decoder_layers: int = 2,
             is_encoder_decoder: bool = True,
-            activation: str = "gelu",  # activation_function
+            activation_function: str = "gelu",
             dropout: float = 0.05,
-            attn: str = "prob",
-            factor: int = 5,
-            distil: bool = True,
+            encoder_layerdrop: float = 0.1,
+            decoder_layerdrop: float = 0.1,
+            attention_dropout: float = 0.1,
+            activation_dropout: float = 0.1,
             num_parallel_samples: int = 100,
             init_std: float = 0.02,
             use_cache=True,
+            # Informer arguments
+            attn: str = "prob",
+            factor: int = 5,
+            distil: bool = True,
             **kwargs
     ):
         # time series specific configuration
@@ -65,17 +171,14 @@ class InformerConfig(PretrainedConfig):
         self.distribution_output = distribution_output
         # self.loss = loss # Eli: From vanilla ts transformer
         self.input_size = input_size
-        # self.target_shape = distr_output.event_shape  # Eli: I think can be removed
-        # self.num_time_features = num_time_features # Eli: From vanilla ts transformer
-        self.lags_seq = lags_seq
+        self.num_time_features = num_time_features
+        self.lags_sequence = lags_sequence
         self.scaling = scaling
-        self.num_feat_dynamic_real = num_feat_dynamic_real
-        self.num_feat_static_cat = num_feat_static_cat
-        self.num_feat_static_real = num_feat_static_real
-
-        # set cardinality
-        if cardinality and num_feat_static_cat > 0:
-            if len(cardinality) != num_feat_static_cat:
+        self.num_dynamic_real_features = num_dynamic_real_features
+        self.num_static_real_features = num_static_real_features
+        self.num_static_categorical_features = num_static_categorical_features
+        if cardinality and num_static_categorical_features > 0:
+            if len(cardinality) != num_static_categorical_features:
                 raise ValueError(
                     "The cardinality should be a list of the same length as `num_static_categorical_features`"
                 )
@@ -84,8 +187,8 @@ class InformerConfig(PretrainedConfig):
             self.cardinality = [1]
 
         # set embedding_dimension
-        if embedding_dimension and num_feat_static_cat > 0:
-            if len(embedding_dimension) != num_feat_static_cat:
+        if embedding_dimension and num_static_categorical_features > 0:
+            if len(embedding_dimension) != num_static_categorical_features:
                 raise ValueError(
                     "The embedding dimension should be a list of the same length as `num_static_categorical_features`"
                 )
@@ -94,23 +197,34 @@ class InformerConfig(PretrainedConfig):
             self.embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.cardinality]
 
         self.num_parallel_samples = num_parallel_samples
-        # self.history_length = context_length + max(self.lags_seq) # Eli: I think can be removed
 
         # Transformer architecture configuration
-        self.d_model = self.input_size * len(self.lags_seq) + self._number_of_features
-        self.nhead = nhead
-        self.num_encoder_layers = num_encoder_layers  # encoder_layers
-        self.num_decoder_layers = num_decoder_layers  # decoder_layers
-        self.dim_feedforward = dim_feedforward
-        self.activation = activation  # activation_function
+        self.d_model = input_size * len(lags_sequence) + self._number_of_features
+        self.encoder_attention_heads = encoder_attention_heads
+        self.decoder_attention_heads = decoder_attention_heads
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.encoder_layers = encoder_layers
+        self.decoder_layers = decoder_layers
+
         self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
+
+        self.activation_function = activation_function
+        self.init_std = init_std
+
+        self.output_attentions = False
+        self.output_hidden_states = False
+
+        self.use_cache = use_cache
+
+        # Informer
         self.attn = attn
         self.factor = factor
         self.distil = distil
-        self.init_std = init_std
-        self.use_cache = use_cache
-
-        # self.param_proj = distr_output.get_args_proj(d_model)
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
@@ -118,17 +232,8 @@ class InformerConfig(PretrainedConfig):
     def _number_of_features(self) -> int:
         return (
             sum(self.embedding_dimension)
-            + self.num_feat_dynamic_real
-            + self.num_feat_static_real
+            + self.num_dynamic_real_features
+            + self.num_time_features
+            + max(1, self.num_static_real_features)  # there is at least one dummy static real feature
             + self.input_size  # the log(scale)
         )
-
-    # @property
-    # def _number_of_features(self) -> int:
-    #     return (
-    #         sum(self.embedding_dimension)
-    #         + self.num_dynamic_real_features
-    #         + self.num_time_features
-    #         + max(1, self.num_static_real_features)  # there is at least one dummy static real feature
-    #         + self.input_size  # the log(scale)
-    #     )
