@@ -169,7 +169,7 @@ class InformerConfig(PretrainedConfig):
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
         self.distribution_output = distribution_output
-        # self.loss = loss # Eli: From vanilla ts transformer
+        self.loss = loss # Eli: From vanilla ts transformer
         self.input_size = input_size
         self.num_time_features = num_time_features
         self.lags_sequence = lags_sequence

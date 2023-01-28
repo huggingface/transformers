@@ -5,7 +5,9 @@ from gluonts.time_feature import get_lags_for_frequency, time_features_from_freq
 from huggingface_hub import hf_hub_download
 import torch
 
-
+"""
+Establish one batch for forward pass in the Informer
+"""
 if __name__ == '__main__':
     freq = "1M"
     prediction_length = 24
@@ -19,8 +21,8 @@ if __name__ == '__main__':
                             num_static_categorical_features=1,
                             cardinality=[366],
                             embedding_dimension=[2],
-                            encoder_layers=4,
-                            decoder_layers=4)
+                            encoder_layers=1,
+                            decoder_layers=1)
     model = InformerModel(config)
     print(model)
 
@@ -37,9 +39,9 @@ if __name__ == '__main__':
     # )
     # model = TimeSeriesTransformerModel(config)
     # model.eval()
-
+    #
     # model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
-
+    #
     # file = hf_hub_download(
     #     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
     # )
