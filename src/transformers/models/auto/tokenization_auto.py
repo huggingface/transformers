@@ -332,10 +332,7 @@ else:
             ),
             (
                 "mra",
-                (
-                    "MRATokenizer" if is_sentencepiece_available() else None,
-                    "MRATokenizerFast" if is_tokenizers_available() else None,
-                ),
+                ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None),
             ),
         ]
     )
