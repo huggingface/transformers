@@ -319,10 +319,9 @@ class VivitModelTest(ModelTesterMixin, unittest.TestCase):
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
 def prepare_video():
     file = hf_hub_download(
-        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type="dataset"
+        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti_32_frames.npy", repo_type="dataset"
     )
     video = np.load(file)
-    video = np.pad(video, ((0, 16), (0, 0), (0, 0), (0, 0)), constant_values=0)
     return list(video)
 
 
@@ -331,12 +330,7 @@ def prepare_video():
 class VivitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # logits were tested with a different mean and std, so we use the same here
-        return (
-            VivitImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
-            if is_vision_available()
-            else None
-        )
+        return VivitImageProcessor() if is_vision_available() else None
 
     @slow
     def test_inference_for_video_classification(self):
@@ -355,8 +349,6 @@ class VivitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         # taken from original model
-        expected_slice = torch.tensor(
-            [-1.2573, 1.7103, -0.5742, 1.2830, 0.6503, -0.2277, -0.0466, 0.5242, -1.3756, 1.1948]
-        ).to(torch_device)
+        expected_slice = torch.tensor([-1.0543, 2.0764, -0.2104, 0.4439, -0.9658]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :10], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
