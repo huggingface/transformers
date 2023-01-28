@@ -16,13 +16,54 @@
 URL: https://github.com/google-research/scenic/tree/main/scenic/projects/vivit
 """
 import argparse
+import json
+import os.path
 from collections import OrderedDict
-from pathlib import Path
 
 import numpy as np
 import torch
 
 from flax.training.checkpoints import restore_checkpoint
+from huggingface_hub import hf_hub_download
+
+from transformers import VivitConfig, VivitImageProcessor, VivitForVideoClassification
+import requests
+
+from transformers.image_utils import PILImageResampling
+
+
+def download_checkpoint(path):
+    url = "https://storage.googleapis.com/scenic-bucket/vivit/kinetics_400/vivit_base_16x2_unfactorized/checkpoint"
+
+    with open(path, "wb") as f:
+        with requests.get(url, stream=True) as req:
+            for chunk in req.iter_content(chunk_size=2048):
+                f.write(chunk)
+
+
+def get_vivit_config() -> VivitConfig:
+    config = VivitConfig()
+
+    config.num_labels = 400
+    repo_id = "huggingface/label-files"
+    filename = "kinetics400-id2label.json"
+
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
+    return config
+
+
+# We will verify our results on a video of eating spaghetti
+# Frame indices used: [ 47, 51, 55, 59, 63, 67, 71, 75, 80, 84, 88, 92, 96, 100, 104, 108, 113, 117,
+# 121, 125, 129, 133, 137, 141, 146, 150, 154, 158, 162, 166, 170, 174]
+def prepare_video():
+    file = hf_hub_download(
+        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti_32_frames.npy", repo_type="dataset"
+    )
+    video = np.load(file)
+    return list(video)
 
 
 def transform_attention(current: np.ndarray):
@@ -51,7 +92,6 @@ def transform_attention_output_weight(current: np.ndarray):
 def transform_state_encoder_block(state_dict, i):
     state = state_dict["optimizer"]["target"]["Transformer"][f"encoderblock_{i}"]
 
-    new_state = OrderedDict()
     prefix = f"encoder.layer.{i}."
     new_state = {
         prefix + "intermediate.dense.bias": state["MlpBlock_0"]["Dense_0"]["bias"],
@@ -94,7 +134,13 @@ def transform_state_encoder_block(state_dict, i):
     return new_state
 
 
-def transform_state(state_dict, transformer_layers=12, classification_head=False):
+def get_n_layers(state_dict):
+    return sum([1 if "encoderblock_" in k else 0 for k in state_dict["optimizer"]["target"]["Transformer"].keys()])
+
+
+def transform_state(state_dict, classification_head=False):
+    transformer_layers = get_n_layers(state_dict)
+
     new_state = OrderedDict()
 
     new_state["layernorm.bias"] = state_dict["optimizer"]["target"]["Transformer"]["encoder_norm"]["bias"]
@@ -121,30 +167,71 @@ def transform_state(state_dict, transformer_layers=12, classification_head=False
     return {k: torch.tensor(v) for k, v in new_state.items()}
 
 
-def get_n_layers(state_dict):
-    return sum([1 if "encoderblock_" in k else 0 for k in state_dict["optimizer"]["target"]["Transformer"].keys()])
+# checks that image processor settings are the same as in the original implementation
+# original: https://github.com/google-research/scenic/blob/main/scenic/projects/vivit/data/video_tfrecord_dataset.py
+# dataset specific config:
+# https://github.com/google-research/scenic/blob/main/scenic/projects/vivit/configs/kinetics400/vivit_base_k400.py
+def get_processor() -> VivitImageProcessor:
+    extractor = VivitImageProcessor()
+
+    assert extractor.do_resize is True
+    assert extractor.size == {"shortest_edge": 256}
+    assert extractor.do_center_crop is True
+    assert extractor.crop_size == {"width": 224, "height": 224}
+    assert extractor.resample == PILImageResampling.BILINEAR
+
+    # here: https://github.com/deepmind/dmvr/blob/master/dmvr/modalities.py
+    # one can seen that add_image has default values for normalization_mean and normalization_std set to 0 and 1
+    # which effectively means no normalization (and ViViT does not overwrite those when calling this func)
+    assert extractor.do_normalize is False
+    assert extractor.do_rescale is True
+    assert extractor.rescale_factor == 1/255
+
+    # zero-centering = True in original implementation
+    assert extractor.do_zero_centering is True
+
+    return extractor
+
+
+def convert(output_path: str):
+    flax_model_path = "checkpoint"
+
+    if not os.path.exists(flax_model_path):
+        download_checkpoint(flax_model_path)
+
+    state_dict = restore_checkpoint(flax_model_path, None)
+    new_state = transform_state(state_dict, classification_head=True)
+
+    config = get_vivit_config()
+
+    assert config.image_size == 224
+    assert config.num_frames == 32
+
+    model = VivitForVideoClassification(config)
+    model.load_state_dict(new_state)
+    model.eval()
+
+    extractor = get_processor()
+
+    video = prepare_video()
+    inputs = extractor(video, return_tensors="pt")
+    torch.save(inputs, "video_processed.pt")
+
+    outputs = model(**inputs)
+
+    expected_shape = torch.Size([1, 400])
+    expected_slice = torch.tensor([-1.0543,  2.0764, -0.2104,  0.4439, -0.9658])
+
+    assert outputs.logits.shape == expected_shape
+    assert torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4), outputs.logits[0, :5]
+
+    model.save_pretrained(output_path)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--flax_model", type=str, help="Path to flax model")
-    parser.add_argument("--output_model_name", type=str, help="Name of the outputed file")
-    parser.add_argument("--classification_head", action="store_true")
+    parser.add_argument("--output_model_name", "-o", type=str, help="Output path for the converted HuggingFace model")
 
     args = parser.parse_args()
-
-    state_dict = restore_checkpoint(args.flax_model, None)
-
-    n_layers = get_n_layers(state_dict)
-    new_state = transform_state(state_dict, n_layers, classification_head=args.classification_head)
-
-    out_path = Path(args.flax_model).parent.absolute()
-
-    if ".pt" in args.output_model_name:
-        out_path = out_path / args.output_model_name
-
-    else:
-        out_path = out_path / (args.output_model_name + ".pt")
-
-    torch.save(new_state, out_path)
+    convert(args.output_model_name)

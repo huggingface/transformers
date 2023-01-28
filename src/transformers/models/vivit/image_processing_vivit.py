@@ -56,7 +56,7 @@ class VivitImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 256}`):
             Size of the output image after resizing. The shortest edge of the image will be resized to
             `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
             `size` in the `preprocess` method.
@@ -75,7 +75,10 @@ class VivitImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Defines the scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter
             in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
+        do_zero_centering (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image to values between [-1 - 1] instead of [0 - 1]. Can be overriden by the
+            `do_zero_centering` in the `preprocess` method..
+        do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
@@ -97,13 +100,14 @@ class VivitImageProcessor(BaseImageProcessor):
         crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
+        do_zero_centering: bool = True,
+        do_normalize: bool = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 224}
+        size = size if size is not None else {"shortest_edge": 256}
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size, param_name="crop_size")
@@ -115,6 +119,7 @@ class VivitImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
+        self.do_zero_centering = do_zero_centering
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
@@ -179,6 +184,7 @@ class VivitImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         scale: Union[int, float],
+        do_zero_centering: bool,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ):
@@ -193,6 +199,9 @@ class VivitImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
+        if do_zero_centering:
+            return rescale(image, scale=scale * 2.0, data_format=data_format, **kwargs) - 1.0
+
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
     def normalize(
@@ -228,6 +237,7 @@ class VivitImageProcessor(BaseImageProcessor):
         crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
+        do_zero_centering: bool = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -246,6 +256,9 @@ class VivitImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
+        if do_zero_centering and not do_rescale:
+            raise ValueError("For zero-centering, do_rescale must also be set to True.")
+
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
@@ -256,7 +269,7 @@ class VivitImageProcessor(BaseImageProcessor):
             image = self.center_crop(image, size=crop_size)
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor)
+            image = self.rescale(image=image, scale=rescale_factor, do_zero_centering=do_zero_centering)
 
         if do_normalize:
             image = self.normalize(image=image, mean=image_mean, std=image_std)
@@ -274,6 +287,7 @@ class VivitImageProcessor(BaseImageProcessor):
         crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
+        do_zero_centering: bool = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -302,6 +316,8 @@ class VivitImageProcessor(BaseImageProcessor):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_zero_centering (`bool`, *optional*, defaults to `self.do_zero_centering`):
+                Whether to rescale the image to values between [-1 - 1] instead of [0 - 1].
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
@@ -326,6 +342,7 @@ class VivitImageProcessor(BaseImageProcessor):
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_zero_centering = do_zero_centering if do_zero_centering is not None else self.do_zero_centering
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -354,6 +371,7 @@ class VivitImageProcessor(BaseImageProcessor):
                     crop_size=crop_size,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
+                    do_zero_centering=do_zero_centering,
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,

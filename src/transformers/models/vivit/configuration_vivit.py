@@ -88,7 +88,7 @@ class VivitConfig(PretrainedConfig):
     def __init__(
         self,
         image_size=224,
-        num_frames=16,
+        num_frames=32,
         tubelet_size=[2, 16, 16],
         num_channels=3,
         hidden_size=768,
