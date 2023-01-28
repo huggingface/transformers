@@ -46,7 +46,7 @@ if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import BeitFeatureExtractor
+    from transformers import BeitImageProcessor
 
 
 class TFBeitModelTester:
@@ -74,7 +74,7 @@ class TFBeitModelTester:
         out_indices=[0, 1, 2, 3],
     ):
         self.parent = parent
-        self.vocab_size = 100
+        self.vocab_size = vocab_size
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
@@ -468,9 +468,9 @@ def prepare_img():
 @require_vision
 class TFBeitModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
+            BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
             if is_vision_available()
             else None
         )
@@ -479,9 +479,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     def test_inference_masked_image_modeling_head(self):
         model = TFBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        pixel_values = feature_extractor(images=image, return_tensors="tf")
+        pixel_values = image_processor(images=image, return_tensors="tf")
 
         # prepare bool_masked_pos
         bool_masked_pos = tf.ones((1, 196), dtype=tf.dtypes.bool)
@@ -504,9 +504,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head_imagenet_1k(self):
         model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
@@ -527,9 +527,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head_imagenet_22k(self):
         model = TFBeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k", from_pt=True)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
@@ -550,11 +550,11 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     def test_inference_semantic_segmentation(self):
         model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640", from_pt=True)
 
-        feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
+        image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
@@ -589,20 +589,20 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     def test_post_processing_semantic_segmentation(self):
         model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640", from_pt=True)
 
-        feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
+        image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
         outputs.logits = tf.stop_gradient(outputs.logits)
 
-        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(500, 300)])
+        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(500, 300)])
         expected_shape = tf.convert_to_tensor([500, 300])
         self.assertEqual(segmentation[0].shape, expected_shape)
 
-        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)
+        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = tf.convert_to_tensor([160, 160])
         self.assertEqual(segmentation[0].shape, expected_shape)

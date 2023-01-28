@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Platforms and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Meta Platforms and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class TFBeitModelOutputWithPooling(TFBaseModelOutputWithPooling):
     """
-    Class for outputs of [`BeitModel`].
+    Class for outputs of [`TFBeitModel`].
 
     Args:
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -1105,7 +1105,7 @@ class TFBeitConvModule(tf.keras.layers.Layer):
             dilation_rate=dilation,
             name="conv",
         )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn")
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
         self.activation = tf.nn.relu
 
     def call(self, input: tf.Tensor) -> tf.Tensor:

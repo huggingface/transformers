@@ -460,7 +460,7 @@ class TFData2VecVisionOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitLayer with Beit->Data2VecVision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitLayer with Beit->Data2VecVision,beit->data2vec_vision
 class TFData2VecVisionLayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -823,7 +823,7 @@ class TFData2VecVisionPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
 class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -928,7 +928,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -990,8 +990,8 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
 class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TFSequenceClassificationLoss):
+    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1466,8 +1466,8 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
 class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
+    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1490,7 +1490,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         self.auxiliary_head = (
             TFData2VecVisionFCNHead(config, name="auxiliary_head") if config.use_auxiliary_head else None
         )
-
+    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation.compute_loss with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
     def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
         if len(shape_list(labels)) > 3:
@@ -1539,17 +1539,17 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         Returns:
         Examples:
         ```python
-        >>> from transformers import AutoFeatureExtractor, TFData2VecVisionForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, TFData2VecVisionForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
         >>> model = TFData2VecVisionForSemanticSegmentation.from_pretrained(
         ...     "microsoft/beit-base-patch16-224-pt22k-ft22k"
         ... )
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> inputs = image_processor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
