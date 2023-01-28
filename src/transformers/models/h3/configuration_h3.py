@@ -28,9 +28,9 @@ H3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class H3Config(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of an [`H3Model`]. It is used to instantiate a GPT-2
+    This is the configuration class to store the configuration of an [`H3Model`]. It is used to instantiate a H3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the H3 [h3](https://huggingface.co/h3) architecture.
+    defaults will yield a similar configuration to that of the H3 [stanford/H3-125m](https://huggingface.co/stanford/H3-125m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -43,7 +43,7 @@ class H3Config(PretrainedConfig):
             Dimensionality of the embeddings and hidden states.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. If not set, will set it to 4 times the `hidden_size`.
@@ -65,8 +65,6 @@ class H3Config(PretrainedConfig):
             SSM mode to use.
         ssm_measure (`str`, *optional*, defaults to `diag-lin`):
             SSM measure to use.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
 
     Example:
 
@@ -103,7 +101,7 @@ class H3Config(PretrainedConfig):
         ssm_mode="diag",
         ssm_measure="diag-lin",
         attn_layer_idx=[6],
-        use_cache=True,
+        use_cache=False,
         bos_token_id=50256,
         eos_token_id=50256,
         **kwargs,

@@ -104,7 +104,7 @@ class H3ModelTester:
             residual_dropout=self.hidden_dropout_prob,
             n_positions=self.max_position_embeddings,
             initializer_range=self.initializer_range,
-            use_cache=True,
+            use_cache=False,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
@@ -229,10 +229,6 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
-
-    @unittest.skip(reason="H3 doesn't support `output_attentions`")
-    def test_beam_sample_generate_dict_output(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

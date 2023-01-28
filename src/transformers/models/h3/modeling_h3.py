@@ -567,8 +567,7 @@ class H3Model(H3PreTrainedModel):
                 outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
-                    None,
-                    attention_mask,
+                    residual,
                 )
             else:
                 hidden_states, residual, attention = block(
