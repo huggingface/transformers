@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    ernie_m,
     albert,
     altclip,
     audio_spectrogram_transformer,
