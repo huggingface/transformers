@@ -3415,11 +3415,7 @@ else:
         ]
     )
     _import_structure["models.resnet"].extend(
-        [
-            "FlaxResNetForImageClassification",
-            "FlaxResNetModel",
-            "FlaxResNetPreTrainedModel"
-        ]
+        ["FlaxResNetForImageClassification", "FlaxResNetModel", "FlaxResNetPreTrainedModel"]
     )
     _import_structure["models.roberta"].extend(
         [

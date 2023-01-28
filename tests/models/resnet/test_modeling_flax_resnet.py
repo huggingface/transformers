@@ -45,7 +45,7 @@ class FlaxResNetModelTester(unittest.TestCase):
         hidden_act="relu",
         num_labels=3,
         scope=None,
-        ):
+    ):
 
         self.parent = parent
         self.batch_size = batch_size
@@ -64,13 +64,9 @@ class FlaxResNetModelTester(unittest.TestCase):
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        labels = None
-        if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.num_labels)
-
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values
 
     def get_config(self):
         return ResNetConfig(
@@ -82,7 +78,7 @@ class FlaxResNetModelTester(unittest.TestCase):
             num_labels=self.num_labels,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
+    def create_and_check_model(self, config, pixel_values):
         model = FlaxResNetModel(config=config)
         result = model(pixel_values)
         self.parent.assertEqual(
@@ -90,13 +86,11 @@ class FlaxResNetModelTester(unittest.TestCase):
             (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
         )
 
-
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+    def create_and_check_for_image_classification(self, config, pixel_values):
         config.num_labels = self.num_labels
         model = FlaxResNetForImageClassification(config=config)
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -115,7 +109,7 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self) -> None:
         self.model_tester = FlaxResNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -181,6 +175,6 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("microsoft/resnet-18")
+            model = model_class_name.from_pretrained("microsoft/resnet-50")
             outputs = model(np.ones((1, 3, 224, 224)))
             self.assertIsNotNone(outputs)

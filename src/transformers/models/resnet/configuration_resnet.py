@@ -44,6 +44,8 @@ class ResNetConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
+        image_size (`int`, *optional*, defaults to 256):
+            The size (resolution) of each image.
         embedding_size (`int`, *optional*, defaults to 64):
             Dimensionality (hidden size) for the embedding layer.
         hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
@@ -82,7 +84,7 @@ class ResNetConfig(PretrainedConfig):
     def __init__(
         self,
         num_channels=3,
-        image_size=256, # NOTE: Changing config, we can somehow remove this
+        image_size=224,  # NOTE: Changing config, we can somehow remove this
         embedding_size=64,
         hidden_sizes=[256, 512, 1024, 2048],
         depths=[3, 4, 6, 3],
