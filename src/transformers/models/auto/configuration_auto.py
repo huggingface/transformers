@@ -118,6 +118,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2Config"),
         ("mobilevit", "MobileViTConfig"),
         ("mpnet", "MPNetConfig"),
+        ("mra", "MRAConfig"),
         ("mt5", "MT5Config"),
         ("mvp", "MvpConfig"),
         ("nat", "NatConfig"),
@@ -191,7 +192,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
-        ("mra", "MRAConfig"),
     ]
 )
 
@@ -280,6 +280,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mra", "MRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mvp", "MVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nat", "NAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nezha", "NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -342,7 +343,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yolos", "YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("mra", "MRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -453,6 +453,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilenet_v2", "MobileNetV2"),
         ("mobilevit", "MobileViT"),
         ("mpnet", "MPNet"),
+        ("mra", "MRA"),
         ("mt5", "MT5"),
         ("mvp", "MVP"),
         ("nat", "NAT"),
@@ -534,7 +535,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
-        ("mra", "MRA"),
     ]
 )
 

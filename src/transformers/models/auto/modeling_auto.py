@@ -117,6 +117,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2Model"),
         ("mobilevit", "MobileViTModel"),
         ("mpnet", "MPNetModel"),
+        ("mra", "MRAModel"),
         ("mt5", "MT5Model"),
         ("mvp", "MvpModel"),
         ("nat", "NatModel"),
@@ -184,7 +185,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
-        ("mra", "MRAModel"),
     ]
 )
 
@@ -290,6 +290,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForCausalLM"),
         ("mobilebert", "MobileBertForMaskedLM"),
         ("mpnet", "MPNetForMaskedLM"),
+        ("mra", "MRAForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nezha", "NezhaForMaskedLM"),
         ("nllb", "M2M100ForConditionalGeneration"),
@@ -317,7 +318,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlnet", "XLNetLMHeadModel"),
         ("yoso", "YosoForMaskedLM"),
-        ("mra", "MRAForMaskedLM"),
     ]
 )
 
@@ -514,6 +514,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForMaskedLM"),
         ("mobilebert", "MobileBertForMaskedLM"),
         ("mpnet", "MPNetForMaskedLM"),
+        ("mra", "MRAForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nezha", "NezhaForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
@@ -532,7 +533,6 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
-        ("mra", "MRAForMaskedLM"),
     ]
 )
 
@@ -636,6 +636,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForSequenceClassification"),
         ("mobilebert", "MobileBertForSequenceClassification"),
         ("mpnet", "MPNetForSequenceClassification"),
+        ("mra", "MRAForSequenceClassification"),
         ("mvp", "MvpForSequenceClassification"),
         ("nezha", "NezhaForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
@@ -658,7 +659,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
         ("xlnet", "XLNetForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
-        ("mra", "MRAForSequenceClassification"),
     ]
 )
 
@@ -697,6 +697,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
         ("mpnet", "MPNetForQuestionAnswering"),
+        ("mra", "MRAForQuestionAnswering"),
         ("mvp", "MvpForQuestionAnswering"),
         ("nezha", "NezhaForQuestionAnswering"),
         ("nystromformer", "NystromformerForQuestionAnswering"),
@@ -715,7 +716,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
         ("xlnet", "XLNetForQuestionAnsweringSimple"),
         ("yoso", "YosoForQuestionAnswering"),
-        ("mra", "MRAForQuestionAnswering"),
     ]
 )
 
@@ -773,6 +773,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForTokenClassification"),
         ("mobilebert", "MobileBertForTokenClassification"),
         ("mpnet", "MPNetForTokenClassification"),
+        ("mra", "MRAForTokenClassification"),
         ("nezha", "NezhaForTokenClassification"),
         ("nystromformer", "NystromformerForTokenClassification"),
         ("qdqbert", "QDQBertForTokenClassification"),
@@ -787,7 +788,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForTokenClassification"),
         ("xlnet", "XLNetForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
-        ("mra", "MRAForTokenClassification"),
     ]
 )
 
@@ -814,6 +814,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForMultipleChoice"),
         ("mobilebert", "MobileBertForMultipleChoice"),
         ("mpnet", "MPNetForMultipleChoice"),
+        ("mra", "MRAForMultipleChoice"),
         ("nezha", "NezhaForMultipleChoice"),
         ("nystromformer", "NystromformerForMultipleChoice"),
         ("qdqbert", "QDQBertForMultipleChoice"),
@@ -828,7 +829,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForMultipleChoice"),
         ("xlnet", "XLNetForMultipleChoice"),
         ("yoso", "YosoForMultipleChoice"),
-        ("mra", "MRAForMultipleChoice"),
     ]
 )
 
