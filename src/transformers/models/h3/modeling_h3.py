@@ -507,10 +507,10 @@ class H3Model(H3PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, new_embeddings):
-        self.embeddings = new_embeddings
+        self.embeddings.word_embeddings = new_embeddings
 
     @add_start_docstrings_to_model_forward(H3_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

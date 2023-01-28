@@ -91,7 +91,7 @@ class H3Config(PretrainedConfig):
         vocab_size=50264,
         hidden_size=768,
         num_hidden_layers=12,
-        num_attention_heads=16,
+        num_attention_heads=12,
         n_inner=None,
         residual_dropout=0.0,
         embedding_dropout=0.1,

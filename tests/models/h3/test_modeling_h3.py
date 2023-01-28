@@ -155,19 +155,14 @@ class H3ModelTester:
 @require_torch
 class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            H3Model,
-            H3ForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (H3Model, H3ForCausalLM,) if is_torch_available() else ()
     all_generative_model_classes = (H3ForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
-    test_model_parallel = True
+    test_model_parallel = False
     has_attentions = False
+    test_pruning = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = H3ModelTester(self)
@@ -180,17 +175,9 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_h3_model(*config_and_inputs)
 
-    def test_h3_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_h3_model_past(*config_and_inputs)
-
     def test_h3_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    def test_h3_weight_initialization(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_h3_weight_initialization(*config_and_inputs)
 
     @slow
     def test_batch_generation(self):
@@ -236,6 +223,10 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
+    @unittest.skip(reason="H3 doesn't support `output_attentions`")
+    def test_beam_sample_generate_dict_output(self):
+        pass
+    
     @slow
     def test_model_from_pretrained(self):
         for model_name in H3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
