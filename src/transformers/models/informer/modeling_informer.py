@@ -868,7 +868,7 @@ class InformerEncoder(nn.Module):
         ])
 
         if config.distil is not None:
-            self.conv_layers = nn.ModuleList([ConvLayer(config.d_model) for _ in range(config.num_encoder_layers - 1)])
+            self.conv_layers = nn.ModuleList([ConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)])
         else:
             self.conv_layers = None
 
@@ -914,7 +914,7 @@ class InformerDecoder(nn.Module):
                             output_attention=False,
                         ),
                         config.d_model,
-                        config.nhead,
+                        config.decoder_attention_heads,
                         mix=True,
                     ),
                     AttentionLayer(
@@ -933,7 +933,7 @@ class InformerDecoder(nn.Module):
                     dropout=config.dropout,
                     activation=self.activation_fn,
                 )
-                for _ in range(config.num_decoder_layers)
+                for _ in range(config.decoder_layers)
             ],
         )
         self.norm = torch.nn.LayerNorm(config.d_model)
@@ -1124,8 +1124,6 @@ class InformerModel(InformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(INFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
             self,
             past_values: torch.Tensor,
