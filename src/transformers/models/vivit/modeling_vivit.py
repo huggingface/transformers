@@ -27,6 +27,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import prune_linear_layer, find_pruneable_heads_and_indices
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_vivit import VivitConfig
 
@@ -200,6 +201,7 @@ class VivitSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Vivit
 class VivitAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -208,7 +210,22 @@ class VivitAttention(nn.Module):
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
-        raise NotImplementedError()
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.attention.query = prune_linear_layer(self.attention.query, index)
+        self.attention.key = prune_linear_layer(self.attention.key, index)
+        self.attention.value = prune_linear_layer(self.attention.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
+        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False):
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
