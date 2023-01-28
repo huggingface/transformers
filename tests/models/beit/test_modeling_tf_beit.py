@@ -470,14 +470,14 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+            BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_masked_image_modeling_head(self):
-        model = TFBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+        model = TFBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -502,7 +502,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -525,7 +525,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_22k(self):
-        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k")
+        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k", from_pt=True)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -548,7 +548,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640", from_pt=True)
 
         feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 
@@ -587,7 +587,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_post_processing_semantic_segmentation(self):
-        model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640", from_pt=True)
 
         feature_extractor = BeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
 
