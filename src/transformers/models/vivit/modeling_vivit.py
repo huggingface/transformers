@@ -89,7 +89,6 @@ class VivitEmbeddings(nn.Module):
     Vivit Embeddings.
 
     Creates embeddings from a video using VivitTubeletEmbeddings, adds CLS token and positional embeddings.
-
     """
 
     def __init__(self, config):
@@ -455,8 +454,11 @@ class VivitModel(VivitPreTrainedModel):
 
     def _prune_heads(self, heads_to_prune):
         """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
+        Prunes heads of the model.
+
+        Args:
+            heads_to_prune:
+                dict of {layer_num: list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -632,6 +634,8 @@ class VivitForVideoClassification(VivitPreTrainedModel):
 
         >>> # model predicts one of the 400 Kinetics-400 classes
         >>> predicted_label = logits.argmax(-1).item()
+        >>> print(model.config.id2label[predicted_label])
+        eating spaghetti
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

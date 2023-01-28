@@ -41,7 +41,7 @@ class VivitConfig(PretrainedConfig):
     Args:
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        num_frames (`int`, *optional*, defaults to 16):
+        num_frames (`int`, *optional*, defaults to 32):
             The number of frames in each video.
         tubelet_size (`List[int]`, *optional*, defaults to [2, 16, 16]):
             The size (resolution) of each tubelet.
@@ -72,12 +72,12 @@ class VivitConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import VivitModel, VivitConfig
+    >>> from transformers import VivitConfig, VivitModel
 
-    >>> # Initializing a Vivit google/vivit-b-16x2-kinetics400 style configuration
+    >>> # Initializing a ViViT google/vivit-b-16x2-kinetics400 style configuration
     >>> configuration = VivitConfig()
 
-    >>> # Initializing a model from the google/vivit-b-16x2-kinetics400 style configuration
+    >>> # Initializing a model (with random weights) from the google/vivit-b-16x2-kinetics400 style configuration
     >>> model = VivitModel(configuration)
 
     >>> # Accessing the model configuration
