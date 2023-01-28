@@ -36,8 +36,8 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
     tf_model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
-        pipe = pipeline("image-to-text", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        pipe = pipeline("image-to-text", model=model, tokenizer=tokenizer, feature_extractor=processor)
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
