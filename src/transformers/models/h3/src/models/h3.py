@@ -182,7 +182,7 @@ class H3(nn.Module):
         if L_og < L:
             y = y[:, :L_og, :]
 
-        return y
+        return (y,)
 
     def step(self, u, state_k, state):
         q, k, v = self.q_proj(u), self.k_proj(u), self.v_proj(u)

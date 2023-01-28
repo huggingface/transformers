@@ -10,4 +10,8 @@ model = H3ForCausalLM(H3Config(use_cache=False))
 
 input_ids = torch.tensor([[101]])
 
-outputs = model(input_ids)
+outputs = model(input_ids, output_attentions=True)
+
+print(outputs.keys())
+
+print(len(outputs.attentions))

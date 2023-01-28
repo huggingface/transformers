@@ -136,7 +136,7 @@ class H3Embeddings(nn.Module):
         return embeddings
 
 
-def attention_pytorch(qkv, dropout_p=0.0, causal=True):
+def attention_pytorch(qkv, dropout_p=0.0, causal=True, output_attentions: Optional[bool] = False):
     """
     Args:
         qkv: (batch_size, seqlen, 3, nheads, head_dim)
@@ -171,7 +171,8 @@ def attention_pytorch(qkv, dropout_p=0.0, causal=True):
     attention = torch.softmax(scores, dim=-1)
     attention_drop = nn.functional.dropout(attention, dropout_p)
     output = torch.einsum("bhts,bshd->bthd", attention_drop, values)
-    return output.to(dtype=qkv.dtype), scores
+
+    return (output.to(dtype=qkv.dtype), attention) if output_attentions else (output,)
 
 
 class MultiHeadAttention(nn.Module):
@@ -190,7 +191,11 @@ class MultiHeadAttention(nn.Module):
         # self.inner_attn = FlashAttention(attention_dropout=attention_dropout, **factory_kwargs)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias)
 
-    def forward(self, hidden_states):
+    def forward(
+        self,
+        hidden_states,
+        output_attentions: Optional[bool] = False,
+    ):
         """
         Args:
             hidden_states: (batch, seqlen, hidden_dim) (where hidden_dim = num heads * head dim)
@@ -198,13 +203,16 @@ class MultiHeadAttention(nn.Module):
         qkv = self.Wqkv(hidden_states)
         batch_size, seq_len, hidden_size = qkv.shape
         qkv = qkv.reshape(batch_size, seq_len, 3, self.num_heads, hidden_size // 3 // self.num_heads)
-        context, attn_weights = attention_pytorch(qkv, dropout_p=self.attention_dropout, causal=self.causal)
-        # TODO support outputting attention weights
-        context = context.reshape(batch_size, seq_len, -1)
+        attention_outputs = attention_pytorch(
+            qkv, dropout_p=self.attention_dropout, causal=self.causal, output_attentions=output_attentions
+        )
+        context = attention_outputs[0].reshape(batch_size, seq_len, -1)
 
         output = self.out_proj(context)
 
-        return output
+        outputs = (output,) + attention_outputs[1:]  # add attentions if we output them
+
+        return outputs
 
 
 class H3MLP(nn.Module):
@@ -273,7 +281,7 @@ class H3Block(nn.Module):
         self.drop_path2 = H3StochasticDepth(drop_path2, mode="row")
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-    def forward(self, hidden_states, residual):
+    def forward(self, hidden_states, residual, output_attentions: Optional[bool] = False):
         # 1. apply prenorm
         dropped = self.drop_path1(self.dropout1(hidden_states))
         residual = (dropped + residual) if residual is not None else dropped
@@ -283,9 +291,13 @@ class H3Block(nn.Module):
             residual = residual.to(torch.float32)
 
         # 2. apply mixer
-        hidden_states = self.mixer(hidden_states)
+        if isinstance(self.mixer, MultiHeadAttention):
+            mixer_outputs = self.mixer(hidden_states, output_attentions=output_attentions)
+        else:
+            mixer_outputs = self.mixer(hidden_states)
 
         # 3. apply second norm
+        hidden_states = mixer_outputs[0]
         dropped = self.drop_path2(self.dropout2(hidden_states))
         residual = (dropped + residual) if residual is not None else dropped
         hidden_states = self.norm2(residual.to(dtype=self.norm2.weight.dtype))
@@ -295,7 +307,7 @@ class H3Block(nn.Module):
         # 4. apply MLP
         hidden_states = self.mlp(hidden_states)
 
-        return hidden_states, residual
+        return (hidden_states, residual, mixer_outputs[1:])
 
 
 # def create_mixer_cls(config, layer_idx=None):
@@ -559,21 +571,19 @@ class H3Model(H3PreTrainedModel):
                     attention_mask,
                 )
             else:
-                # print("Hidden states before block:", hidden_states.shape)
-                # print("Residual before block:", residual)
-                # print("Block:", i)
-                hidden_states, residual = block(hidden_states, residual)
+                hidden_states, residual, attention = block(
+                    hidden_states, residual, output_attentions=output_attentions
+                )
 
             # hidden_states = outputs[0]
 
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
+            if output_attentions and attention:
+                all_self_attentions = all_self_attentions + (attention,)
 
         dropped = self.final_dropout(hidden_states)
         residual = (dropped + residual) if residual is not None else dropped
         hidden_states = self.final_layernorm(residual.to(dtype=self.final_layernorm.weight.dtype))
 
-        # hidden_states = hidden_states.view(output_shape)
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -674,24 +684,24 @@ class H3ForCausalLM(H3PreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
-        lm_logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
+            output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss,
-            logits=lm_logits,
+            logits=logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
