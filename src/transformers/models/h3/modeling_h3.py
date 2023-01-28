@@ -26,7 +26,7 @@ from torch.nn import CrossEntropyLoss
 
 from transformers.models.h3.src.models.h3 import H3
 
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_h3 import H3Config
@@ -117,14 +117,20 @@ class H3Embeddings(nn.Module):
         if self.max_position_embeddings > 0:
             self.position_embeddings = nn.Embedding(max_position_embeddings, embed_dim)
 
-    def forward(self, input_ids, position_ids=None):
-        seqlen = input_ids.shape[1]
-        embeddings = self.word_embeddings(input_ids)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ):
+        seq_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        embeddings = self.word_embeddings(input_ids) if input_ids is not None else inputs_embeds
+
         if self.project_in is not None:
             embeddings = self.project_in(embeddings)
         if self.max_position_embeddings > 0:
             if position_ids is None:
-                position_ids = torch.arange(seqlen, dtype=torch.long, device=input_ids.device)
+                position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
             position_embeddings = self.position_embeddings(position_ids)
             embeddings = embeddings + position_embeddings
         return embeddings
@@ -422,30 +428,16 @@ H3_START_DOCSTRING = r"""
 H3_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
-            sequence tokens in the vocabulary.
-
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
-            `input_ids`.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
-            Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
-            `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
-            their past given to this model should not be passed as `input_ids` as they have already been computed.
+
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-
-            If `past_key_values` is used, `attention_mask` needs to contain the masking strategy that was used for
-            `past_key_values`. In other words, the `attention_mask` always has to have the length:
-            `len(past_key_values) + len(input_ids)`
 
             [What are attention masks?](../glossary#attention-mask)
 
@@ -460,11 +452,6 @@ H3_INPUTS_DOCSTRING = r"""
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
 
-            If `past_key_values` is used, optionally only the last `inputs_embeds` have to be input (see
-            `past_key_values`).
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -515,26 +502,23 @@ class H3Model(H3PreTrainedModel):
     @add_start_docstrings_to_model_forward(H3_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
@@ -547,9 +531,6 @@ class H3Model(H3PreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        # if past_key_values is None:
-        #     past_key_values = tuple([None] * len(self.h))
-
         if inputs_embeds is None:
             hidden_states = self.embeddings(input_ids, position_ids=position_ids)
         else:
@@ -557,7 +538,6 @@ class H3Model(H3PreTrainedModel):
 
         residual = None
 
-        presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for block in self.blocks:
@@ -566,16 +546,9 @@ class H3Model(H3PreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
 
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions)
+                        return module(*inputs, output_attentions)
 
                     return custom_forward
 
@@ -592,11 +565,9 @@ class H3Model(H3PreTrainedModel):
                 hidden_states, residual = block(hidden_states, residual)
 
             # hidden_states = outputs[0]
-            # if use_cache is True:
-            #     presents = presents + (outputs[1],)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         dropped = self.final_dropout(hidden_states)
         residual = (dropped + residual) if residual is not None else dropped
@@ -612,20 +583,16 @@ class H3Model(H3PreTrainedModel):
                 v
                 for v in [
                     hidden_states,
-                    presents,
                     all_hidden_states,
                     all_self_attentions,
                 ]
                 if v is not None
             )
 
-        # TODO use class without cross-attentions
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutput(
             last_hidden_state=hidden_states,
-            past_key_values=presents,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-            cross_attentions=None,
         )
 
 
@@ -655,11 +622,7 @@ class H3ForCausalLM(H3PreTrainedModel):
     def tie_weights(self):
         self.lm_head.weight = self.h3.embeddings.word_embeddings.weight
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
-        # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
 
@@ -667,14 +630,10 @@ class H3ForCausalLM(H3PreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
         return {
             "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
         }
@@ -682,22 +641,20 @@ class H3ForCausalLM(H3PreTrainedModel):
     @add_start_docstrings_to_model_forward(H3_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
+        output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -708,11 +665,9 @@ class H3ForCausalLM(H3PreTrainedModel):
 
         transformer_outputs = self.h3(
             input_ids,
-            past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -734,24 +689,9 @@ class H3ForCausalLM(H3PreTrainedModel):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        # TODO use class without cross-attentions
-        return CausalLMOutputWithCrossAttentions(
+        return CausalLMOutput(
             loss=loss,
             logits=lm_logits,
-            past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
-            cross_attentions=None,
-        )
-
-    @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-        """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
         )

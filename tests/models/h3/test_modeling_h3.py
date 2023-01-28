@@ -155,7 +155,14 @@ class H3ModelTester:
 @require_torch
 class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (H3Model, H3ForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            H3Model,
+            H3ForCausalLM,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (H3ForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
@@ -226,7 +233,7 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @unittest.skip(reason="H3 doesn't support `output_attentions`")
     def test_beam_sample_generate_dict_output(self):
         pass
-    
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in H3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

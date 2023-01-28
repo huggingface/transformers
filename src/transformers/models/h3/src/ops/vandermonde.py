@@ -7,8 +7,8 @@ import torch
 
 from einops import rearrange
 from opt_einsum import contract
-
 from pykeops.torch import Genred, LazyTensor
+
 
 try:
     from cauchy_mult import vand_log_mult_sym_bwd, vand_log_mult_sym_fwd
