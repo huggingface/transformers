@@ -667,32 +667,37 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         #               scores[k, : self.eos_token_id] = -float("inf")
 
         def _update_slices(batch_idx_to_modify, idx0, idx1):
-            # TODO most important function hahaahh
-            batches = batch_idx_to_modify.shape[0]
+            batch_idx_to_modify = tf.where(batch_idx_to_modify)
             new_scores = tf.identity(scores)
-            mod = tf.tile(range(idx0, idx1), [batches])
-            batch = tf.repeat(batch_idx_to_modify, idx1 - idx0)
-            final_idx = tf.stack((tf.cast(batch, mod.dtype), mod), axis=1)
-            updates = tf.ones(((idx1 - idx0) * batches,), dtype=scores.dtype) * -float("inf")
-            new_scores = tf.tensor_scatter_nd_update(new_scores, final_idx, updates)
+            if batch_idx_to_modify.shape[0] is not None:
+                if batch_idx_to_modify.shape[0] > 0:
+                    batches = batch_idx_to_modify.shape[0]
+                    mod = tf.tile(range(idx0, idx1), [batches])
+                    batch = tf.repeat(batch_idx_to_modify, (idx1 - idx0))
+                    final_idx = tf.stack((tf.cast(batch, mod.dtype), mod), axis=1)
+                    updates = tf.ones(((idx1 - idx0) * batches,), dtype=scores.dtype) * -float("inf")
+                    new_scores = tf.tensor_scatter_nd_update(new_scores, final_idx, updates)
             return new_scores
 
         max_idx = scores.shape[1]
-        indices_1 = tf.where(last_was_timestamps & penultimate_was_timestamp)
-        indices_2 = tf.where(last_was_timestamps & tf.math.logical_not(penultimate_was_timestamp))
+        indices_1 = last_was_timestamps & penultimate_was_timestamp
+        indices_2 = last_was_timestamps & tf.math.logical_not(penultimate_was_timestamp)
 
-        if indices_1 is not None:
-            # correct until here
-            scores = tf.cond(
-                tf.greater(indices_1.shape[0], 0),
-                lambda: _update_slices(indices_1, self.timestamp_begin, max_idx),
-                lambda: tf.identity(scores),
-            )
-        scores = tf.cond(
-            tf.is_tensor(indices_2) & tf.greater(indices_2.shape[0], 0),
-            lambda: _update_slices(indices_2, 0, self.eos_token_id),
-            lambda: tf.identity(scores),
-        )
+        # Let's deal with the empty cases
+        scores = _update_slices(indices_1, self.timestamp_begin, max_idx)
+        # correct until here
+        # scores = tf.cond(
+        #     tf.greater(tf.shape(indices_1)[0], 0),
+        #     lambda: _update_slices(indices_1, self.timestamp_begin , max_idx),
+        #     lambda: tf.identity(scores),
+        # )
+        scores = _update_slices(indices_2, 0, self.eos_token_id)
+
+        # scores = tf.cond(
+        #     tf.greater(tf.shape(indices_2)[0], 0),
+        #     lambda: _update_slices(indices_2, 0, self.eos_token_id),
+        #     lambda: tf.identity(scores),
+        # )
 
         # if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
         #     last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
@@ -707,7 +712,7 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         )
 
         ####################################################################################################
-        # Still left to do:
+        # Still left to do: TODO this does not seem to properly update the scores
         # logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
         # for k in range(input_ids.shape[0]):
         #     timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
@@ -718,9 +723,9 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         logprobs = tf.nn.log_softmax(tf.cast(scores, dtype=tf.float32), axis=-1)
         timestamp_logprob = tf.reduce_logsumexp(logprobs[:, self.timestamp_begin :], axis=-1)
         max_text_token_logprob = tf.reduce_max(logprobs[:, : self.timestamp_begin], axis=-1)
-        indices_3 = tf.where(timestamp_logprob > max_text_token_logprob)
+        indices_3 = timestamp_logprob > max_text_token_logprob
         scores = tf.cond(
-            tf.is_tensor(indices_3) & tf.greater(indices_3.shape[0], 0),
+            tf.greater(tf.shape(indices_3)[0], 0),
             lambda: _update_slices(indices_3, 0, self.timestamp_begin),
             lambda: tf.identity(scores),
         )
