@@ -559,7 +559,7 @@ class MRASelfAttention(nn.Module):
         gpu_warp_size = 32
 
         if head_dim < gpu_warp_size:
-            pad_size = batch_size * num_heads, seq_len, gpu_warp_size - head_dim
+            pad_size = batch_size, num_heads, seq_len, gpu_warp_size - head_dim
 
             query_layer = torch.cat([query_layer, torch.zeros(pad_size, device=query_layer.device)], dim=-1)
             key_layer = torch.cat([key_layer, torch.zeros(pad_size, device=key_layer.device)], dim=-1)
