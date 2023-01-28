@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Flax ViViT checkpoints from the original repository to PyTorch.
-URL: https://github.com/google-research/scenic/tree/main/scenic/projects/vivit
+"""Convert Flax ViViT checkpoints from the original repository to PyTorch. URL:
+https://github.com/google-research/scenic/tree/main/scenic/projects/vivit
 """
 import argparse
 import json
@@ -23,12 +23,10 @@ from collections import OrderedDict
 import numpy as np
 import torch
 
+import requests
 from flax.training.checkpoints import restore_checkpoint
 from huggingface_hub import hf_hub_download
-
-from transformers import VivitConfig, VivitImageProcessor, VivitForVideoClassification
-import requests
-
+from transformers import VivitConfig, VivitForVideoClassification, VivitImageProcessor
 from transformers.image_utils import PILImageResampling
 
 
@@ -185,7 +183,7 @@ def get_processor() -> VivitImageProcessor:
     # which effectively means no normalization (and ViViT does not overwrite those when calling this func)
     assert extractor.do_normalize is False
     assert extractor.do_rescale is True
-    assert extractor.rescale_factor == 1/255
+    assert extractor.rescale_factor == 1 / 255
 
     # zero-centering = True in original implementation
     assert extractor.do_zero_centering is True
@@ -220,7 +218,7 @@ def convert(output_path: str):
     outputs = model(**inputs)
 
     expected_shape = torch.Size([1, 400])
-    expected_slice = torch.tensor([-1.0543,  2.0764, -0.2104,  0.4439, -0.9658])
+    expected_slice = torch.tensor([-1.0543, 2.0764, -0.2104, 0.4439, -0.9658])
 
     assert outputs.logits.shape == expected_shape
     assert torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4), outputs.logits[0, :5]
