@@ -1797,7 +1797,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     if is_torch_available():
         framework_dependent_parameters = {
             "AutoModelForSeq2SeqLM": AutoModelForSeq2SeqLM,
-            "create_tensor": torch.tensor,
+            "create_tensor_fn": torch.tensor,
             "return_tensors": "pt",
         }
 

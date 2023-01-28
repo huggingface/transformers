@@ -132,7 +132,7 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
     if is_tf_available():
         framework_dependent_parameters = {
             "AutoModelForSeq2SeqLM": TFAutoModelForSeq2SeqLM,
-            "create_tensor": tf.convert_to_tensor,
+            "create_tensor_fn": tf.convert_to_tensor,
             "return_tensors": "tf",
         }
 

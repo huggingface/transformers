@@ -12,14 +12,14 @@ class GenerationIntegrationTestsMixin:
     # To be populated by the child classes
     framework_dependent_parameters = {
         "AutoModelForSeq2SeqLM": None,
-        "create_tensor": None,
+        "create_tensor_fn": None,
         "return_tensors": None,
     }
 
     def test_validate_generation_inputs(self):
         model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
         return_tensors = self.framework_dependent_parameters["return_tensors"]
-        create_tensor = self.framework_dependent_parameters["create_tensor"]
+        create_tensor_fn = self.framework_dependent_parameters["create_tensor_fn"]
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
         model = model_cls.from_pretrained("hf-internal-testing/tiny-random-t5")
@@ -37,5 +37,5 @@ class GenerationIntegrationTestsMixin:
             model.generate(input_ids, **fake_model_kwargs)
 
         # however, valid model_kwargs are accepted
-        valid_model_kwargs = {"attention_mask": create_tensor(np.zeros_like(input_ids))}
+        valid_model_kwargs = {"attention_mask": create_tensor_fn(np.zeros_like(input_ids))}
         model.generate(input_ids, **valid_model_kwargs)
