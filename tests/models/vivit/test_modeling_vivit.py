@@ -52,7 +52,7 @@ class VivitModelTester:
         use_labels=True,
         num_labels=10,
         image_size=224,
-        num_frames=8, # decreased, because default 32 takes too much RAM at inference
+        num_frames=8,  # decreased, because default 32 takes too much RAM at inference
         tubelet_size=[2, 16, 16],
         num_channels=3,
         hidden_size=768,

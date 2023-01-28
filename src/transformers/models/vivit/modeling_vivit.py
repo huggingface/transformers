@@ -16,8 +16,7 @@
 
 
 import math
-import os
-from typing import Optional, Tuple, Union
+from typing import Optional, Set, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -27,7 +26,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import prune_linear_layer, find_pruneable_heads_and_indices
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_vivit import VivitConfig
 
@@ -66,14 +65,15 @@ class VivitTubeletEmbeddings(nn.Module):
         )
         self.embed_dim = config.hidden_size
 
-        self.projection = nn.Conv3d(config.num_channels, config.hidden_size, kernel_size=config.tubelet_size, stride=config.tubelet_size)
+        self.projection = nn.Conv3d(
+            config.num_channels, config.hidden_size, kernel_size=config.tubelet_size, stride=config.tubelet_size
+        )
 
     def forward(self, pixel_values):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         if height != self.image_size or width != self.image_size:
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size}*{self.image_size})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
             )
 
         # permute to (batch_size, num_channels, num_frames, height, width)
@@ -203,13 +203,13 @@ class VivitSelfOutput(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Vivit
 class VivitAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: VivitConfig) -> None:
         super().__init__()
         self.attention = VivitSelfAttention(config)
         self.output = VivitSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
+    def prune_heads(self, heads: Set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -227,7 +227,12 @@ class VivitAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -571,7 +576,8 @@ class VivitModel(VivitPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ViViT Transformer model with a video classification head on top (a linear layer on top of the final hidden state of the [CLS] token) e.g. for Kinetics-400.""",
+    """ViViT Transformer model with a video classification head on top (a linear layer on top of the final hidden state of the
+[CLS] token) e.g. for Kinetics-400.""",
     VIVIT_START_DOCSTRING,
 )
 class VivitForVideoClassification(VivitPreTrainedModel):
