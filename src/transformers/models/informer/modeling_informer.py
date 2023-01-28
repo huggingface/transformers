@@ -1,6 +1,6 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
-# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,9 +40,7 @@ from .configuration_informer import InformerConfig
 from math import sqrt
 from typing import List, Optional
 
-import math
 import numpy as np
-import torch
 import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)
@@ -50,13 +48,64 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "InformerConfig"
 
 
-class NegativeLogLikelihood:
-    """
-    Computes the negative log likelihood loss from input distribution with respect to target.
-    """
+INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "elisim/informer",
+    # See all Informer models at https://huggingface.co/models?filter=informer
+]
 
-    def __call__(self, input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
-        return -input.log_prob(target)
+
+
+class AffineTransformed(TransformedDistribution):
+    def __init__(self, base_distribution: Distribution, loc=None, scale=None, event_dim=0):
+        self.scale = 1.0 if scale is None else scale
+        self.loc = 0.0 if loc is None else loc
+
+        super().__init__(base_distribution, [AffineTransform(loc=self.loc, scale=self.scale, event_dim=event_dim)])
+
+    @property
+    def mean(self):
+        """
+        Returns the mean of the distribution.
+        """
+        return self.base_dist.mean * self.scale + self.loc
+
+    @property
+    def variance(self):
+        """
+        Returns the variance of the distribution.
+        """
+        return self.base_dist.variance * self.scale**2
+
+    @property
+    def stddev(self):
+        """
+        Returns the standard deviation of the distribution.
+        """
+        return self.variance.sqrt()
+
+
+class ParameterProjection(nn.Module):
+    def __init__(
+        self, in_features: int, args_dim: Dict[str, int], domain_map: Callable[..., Tuple[torch.Tensor]], **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+        self.args_dim = args_dim
+        self.proj = nn.ModuleList([nn.Linear(in_features, dim) for dim in args_dim.values()])
+        self.domain_map = domain_map
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
+        params_unbounded = [proj(x) for proj in self.proj]
+
+        return self.domain_map(*params_unbounded)
+
+
+class LambdaLayer(nn.Module):
+    def __init__(self, function):
+        super().__init__()
+        self.function = function
+
+    def forward(self, x, *args):
+        return self.function(x, *args)
 
 
 class DistributionOutput:
@@ -186,6 +235,173 @@ class NegativeBinomialOutput(DistributionOutput):
             logits += scale.log()
 
         return self._base_distribution((total_count, logits))
+
+
+# Eli: FeatureEmbedder, MeanScaler and NOPScaler are from GlounTS (see the exact source below)
+# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/feature.py
+class FeatureEmbedder(nn.Module):
+    def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
+        super().__init__()
+
+        self.num_features = len(cardinalities)
+        self.embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if self.num_features > 1:
+            # we slice the last dimension, giving an array of length
+            # self.num_features with shape (N,T) or (N)
+            cat_feature_slices = torch.chunk(features, self.num_features, dim=-1)
+        else:
+            cat_feature_slices = [features]
+
+        return torch.cat(
+            [
+                embed(cat_feature_slice.squeeze(-1))
+                for embed, cat_feature_slice in zip(self.embedders, cat_feature_slices)
+            ],
+            dim=-1,
+        )
+
+
+# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/scaler.py
+class MeanScaler(nn.Module):
+    """
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
+        super().__init__()
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
+
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # these will have shape (N, C)
+        total_weight = weights.sum(dim=self.dim)
+        weighted_sum = (data.abs() * weights).sum(dim=self.dim)
+
+        # first compute a global scale per-dimension
+        total_observed = total_weight.sum(dim=0)
+        denominator = torch.max(total_observed, torch.ones_like(total_observed))
+        default_scale = weighted_sum.sum(dim=0) / denominator
+
+        # then compute a per-item, per-dimension scale
+        denominator = torch.max(total_weight, torch.ones_like(total_weight))
+        scale = weighted_sum / denominator
+
+        # use per-batch scale when no element is observed
+        # or when the sequence contains only zeros
+        scale = (
+            torch.max(
+                self.minimum_scale,
+                torch.where(
+                    weighted_sum > torch.zeros_like(weighted_sum),
+                    scale,
+                    default_scale * torch.ones_like(total_weight),
+                ),
+            )
+            .detach()
+            .unsqueeze(dim=self.dim)
+        )
+
+        return data / scale, scale if self.keepdim else scale.squeeze(dim=self.dim)
+
+
+# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/scaler.py
+class NOPScaler(nn.Module):
+    """
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+
+    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        scale = torch.ones_like(data).mean(dim=self.dim, keepdim=self.keepdim)
+        return data, scale
+
+
+def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+    """
+    Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
+    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
+
+    Args:
+        input_tensor (`torch.FloatTensor`):
+            Input tensor, of which the average must be computed.
+        weights (`torch.FloatTensor`, *optional*):
+            Weights tensor, of the same shape as `input_tensor`.
+        dim (`int`, *optional*):
+            The dim along which to average `input_tensor`.
+
+    Returns:
+        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
+    """
+    if weights is not None:
+        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
+        sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
+        return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
+    else:
+        return input_tensor.mean(dim=dim)
+
+
+class NegativeLogLikelihood:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+
+    def __call__(self, input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+        return -input.log_prob(target)
+
+
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
+def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
+    """
+    Make causal mask used for bi-directional self-attention.
+    """
+    bsz, tgt_len = input_ids_shape
+    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
+    mask_cond = torch.arange(mask.size(-1))
+    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+    mask = mask.to(dtype)
+
+    if past_key_values_length > 0:
+        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
+    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
+# Copied from transformers.models.bart.modeling_bart._expand_mask
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
@@ -329,107 +545,6 @@ class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
 class SampleTimeSeriesPredictionOutput(ModelOutput):
     sequences: torch.FloatTensor = None
 
-# Eli: FeatureEmbedder, MeanScaler and NOPScaler are from GlounTS (see the exact source below)
-# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/feature.py
-class FeatureEmbedder(nn.Module):
-    def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
-        super().__init__()
-
-        self.num_features = len(cardinalities)
-        self.embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        if self.num_features > 1:
-            # we slice the last dimension, giving an array of length
-            # self.num_features with shape (N,T) or (N)
-            cat_feature_slices = torch.chunk(features, self.num_features, dim=-1)
-        else:
-            cat_feature_slices = [features]
-
-        return torch.cat(
-            [
-                embed(cat_feature_slice.squeeze(-1))
-                for embed, cat_feature_slice in zip(self.embedders, cat_feature_slices)
-            ],
-            dim=-1,
-        )
-
-
-# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/scaler.py
-class MeanScaler(nn.Module):
-    """
-    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
-    accordingly.
-
-    Args:
-        dim (`int`):
-            Dimension along which to compute the scale.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-        minimum_scale (`float`, *optional*, defaults to 1e-10):
-            Default scale that is used for elements that are constantly zero along dimension `dim`.
-    """
-
-    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
-        super().__init__()
-        if not dim > 0:
-            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
-        self.dim = dim
-        self.keepdim = keepdim
-        self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
-
-    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # these will have shape (N, C)
-        total_weight = weights.sum(dim=self.dim)
-        weighted_sum = (data.abs() * weights).sum(dim=self.dim)
-
-        # first compute a global scale per-dimension
-        total_observed = total_weight.sum(dim=0)
-        denominator = torch.max(total_observed, torch.ones_like(total_observed))
-        default_scale = weighted_sum.sum(dim=0) / denominator
-
-        # then compute a per-item, per-dimension scale
-        denominator = torch.max(total_weight, torch.ones_like(total_weight))
-        scale = weighted_sum / denominator
-
-        # use per-batch scale when no element is observed
-        # or when the sequence contains only zeros
-        scale = (
-            torch.max(
-                self.minimum_scale,
-                torch.where(
-                    weighted_sum > torch.zeros_like(weighted_sum),
-                    scale,
-                    default_scale * torch.ones_like(total_weight),
-                ),
-            )
-            .detach()
-            .unsqueeze(dim=self.dim)
-        )
-
-        return data / scale, scale if self.keepdim else scale.squeeze(dim=self.dim)
-
-
-# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/scaler.py
-class NOPScaler(nn.Module):
-    """
-    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
-
-    Args:
-        dim (`int`):
-            Dimension along which to compute the scale.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-    """
-
-    def __init__(self, dim: int, keepdim: bool = False):
-        super().__init__()
-        self.dim = dim
-        self.keepdim = keepdim
-
-    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        scale = torch.ones_like(data).mean(dim=self.dim, keepdim=self.keepdim)
-        return data, scale
 
 # Eli: TriangularCausalMask, ProbMask, FullAttention, ProbAttention and AttentionLayer
 # are from the original Informer repository (see the exact source below)
@@ -730,6 +845,7 @@ class InformerEncoder(nn.Module):
     def __init__(self, config: InformerConfig):
         super(InformerEncoder, self).__init__()
 
+        self.activation_fn = ACT2FN[config.activation_function]
         Attn = ProbAttention if config.attn == "prob" else FullAttention
         self.attn_layers = nn.ModuleList([
             EncoderLayer(
@@ -737,18 +853,18 @@ class InformerEncoder(nn.Module):
                         Attn(
                             mask_flag=False,
                             factor=config.factor,
-                            attention_dropout=config.dropout,
+                            attention_dropout=config.attention_dropout,
                             output_attention=False,
                         ),
                         config.d_model,
-                        config.nhead,
+                        config.encoder_attention_heads,
                         mix=False,
                     ),
                     config.d_model,
-                    d_ff=config.dim_feedforward,
-                    dropout=config.dropout,
-                    activation=config.activation,
-                ) for _ in range(config.num_encoder_layers)
+                    d_ff=config.encoder_ffn_dim,
+                    dropout=config.attention_dropout,
+                    activation=self.activation_fn,
+                ) for _ in range(config.encoder_layers)
         ])
 
         if config.distil is not None:
@@ -783,6 +899,7 @@ class InformerDecoder(nn.Module):
     def __init__(self, config: InformerConfig):
         super(InformerDecoder, self).__init__()
 
+        self.activation_fn = ACT2FN[config.activation_function]
         Attn = ProbAttention if config.attn == "prob" else FullAttention
 
         # Masked Decoder
@@ -793,7 +910,7 @@ class InformerDecoder(nn.Module):
                         Attn(
                             mask_flag=True,
                             factor=config.factor,
-                            attention_dropout=config.dropout,
+                            attention_dropout=config.attention_dropout,
                             output_attention=False,
                         ),
                         config.d_model,
@@ -804,17 +921,17 @@ class InformerDecoder(nn.Module):
                         FullAttention(
                             mask_flag=False,
                             factor=config.factor,
-                            attention_dropout=config.dropout,
+                            attention_dropout=config.attention_dropout,
                             output_attention=False,
                         ),
                         config.d_model,
-                        config.nhead,
+                        config.decoder_attention_heads,
                         mix=False,
                     ),
                     config.d_model,
-                    d_ff=config.dim_feedforward,
+                    d_ff=config.decoder_ffn_dim,
                     dropout=config.dropout,
-                    activation=config.activation,
+                    activation=self.activation_fn,
                 )
                 for _ in range(config.num_decoder_layers)
             ],
@@ -877,7 +994,7 @@ class InformerModel(InformerPreTrainedModel):
 
     @property
     def _past_length(self) -> int:
-        return self.config.context_length + max(self.config.lags_seq)
+        return self.config.context_length + max(self.config.lags_sequence)
 
     def get_lagged_subsequences(
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
@@ -901,12 +1018,16 @@ class InformerModel(InformerPreTrainedModel):
             lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
         """
         sequence_length = sequence.shape[1]
-        indices = [lag - shift for lag in self.lags_seq]
+        indices = [lag - shift for lag in self.config.lags_sequence]
 
-        assert max(indices) + subsequences_length <= sequence_length, (
-            f"lags cannot go further than history length, found lag {max(indices)} "
-            f"while history length is only {sequence_length}"
-        )
+        try:
+            assert max(indices) + subsequences_length <= sequence_length, (
+                f"lags cannot go further than history length, found lag {max(indices)} "
+                f"while history length is only {sequence_length}"
+            )
+        except AssertionError as e:
+            e.args += (max(indices), sequence_length)
+            raise
 
         lagged_values = []
         for lag_index in indices:
@@ -1003,6 +1124,8 @@ class InformerModel(InformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    @add_start_docstrings_to_model_forward(INFORMER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
             self,
             past_values: torch.Tensor,
