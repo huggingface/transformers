@@ -35,7 +35,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_ernie_m_fast"] = ["ErnieMTokenizerFast"]
+    pass
 
 try:
     if not is_torch_available():
@@ -53,8 +53,7 @@ else:
         "ErnieMForTokenClassification",
         "ErnieMLayer",
         "ErnieMModel",
-        "ErnieMPreTrainedModel",
-        "load_tf_weights_in_ernie_m",
+        "ErnieMPreTrainedModel"
     ]
 
 
@@ -70,7 +69,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_ernie_m_fast import ErnieMTokenizerFast
+        pass
 
     try:
         if not is_torch_available():
