@@ -224,6 +224,7 @@ def convert(output_path: str):
     assert torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4), outputs.logits[0, :5]
 
     model.save_pretrained(output_path)
+    extractor.save_pretrained(output_path)
 
 
 if __name__ == "__main__":
