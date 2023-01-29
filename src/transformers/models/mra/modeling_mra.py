@@ -362,9 +362,12 @@ def mra2_attention(
     Q = Q.reshape(meta_batch, seq_len, head_dim)
     K = K.reshape(meta_batch, seq_len, head_dim)
     V = V.reshape(meta_batch, seq_len, head_dim)
+
+    """
     mask = (
         None if torch.all(mask == 1).item() else mask[:, None, :].repeat(1, num_head, 1).reshape(meta_batch, seq_len)
     )
+    """
 
     if mask is not None:
         Q = Q * mask[:, :, None]
@@ -978,7 +981,8 @@ class MRAModel(MRAPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        # extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask = attention_mask
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
