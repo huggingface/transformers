@@ -1118,10 +1118,8 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
 
     config_class = Pix2StructTextConfig
     base_model_prefix = "transformer"
-    is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructDecoderBlock"]
-    _keep_in_fp32_modules = ["wo"]
 
     @property
     def dummy_inputs(self):
@@ -1722,16 +1720,6 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
-            hidden_states = hidden_states.to(self.decoder.first_device)
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(self.decoder.first_device)
-            if decoder_attention_mask is not None:
-                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
 
         # Decode
         decoder_outputs = self.decoder(
