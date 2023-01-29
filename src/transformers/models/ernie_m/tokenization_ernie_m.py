@@ -14,21 +14,23 @@
 # limitations under the License.
 """Tokenization classes for ErnieM."""
 
-#Copied from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/tokenizer.py)
+#Some of the code is Copied from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/tokenizer.py)
+# and Albert directory.(https://github.com/huggingface/transformers/blob/main/src/transformers/models/albert/tokenization_albert.py)
+import io
 import os
 import unicodedata
 from typing import List, Optional
 
 import sentencepiece as spm
 
-from .. import PretrainedTokenizer
+from transformers import PreTrainedTokenizer
 
 __all__ = ["ErnieMTokenizer"]
 
 SPIECE_UNDERLINE = "▁"
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "sentencepiece_model_ckpt":"sentencepiece.bpe.model"}
 
-
-class ErnieMTokenizer(PretrainedTokenizer):
+class ErnieMTokenizer(PreTrainedTokenizer):
     r"""
     Constructs a ErnieM tokenizer. It uses the `sentencepiece` tools to cut the words to sub-words.
     Args:
@@ -63,16 +65,16 @@ class ErnieMTokenizer(PretrainedTokenizer):
     }  # for save_pretrained
     pretrained_resource_files_map = {
         "vocab_file": {
-            "ernie-m-base": "https://bj.bcebos.com/paddlenlp/models/transformers/ernie_m/ernie_m.vocab.txt",
-            "ernie-m-large": "https://bj.bcebos.com/paddlenlp/models/transformers/ernie_m/ernie_m.vocab.txt",
-            "uie-m-base": "https://bj.bcebos.com/paddlenlp/models/transformers/ernie_m/ernie_m.vocab.txt",
-            "uie-m-large": "https://bj.bcebos.com/paddlenlp/models/transformers/ernie_m/ernie_m.vocab.txt",
+            "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
+            "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
+            "uie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
+            "uie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
         },
         "sentencepiece_model_file": {
-            "ernie-m-base": "https://bj.bcebos.com/paddlenlp/models/transformers/ernie_m/ernie_m.sentencepiece.bpe.model",
-            "ernie-m-large": "https://bj.bcebos.com/paddlenlp/models/transformers/ernie_m/ernie_m.sentencepiece.bpe.model",
-            "uie-m-base": "https://bj.bcebos.com/paddlenlp/models/transformers/ernie_m/ernie_m.sentencepiece.bpe.model",
-            "uie-m-large": "https://bj.bcebos.com/paddlenlp/models/transformers/ernie_m/ernie_m.sentencepiece.bpe.model",
+            "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
+            "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
+            "uie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
+            "uie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
         },
     }
     pretrained_init_configuration = {
@@ -85,10 +87,12 @@ class ErnieMTokenizer(PretrainedTokenizer):
     # Ernie-M model doesn't have token_type embedding.
     model_input_names: List[str] = ["input_ids"]
 
+    vocab_files_names = VOCAB_FILES_NAMES
+
     def __init__(
         self,
         vocab_file,
-        sentencepiece_model_file,
+        sentencepiece_model_ckpt,
         do_lower_case=False,
         encoding="utf8",
         unk_token="[UNK]",
@@ -97,26 +101,31 @@ class ErnieMTokenizer(PretrainedTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         **kwargs
-    ):
-        self.sp_model = spm.SentencePieceProcessor()
+    ) -> None:
+        # Mask token behave like a normal word, i.e. include the space before it and
+        # is included in the raw text, there should be a match in a non-normalized sentence.
+
+        self.sentencepiece_model_ckpt = {} if sentencepiece_model_ckpt is None else sentencepiece_model_ckpt
+
+        super().__init__(
+            do_lower_case=do_lower_case,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            sp_model_kwargs=self.sentencepiece_model_ckpt,
+            **kwargs,
+        )
 
         self.do_lower_case = do_lower_case
-        self.encoding = encoding
-        if not os.path.isfile(vocab_file):
-            raise ValueError("Can't find a vocabulary file at path '{}'.".format(vocab_file))
-        self.vocab = self.load_vocabulary(vocab_file, unk_token=unk_token)
-        self.vocab_file = vocab_file
-        self.sentencepiece_model_file = sentencepiece_model_file
-        if os.path.isfile(sentencepiece_model_file):
-            self.sp_model.Load(sentencepiece_model_file)
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(sentencepiece_model_ckpt)
+        self.vocab = self.load_vocab(filepath=vocab_file)
+        self.reverse_vocab = dict((v, k) for k, v in self.vocab.items())
 
-        self.SP_CHAR_MAPPING = {}
+        assert len(self.vocab) == len(self.reverse_vocab)
 
-        for ch in range(65281, 65375):
-            if ch in [ord("～")]:
-                self.SP_CHAR_MAPPING[chr(ch)] = chr(ch)
-                continue
-            self.SP_CHAR_MAPPING[chr(ch)] = chr(ch - 65248)
 
     def get_offset_mapping(self, text):
         if text is None:
@@ -202,6 +211,13 @@ class ErnieMTokenizer(PretrainedTokenizer):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
+
+    def _convert_token_to_id(self, token):
+        return self.vocab[token]
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        return self.reverse_vocab[index]
 
     def convert_ids_to_string(self, ids):
         """
@@ -341,3 +357,13 @@ class ErnieMTokenizer(PretrainedTokenizer):
             if cat == "Zs":
                 return True
         return False
+
+
+    def load_vocab(self, filepath):
+        token_to_idx = {}
+        with io.open(filepath, "r", encoding="utf-8") as f:
+            for index, line in enumerate(f):
+                token = line.rstrip("\n")
+                token_to_idx[token] = int(index)
+
+        return token_to_idx
