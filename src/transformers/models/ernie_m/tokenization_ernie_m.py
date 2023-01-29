@@ -23,7 +23,7 @@ from typing import List, Optional
 
 import sentencepiece as spm
 
-from transformers import PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 
 __all__ = ["ErnieMTokenizer"]
 

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from ..configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig
 
 __all__ = ["ERNIE_M_PRETRAINED_INIT_CONFIGURATION", "ErnieMConfig", "ERNIE_M_PRETRAINED_RESOURCE_FILES_MAP"]
 
