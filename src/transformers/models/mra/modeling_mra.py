@@ -353,6 +353,7 @@ def mra2_attention(
     """
     Use MRA to approximate self-attention.
     """
+    load_cuda_kernels()
     batch_size, num_head, seq_len, head_dim = Q.size()
     meta_batch = batch_size * num_head
 
