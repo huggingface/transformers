@@ -651,9 +651,9 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         last_was_timestamps = not_eos & (input_ids[:, cur_len - 1] >= self.timestamp_begin)
 
         not_eos = (
-            tf.math.count_nonzero((input_ids[:, self.begin_index : cur_len + 1] != self.eos_token_id), axis=-1) >= 2
+            tf.math.count_nonzero((input_ids[:, self.begin_index : cur_len + 1] != self.eos_token_id), axis=-1) < 2
         )
-        penultimate_was_timestamp = not_eos & (input_ids[:, -2] >= self.timestamp_begin)
+        penultimate_was_timestamp = not_eos | (input_ids[:, cur_len - 2] >= self.timestamp_begin)
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         # for k in range(input_ids.shape[0]):
@@ -683,21 +683,8 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         indices_1 = last_was_timestamps & penultimate_was_timestamp
         indices_2 = last_was_timestamps & tf.math.logical_not(penultimate_was_timestamp)
 
-        # Let's deal with the empty cases
         scores = _update_slices(indices_1, self.timestamp_begin, max_idx)
-        # correct until here
-        # scores = tf.cond(
-        #     tf.greater(tf.shape(indices_1)[0], 0),
-        #     lambda: _update_slices(indices_1, self.timestamp_begin , max_idx),
-        #     lambda: tf.identity(scores),
-        # )
         scores = _update_slices(indices_2, 0, self.eos_token_id)
-
-        # scores = tf.cond(
-        #     tf.greater(tf.shape(indices_2)[0], 0),
-        #     lambda: _update_slices(indices_2, 0, self.eos_token_id),
-        #     lambda: tf.identity(scores),
-        # )
 
         # if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
         #     last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
@@ -706,7 +693,9 @@ class TFWhisperTimeStampLogitsProcessor(TFLogitsProcessor):
         scores = tf.cond(
             tf.equal(cur_len, self.begin_index) and self.max_initial_timestamp_index is not None,
             lambda: _update_slices(
-                tf.range(scores.shape[0]), self.timestamp_begin + self.max_initial_timestamp_index + 1, max_idx
+                tf.ones((scores.shape[0],), dtype=tf.bool),
+                self.timestamp_begin + self.max_initial_timestamp_index + 1,
+                max_idx,
             ),
             lambda: tf.identity(scores),
         )

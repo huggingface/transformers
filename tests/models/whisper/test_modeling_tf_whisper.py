@@ -1070,16 +1070,18 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True)
 
-        xla_generate = tf.function(model.generate, jit_compile=True)
+        xla_generate = tf.function(model.generate, jit_compile=False)
+        generated_ids_xla = xla_generate(input_features, max_length=448, return_timestamps=True)
 
-        generated_ids_xla = xla_generate(input_features, max_length=20, return_timestamps=True)
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        generated_ids_xla = xla_generate(input_features, max_length=448, return_timestamps=True)
 
         # fmt: off
         EXPECTED_OUTPUT = tf.convert_to_tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])
         # fmt: on
 
         self.assertTrue(np.allclose(generated_ids, EXPECTED_OUTPUT))
-        self.assertTrue(np.allclose(generated_ids_xla, EXPECTED_OUTPUT))
+        self.assertTrue(np.allclose(generated_ids_xla[:, : EXPECTED_OUTPUT.shape[0]], EXPECTED_OUTPUT))
 
         EXPECTED_TRANSCRIPT = [
             {
