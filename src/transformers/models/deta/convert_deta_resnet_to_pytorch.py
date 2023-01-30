@@ -226,15 +226,11 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     if model_name == "deta-resnet-50":
         filename = "adet_checkpoint0011.pth"
     elif model_name == "deta-resnet-50-24-epochs":
-        raise NotImplementedError("To do")
+        filename = "adet_2x_checkpoint0023.pth"
     else:
         raise ValueError(f"Model name {model_name} not supported")
     checkpoint_path = hf_hub_download(repo_id="nielsr/deta-checkpoints", filename=filename)
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
-
-    # original state dict
-    for name, param in state_dict.items():
-        print(name, param.shape)
 
     # rename keys
     rename_keys = create_rename_keys(config)

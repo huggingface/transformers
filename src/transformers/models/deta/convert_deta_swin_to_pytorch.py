@@ -55,16 +55,19 @@ def get_deta_config(model_name):
     )
 
     # set labels
+    repo_id = "huggingface/label-files"
     if "o365" in model_name:
-        config.num_labels = 366
+        num_labels = 366
+        filename = "object365-id2label.json"
     else:
-        config.num_labels = 91
-        repo_id = "huggingface/label-files"
+        num_labels = 91
         filename = "coco-detection-id2label.json"
-        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
+
+    config.num_labels = num_labels
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
