@@ -1888,9 +1888,6 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
         global_attention_mask = tf.convert_to_tensor(
             [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]], dtype=tf.int32
         )
-        global_attention_mask = tf.convert_to_tensor(
-            [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]], dtype=tf.int32
-        )
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
