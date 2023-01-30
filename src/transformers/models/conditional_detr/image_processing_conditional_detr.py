@@ -77,6 +77,9 @@ if is_scipy_available():
     import scipy.stats
 
 
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
+
+
 class AnnotionFormat(ExplicitEnum):
     COCO_DETECTION = "coco_detection"
     COCO_PANOPTIC = "coco_panoptic"
@@ -1071,7 +1074,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         return_segmentation_masks: bool = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
@@ -1094,7 +1097,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess.
-            annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
                 List of annotations associated with the image or batch of images. If annotionation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
@@ -1173,7 +1176,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
         images = make_list_of_images(images)
-        if annotations is not None and isinstance(annotations[0], dict):
+        if annotations is not None and isinstance(annotations, dict):
             annotations = [annotations]
 
         if annotations is not None and len(images) != len(annotations):
