@@ -1039,7 +1039,7 @@ class YolosImageProcessor(BaseImageProcessor):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
         images = make_list_of_images(images)
-        if annotations is not None and isinstance(annotations[0], dict):
+        if annotations is not None and isinstance(annotations, dict):
             annotations = [annotations]
 
         if annotations is not None and len(images) != len(annotations):
