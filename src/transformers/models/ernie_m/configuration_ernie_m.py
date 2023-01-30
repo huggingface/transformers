@@ -35,6 +35,7 @@ ERNIE_M_PRETRAINED_INIT_CONFIGURATION = {
         "num_hidden_layers": 12,
         "vocab_size": 250002,
         "pad_token_id": 1,
+        "layer_norm_eps": 1e-05,
     },
     "ernie-m-large": {
         "attention_probs_dropout_prob": 0.1,
@@ -47,6 +48,7 @@ ERNIE_M_PRETRAINED_INIT_CONFIGURATION = {
         "num_hidden_layers": 24,
         "vocab_size": 250002,
         "pad_token_id": 1,
+        "layer_norm_eps": 1e-05,
     },
     "uie-m-base": {
         "attention_probs_dropout_prob": 0.1,
@@ -59,6 +61,7 @@ ERNIE_M_PRETRAINED_INIT_CONFIGURATION = {
         "num_hidden_layers": 12,
         "vocab_size": 250002,
         "pad_token_id": 1,
+        "layer_norm_eps": 1e-05,
     },
     "uie-m-large": {
         "attention_probs_dropout_prob": 0.1,
@@ -71,6 +74,7 @@ ERNIE_M_PRETRAINED_INIT_CONFIGURATION = {
         "num_hidden_layers": 24,
         "vocab_size": 250002,
         "pad_token_id": 1,
+        "layer_norm_eps": 1e-05,
     },
 }
 
@@ -78,8 +82,8 @@ ERNIE_M_PRETRAINED_RESOURCE_FILES_MAP = {
     "model_state": {
         "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/pytorch_model.bin",
         "ernie-m-large": "https://huggingface.co/susnato/ernie-m-large_pytorch/pytorch_model.bin",
-        "uie-m-base": "https://paddlenlp.bj.bcebos.com/models/transformers/uie_m/uie_m_base.pdparams",
-        "uie-m-large": "https://paddlenlp.bj.bcebos.com/models/transformers/uie_m/uie_m_large.pdparams",
+        "uie-m-base": "https://paddlenlp.bj.bcebos.com/models/transformers/uie_m/pytorch_model.bin",
+        "uie-m-large": "https://paddlenlp.bj.bcebos.com/models/transformers/uie_m/pytorch_model.bin",
     }
 }
 
@@ -161,6 +165,7 @@ class ErnieMConfig(PretrainedConfig):
         type_vocab_size: int = 16,
         initializer_range: float = 0.02,
         pad_token_id: int = 1,
+        layer_norm_eps: float =  1e-05,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -175,3 +180,4 @@ class ErnieMConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
