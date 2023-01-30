@@ -28,9 +28,8 @@ def preprocess_vqgan(x):
 def custom_to_pil(x, process=True, mode="RGB"):
     x = x.detach().cpu()
     if process:
-        x = torch.clamp(x, -1.0, 1.0)
-        x = (x + 1.0) / 2.0
-    x = x.permute(1, 2, 0).numpy()
+        x = post_process_tensor(x)
+    x = x.numpy()
     if process:
         x = (255 * x).astype(np.uint8)
     x = Image.fromarray(x)
@@ -39,7 +38,7 @@ def custom_to_pil(x, process=True, mode="RGB"):
     return x
 
 
-def get_pil(x):
+def post_process_tensor(x):
     x = torch.clamp(x, -1.0, 1.0)
     x = (x + 1.0) / 2.0
     x = x.permute(1, 2, 0)
@@ -47,5 +46,5 @@ def get_pil(x):
 
 
 def loop_post_process(x):
-    x = get_pil(x.squeeze())
+    x = post_process_tensor(x.squeeze())
     return x.permute(2, 0, 1).unsqueeze(0)

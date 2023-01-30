@@ -1,16 +1,16 @@
 import os
 from glob import glob
 
-import imageio
 import torch
 import torchvision
-import wandb
 from PIL import Image
 from torch import nn
-from transformers import CLIPModel, CLIPProcessor
 
+import imageio
+import wandb
 from img_processing import custom_to_pil, loop_post_process, preprocess, preprocess_vqgan
 from loaders import load_vqgan
+from transformers import CLIPModel, CLIPProcessor, CLIPTokenizerFast
 from utils import get_device, get_timestamp, show_pil
 
 
@@ -23,7 +23,8 @@ class ProcessorGradientFlow:
 
     def __init__(self, device: str = "cpu", clip_model: str = "openai/clip-vit-large-patch14") -> None:
         self.device = device
-        self.processor = CLIPProcessor.from_pretrained(clip_model)
+        # self.processor = CLIPProcessor.from_pretrained(clip_model)
+        self.tokenizer = CLIPTokenizerFast.from_pretrained(clip_model)
         self.image_mean = [0.48145466, 0.4578275, 0.40821073]
         self.image_std = [0.26862954, 0.26130258, 0.27577711]
         self.normalize = torchvision.transforms.Normalize(self.image_mean, self.image_std)
@@ -31,17 +32,17 @@ class ProcessorGradientFlow:
         self.center_crop = torchvision.transforms.CenterCrop(224)
 
     def preprocess_img(self, images):
-        images = self.center_crop(images)
         images = self.resize(images)
         images = self.center_crop(images)
         images = self.normalize(images)
         return images
 
     def __call__(self, text=None, images=None, **kwargs):
-        processed_inputs = self.processor(text=text, images=None, **kwargs)
-        processed_inputs["pixel_values"] = self.preprocess_img(images)
-        processed_inputs = {key: value.to(self.device) for (key, value) in processed_inputs.items()}
-        return processed_inputs
+        # processed_inputs = self.processor(text=text, images=None, **kwargs)
+        encoding = self.tokenizer(text=text, **kwargs)
+        encoding["pixel_values"] = self.preprocess_img(images)
+        encoding = {key: value.to(self.device) for (key, value) in encoding.items()}
+        return encoding
 
 
 class VQGAN_CLIP(nn.Module):
@@ -101,7 +102,8 @@ class VQGAN_CLIP(nn.Module):
         if input_path is None:
             input_path = self.save_path
         paths = list(sorted(glob(input_path + "/*")))
-        assert len(paths), print(
+        if not len(paths):
+            raise ValueError(
             "No images found in save path, aborting (did you pass save_intermediate=True to the generate function?)"
         )
         if len(paths) == 1:
@@ -118,7 +120,8 @@ class VQGAN_CLIP(nn.Module):
         print(f"gif saved to {output_path}")
 
     def _get_latent(self, path=None, img=None):
-        assert path or img, "Input either path or tensor"
+        if not (path or img):
+            raise ValueError("Input either path or tensor")
         if img is not None:
             raise NotImplementedError
         x = preprocess(Image.open(path), target_image_size=256).to(self.device)
