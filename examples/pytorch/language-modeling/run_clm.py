@@ -202,7 +202,6 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-
         if self.streaming:
             require_version("datasets>=2.0.0", "The streaming feature requires `datasets>=2.0.0`")
 
