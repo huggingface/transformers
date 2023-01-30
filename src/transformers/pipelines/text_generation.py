@@ -252,7 +252,7 @@ class TextGenerationPipeline(Pipeline):
         # BS x SL
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
         if generate_kwargs['return_dict_in_generate']:
-            # Instance check does not work until Python 3.10, e.g. `isinstance(generated_sequence, GenerateOutput):`
+            # Instance check of type unions do not work until Python 3.10, e.g. `isinstance(generated_sequence, GenerateOutput):`
             # https://peps.python.org/pep-0604/#isinstance-and-issubclass
             generated_sequence = generated_sequence.sequences
         out_b = generated_sequence.shape[0]
