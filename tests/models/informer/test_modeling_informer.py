@@ -31,15 +31,8 @@ TOLERANCE = 1e-4
 if is_torch_available():
     import torch
 
-    from transformers import (
-        InformerConfig,
-        InformerForPrediction,
-        InformerModel,
-    )
-    from transformers.models.informer.modeling_informer import (
-        InformerDecoder,
-        InformerEncoder,
-    )
+    from transformers import InformerConfig, InformerForPrediction, InformerModel
+    from transformers.models.informer.modeling_informer import InformerDecoder, InformerEncoder
 
 
 @require_torch
@@ -171,9 +164,7 @@ class InformerModelTester:
 
 @require_torch
 class InformerModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (InformerModel, InformerForPrediction) if is_torch_available() else ()
-    )
+    all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
     all_generative_model_classes = (InformerForPrediction,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -374,9 +365,7 @@ def prepare_batch(filename="train-batch.pt"):
 @slow
 class InformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = InformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-            torch_device
-        )
+        model = InformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
         batch = prepare_batch()
 
         with torch.no_grad():
@@ -399,9 +388,9 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = InformerForPrediction.from_pretrained(
-            "huggingface/time-series-transformer-tourism-monthly"
-        ).to(torch_device)
+        model = InformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+            torch_device
+        )
         batch = prepare_batch("val-batch.pt")
         with torch.no_grad():
             output = model(
@@ -421,9 +410,9 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = InformerForPrediction.from_pretrained(
-            "huggingface/time-series-transformer-tourism-monthly"
-        ).to(torch_device)
+        model = InformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+            torch_device
+        )
         batch = prepare_batch("val-batch.pt")
         with torch.no_grad():
             outputs = model.generate(

@@ -290,6 +290,10 @@ _import_structure = {
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
+    "models.informer": [
+        "INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "InformerConfig",
+    ],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -413,10 +417,6 @@ _import_structure = {
     "models.time_series_transformer": [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
-    ],
-    "models.informer": [
-        "INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "InformerConfig",
     ],
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.trajectory_transformer": [
@@ -1621,6 +1621,14 @@ else:
             "load_tf_weights_in_imagegpt",
         ]
     )
+    _import_structure["models.informer"].extend(
+        [
+            "INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "InformerForPrediction",
+            "InformerModel",
+            "InformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.jukebox"].extend(
         [
             "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2273,14 +2281,6 @@ else:
             "TimeSeriesTransformerForPrediction",
             "TimeSeriesTransformerModel",
             "TimeSeriesTransformerPreTrainedModel",
-        ]
-    )
-    _import_structure["models.informer"].extend(
-        [
-            "INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "InformerForPrediction",
-            "InformerModel",
-            "InformerPreTrainedModel",
         ]
     )
     _import_structure["models.timesformer"].extend(
@@ -3741,6 +3741,7 @@ if TYPE_CHECKING:
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
+    from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -3854,10 +3855,6 @@ if TYPE_CHECKING:
     from .models.time_series_transformer import (
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
-    )
-    from .models.informer import (
-        INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        InformerConfig,
     )
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.trajectory_transformer import (
@@ -4865,6 +4862,12 @@ if TYPE_CHECKING:
             ImageGPTPreTrainedModel,
             load_tf_weights_in_imagegpt,
         )
+        from .models.informer import (
+            INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            InformerForPrediction,
+            InformerModel,
+            InformerPreTrainedModel,
+        )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
@@ -5392,12 +5395,6 @@ if TYPE_CHECKING:
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
-        )
-        from .models.informer import (
-            INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            InformerForPrediction,
-            InformerModel,
-            InformerPreTrainedModel,
         )
         from .models.timesformer import (
             TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

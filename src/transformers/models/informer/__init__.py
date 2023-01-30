@@ -43,10 +43,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_informer import (
-        INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        InformerConfig,
-    )
+    from .configuration_informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
 
     try:
         if not is_torch_available():

@@ -17,9 +17,12 @@
 
 import random
 from dataclasses import dataclass
+from math import sqrt
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.distributions import (
     AffineTransform,
@@ -37,11 +40,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_informer import InformerConfig
 
-from math import sqrt
-from typing import List, Optional
-
-import numpy as np
-import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -52,7 +50,6 @@ INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "elisim/informer",
     # See all Informer models at https://huggingface.co/models?filter=informer
 ]
-
 
 
 class AffineTransformed(TransformedDistribution):
@@ -472,6 +469,7 @@ class Seq2SeqTimeSeriesModelOutput(ModelOutput):
     scale: Optional[torch.FloatTensor] = None
     static_features: Optional[torch.FloatTensor] = None
 
+
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
 @dataclass
 class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
@@ -540,6 +538,7 @@ class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
     scale: Optional[torch.FloatTensor] = None
     static_features: Optional[torch.FloatTensor] = None
 
+
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
 @dataclass
 class SampleTimeSeriesPredictionOutput(ModelOutput):
@@ -554,9 +553,7 @@ class TriangularCausalMask:
     def __init__(self, B, L, device="cpu"):
         mask_shape = [B, 1, L, L]
         with torch.no_grad():
-            self._mask = torch.triu(
-                torch.ones(mask_shape, dtype=torch.bool), diagonal=1
-            ).to(device)
+            self._mask = torch.triu(torch.ones(mask_shape, dtype=torch.bool), diagonal=1).to(device)
 
     @property
     def mask(self):
@@ -568,9 +565,7 @@ class ProbMask:
     def __init__(self, B, H, L, index, scores, device="cpu"):
         _mask = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(device).triu(1)
         _mask_ex = _mask[None, None, :].expand(B, H, L, scores.shape[-1])
-        indicator = _mask_ex[
-            torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :
-        ].to(device)
+        indicator = _mask_ex[torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :].to(device)
         self._mask = indicator.view(scores.shape).to(device)
 
     @property
@@ -597,7 +592,7 @@ class FullAttention(nn.Module):
     def forward(self, queries, keys, values, attn_mask):
         B, L, H, E = queries.shape
         _, S, _, D = values.shape
-        scale = self.scale or 1. / sqrt(E)
+        scale = self.scale or 1.0 / sqrt(E)
 
         scores = torch.einsum("blhe,bshe->bhls", queries, keys)
         if self.mask_flag:
@@ -673,14 +668,12 @@ class ProbAttention(nn.Module):
 
         attn = torch.softmax(scores, dim=-1)  # nn.Softmax(dim=-1)(scores)
 
-        context_in[
-            torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :
-        ] = torch.matmul(attn, V).type_as(context_in)
+        context_in[torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :] = torch.matmul(
+            attn, V
+        ).type_as(context_in)
         if self.output_attention:
             attns = (torch.ones([B, H, L_V, L_V]) / L_V).type_as(attn).to(attn.device)
-            attns[
-                torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :
-            ] = attn
+            attns[torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :] = attn
             return (context_in, attns)
         else:
             return (context_in, None)
@@ -708,18 +701,14 @@ class ProbAttention(nn.Module):
         # get the context
         context = self._get_initial_context(values, L_Q)
         # update the context with selected top_k queries
-        context, attn = self._update_context(
-            context, values, scores_top, index, L_Q, attn_mask
-        )
+        context, attn = self._update_context(context, values, scores_top, index, L_Q, attn_mask)
 
         return context.transpose(2, 1).contiguous(), attn
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/attn.py
 class AttentionLayer(nn.Module):
-    def __init__(
-        self, attention, d_model, n_heads, d_keys=None, d_values=None, mix=False
-    ):
+    def __init__(self, attention, d_model, n_heads, d_keys=None, d_values=None, mix=False):
         super(AttentionLayer, self).__init__()
 
         d_keys = d_keys or (d_model // n_heads)
@@ -761,13 +750,13 @@ class ConvLayer(nn.Module):
             padding=1,
             padding_mode="circular",
         )
-        self.norm = nn.BatchNorm1d(c_in) # Eli question: why batchnorm here?
+        self.norm = nn.BatchNorm1d(c_in)  # Eli question: why batchnorm here?
         self.activation = nn.ELU()
         self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         x = self.downConv(x.permute(0, 2, 1))
-        x = self.norm(x) # Eli: why? maybe because the impl...
+        x = self.norm(x)  # Eli: why? maybe because the impl...
         x = self.activation(x)
         x = self.maxPool(x)
         x = x.transpose(1, 2)
@@ -830,9 +819,7 @@ class DecoderLayer(nn.Module):
         x = x + self.dropout(self.self_attention(x, x, x, attn_mask=x_mask)[0])
         x = self.norm1(x)
 
-        x = x + self.dropout(
-            self.cross_attention(x, cross, cross, attn_mask=cross_mask)[0]
-        )
+        x = x + self.dropout(self.cross_attention(x, cross, cross, attn_mask=cross_mask)[0])
 
         y = x = self.norm2(x)
         y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
@@ -847,8 +834,9 @@ class InformerEncoder(nn.Module):
 
         self.activation_fn = ACT2FN[config.activation_function]
         Attn = ProbAttention if config.attn == "prob" else FullAttention
-        self.attn_layers = nn.ModuleList([
-            EncoderLayer(
+        self.attn_layers = nn.ModuleList(
+            [
+                EncoderLayer(
                     AttentionLayer(
                         Attn(
                             mask_flag=False,
@@ -864,8 +852,10 @@ class InformerEncoder(nn.Module):
                     d_ff=config.encoder_ffn_dim,
                     dropout=config.attention_dropout,
                     activation=self.activation_fn,
-                ) for _ in range(config.encoder_layers)
-        ])
+                )
+                for _ in range(config.encoder_layers)
+            ]
+        )
 
         if config.distil is not None:
             self.conv_layers = nn.ModuleList([ConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)])
@@ -1000,22 +990,15 @@ class InformerModel(InformerPreTrainedModel):
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
     ) -> torch.Tensor:
         """
-        Returns lagged subsequences of a given sequence.
-        Parameters
-        ----------
-        sequence : Tensor
-            the sequence from which lagged subsequences should be extracted.
-            Shape: (N, T, C).
+        Returns lagged subsequences of a given sequence. Parameters ---------- sequence : Tensor
+            the sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
         subsequences_length : int
             length of the subsequences to be extracted.
         shift: int
             shift the lags by this amount back.
-        Returns
-        --------
-        lagged : Tensor
-            a tensor of shape (N, S, C, I), where S = subsequences_length and
-            I = len(indices), containing lagged subsequences. Specifically,
-            lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Returns -------- lagged : Tensor
+            a tensor of shape (N, S, C, I), where S = subsequences_length and I = len(indices), containing lagged
+            subsequences. Specifically, lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
         """
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_sequence]
@@ -1125,24 +1108,24 @@ class InformerModel(InformerPreTrainedModel):
         return self.decoder
 
     def forward(
-            self,
-            past_values: torch.Tensor,
-            past_time_features: torch.Tensor,
-            past_observed_mask: torch.Tensor,
-            static_categorical_features: torch.Tensor,
-            static_real_features: torch.Tensor,
-            future_values: Optional[torch.Tensor] = None,
-            future_time_features: Optional[torch.Tensor] = None,
-            decoder_attention_mask: Optional[torch.LongTensor] = None,
-            head_mask: Optional[torch.Tensor] = None,
-            decoder_head_mask: Optional[torch.Tensor] = None,
-            cross_attn_head_mask: Optional[torch.Tensor] = None,
-            encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
-            output_hidden_states: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            use_cache: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        past_values: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_observed_mask: torch.Tensor,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1178,7 +1161,7 @@ class InformerModel(InformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        dec_input = transformer_inputs[:, self.config.context_length:, ...]
+        dec_input = transformer_inputs[:, self.config.context_length :, ...]
         decoder_outputs = self.decoder(
             inputs_embeds=dec_input,
             attention_mask=decoder_attention_mask,
@@ -1462,6 +1445,3 @@ class InformerForPrediction(InformerPreTrainedModel):
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )
-
-
-
