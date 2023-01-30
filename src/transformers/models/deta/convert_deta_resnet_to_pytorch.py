@@ -268,11 +268,17 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     outputs = model(pixel_values.to(device))
 
     # verify logits
-    print("Logits:", outputs.logits[0, :3, :3])
-    expected_logits = torch.tensor(
-        [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
-    )
-    expected_boxes = torch.tensor([[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]])
+    if model_name == "deta-resnet-50":
+        expected_logits = torch.tensor(
+            [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
+        )
+        expected_boxes = torch.tensor([[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]])
+    elif model_name == "deta-resnet-50-24-epochs":
+        expected_logits = torch.tensor(
+            [[-7.1688, -2.4857, -4.8669], [-7.8630, -3.8154, -4.2674], [-7.2730, -4.1865, -5.5323]]
+        )
+        expected_boxes = torch.tensor([[0.5021, 0.4971, 0.9994], [0.2546, 0.5486, 0.4731], [0.1686, 0.1986, 0.2142]])
+
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
     print("Everything ok!")

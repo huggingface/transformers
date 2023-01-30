@@ -63,6 +63,7 @@ class DetaModelTester:
         num_feature_levels=4,
         encoder_n_points=2,
         decoder_n_points=6,
+        two_stage=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,6 +84,7 @@ class DetaModelTester:
         self.num_feature_levels = num_feature_levels
         self.encoder_n_points = encoder_n_points
         self.decoder_n_points = decoder_n_points
+        self.two_stage = two_stage
 
         # we also set the expected seq length for both encoder and decoder
         self.encoder_seq_length = (
@@ -130,6 +132,7 @@ class DetaModelTester:
             num_feature_levels=self.num_feature_levels,
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
+            two_stage=self.two_stage,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -397,12 +400,15 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @unittest.skip(reason="Model doesn't use tied weights")
+    def test_tied_model_weights_key_ignore(self):
+        pass
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
