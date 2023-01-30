@@ -202,6 +202,14 @@ _import_structure = {
         "ChineseCLIPTextConfig",
         "ChineseCLIPVisionConfig",
     ],
+    "models.clap": [
+        "CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLAPConfig",
+        "CLAPProcessor",
+        "CLAPTextConfig",
+        "CLAPTokenizer",
+        "CLAPVisionConfig",
+    ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
@@ -656,6 +664,7 @@ else:
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.bloom"].append("BloomTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
+    _import_structure["models.clap"].append("CLAPTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -788,6 +797,7 @@ else:
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
     _import_structure["models.bridgetower"].append("BridgeTowerImageProcessor")
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
+    _import_structure["models.clap"].extend(["CLAPFeatureExtractor", "CLAPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
@@ -1205,6 +1215,17 @@ else:
             "ChineseCLIPPreTrainedModel",
             "ChineseCLIPTextModel",
             "ChineseCLIPVisionModel",
+        ]
+    )
+    _import_structure["models.clap"].extend(
+        [
+            "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CLAPModel",
+            "CLAPPreTrainedModel",
+            "CLAPTextModel",
+            "CLAPTextModelWithProjection",
+            "CLAPVisionModel",
+            "CLAPVisionModelWithProjection",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -3645,6 +3666,14 @@ if TYPE_CHECKING:
         ChineseCLIPTextConfig,
         ChineseCLIPVisionConfig,
     )
+    from .models.clap import (
+        CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLAPConfig,
+        CLAPProcessor,
+        CLAPTextConfig,
+        CLAPTokenizer,
+        CLAPVisionConfig,
+    )
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
@@ -4062,6 +4091,7 @@ if TYPE_CHECKING:
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
+        from .models.clap import CLAPTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
@@ -4163,6 +4193,7 @@ if TYPE_CHECKING:
         from .models.blip import BlipImageProcessor
         from .models.bridgetower import BridgeTowerImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
+        from .models.clap import CLAPFeatureExtractor, CLAPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
@@ -4516,6 +4547,15 @@ if TYPE_CHECKING:
             ChineseCLIPPreTrainedModel,
             ChineseCLIPTextModel,
             ChineseCLIPVisionModel,
+        )
+        from .models.clap import (
+            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLAPModel,
+            CLAPPreTrainedModel,
+            CLAPTextModel,
+            CLAPTextModelWithProjection,
+            CLAPVisionModel,
+            CLAPVisionModelWithProjection,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
