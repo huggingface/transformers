@@ -597,6 +597,18 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_SPEECH_TO_SPEECH_MAPPING_NAMES = OrderedDict(
+    [
+        ("speecht5", "SpeechT5ForSpeechToSpeech"),
+    ]
+)
+
+MODEL_FOR_TEXT_TO_SPEECH_MAPPING_NAMES = OrderedDict(
+    [
+        ("speecht5", "SpeechT5ForTextToSpeech"),
+    ]
+)
+
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
@@ -985,6 +997,8 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
 )
 MODEL_FOR_CTC_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CTC_MAPPING_NAMES)
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES)
+MODEL_FOR_SPEECH_TO_SPEECH_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SPEECH_TO_SPEECH_MAPPING_NAMES)
+MODEL_FOR_TEXT_TO_SPEECH_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_TO_SPEECH_MAPPING_NAMES)
 MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
 )
@@ -1209,6 +1223,20 @@ class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 AutoModelForSpeechSeq2Seq = auto_class_update(
     AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
 )
+
+
+class AutoModelForSpeechToSpeech(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SPEECH_TO_SPEECH_MAPPING
+
+
+AutoModelForSpeechToSpeech = auto_class_update(AutoModelForSpeechToSpeech, head_doc="speech-to-speech modeling")
+
+
+class AutoModelForTextToSpeech(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TEXT_TO_SPEECH_MAPPING
+
+
+AutoModelForTextToSpeech = auto_class_update(AutoModelForTextToSpeech, head_doc="text-to-speech modeling")
 
 
 class AutoModelForAudioFrameClassification(_BaseAutoModelClass):
