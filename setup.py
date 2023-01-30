@@ -144,7 +144,7 @@ _deps = [
     "pytest",
     "pytest-timeout",
     "pytest-xdist",
-    "python>=3.7.1",
+    "python>=3.7.0",
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
