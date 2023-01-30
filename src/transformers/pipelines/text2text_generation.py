@@ -186,8 +186,6 @@ class Text2TextGenerationPipeline(Pipeline):
         self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if generate_kwargs.get("return_dict_in_generate"):
-            # Instance check of type unions do not work until Python 3.10, e.g. `isinstance(generated_sequence, GenerateOutput):`
-            # https://peps.python.org/pep-0604/#isinstance-and-issubclass
             output_ids = output_ids.sequences
         out_b = output_ids.shape[0]
         if self.framework == "pt":
