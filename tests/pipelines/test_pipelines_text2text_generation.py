@@ -127,28 +127,38 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_return_dict_in_generate(self):
-        greedy_search_inference_config = {"do_sample": False, "num_return_sequences": 1, "num_beams": 1}
-        pipe = pipeline(task="text2text-generation", model="patrickvonplaten/t5-tiny-random")
-        pipe("hello", return_dict_in_generate=True, **greedy_search_inference_config)
+        import torch
 
-        beam_search_inference_config = {"do_sample": False, "num_return_sequences": 1, "num_beams": 3}
-        pipe = pipeline(task="text2text-generation", model="patrickvonplaten/t5-tiny-random")
-        pipe("hello", return_dict_in_generate=True, **beam_search_inference_config)
+        torch.manual_seed(42)
 
-        top_p_inference_config = {"do_sample": True, "num_return_sequences": 1, "num_beams": 1, "top_p": 0.9}
+        greedy_search_inference_config = {"do_sample": False, "num_return_sequences": 1,  "max_length": 4, "num_beams": 1}
         pipe = pipeline(task="text2text-generation", model="patrickvonplaten/t5-tiny-random")
-        pipe("hello", return_dict_in_generate=True, **top_p_inference_config)
+        results = pipe("hello", return_dict_in_generate=True, **greedy_search_inference_config)
+        assert results[0]['generated_text'] == ''
+
+        beam_search_inference_config = {"do_sample": False, "num_return_sequences": 1,  "max_length": 4, "num_beams": 3}
+        pipe = pipeline(task="text2text-generation", model="patrickvonplaten/t5-tiny-random")
+        results = pipe("hello", return_dict_in_generate=True, **beam_search_inference_config)
+        assert results[0]['generated_text'] == ''
 
         contrastive_inference_config = {
             "do_sample": True,
             "num_return_sequences": 1,
+            "max_length": 3,
             "num_beams": 1,
             "top_k": 4,
             "penalty_alpha": 0.6,
         }
         pipe = pipeline(task="text2text-generation", model="patrickvonplaten/t5-tiny-random")
-        pipe("hello", return_dict_in_generate=True, **contrastive_inference_config)
+        results = pipe("hello", return_dict_in_generate=True, **contrastive_inference_config)
+        assert results[0]['generated_text'] == ''
 
-        eta_sampling_inference_config = {"do_sample": True, "num_return_sequences": 1, "eta_cutoff": 0.002}
+        top_p_inference_config = {"do_sample": True, "num_return_sequences": 1,  "max_length": 3, "num_beams": 1, "top_p": 0.9}
         pipe = pipeline(task="text2text-generation", model="patrickvonplaten/t5-tiny-random")
-        pipe("hello", return_dict_in_generate=True, **eta_sampling_inference_config)
+        results = pipe("hello", return_dict_in_generate=True, **top_p_inference_config)
+        assert results[0]['generated_text'] == 'créé numerical'
+
+        eta_sampling_inference_config = {"do_sample": True, "num_return_sequences": 1,  "max_length": 3, "eta_cutoff": 0.002}
+        pipe = pipeline(task="text2text-generation", model="patrickvonplaten/t5-tiny-random")
+        results = pipe("hello", return_dict_in_generate=True, **eta_sampling_inference_config)
+        assert results[0]['generated_text'] == 'läsststat'
