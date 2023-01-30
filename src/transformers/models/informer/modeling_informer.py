@@ -1623,6 +1623,7 @@ class InformerEncoder(InformerPreTrainedModel):
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                     )
+                    # TODO support for checkpointing conv_layers
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
@@ -1630,6 +1631,7 @@ class InformerEncoder(InformerPreTrainedModel):
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
                     )
+                    # TODO support for conv_layers
 
                 hidden_states = layer_outputs[0]
 
