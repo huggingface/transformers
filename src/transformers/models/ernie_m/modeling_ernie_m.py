@@ -35,6 +35,7 @@ from ...utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -62,6 +63,37 @@ ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ernie-m",
     # See all ErnieM models at https://huggingface.co/models?filter=ernie_m
 ]
+
+class ErnieMPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = ErnieMConfig
+    base_model_prefix = "ernie_m"
+    supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
+
+    def _init_weights(self, module):
+        """ Initialize the weights """
+        if isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, ErnieMEncoder):
+            module.gradient_checkpointing = value
 
 class ErnieMEmbeddings(nn.Module):
     def __init__(self, config):
@@ -104,6 +136,195 @@ class ErnieMEmbeddings(nn.Module):
         return embeddings
 
 
+class ErnieMEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([ErnieMEncoderLayer(config)
+                                     for _ in range(config.num_attention_heads)])
+    def forward(self,
+                input_embeds,
+                attn_mask=None,
+                output_attentions=False,
+                output_hidden_states=False,
+                return_dict=False):
+        hidden_states = () if output_hidden_states else None
+        attentions = () if output_attentions else None
+
+        output = input_embeds
+        if output_hidden_states:
+            hidden_states = hidden_states + (output, )
+        for layer in self.layers:
+            output, opt_attn_weights = layer(embeds=output, attn_mask=attn_mask)
+            if output_hidden_states:
+                hidden_states = hidden_states + (output, )
+            if output_attentions:
+                attentions = attentions + (opt_attn_weights, )
+
+        last_hidden_state = output
+        if not return_dict:
+            return tuple(v for v in [last_hidden_state, hidden_states, attentions] \
+                         if v is not None)
+
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=last_hidden_state,
+            hidden_states=hidden_states,
+            attentions=attentions
+        )
+
+
+class ErnieMEncoderLayer(nn.Module):
+    def __init__(self, config, act_dropout=0):
+        super().__init__()
+        dropout = 0.1 if config.hidden_dropout_prob is None else config.hidden_dropout_prob
+        attn_dropout = config.hidden_dropout_prob if \
+            config.attention_probs_dropout_prob is None \
+            else config.attention_probs_dropout_prob
+        act_dropout = config.hidden_dropout_prob if act_dropout is None \
+            else act_dropout
+        self.self_attn = nn.MultiheadAttention(embed_dim=config.hidden_size,
+                                               num_heads=config.num_attention_heads,
+                                               dropout=attn_dropout,
+                                               bias=True,
+                                               batch_first=True)
+        self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dropout = nn.Dropout(act_dropout)
+        self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.activation = nn.GELU()
+
+    def forward(self, embeds, attn_mask):
+        residual = embeds
+        embeds, attention_opt_weights = self.self_attn(query=embeds, key=embeds, value=embeds,
+                              key_padding_mask=attn_mask
+                              )
+        embeds = residual + self.dropout1(embeds)
+        embeds = self.norm1(embeds)
+
+        residual = embeds
+        embeds = self.linear2(self.dropout(self.activation(self.linear1(embeds))))
+        embeds = residual + self.dropout2(embeds)
+        embeds = self.norm2(embeds)
+
+        return embeds, attention_opt_weights
+
+class ErnieMPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # As described in ErnieM repository(paddlenlp)
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+class ErnieMModel(ErnieMPreTrainedModel):
+    def __init__(self, config):
+        super(ErnieMModel, self).__init__()
+        self.config = config
+        self.initializer_range = config.initializer_range
+        self.embeddings = ErnieMEmbeddings(config)
+        self.encoder = ErnieMEncoder(config)
+        self.pooler = ErnieMPooler(config)
+        self.apply(self.init_weights)
+
+    def forward(self,
+                input_ids: Optional[tensor] = None,
+                position_ids: Optional[tensor] = None,
+                attention_mask: Optional[tensor] = None,
+                inputs_embeds: Optional[tensor] = None,
+                past_key_values: Optional[Tuple[Tuple[tensor]]] = None,
+                use_cache: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                output_attentions: Optional[bool] = None,
+                return_dict: Optional[bool] = None,):
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time.")
+
+        # init the default bool value
+        output_attentions = output_attentions if output_attentions is not None else False
+        output_hidden_states = output_hidden_states if output_hidden_states is not None\
+            else False
+        return_dict = return_dict if return_dict is not None else False
+        use_cache = use_cache if use_cache is not None else False
+
+        past_key_values_length = 0
+        if past_key_values is not None:
+            past_key_values_length = past_key_values[0][0].shape[2]
+
+        if attention_mask is None:
+            attention_mask = (input_ids == 0).to(torch.float32) * -1e4
+            if past_key_values is not None:
+                batch_size = past_key_values[0][0].shape[0]
+                past_mask = torch.zeros([batch_size, 1, 1, past_key_values_length], dtype=attention_mask.dtype)
+                attention_mask = torch.concat([past_mask, attention_mask], dim=-1)
+        # For 2D attention_mask from tokenizer
+        elif attention_mask.ndim == 2:
+            attention_mask = attention_mask.to(torch.float32)
+            attention_mask = (1.0 - attention_mask) * -1e4
+
+        embedding_output = self.embeddings(
+                                        input_ids=input_ids,
+                                        position_ids=position_ids,
+                                        inputs_embeds=inputs_embeds,
+                                        past_key_values_length=past_key_values_length,
+                                            )
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        if type(encoder_outputs)==tuple:
+            sequence_output = encoder_outputs[0]
+            pooler_output = self.pooler(sequence_output)
+            return (sequence_output, pooler_output) + encoder_outputs[1:]
+
+        elif type(encoder_outputs)==BaseModelOutputWithPastAndCrossAttentions:
+            sequence_output = encoder_outputs["last_hidden_state"]
+            pooler_output = self.pooler(sequence_output)
+            hidden_states = None if not output_hidden_states else\
+                encoder_outputs["hidden_states"]
+            attentions = None if not output_attentions else\
+                encoder_outputs["attentions"]
+
+            return BaseModelOutputWithPoolingAndCrossAttentions(
+                last_hidden_state=sequence_output,
+                pooler_output=pooler_output,
+                hidden_states=hidden_states,
+                attentions=attentions
+            )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -128,186 +349,6 @@ class ErnieMOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
-
-
-class ErnieMLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = ErnieMAttention(config)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
-        if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = ErnieMAttention(config, position_embedding_type="absolute")
-        self.intermediate = ErnieMIntermediate(config)
-        self.output = ErnieMOutput(config)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
-        )
-        attention_output = self_attention_outputs[0]
-
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        cross_attn_present_key_value = None
-        if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
-
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                output_attentions,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
-
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
-        outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
-
-        return outputs
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
-
-
-class ErnieMEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([ErnieMLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-
-        next_decoder_cache = () if use_cache else None
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
-
-            if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
-
-            hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache += (layer_outputs[-1],)
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            past_key_values=next_decoder_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
-        )
 
 
 class ErnieMPredictionHeadTransform(nn.Module):
@@ -357,37 +398,6 @@ class ErnieMOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-class ErnieMPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = ErnieMConfig
-    base_model_prefix = "ernie_m"
-    supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
-    def _init_weights(self, module):
-        """ Initialize the weights """
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ErnieMEncoder):
-            module.gradient_checkpointing = value
-
 
 ERNIE_M_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
@@ -417,13 +427,6 @@ ERNIE_M_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range `[0, config.max_position_embeddings - 1]`.
