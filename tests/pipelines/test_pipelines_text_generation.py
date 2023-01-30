@@ -319,15 +319,20 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
         torch.manual_seed(42)
 
-        greedy_search_inference_config = {"do_sample": False, "num_return_sequences": 1, "max_length": 4, "num_beams": 1}
+        greedy_search_inference_config = {
+            "do_sample": False,
+            "num_return_sequences": 1,
+            "max_length": 4,
+            "num_beams": 1,
+        }
         pipe = pipeline(task="text-generation", model="hf-internal-testing/tiny-random-gpt2")
         results = pipe("hello", return_dict_in_generate=True, **greedy_search_inference_config)
-        assert results[0]['generated_text'] == 'hello 200'
+        assert results[0]["generated_text"] == "hello 200"
 
         beam_search_inference_config = {"do_sample": False, "num_return_sequences": 1, "max_length": 4, "num_beams": 3}
         pipe = pipeline(task="text-generation", model="hf-internal-testing/tiny-random-gpt2")
         results = pipe("hello", return_dict_in_generate=True, **beam_search_inference_config)
-        assert results[0]['generated_text'] == 'hello 200'
+        assert results[0]["generated_text"] == "hello 200"
 
         contrastive_inference_config = {
             "do_sample": True,
@@ -339,14 +344,25 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         }
         pipe = pipeline(task="text-generation", model="hf-internal-testing/tiny-random-gpt2")
         results = pipe("hello", return_dict_in_generate=True, **contrastive_inference_config)
-        assert results[0]['generated_text'] == 'hello century'
+        assert results[0]["generated_text"] == "hello century"
 
-        top_p_inference_config = {"do_sample": True, "num_return_sequences": 1, "max_length": 3, "num_beams": 1, "top_p": 0.9}
+        top_p_inference_config = {
+            "do_sample": True,
+            "num_return_sequences": 1,
+            "max_length": 3,
+            "num_beams": 1,
+            "top_p": 0.9,
+        }
         pipe = pipeline(task="text-generation", model="hf-internal-testing/tiny-random-gpt2")
         results = pipe("hello", return_dict_in_generate=True, **top_p_inference_config)
-        assert results[0]['generated_text'] == 'hello)'
+        assert results[0]["generated_text"] == "hello)"
 
-        eta_sampling_inference_config = {"do_sample": True, "num_return_sequences": 1, "max_length": 3, "eta_cutoff": 0.002}
+        eta_sampling_inference_config = {
+            "do_sample": True,
+            "num_return_sequences": 1,
+            "max_length": 3,
+            "eta_cutoff": 0.002,
+        }
         pipe = pipeline(task="text-generation", model="hf-internal-testing/tiny-random-gpt2")
         results = pipe("hello", return_dict_in_generate=True, **eta_sampling_inference_config)
-        assert results[0]['generated_text'] == 'helloact'
+        assert results[0]["generated_text"] == "helloact"
