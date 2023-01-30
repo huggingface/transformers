@@ -162,7 +162,7 @@ class VQGAN_CLIP(nn.Module):
             transformed_img = self._add_vector(vector)
             processed_img = loop_post_process(transformed_img)
             clip_loss = self._get_CLIP_loss(pos_prompts, neg_prompts, processed_img)
-            # print("CLIP loss", clip_loss)
+            print("CLIP loss", clip_loss)
             if self.log:
                 wandb.log({"CLIP Loss": clip_loss})
             clip_loss.backward(retain_graph=True)
