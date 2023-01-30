@@ -34,7 +34,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_deta_config():
+def get_deta_config(model_name):
     backbone_config = SwinConfig(
         embed_dim=192,
         depths=(2, 2, 18, 2),
@@ -55,13 +55,16 @@ def get_deta_config():
     )
 
     # set labels
-    config.num_labels = 91
-    repo_id = "huggingface/label-files"
-    filename = "coco-detection-id2label.json"
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
-    id2label = {int(k): v for k, v in id2label.items()}
-    config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}
+    if "o365" in model_name:
+        config.num_labels = 366
+    else:
+        config.num_labels = 91
+        repo_id = "huggingface/label-files"
+        filename = "coco-detection-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
@@ -215,14 +218,16 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
 
     # load config
-    config = get_deta_config()
+    config = get_deta_config(model_name)
 
     # load original state dict
     if model_name == "deta-swin-large":
-        filename = "adet_swin_ft.pth"
+        checkpoint_path = hf_hub_download(repo_id="nielsr/deta-checkpoints", filename="adet_swin_ft.pth")
+    elif model_name == "deta-swin-large-o365":
+        checkpoint_path = hf_hub_download(repo_id="jozhang97/deta-swin-l-o365", filename="deta_swin_pt_o365.pth")
     else:
         raise ValueError(f"Model name {model_name} not supported")
-    checkpoint_path = hf_hub_download(repo_id="nielsr/deta-checkpoints", filename=filename)
+
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
 
     # original state dict
@@ -267,10 +272,17 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # verify logits
     print("Logits:", outputs.logits[0, :3, :3])
-    expected_logits = torch.tensor(
-        [[-7.6308, -2.8485, -5.3737], [-7.2037, -4.5505, -4.8027], [-7.2943, -4.2611, -4.6617]]
-    )
-    expected_boxes = torch.tensor([[0.4987, 0.4969, 0.9999], [0.2549, 0.5498, 0.4805], [0.5498, 0.2757, 0.0569]])
+    print("Boxes:", outputs.pred_boxes[0, :3, :3])
+    if model_name == "deta-swin-large":
+        expected_logits = torch.tensor(
+            [[-7.6308, -2.8485, -5.3737], [-7.2037, -4.5505, -4.8027], [-7.2943, -4.2611, -4.6617]]
+        )
+        expected_boxes = torch.tensor([[0.4987, 0.4969, 0.9999], [0.2549, 0.5498, 0.4805], [0.5498, 0.2757, 0.0569]])
+    elif model_name == "deta-swin-large-o365":
+        expected_logits = torch.tensor(
+            [[-8.0122, -3.5720, -4.9717], [-8.1547, -3.6886, -4.6389], [-7.6610, -3.6194, -5.0134]]
+        )
+        expected_boxes = torch.tensor([[0.2523, 0.5549, 0.4881], [0.7715, 0.4149, 0.4601], [0.5503, 0.2753, 0.0575]])
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
     print("Everything ok!")
@@ -285,8 +297,8 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # Push to hub
     if push_to_hub:
         print("Pushing model and processor to hub...")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"jozhang97{model_name}")
+        processor.push_to_hub(f"jozhang97/{model_name}")
 
 
 if __name__ == "__main__":
@@ -296,7 +308,7 @@ if __name__ == "__main__":
         "--model_name",
         type=str,
         default="deta-swin-large",
-        choices=["deta-swin-large"],
+        choices=["deta-swin-large", "deta-swin-large-o365"],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(

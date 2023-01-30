@@ -291,8 +291,8 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # Push to hub
     if push_to_hub:
         print("Pushing model and processor to hub...")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"jozhang97/{model_name}")
+        processor.push_to_hub(f"jozhang97/{model_name}")
 
 
 if __name__ == "__main__":
