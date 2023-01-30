@@ -1056,7 +1056,7 @@ class DagsHubCallback(MLflowCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         if self.log_artifacts:
-            if self.train_dataloader:
+            if getattr(self, 'train_dataloader', None):
                 print(self.train_dataloader.dataset)
 
             Path(self.paths["models"] / self.name).mkdir(parents=True, exist_ok=True)
