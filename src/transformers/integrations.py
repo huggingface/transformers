@@ -1038,8 +1038,6 @@ class DagsHubCallback(MLflowCallback):
         self.model = args[2]
         self.log_artifacts = os.getenv("HF_DAGSHUB_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self.name = os.getenv("HF_DAGSHUB_MODEL_NAME") or "main"
-        if self.log_artifacts:
-            self.data = os.getenv("HF_DAGSHUB_DATA_PATH")
         self.remote = os.getenv("MLFLOW_TRACKING_URI") or input("Please input a remote url.")
         self.repo = self.Repo(
             owner=self.remote.split(os.sep)[-2],
@@ -1058,17 +1056,18 @@ class DagsHubCallback(MLflowCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         if self.log_artifacts:
-            # dataset =
-            # for i in range(len(self.train_dataloader)): # or i, image in enumerate(dataset)
-            #     = dataset[i] # or whatever your dataset returns
-            # self.repo.directory(self.paths["artifacts"]).add(file=self.data, path=self.paths["data"])
+            if self.train_dataloader:
+                print(self.train_dataloader.dataset)
 
             Path(self.paths["models"] / self.name).mkdir(parents=True, exist_ok=True)
-            torch.save(self.model, self.paths["models"] / self.name / "model.pt")
-            state.save_to_json(self.paths["models"] / self.name / "state.json")
 
-            self.repo.directory(self.paths["artifacts"]).add_dir(file=self.paths["artifacts"])
+            self.repo.directory(args.output_dir).add_dir(file=str(self.paths["models"]))
             self.repo.directory(self.paths["artifacts"]).commit("updated artifacts", versioning="dvc", force=True)
+
+    def _dvc_add(self, local_path="", remote_path=""):
+        if not os.path.isfile(local_path):
+            FileExistsError(f"Invalid file path: {local_path}")
+        self.repo.directory().add_dir(file=local_path)
 
 
 class NeptuneMissingConfiguration(Exception):
