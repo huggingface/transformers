@@ -26,6 +26,37 @@ from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer, H3Config, H3ForCausalLM
 
 
+def get_h3_config(model_name):
+    if model_name == "H3-125m":
+        hidden_size = 768
+        num_hidden_layers = 12
+        num_attention_heads = 12
+        attn_layer_idx = [6]
+
+    elif model_name == "H3-355m":
+        hidden_size = 1024
+        num_hidden_layers = 24
+        num_attention_heads = 16
+        attn_layer_idx = [8, 16]
+
+    elif model_name == "H3-1.3b":
+        hidden_size = 2048
+        num_hidden_layers = 24
+        num_attention_heads = 16
+        attn_layer_idx = [8, 16]
+
+    elif model_name == "H3-2.7b":
+        raise NotImplementedError("To do")
+
+    config = H3Config(
+        hidden_size=hidden_size,
+        num_hidden_layers=num_hidden_layers,
+        num_attention_heads=num_attention_heads,
+        attn_layer_idx=attn_layer_idx,
+    )
+    return config
+
+
 def rename_key(name):
     if "backbone.embeddings" in name:
         name = name.replace("backbone", "h3")
@@ -49,13 +80,16 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
     # Load original state dict
     model_name_to_repo_id = {
         "H3-125m": "danfu09/H3-125M",
+        "H3-355m": "danfu09/H3-355M",
+        "H3-1.3b": "danfu09/H3-1.3B",
+        "H3-2.7b": "danfu09/H3-2.7B",
     }
     filepath = hf_hub_download(repo_id=model_name_to_repo_id[model_name], filename="model.pt")
     state_dict = torch.load(filepath, map_location="cpu")
     if "pytorch-lightning_version" in state_dict:
         state_dict = {k[len("model.") :]: v for k, v in state_dict["state_dict"].items() if k.startswith("model.")}
 
-    config = H3Config()
+    config = get_h3_config(model_name)
 
     # Update state dict
     if "backbone.ln_0.weight" in state_dict:
@@ -82,8 +116,6 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
     state_dict = convert_state_dict(state_dict)
 
     # Load HF model, equip with weights
-    # TODO remove caching?
-    config.use_cache = False
     model = H3ForCausalLM(config)
     model.load_state_dict(state_dict)
     model.eval()
@@ -98,7 +130,10 @@ def convert_h3_checkpoint_to_pytorch(model_name, pytorch_dump_folder_path, push_
         logits = outputs.logits
 
     print("Logits:", logits[0, :3, :3])
-    expected_slice = torch.tensor([[5.9570, 7.0703, 4.4727]], device=device)
+    if model_name == "H3-125m":
+        expected_slice = torch.tensor([[5.9570, 7.0703, 4.4727]], device=device)
+    elif model_name == "H3-355m":
+        expected_slice = torch.tensor([[4.5926, 6.2018, 4.6021]], device=device)
     assert torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-2)
 
     print("Generating text...")
@@ -124,7 +159,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--model_name", default="H3-125m", type=str, help="Name of the H3 model you'd like to convert."
+        "--model_name",
+        default="H3-125m",
+        type=str,
+        choices=["H3-125m", "H3-355m", "H3-1.3b", "H3-2.7b"],
+        help="Name of the H3 model you'd like to convert.",
     )
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
