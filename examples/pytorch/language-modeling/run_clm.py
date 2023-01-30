@@ -279,30 +279,27 @@ def main():
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
     if data_args.dataset_name is not None:
-        kwargs = dict(
-            cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-        if data_args.streaming:
-            kwargs.update(streaming=True)
-        # Downloading and loading a dataset from the hub.
+
         raw_datasets = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
-            **kwargs,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+            streaming=data_args.streaming,
         )
+
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
-                **kwargs,
+                streaming=data_args.streaming,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
-                **kwargs,
+                streaming=data_args.streaming,
             )
     else:
         data_files = {}
@@ -442,18 +439,21 @@ def main():
         return output
 
     with training_args.main_process_first(desc="dataset map tokenization"):
-        kwargs = dict(
-            batched=True,
-            remove_columns=column_names,
-        )
         if not data_args.streaming:
-            kwargs.update(
+            tokenized_datasets = raw_datasets.map(
+                tokenize_function,
+                batched=True,
                 num_proc=data_args.preprocessing_num_workers,
+                remove_columns=column_names,
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on dataset",
             )
-
-        tokenized_datasets = raw_datasets.map(tokenize_function, **kwargs)
+        else:
+            tokenized_datasets = raw_datasets.map(
+                tokenize_function,
+                batched=True,
+                remove_columns=column_names,
+            )
 
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
@@ -496,20 +496,19 @@ def main():
     # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
     with training_args.main_process_first(desc="grouping texts together"):
-        kwargs = dict(
-            batched=True,
-        )
         if not data_args.streaming:
-            kwargs.update(
+            lm_datasets = tokenized_datasets.map(
+                group_texts,
+                batched=True,
                 num_proc=data_args.preprocessing_num_workers,
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc=f"Grouping texts in chunks of {block_size}",
             )
-
-        lm_datasets = tokenized_datasets.map(
-            group_texts,
-            **kwargs,
-        )
+        else:
+            lm_datasets = tokenized_datasets.map(
+                group_texts,
+                batched=True,
+            )
 
     if training_args.do_train:
         if "train" not in tokenized_datasets:
