@@ -239,7 +239,8 @@ class TokenClassificationPipeline(Pipeline):
         if self.framework == "tf":
             logits = self.model(model_inputs.data)[0]
         else:
-            logits = self.model(**model_inputs)[0]
+            output = self.model(**model_inputs)
+            logits = output["logits"] if isinstance(output, dict) else output[0]
 
         return {
             "logits": logits,
