@@ -1,16 +1,16 @@
 import os
 from glob import glob
 
+import imageio
 import torch
 import torchvision
+import wandb
 from PIL import Image
 from torch import nn
+from transformers import CLIPModel, CLIPProcessor
 
-import imageio
-import wandb
 from img_processing import custom_to_pil, loop_post_process, preprocess, preprocess_vqgan
 from loaders import load_vqgan
-from transformers import CLIPModel, CLIPProcessor
 from utils import get_device, get_timestamp, show_pil
 
 
