@@ -1,8 +1,8 @@
-taming-transformers
 einops
 gradio
 icecream
 imageio
+lpips
 matplotlib
 more_itertools
 numpy
@@ -17,10 +17,10 @@ scikit_image
 scipy
 setuptools
 streamlit
+taming-transformers
 torch
 torchvision
 tqdm
-transformers
+transformers==4.26.0
 typing_extensions
 wandb
-lpips
