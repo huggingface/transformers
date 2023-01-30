@@ -52,6 +52,7 @@ INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+
 class AffineTransformed(TransformedDistribution):
     def __init__(self, base_distribution: Distribution, loc=None, scale=None, event_dim=0):
         self.scale = 1.0 if scale is None else scale
@@ -828,6 +829,177 @@ class DecoderLayer(nn.Module):
         return self.norm3(x + y)
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerPreTrainedModel with TimeSeriesTransformer->Informer
+class InformerPreTrainedModel(PreTrainedModel):
+    config_class = InformerConfig
+    base_model_prefix = "model"
+    main_input_name = "past_values"
+    supports_gradient_checkpointing = True
+
+    def _init_weights(self, module):
+        std = self.config.init_std
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (InformerDecoder, InformerEncoder)):
+            module.gradient_checkpointing = value
+
+
+INFORMER_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`InformerConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+INFORMER_INPUTS_DOCSTRING = r"""
+    Args:
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series, that serve as context in order to predict the future. These values may
+            contain lags, i.e. additional values from the past which are added in order to serve as "extra context".
+            The `past_values` is what the Transformer encoder gets as input (with optional additional features, such as
+            `static_categorical_features`, `static_real_features`, `past_time_features`).
+
+            The sequence length here is equal to `context_length` + `max(config.lags_sequence)`.
+
+            Missing values need to be replaced with zeros.
+
+        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
+            Optional time features, which the model internally will add to `past_values`. These could be things like
+            "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
+            could also be so-called "age" features, which basically help the model know "at which point in life" a
+            time-series is. Age features have small values for distant past time steps and increase monotonically the
+            more we approach the current time step.
+
+            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
+            the position encodings are learned from scratch internally as parameters of the model, the Time Series
+            Transformer requires to provide additional time features.
+
+            The Informer only learns additional embeddings for `static_categorical_features`.
+
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
+            `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
+        static_categorical_features (`torch.LongTensor` of shape `(batch_size, number of static categorical features)`, *optional*):
+            Optional static categorical features for which the model will learn an embedding, which it will add to the
+            values of the time series.
+
+            Static categorical features are features which have the same value for all time steps (static over time).
+
+            A typical example of a static categorical feature is a time series ID.
+
+        static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+            Optional static real features which the model will add to the values of the time series.
+
+            Static real features are features which have the same value for all time steps (static over time).
+
+            A typical example of a static real feature is promotion information.
+
+        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)`):
+            Future values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs to learn to output, given the `past_values`.
+
+            See the demo notebook and code snippets for details.
+
+            Missing values need to be replaced with zeros.
+
+        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
+            Optional time features, which the model internally will add to `future_values`. These could be things like
+            "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
+            could also be so-called "age" features, which basically help the model know "at which point in life" a
+            time-series is. Age features have small values for distant past time steps and increase monotonically the
+            more we approach the current time step.
+
+            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
+            the position encodings are learned from scratch internally as parameters of the model, the Time Series
+            Transformer requires to provide additional features.
+
+            The Informer only learns additional embeddings for `static_categorical_features`.
+
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on certain token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
+            make sure the model can only look at previous inputs in order to predict the future.
+
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
 class InformerEncoder(nn.Module):
     def __init__(self, config: InformerConfig):
         super(InformerEncoder, self).__init__()
@@ -938,29 +1110,11 @@ class InformerDecoder(nn.Module):
         return x
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerPreTrainedModel with TimeSeriesTransformer->Informer
-class InformerPreTrainedModel(PreTrainedModel):
-    config_class = InformerConfig
-    base_model_prefix = "model"
-    main_input_name = "past_values"
-    supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (InformerDecoder, InformerEncoder)):
-            module.gradient_checkpointing = value
-
-
+@add_start_docstrings(
+    "The bare Informer Model outputting raw hidden-states without any specific head on top.",
+    INFORMER_START_DOCSTRING,
+)
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER
 class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
@@ -990,15 +1144,17 @@ class InformerModel(InformerPreTrainedModel):
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
     ) -> torch.Tensor:
         """
-        Returns lagged subsequences of a given sequence. Parameters ---------- sequence : Tensor
-            the sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
-        subsequences_length : int
-            length of the subsequences to be extracted.
-        shift: int
-            shift the lags by this amount back.
-        Returns -------- lagged : Tensor
-            a tensor of shape (N, S, C, I), where S = subsequences_length and I = len(indices), containing lagged
-            subsequences. Specifically, lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
+            where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
+            j, :, k] = sequence[i, -indices[k]-S+j, :].
+
+        Args:
+            sequence: Tensor
+                The sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
+            subsequences_length : int
+                Length of the subsequences to be extracted.
+            shift: int
+                Shift the lags by this amount back.
         """
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_sequence]
@@ -1096,10 +1252,11 @@ class InformerModel(InformerPreTrainedModel):
         enc_input = transformer_inputs[:, : self.config.context_length, ...]
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
 
-        enc_out, _ = self.encoder(enc_input)
-        dec_output = self.decoder(dec_input, enc_out)
-
-        return self.param_proj(dec_output)
+        encoder_outputs = self.encoder(inputs_embeds=enc_input)
+        decoder_outputs = self.decoder(
+            inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state
+        )
+        return encoder_outputs, decoder_outputs
 
     def get_encoder(self):
         return self.encoder
@@ -1107,6 +1264,8 @@ class InformerModel(InformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    @add_start_docstrings_to_model_forward(INFORMER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1127,6 +1286,37 @@ class InformerModel(InformerPreTrainedModel):
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from huggingface_hub import hf_hub_download
+        >>> import torch
+        >>> from transformers import InformerModel
+
+        >>> file = hf_hub_download(
+        ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ... )
+        >>> batch = torch.load(file)
+
+        >>> model = InformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
+
+        >>> # during training, one provides both past and future values
+        >>> # as well as possible additional features
+        >>> outputs = model(
+        ...     past_values=batch["past_values"],
+        ...     past_time_features=batch["past_time_features"],
+        ...     past_observed_mask=batch["past_observed_mask"],
+        ...     static_categorical_features=batch["static_categorical_features"],
+        ...     static_real_features=batch["static_real_features"],
+        ...     future_values=batch["future_values"],
+        ...     future_time_features=batch["future_time_features"],
+        ... )
+
+        >>> last_hidden_state = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1192,6 +1382,11 @@ class InformerModel(InformerPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The Informer Model with a distribution head on top for time-series forecasting.",
+    INFORMER_START_DOCSTRING,
+)
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerForPrediction with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER
 class InformerForPrediction(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
@@ -1232,6 +1427,8 @@ class InformerForPrediction(InformerPreTrainedModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, scale=scale)
 
+    @add_start_docstrings_to_model_forward(INFORMER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1270,14 +1467,14 @@ class InformerForPrediction(InformerPreTrainedModel):
         ```python
         >>> from huggingface_hub import hf_hub_download
         >>> import torch
-        >>> from transformers import TimeSeriesTransformerForPrediction
+        >>> from transformers import InformerForPrediction
 
         >>> file = hf_hub_download(
         ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = TimeSeriesTransformerForPrediction.from_pretrained(
+        >>> model = InformerForPrediction.from_pretrained(
         ...     "huggingface/time-series-transformer-tourism-monthly"
         ... )
 
