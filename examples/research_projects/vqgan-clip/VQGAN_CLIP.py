@@ -144,7 +144,7 @@ class VQGAN_CLIP(nn.Module):
             similarity_logits = similarity_logits * weights
         return similarity_logits.sum()
 
-    def _get_CLIP_loss(self, pos_prompts, neg_prompts, image):
+    def _get_clip_loss(self, pos_prompts, neg_prompts, image):
         pos_logits = self._get_clip_similarity(pos_prompts["prompts"], image, weights=(1 / pos_prompts["weights"]))
         if neg_prompts:
             neg_logits = self._get_clip_similarity(neg_prompts["prompts"], image, weights=neg_prompts["weights"])
