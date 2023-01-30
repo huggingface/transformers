@@ -1498,10 +1498,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         If needed prunes and maybe initializes weights.
         """
-        # Prune heads if needed
-        if self.config.pruned_heads:
-            self.prune_heads(self.config.pruned_heads)
-
         if _init_weights:
             # Initialize weights
             self.apply(self._init_weights)
