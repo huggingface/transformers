@@ -57,10 +57,10 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DetaConfig"
-_CHECKPOINT_FOR_DOC = "ut/deta"
+_CHECKPOINT_FOR_DOC = "jozhang97/deta-swin-large-o365"
 
 DETA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ut/deta",
+    "jozhang97/deta-swin-large-o365",
     # See all DETA models at https://huggingface.co/models?filter=deta
 ]
 
@@ -1552,8 +1552,8 @@ class DetaModel(DetaPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = DetaModel.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("jozhang97/deta-swin-large-o365")
+        >>> model = DetaModel.from_pretrained("jozhang97/deta-swin-large-o365")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1864,8 +1864,8 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = DetaForObjectDetection.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("jozhang97/deta-swin-large-o365")
+        >>> model = DetaForObjectDetection.from_pretrained("jozhang97/deta-swin-large-o365")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

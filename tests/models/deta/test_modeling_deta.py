@@ -437,12 +437,10 @@ def prepare_img():
 class DetaModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        # TODO update organization
-        return AutoImageProcessor.from_pretrained("nielsr/deta-resnet-50") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("jozhang97/deta-resnet-50") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        # TODO update organization
-        model = DetaForObjectDetection.from_pretrained("nielsr/deta-resnet-50").to(torch_device)
+        model = DetaForObjectDetection.from_pretrained("jozhang97/deta-resnet-50").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -480,8 +478,7 @@ class DetaModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
 
     def test_inference_object_detection_head_swin_backbone(self):
-        # TODO update organization
-        model = DetaForObjectDetection.from_pretrained("nielsr/deta-swin-large").to(torch_device)
+        model = DetaForObjectDetection.from_pretrained("jozhang97/deta-swin-large").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
