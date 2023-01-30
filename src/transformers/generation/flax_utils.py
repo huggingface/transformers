@@ -744,7 +744,7 @@ class FlaxGenerationMixin:
             improvement_still_possible = jnp.any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(jnp.all(state.is_sent_finished) & early_stopping is True)
+            still_open_beam = ~(jnp.all(state.is_sent_finished) & (early_stopping is True))
 
             return not_max_length_yet & still_open_beam & improvement_still_possible
 

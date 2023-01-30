@@ -2020,7 +2020,7 @@ class TFGenerationMixin:
             improvement_still_possible = tf.math.reduce_any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & early_stopping is True)
+            still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & (early_stopping is True))
 
             return not_max_length_yet & still_open_beam & improvement_still_possible
 
