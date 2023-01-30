@@ -63,7 +63,7 @@ class VQGAN_CLIP(nn.Module):
         show_intermediate=False,
         make_grid=False,
     ) -> None:
-        """ "
+        """
         Instantiate a VQGAN_CLIP model. If you want to use a custom VQGAN model, pass it as vqgan.
         """
         super().__init__()
