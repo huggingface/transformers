@@ -250,7 +250,7 @@ class TextGenerationPipeline(Pipeline):
         prompt_text = model_inputs.pop("prompt_text")
         # BS x SL
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
-        if generate_kwargs["return_dict_in_generate"]:
+        if generate_kwargs.get("return_dict_in_generate"):
             # Instance check of type unions do not work until Python 3.10, e.g. `isinstance(generated_sequence, GenerateOutput):`
             # https://peps.python.org/pep-0604/#isinstance-and-issubclass
             generated_sequence = generated_sequence.sequences
