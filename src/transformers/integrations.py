@@ -1056,18 +1056,13 @@ class DagsHubCallback(MLflowCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         if self.log_artifacts:
-            if getattr(self, 'train_dataloader', None):
+            if getattr(self, "train_dataloader", None):
                 print(self.train_dataloader.dataset)
 
             Path(self.paths["models"] / self.name).mkdir(parents=True, exist_ok=True)
 
-            self.repo.directory(args.output_dir).add_dir(file=str(self.paths["models"]))
+            self.repo.directory(args.output_dir).add_dir(str(self.paths["models"]))
             self.repo.directory(self.paths["artifacts"]).commit("updated artifacts", versioning="dvc", force=True)
-
-    def _dvc_add(self, local_path="", remote_path=""):
-        if not os.path.isfile(local_path):
-            FileExistsError(f"Invalid file path: {local_path}")
-        self.repo.directory().add_dir(file=local_path)
 
 
 class NeptuneMissingConfiguration(Exception):
