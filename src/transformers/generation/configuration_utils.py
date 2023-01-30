@@ -63,14 +63,12 @@ class GenerationConfig(PushToHubMixin):
 
         max_length (`int`, *optional*, defaults to 20):
             The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
-            `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in the
-            prompt.
+            `max_new_tokens`. Its effect is overridden by `max_new_tokens`, if also set.
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         min_length (`int`, *optional*, defaults to 0):
             The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
-            `min_new_tokens`. In general, prefer the use of `min_new_tokens`, which ignores the number of tokens in the
-            prompt.
+            `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
         min_new_tokens (`int`, *optional*):
             The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         early_stopping (`bool`, *optional*, defaults to `False`):
