@@ -13,14 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch CLAP model."""
-
+import collections
+import math
 
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union, List
 import numpy as np
 
+
+from itertools import repeat
 import torch
 import torch.utils.checkpoint
+import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
@@ -52,62 +56,22 @@ CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
+def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/Clip.html
-def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
-
-
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clap
-def clap_loss(similarity: torch.Tensor) -> torch.Tensor:
-    caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
-    return (caption_loss + image_loss) / 2.0
-
-
-@dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->CLAP
-class CLAPVisionModelOutput(ModelOutput):
-    """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+    are ignored. This is modified from fairseq's `utils.make_positions`.
 
     Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        x: torch.Tensor x:
 
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    Returns: torch.Tensor
     """
+    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+    mask = input_ids.ne(padding_idx).int()
+    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+    return incremental_indices.long() + padding_idx
 
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -178,314 +142,506 @@ class CLAPOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->CLAP
-class CLAPVisionEmbeddings(nn.Module):
-    def __init__(self, config: CLAPVisionConfig):
+
+# from PyTorch internals
+def _ntuple(n):
+    def parse(x):
+        if isinstance(x, collections.abc.Iterable):
+            return x
+        return tuple(repeat(x, n))
+    return parse
+
+to_1tuple = _ntuple(1)
+to_2tuple = _ntuple(2)
+to_3tuple = _ntuple(3)
+to_4tuple = _ntuple(4)
+to_ntuple = _ntuple
+
+
+def drop_path(x, drop_prob: float = 0., training: bool = False):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
+    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
+    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
+    'survival rate' as the argument.
+    """
+    if drop_prob == 0. or not training:
+        return x
+    keep_prob = 1 - drop_prob
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    random_tensor.floor_()  # binarize
+    output = x.div(keep_prob) * random_tensor
+    return output
+
+
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
+    """
+    def __init__(self, drop_prob=None):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training)
+
+class PatchEmbed(nn.Module):
+    """ 2D Image to Patch Embedding
+    """
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, hidden_size=768, norm_layer=None, flatten=True, patch_stride = 16,
+        enable_fusion=False, fusion_type='None'):
         super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
+        img_size = to_2tuple(img_size)
+        patch_size = to_2tuple(patch_size)
+        patch_stride = to_2tuple(patch_stride)
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.grid_size = (img_size[0] // patch_stride[0], img_size[1] // patch_stride[1])
+        self.num_patches = self.grid_size[0] * self.grid_size[1]
+        self.flatten = flatten
+        self.in_chans = in_chans
+        self.hidden_size = hidden_size
 
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+        self.enable_fusion = enable_fusion
+        self.fusion_type = fusion_type
+        
+        padding = ((patch_size[0] - patch_stride[0]) // 2, (patch_size[1] - patch_stride[1]) // 2)
 
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
-
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
-
-
-# Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->CLAP
-class CLAPTextEmbeddings(nn.Module):
-    def __init__(self, config: CLAPTextConfig):
-        super().__init__()
-        embed_dim = config.hidden_size
-
-        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
-
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-    ) -> torch.Tensor:
-        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
-
-        if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
-
-        if inputs_embeds is None:
-            inputs_embeds = self.token_embedding(input_ids)
-
-        position_embeddings = self.position_embedding(position_ids)
-        embeddings = inputs_embeds + position_embeddings
-
-        return embeddings
-
-
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->CLAP
-class CLAPAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        bsz, tgt_len, embed_dim = hidden_states.size()
-
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        if (self.enable_fusion) and (self.fusion_type == 'channel_map'):
+            self.proj = nn.Conv2d(in_chans*4, hidden_size, kernel_size=patch_size, stride=patch_stride, padding=padding)
         else:
-            attn_weights_reshaped = None
+            self.proj = nn.Conv2d(in_chans, hidden_size, kernel_size=patch_size, stride=patch_stride, padding=padding)
+        self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        if (self.enable_fusion) and (self.fusion_type in ['daf_2d','aff_2d','iaff_2d']):
+            self.mel_conv2d = nn.Conv2d(in_chans, hidden_size, kernel_size=(patch_size[0], patch_size[1]*3), stride=(patch_stride[0], patch_stride[1] * 3), padding=padding)
+            if self.fusion_type == 'daf_2d':
+                self.fusion_model = DAF()
+            elif self.fusion_type == 'aff_2d':
+                self.fusion_model = AFF(channels=hidden_size, type='2D')
+            elif self.fusion_type == 'iaff_2d':
+                self.fusion_model = iAFF(channels=hidden_size, type='2D')    
+    def forward(self, x, longer_idx = None):
+        if (self.enable_fusion) and (self.fusion_type in ['daf_2d','aff_2d','iaff_2d']):
+            global_x = x[:,0:1,:,:]
+            
 
-        attn_output = torch.bmm(attn_probs, value_states)
+            # global processing
+            B, C, H, W = global_x.shape
+            assert H == self.img_size[0] and W == self.img_size[1], \
+                f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+            global_x = self.proj(global_x)
+            TW = global_x.size(-1)
+            if len(longer_idx) > 0:
+                # local processing
+                local_x = x[longer_idx,1:,:,:].contiguous()
+                B, C, H, W = local_x.shape
+                local_x = local_x.view(B*C,1,H,W)
+                local_x = self.mel_conv2d(local_x)
+                local_x = local_x.view(B,C,local_x.size(1),local_x.size(2),local_x.size(3))
+                local_x = local_x.permute((0,2,3,1,4)).contiguous().flatten(3)
+                TB,TC,TH,_ = local_x.size()
+                if local_x.size(-1) < TW:
+                    local_x = torch.cat([local_x, torch.zeros((TB,TC,TH,TW-local_x.size(-1)), device=global_x.device)], dim=-1)
+                else:
+                    local_x = local_x[:,:,:,:TW]
+                
+                global_x[longer_idx] = self.fusion_model(global_x[longer_idx],local_x)
+            x = global_x
+        else:
+            B, C, H, W = x.shape
+            assert H == self.img_size[0] and W == self.img_size[1], \
+                f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+            x = self.proj(x)
+        
+        if self.flatten:
+            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+        x = self.norm(x)
+        return x
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
-
-
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->CLAP
-class CLAPMLP(nn.Module):
-    def __init__(self, config):
+class Mlp(nn.Module):
+    """ MLP as used in Vision Transformer, MLP-Mixer and related networks
+    """
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
         super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = act_layer()
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.drop = nn.Dropout(drop)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.drop(x)
+        return x
+
+def _no_grad_trunc_normal_(tensor, mean, std, a, b):
+    # Cut & paste from PyTorch official master until it's in a few official releases - RW
+    # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    def norm_cdf(x):
+        # Computes standard normal cumulative distribution function
+        return (1. + math.erf(x / math.sqrt(2.))) / 2.
+
+    if (mean < a - 2 * std) or (mean > b + 2 * std):
+        warnings.warn("mean is more than 2 std from [a, b] in nn.init.trunc_normal_. "
+                      "The distribution of values may be incorrect.",
+                      stacklevel=2)
+
+    with torch.no_grad():
+        # Values are generated by using a truncated uniform distribution and
+        # then using the inverse CDF for the normal distribution.
+        # Get upper and lower cdf values
+        l = norm_cdf((a - mean) / std)
+        u = norm_cdf((b - mean) / std)
+
+        # Uniformly fill tensor with values from [l, u], then translate to
+        # [2l-1, 2u-1].
+        tensor.uniform_(2 * l - 1, 2 * u - 1)
+
+        # Use inverse cdf transform for normal distribution to get truncated
+        # standard normal
+        tensor.erfinv_()
+
+        # Transform to proper mean, std
+        tensor.mul_(std * math.sqrt(2.))
+        tensor.add_(mean)
+
+        # Clamp to ensure it's in the proper range
+        tensor.clamp_(min=a, max=b)
+        return tensor
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->CLAP
-class CLAPEncoderLayer(nn.Module):
-    def __init__(self, config: CLAPConfig):
+def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
+    # type: (Tensor, float, float, float, float) -> Tensor
+    r"""Fills the input Tensor with values drawn from a truncated
+    normal distribution. The values are effectively drawn from the
+    normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
+    with values outside :math:`[a, b]` redrawn until they are within
+    the bounds. The method used for generating the random values works
+    best when :math:`a \leq \text{mean} \leq b`.
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+        mean: the mean of the normal distribution
+        std: the standard deviation of the normal distribution
+        a: the minimum cutoff value
+        b: the maximum cutoff value
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.trunc_normal_(w)
+    """
+    return _no_grad_trunc_normal_(tensor, mean, std, a, b)
+
+
+def variance_scaling_(tensor, scale=1.0, mode='fan_in', distribution='normal'):
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    if mode == 'fan_in':
+        denom = fan_in
+    elif mode == 'fan_out':
+        denom = fan_out
+    elif mode == 'fan_avg':
+        denom = (fan_in + fan_out) / 2
+
+    variance = scale / denom
+
+    if distribution == "truncated_normal":
+        # constant is stddev of standard normal truncated to (-2, 2)
+        trunc_normal_(tensor, std=math.sqrt(variance) / .87962566103423978)
+    elif distribution == "normal":
+        tensor.normal_(std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        tensor.uniform_(-bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def lecun_normal_(tensor):
+    variance_scaling_(tensor, mode='fan_in', distribution='truncated_normal')
+
+def window_partition(x, window_size):
+    """
+    Args:
+        x: (B, H, W, C)
+        window_size (int): window size
+    Returns:
+        windows: (num_windows*B, window_size, window_size, C)
+    """
+    B, H, W, C = x.shape
+    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
+    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    return windows
+
+
+def window_reverse(windows, window_size, H, W):
+    """
+    Args:
+        windows: (num_windows*B, window_size, window_size, C)
+        window_size (int): Window size
+        H (int): Height of image
+        W (int): Width of image
+    Returns:
+        x: (B, H, W, C)
+    """
+    B = int(windows.shape[0] / (H * W / window_size / window_size))
+    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
+    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
+    return x
+
+
+class WindowAttention(nn.Module):
+    r""" Window based multi-head self attention (W-MSA) module with relative position bias.
+    It supports both of shifted and non-shifted window.
+    Args:
+        dim (int): Number of input channels.
+        window_size (tuple[int]): The height and width of the window.
+        num_heads (int): Number of attention heads.
+        qkv_bias (bool, optional):  If True, add a learnable bias to query, key, value. Default: True
+        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set
+        attn_drop (float, optional): Dropout ratio of attention weight. Default: 0.0
+        proj_drop (float, optional): Dropout ratio of output. Default: 0.0
+    """
+
+    def __init__(self, dim, window_size, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0., proj_drop=0.):
+
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = CLAPAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.mlp = CLAPMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.dim = dim
+        self.window_size = window_size  # Wh, Ww
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+        # define a parameter table of relative position bias
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads))  # 2*Wh-1 * 2*Ww-1, nH
+
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(self.window_size[0])
+        coords_w = torch.arange(self.window_size[1])
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
+        relative_coords[:, :, 0] += self.window_size[0] - 1  # shift to start from 0
+        relative_coords[:, :, 1] += self.window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+        relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+        self.register_buffer("relative_position_index", relative_position_index)
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        trunc_normal_(self.relative_position_bias_table, std=.02)
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x, mask=None):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
+            x: input features with shape of (num_windows*B, N, C)
+            mask: (0/-inf) mask with shape of (num_windows, Wh*Ww, Wh*Ww) or None
         """
-        residual = hidden_states
+        B_, N, C = x.shape
+        qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = residual + hidden_states
+        q = q * self.scale
+        attn = (q @ k.transpose(-2, -1))
 
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
+            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1)  # Wh*Ww,Wh*Ww,nH
+        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+        attn = attn + relative_position_bias.unsqueeze(0)
 
-        outputs = (hidden_states,)
+        if mask is not None:
+            nW = mask.shape[0]
+            attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
+            attn = attn.view(-1, self.num_heads, N, N)
+            attn = self.softmax(attn)
+        else:
+            attn = self.softmax(attn)
 
-        if output_attentions:
-            outputs += (attn_weights,)
+        attn = self.attn_drop(attn)
 
-        return outputs
+        x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x, attn
+
+    def extra_repr(self):
+        return f'dim={self.dim}, window_size={self.window_size}, num_heads={self.num_heads}'
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->CLAP,clip->clap
-class CLAPPreTrainedModel(PreTrainedModel):
+class SwinTransformerBlock(nn.Module):
+    r""" Swin Transformer Block.
+    Args:
+        dim (int): Number of input channels.
+        input_resolution (tuple[int]): Input resulotion.
+        num_heads (int): Number of attention heads.
+        window_size (int): Window size.
+        shift_size (int): Shift size for SW-MSA.
+        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
+        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
+        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
+        drop (float, optional): Dropout rate. Default: 0.0
+        attn_drop (float, optional): Attention dropout rate. Default: 0.0
+        drop_path (float, optional): Stochastic depth rate. Default: 0.0
+        act_layer (nn.Module, optional): Activation layer. Default: nn.GELU
+        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+
+    def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
+                 mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
+                 act_layer=nn.GELU, norm_layer=nn.LayerNorm, norm_before_mlp='ln'):
+        super().__init__()
+        self.dim = dim
+        self.input_resolution = input_resolution
+        self.num_heads = num_heads
+        self.window_size = window_size
+        self.shift_size = shift_size
+        self.mlp_ratio = mlp_ratio
+        self.norm_before_mlp = norm_before_mlp
+        if min(self.input_resolution) <= self.window_size:
+            # if window size is larger than input resolution, we don't partition windows
+            self.shift_size = 0
+            self.window_size = min(self.input_resolution)
+        assert 0 <= self.shift_size < self.window_size, "shift_size must in 0-window_size"
+
+        self.norm1 = norm_layer(dim)
+        self.attn = WindowAttention(
+            dim, window_size=to_2tuple(self.window_size), num_heads=num_heads,
+            qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        if self.norm_before_mlp == 'ln':
+            self.norm2 = nn.LayerNorm(dim)
+        elif self.norm_before_mlp == 'bn':
+            self.norm2 = lambda x: nn.BatchNorm1d(dim)(x.transpose(1, 2)).transpose(1, 2)
+        else:
+            raise NotImplementedError
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
+        if self.shift_size > 0:
+            # calculate attention mask for SW-MSA
+            H, W = self.input_resolution
+            img_mask = torch.zeros((1, H, W, 1))  # 1 H W 1
+            h_slices = (slice(0, -self.window_size),
+                        slice(-self.window_size, -self.shift_size),
+                        slice(-self.shift_size, None))
+            w_slices = (slice(0, -self.window_size),
+                        slice(-self.window_size, -self.shift_size),
+                        slice(-self.shift_size, None))
+            cnt = 0
+            for h in h_slices:
+                for w in w_slices:
+                    img_mask[:, h, w, :] = cnt
+                    cnt += 1
+
+            mask_windows = window_partition(img_mask, self.window_size)  # nW, window_size, window_size, 1
+            mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+        else:
+            attn_mask = None
+
+        self.register_buffer("attn_mask", attn_mask)
+
+    def forward(self, x):
+        # pdb.set_trace()
+        H, W = self.input_resolution
+        # print("H: ", H)
+        # print("W: ", W)
+        # pdb.set_trace()
+        B, L, C = x.shape
+        # assert L == H * W, "input feature has wrong size"
+
+        shortcut = x
+        x = self.norm1(x)
+        x = x.view(B, H, W, C)
+
+        # cyclic shift
+        if self.shift_size > 0:
+            shifted_x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
+        else:
+            shifted_x = x
+
+        # partition windows
+        x_windows = window_partition(shifted_x, self.window_size)  # nW*B, window_size, window_size, C
+        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
+
+        # W-MSA/SW-MSA
+        attn_windows, attn = self.attn(x_windows, mask=self.attn_mask)  # nW*B, window_size*window_size, C
+
+        # merge windows
+        attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
+        shifted_x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
+
+        # reverse cyclic shift
+        if self.shift_size > 0:
+            x = torch.roll(shifted_x, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
+        else:
+            x = shifted_x
+        x = x.view(B, H * W, C)
+
+        # FFN
+        x = shortcut + self.drop_path(x)
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+
+        return x, attn
+
+    def extra_repr(self):
+        return f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, " \
+               f"window_size={self.window_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
+
+
+# contrastive loss function, adapted from
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/Clip.html
+def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
+    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
+
+
+# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clap
+def clap_loss(similarity: torch.Tensor) -> torch.Tensor:
+    caption_loss = contrastive_loss(similarity)
+    image_loss = contrastive_loss(similarity.t())
+    return (caption_loss + image_loss) / 2.0
+
+
+@dataclass
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->CLAP
+class CLAPVisionModelOutput(ModelOutput):
+    """
+    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+
+    Args:
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
     """
 
-    config_class = CLAPConfig
-    base_model_prefix = "clap"
-    supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t", r"vision_model.*"]
-
-    def _init_weights(self, module):
-        pass
-        # """Initialize the weights"""
-        # factor = self.config.initializer_factor
-        # if isinstance(module, CLAPTextEmbeddings):
-        #     module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        #     module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        # elif isinstance(module, CLAPVisionEmbeddings):
-        #     factor = self.config.initializer_factor
-        #     nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-        #     nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-        #     nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        # elif isinstance(module, CLAPAttention):
-        #     factor = self.config.initializer_factor
-        #     in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-        #     out_proj_std = (module.embed_dim**-0.5) * factor
-        #     nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-        #     nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-        #     nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-        #     nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        # elif isinstance(module, CLAPMLP):
-        #     factor = self.config.initializer_factor
-        #     in_proj_std = (
-        #         (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-        #     )
-        #     fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-        #     nn.init.normal_(module.fc1.weight, std=fc_std)
-        #     nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        # elif isinstance(module, CLAPModel):
-        #     nn.init.normal_(
-        #         module.text_projection.weight,
-        #         std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-        #     )
-        #     nn.init.normal_(
-        #         module.visual_projection.weight,
-        #         std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-        #     )
-        # elif isinstance(module, CLAPVisionModelWithProjection):
-        #     nn.init.normal_(
-        #         module.visual_projection.weight,
-        #         std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-        #     )
-        # elif isinstance(module, CLAPTextModelWithProjection):
-        #     nn.init.normal_(
-        #         module.text_projection.weight,
-        #         std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-        #     )
-
-        # if isinstance(module, nn.LayerNorm):
-        #     module.bias.data.zero_()
-        #     module.weight.data.fill_(1.0)
-        # if isinstance(module, nn.Linear) and module.bias is not None:
-        #     module.bias.data.zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CLAPEncoder):
-            module.gradient_checkpointing = value
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 CLAP_START_DOCSTRING = r"""
@@ -588,119 +744,15 @@ CLAP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->CLAP
-class CLAPEncoder(nn.Module):
-    """
-    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`CLAPEncoderLayer`].
-
-    Args:
-        config: CLAPConfig
-    """
-
-    def __init__(self, config: CLAPConfig):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([CLAPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions=output_attentions,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-
 class CLAPFusionBlock(nn.Module):
     def __init__(self, config: CLAPTextConfig):
         super().__init__()
         self.config = config
-        embed_dim = config.projection_dim
+        hidden_size = config.projection_dim
         self.activation = ACT2FN[config.hidden_act]
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         
-        self.linear = nn.Linear(embed_dim, embed_dim)
+        self.linear = nn.Linear(hidden_size, hidden_size)
 
     def forward(self, hidden_states):
         hidden_states = self.linear(hidden_states)
@@ -709,15 +761,15 @@ class CLAPFusionBlock(nn.Module):
         return hidden_states
 
 
-class CLAPTextProjectionLayer(nn.Module):
+class CLAPProjectionLayer(nn.Module):
     def __init__(self, config: CLAPTextConfig):
         super().__init__()
         self.config = config
-        embed_dim = config.hidden_size
+        hidden_size = config.projection_hidden_size
         projection_dim = config.projection_dim
-        self.activation = ACT2FN[config.hidden_act]
         
-        self.linear1 = nn.Linear(embed_dim, projection_dim)
+        self.linear1 = nn.Linear(hidden_size, projection_dim)
+        self.activation = ACT2FN[config.projection_hidden_act]
         self.linear2 = nn.Linear(projection_dim, projection_dim)
 
     def forward(self, hidden_states):
@@ -738,661 +790,6 @@ class CLAPFusionLayer(nn.Module):
         for layer in self.layers:
             hidden_states = layer(hidden_states)
         return hidden_states
-
-class CLAPTextTransformer(nn.Module):
-    def __init__(self, config: CLAPTextConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-        self.embeddings = CLAPTextEmbeddings(config)
-        self.encoder = CLAPEncoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
-
-    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLAPTextConfig)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is None:
-            raise ValueError("You have to specify input_ids")
-
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_shape[-1])
-
-        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
-
-        bsz, seq_len = input_shape
-        # CLAP's text model uses causal mask, prepare it here.
-        # https://github.com/openai/CLAP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clap/model.py#L324
-        causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len, hidden_states.dtype).to(
-            hidden_states.device
-        )
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-        last_hidden_state = self.final_layer_norm(last_hidden_state)
-
-        # text_embeds.shape = [batch_size, sequence_length, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
-        pooled_output = last_hidden_state[
-            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
-        ]
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-    def _build_causal_attention_mask(self, bsz, seq_len, dtype):
-        # lazily create causal attention mask, with full attention between the vision tokens
-        # pytorch uses additive attention mask; fill with -inf
-        mask = torch.empty(bsz, seq_len, seq_len, dtype=dtype)
-        mask.fill_(torch.tensor(torch.finfo(dtype).min))
-        mask.triu_(1)  # zero out the lower diagonal
-        mask = mask.unsqueeze(1)  # expand mask
-        return mask
-
-
-@add_start_docstrings(
-    """The text model from CLAP without any head or projection on top.""",
-    CLAP_START_DOCSTRING,
-)
-class CLAPTextModel(CLAPPreTrainedModel):
-    config_class = CLAPTextConfig
-
-    _no_split_modules = ["CLAPEncoderLayer"]
-
-    def __init__(self, config: CLAPTextConfig):
-        super().__init__(config)
-        self.text_model = CLAPTextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLAPTextConfig)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, CLAPTextModel
-
-        >>> model = CLAPTextModel.from_pretrained("laion-ai/base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/base")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-
-class CLAPVisionTransformer(nn.Module):
-    def __init__(self, config: CLAPVisionConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = CLAPVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
-        self.encoder = CLAPEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
-
-    @add_start_docstrings_to_model_forward(CLAP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLAPVisionConfig)
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """The vision model from CLAP without any head or projection on top.""",
-    CLAP_START_DOCSTRING,
-)
-class CLAPVisionModel(CLAPPreTrainedModel):
-    config_class = CLAPVisionConfig
-    main_input_name = "pixel_values"
-
-    def __init__(self, config: CLAPVisionConfig):
-        super().__init__(config)
-        self.vision_model = CLAPVisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @add_start_docstrings_to_model_forward(CLAP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLAPVisionConfig)
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLAPVisionModel
-
-        >>> model = CLAPVisionModel.from_pretrained("laion-ai/base")
-        >>> processor = AutoProcessor.from_pretrained("laion-ai/base")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-
-@add_start_docstrings(CLAP_START_DOCSTRING)
-class CLAPModel(CLAPPreTrainedModel):
-    config_class = CLAPConfig
-
-    def __init__(self, config: CLAPConfig):
-        super().__init__(config)
-
-        if not isinstance(config.text_config, CLAPTextConfig):
-            raise ValueError(
-                "config.text_config is expected to be of type CLAPTextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
-
-        if not isinstance(config.vision_config, CLAPVisionConfig):
-            raise ValueError(
-                "config.vision_config is expected to be of type CLAPVisionConfig but is of type"
-                f" {type(config.vision_config)}."
-            )
-
-        text_config = config.text_config
-        vision_config = config.vision_config
-
-        self.logit_scale_a = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        self.logit_scale_t = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-
-        self.projection_dim = config.projection_dim
-        self.text_embed_dim = text_config.hidden_size
-        self.vision_embed_dim = vision_config.hidden_size
-
-        # self.text_model = CLAPTextTransformer(text_config)
-        self.text_model = CLAPTextModel(text_config)
-        self.vision_model = CLAPVisionTransformer(vision_config)
-
-        self.text_transform = CLAPFusionLayer(text_config)
-
-        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
-        self.text_projection = CLAPTextProjectionLayer(text_config) 
-        
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
-    def get_text_features(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
-        r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLAPTextModel`].
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, CLAPModel
-
-        >>> model = CLAPModel.from_pretrained("laion-ai/base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/base")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
-        ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
-
-        return text_features
-
-    @add_start_docstrings_to_model_forward(CLAP_VISION_INPUTS_DOCSTRING)
-    def get_image_features(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
-        r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLAPVisionModel`].
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLAPModel
-
-        >>> model = CLAPModel.from_pretrained("laion-ai/base")
-        >>> processor = AutoProcessor.from_pretrained("laion-ai/base")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> image_features = model.get_image_features(**inputs)
-        ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
-
-        return image_features
-
-    @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLAPOutput, config_class=CLAPConfig)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLAPOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLAPModel
-
-        >>> model = CLAPModel.from_pretrained("laion-ai/base")
-        >>> processor = AutoProcessor.from_pretrained("laion-ai/base")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
-        ... )
-
-        >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
-        ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
-
-        text_embeds = text_outputs[1]
-        text_embeds = self.text_projection(text_embeds)
-
-        # normalized features
-        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
-        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
-
-        # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-        logits_per_image = logits_per_text.t()
-
-        loss = None
-        if return_loss:
-            loss = clap_loss(logits_per_text)
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
-
-        return CLAPOutput(
-            loss=loss,
-            logits_per_image=logits_per_image,
-            logits_per_text=logits_per_text,
-            text_embeds=text_embeds,
-            image_embeds=image_embeds,
-            text_model_output=text_outputs,
-            vision_model_output=vision_outputs,
-        )
-
-
-@add_start_docstrings(
-    """
-    CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLAP_START_DOCSTRING,
-)
-class CLAPTextModelWithProjection(CLAPPreTrainedModel):
-    config_class = CLAPTextConfig
-
-    _no_split_modules = ["CLAPEncoderLayer"]
-
-    def __init__(self, config: CLAPTextConfig):
-        super().__init__(config)
-
-        self.text_model = CLAPTextTransformer(config)
-
-        self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLAPTextModelOutput, config_class=CLAPTextConfig)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLAPTextModelOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, CLAPTextModelWithProjection
-
-        >>> model = CLAPTextModelWithProjection.from_pretrained("laion-ai/base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/base")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> text_embeds = outputs.text_embeds
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = text_outputs[1]
-
-        text_embeds = self.text_projection(pooled_output)
-
-        if not return_dict:
-            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
-            return tuple(output for output in outputs if output is not None)
-
-        return CLAPTextModelOutput(
-            text_embeds=text_embeds,
-            last_hidden_state=text_outputs.last_hidden_state,
-            hidden_states=text_outputs.hidden_states,
-            attentions=text_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    CLAP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLAP_START_DOCSTRING,
-)
-class CLAPVisionModelWithProjection(CLAPPreTrainedModel):
-    config_class = CLAPVisionConfig
-    main_input_name = "pixel_values"
-
-    def __init__(self, config: CLAPVisionConfig):
-        super().__init__(config)
-
-        self.vision_model = CLAPVisionTransformer(config)
-
-        self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @add_start_docstrings_to_model_forward(CLAP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLAPVisionModelOutput, config_class=CLAPVisionConfig)
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLAPVisionModelOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLAPVisionModelWithProjection
-
-        >>> model = CLAPVisionModelWithProjection.from_pretrained("laion-ai/base")
-        >>> processor = AutoProcessor.from_pretrained("laion-ai/base")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> image_embeds = outputs.image_embeds
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = vision_outputs[1]  # pooled_output
-
-        image_embeds = self.visual_projection(pooled_output)
-
-        if not return_dict:
-            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
-            return tuple(output for output in outputs if output is not None)
-
-        return CLAPVisionModelOutput(
-            image_embeds=image_embeds,
-            last_hidden_state=vision_outputs.last_hidden_state,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
-        )
 
 
 class CLAPTextEmbeddings(nn.Module):
@@ -1914,12 +1311,13 @@ class CLAPTextPooler(nn.Module):
         return pooled_output
 
 
+
+
 class CLAPTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
     config_class = CLAPTextConfig
     base_model_prefix = "claptext"
     supports_gradient_checkpointing = True
@@ -2130,3 +1528,815 @@ class CLAPTextModel(CLAPTextPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
+
+
+
+# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->CLAP,clip->clap
+class CLAPPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = CLAPConfig
+    base_model_prefix = "clap"
+    supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t", r"vision_model.*"]
+
+    def _init_weights(self, module):
+        pass
+        # """Initialize the weights"""
+        # factor = self.config.initializer_factor
+        # if isinstance(module, CLAPTextEmbeddings):
+        #     module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        #     module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        # elif isinstance(module, CLAPVisionEmbeddings):
+        #     factor = self.config.initializer_factor
+        #     nn.init.normal_(module.class_embedding, mean=0.0, std=module.hidden_size**-0.5 * factor)
+        #     nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+        #     nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+        # elif isinstance(module, CLAPAttention):
+        #     factor = self.config.initializer_factor
+        #     in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+        #     out_proj_std = (module.hidden_size**-0.5) * factor
+        #     nn.init.normal_(module.q_proj.weight, std=in_proj_std)
+        #     nn.init.normal_(module.k_proj.weight, std=in_proj_std)
+        #     nn.init.normal_(module.v_proj.weight, std=in_proj_std)
+        #     nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+        # elif isinstance(module, CLAPMLP):
+        #     factor = self.config.initializer_factor
+        #     in_proj_std = (
+        #         (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+        #     )
+        #     fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
+        #     nn.init.normal_(module.fc1.weight, std=fc_std)
+        #     nn.init.normal_(module.fc2.weight, std=in_proj_std)
+        # elif isinstance(module, CLAPModel):
+        #     nn.init.normal_(
+        #         module.text_projection.weight,
+        #         std=module.text_hidden_size**-0.5 * self.config.initializer_factor,
+        #     )
+        #     nn.init.normal_(
+        #         module.visual_projection.weight,
+        #         std=module.vision_hidden_size**-0.5 * self.config.initializer_factor,
+        #     )
+        # elif isinstance(module, CLAPVisionModelWithProjection):
+        #     nn.init.normal_(
+        #         module.visual_projection.weight,
+        #         std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
+        #     )
+        # elif isinstance(module, CLAPTextModelWithProjection):
+        #     nn.init.normal_(
+        #         module.text_projection.weight,
+        #         std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
+        #     )
+
+        # if isinstance(module, nn.LayerNorm):
+        #     module.bias.data.zero_()
+        #     module.weight.data.fill_(1.0)
+        # if isinstance(module, nn.Linear) and module.bias is not None:
+        #     module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, CLAPEncoder):
+            module.gradient_checkpointing = value
+
+
+
+@add_start_docstrings(CLAP_START_DOCSTRING)
+class CLAPModel(CLAPPreTrainedModel):
+    config_class = CLAPConfig
+
+    def __init__(self, config: CLAPConfig):
+        super().__init__(config)
+
+        if not isinstance(config.text_config, CLAPTextConfig):
+            raise ValueError(
+                "config.text_config is expected to be of type CLAPTextConfig but is of type"
+                f" {type(config.text_config)}."
+            )
+
+        if not isinstance(config.vision_config, CLAPVisionConfig):
+            raise ValueError(
+                "config.vision_config is expected to be of type CLAPVisionConfig but is of type"
+                f" {type(config.vision_config)}."
+            )
+
+        text_config = config.text_config
+        vision_config = config.vision_config
+
+        self.logit_scale_a = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.logit_scale_t = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+
+        self.projection_dim = config.projection_dim
+        self.text_hidden_size = text_config.hidden_size
+        self.vision_hidden_size = vision_config.hidden_size
+
+
+        self.text_model = CLAPTextModel(text_config)
+        self.text_transform = CLAPFusionLayer(text_config)
+        self.text_projection = CLAPProjectionLayer(text_config) 
+
+        self.audio_model = HTSAT_Swin_Transformer(config=vision_config)
+        self.audio_transform = CLAPFusionLayer(vision_config)
+        self.audio_projection = CLAPProjectionLayer(vision_config) 
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
+    def get_text_features(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of [`CLAPTextModel`].
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, CLAPModel
+
+        >>> model = CLAPModel.from_pretrained("laion-ai/base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/base")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
+        # Use CLAP model's config for some fields (if specified) instead of those of vision & text components.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = text_outputs[1]
+        text_features = self.text_projection(pooled_output)
+        text_features = F.normalize(text_features, dim=-1)
+
+        return text_features
+
+    @add_start_docstrings_to_model_forward(CLAP_VISION_INPUTS_DOCSTRING)
+    def get_image_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`CLAPVisionModel`].
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, CLAPModel
+
+        >>> model = CLAPModel.from_pretrained("laion-ai/base")
+        >>> processor = AutoProcessor.from_pretrained("laion-ai/base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> image_features = model.get_image_features(**inputs)
+        ```"""
+        # Use CLAP model's config for some fields (if specified) instead of those of vision & text components.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = vision_outputs[1]  # pooled_output
+        image_features = self.visual_projection(pooled_output)
+
+        return image_features
+
+    @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CLAPOutput, config_class=CLAPConfig)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        return_loss: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CLAPOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, CLAPModel
+
+        >>> model = CLAPModel.from_pretrained("laion-ai/base")
+        >>> processor = AutoProcessor.from_pretrained("laion-ai/base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(
+        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ... )
+
+        >>> outputs = model(**inputs)
+        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        ```"""
+        # Use CLAP model's config for some fields (if specified) instead of those of vision & text components.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[1]
+        image_embeds = self.visual_projection(image_embeds)
+
+        text_embeds = text_outputs[1]
+        text_embeds = self.text_projection(text_embeds)
+
+        # normalized features
+        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+
+        # cosine similarity as logits
+        logit_scale = self.logit_scale.exp()
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
+        logits_per_image = logits_per_text.t()
+
+        loss = None
+        if return_loss:
+            loss = clap_loss(logits_per_text)
+
+        if not return_dict:
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            return ((loss,) + output) if loss is not None else output
+
+        return CLAPOutput(
+            loss=loss,
+            logits_per_image=logits_per_image,
+            logits_per_text=logits_per_text,
+            text_embeds=text_embeds,
+            image_embeds=image_embeds,
+            text_model_output=text_outputs,
+            vision_model_output=vision_outputs,
+        )
+
+@add_start_docstrings(
+    """
+    CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
+    """,
+    CLAP_START_DOCSTRING,
+)
+class CLAPTextModelWithProjection(CLAPPreTrainedModel):
+    config_class = CLAPTextConfig
+
+    def __init__(self, config: CLAPTextConfig):
+        super().__init__(config)
+        self.text_model = CLAPTextModel(config)
+        self.text_projection = CLAPProjectionLayer(config)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.text_model.embeddings.token_embedding = value
+
+    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CLAPTextModelOutput, config_class=CLAPTextConfig)
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CLAPTextModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, CLAPTextModelWithProjection
+
+        >>> model = CLAPTextModelWithProjection.from_pretrained("laion-ai/base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/base")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> text_embeds = outputs.text_embeds
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = text_outputs[1]
+
+        text_embeds = self.text_projection(pooled_output)
+
+        if not return_dict:
+            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
+            return tuple(output for output in outputs if output is not None)
+
+        return CLAPTextModelOutput(
+            text_embeds=text_embeds,
+            last_hidden_state=text_outputs.last_hidden_state,
+            hidden_states=text_outputs.hidden_states,
+            attentions=text_outputs.attentions,
+        )
+
+
+class BasicLayer(nn.Module):
+    """ A basic Swin Transformer layer for one stage.
+    Args:
+        dim (int): Number of input channels.
+        input_resolution (tuple[int]): Input resolution.
+        depth (int): Number of blocks.
+        num_heads (int): Number of attention heads.
+        window_size (int): Local window size.
+        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
+        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
+        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
+        drop (float, optional): Dropout rate. Default: 0.0
+        attn_drop (float, optional): Attention dropout rate. Default: 0.0
+        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
+        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
+        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
+        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
+    """
+
+    def __init__(self, dim, input_resolution, depth, num_heads, window_size,
+                 mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0.,
+                 drop_path=0., norm_layer=nn.LayerNorm, downsample=None, use_checkpoint=False,
+                 norm_before_mlp='ln'):
+
+        super().__init__()
+        self.dim = dim
+        self.input_resolution = input_resolution
+        self.depth = depth
+        self.use_checkpoint = use_checkpoint
+
+        # build blocks
+        self.blocks = nn.ModuleList([
+            SwinTransformerBlock(dim=dim, input_resolution=input_resolution,
+                                 num_heads=num_heads, window_size=window_size,
+                                 shift_size=0 if (i % 2 == 0) else window_size // 2,
+                                 mlp_ratio=mlp_ratio,
+                                 qkv_bias=qkv_bias, qk_scale=qk_scale,
+                                 drop=drop, attn_drop=attn_drop,
+                                 drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
+                                 norm_layer=norm_layer, norm_before_mlp=norm_before_mlp)
+            for i in range(depth)])
+
+        # patch merging layer
+        if downsample is not None:
+            self.downsample = downsample(input_resolution, dim=dim, norm_layer=norm_layer)
+        else:
+            self.downsample = None
+
+    def forward(self, x):
+        attns = []
+        for blk in self.blocks:
+            if self.use_checkpoint:
+                x = checkpoint.checkpoint(blk, x)
+            else:
+                x, attn = blk(x)
+                if not self.training:
+                    attns.append(attn.unsqueeze(0))
+        if self.downsample is not None:
+            x = self.downsample(x)
+        if not self.training:
+            attn = torch.cat(attns, dim = 0)
+            attn = torch.mean(attn, dim = 0)
+        return x, attn
+
+class PatchMerging(nn.Module):
+    r""" Patch Merging Layer.
+    Args:
+        input_resolution (tuple[int]): Resolution of input feature.
+        dim (int): Number of input channels.
+        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
+    """
+
+    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.input_resolution = input_resolution
+        self.dim = dim
+        self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
+        self.norm = norm_layer(4 * dim)
+
+    def forward(self, x):
+        """
+        x: B, H*W, C
+        """
+        H, W = self.input_resolution
+        B, L, C = x.shape
+        assert L == H * W, "input feature has wrong size"
+        assert H % 2 == 0 and W % 2 == 0, f"x size ({H}*{W}) are not even."
+
+        x = x.view(B, H, W, C)
+
+        x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
+        x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
+        x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
+        x3 = x[:, 1::2, 1::2, :]  # B H/2 W/2 C
+        x = torch.cat([x0, x1, x2, x3], -1)  # B H/2 W/2 4*C
+        x = x.view(B, -1, 4 * C)  # B H/2*W/2 4*C
+
+        x = self.norm(x)
+        x = self.reduction(x)
+
+        return x
+
+    def extra_repr(self):
+        return f"input_resolution={self.input_resolution}, dim={self.dim}"
+
+
+
+
+# The Core of HTSAT
+class HTSAT_Swin_Transformer(nn.Module):
+    r"""HTSAT based on the Swin Transformer
+    Args:
+        spec_size (int | tuple(int)): Input Spectrogram size. Default 256
+        patch_size (int | tuple(int)): Patch size. Default: 4
+        path_stride (iot | tuple(int)): Patch Stride for Frequency and Time Axis. Default: 4
+        in_chans (int): Number of input image channels. Default: 1 (mono)
+        num_classes (int): Number of classes for classification head. Default: 527
+        hidden_size (int): Patch embedding dimension. Default: 96
+        depths (tuple(int)): Depth of each HTSAT-Swin Transformer layer.
+        num_heads (tuple(int)): Number of attention heads in different layers.
+        window_size (int): Window size. Default: 8
+        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim. Default: 4
+        qkv_bias (bool): If True, add a learnable bias to query, key, value. Default: True
+        qk_scale (float): Override default qk scale of head_dim ** -0.5 if set. Default: None
+        drop_rate (float): Dropout rate. Default: 0
+        attn_drop_rate (float): Attention dropout rate. Default: 0
+        drop_path_rate (float): Stochastic depth rate. Default: 0.1
+        norm_layer (nn.Module): Normalization layer. Default: nn.LayerNorm.
+        ape (bool): If True, add absolute position embedding to the patch embedding. Default: False
+        patch_norm (bool): If True, add normalization after patch embedding. Default: True
+        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
+        config (module): The configuration Module from config.py
+    """
+
+    def __init__(self, spec_size=256, patch_size=4, patch_stride=(4,4), 
+                in_chans=1, num_classes=527,
+                 hidden_size=96, depths=[2, 2, 6, 2], num_heads=[4, 8, 16, 32],
+                 window_size=8, mlp_ratio=4., qkv_bias=True, qk_scale=None,
+                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
+                 norm_layer=nn.LayerNorm, 
+                 ape=False, patch_norm=True,
+                 use_checkpoint=False, norm_before_mlp='ln', config = None, 
+                 enable_fusion = False, fusion_type = 'None', **kwargs):
+        super(HTSAT_Swin_Transformer, self).__init__()
+
+        self.config = config
+        self.spec_size = spec_size 
+        self.patch_stride = patch_stride
+        self.patch_size = patch_size
+        self.window_size = window_size
+        self.hidden_size = hidden_size
+        self.depths = depths
+        self.ape = ape
+        self.in_chans = in_chans
+        self.num_classes = num_classes
+        self.num_heads = num_heads
+        self.num_layers = len(self.depths)
+        self.num_features = int(self.hidden_size * 2 ** (self.num_layers - 1))
+        
+        self.drop_rate = drop_rate
+        self.attn_drop_rate = attn_drop_rate
+        self.drop_path_rate = drop_path_rate
+
+        self.qkv_bias = qkv_bias
+        self.qk_scale = None
+
+        self.patch_norm = patch_norm
+        self.norm_layer = norm_layer if self.patch_norm else None
+        self.norm_before_mlp = norm_before_mlp
+        self.mlp_ratio = mlp_ratio
+
+        self.use_checkpoint = use_checkpoint
+
+        self.enable_fusion = enable_fusion
+        self.fusion_type = fusion_type
+
+        #  process mel-spec ; used only once
+        self.freq_ratio = self.spec_size // self.config.mel_bins
+        window = 'hann'
+        center = True
+        pad_mode = 'reflect'
+        ref = 1.0
+        amin = 1e-10
+        top_db = None
+        self.interpolate_ratio = 32     # Downsampled ratio
+        # Spectrogram extractor
+        self.bn0 = nn.BatchNorm2d(self.config.mel_bins)
+
+
+        # split spctrogram into non-overlapping patches
+        self.patch_embed = PatchEmbed(
+            img_size=self.spec_size, patch_size=self.patch_size, in_chans=self.in_chans, 
+            hidden_size=self.hidden_size, norm_layer=self.norm_layer, patch_stride = patch_stride,
+            enable_fusion=self.enable_fusion, fusion_type=self.fusion_type
+            )
+
+        num_patches = self.patch_embed.num_patches
+        patches_resolution = self.patch_embed.grid_size
+        self.patches_resolution = patches_resolution
+
+        # absolute position embedding
+        if self.ape:
+            self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, self.hidden_size))
+            trunc_normal_(self.absolute_pos_embed, std=.02)
+
+        self.pos_drop = nn.Dropout(p=self.drop_rate)
+
+        # stochastic depth
+        dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, sum(self.depths))]  # stochastic depth decay rule
+
+        # build layers
+        self.layers = nn.ModuleList()
+        for i_layer in range(self.num_layers):
+            layer = BasicLayer(dim=int(self.hidden_size * 2 ** i_layer),
+                input_resolution=(patches_resolution[0] // (2 ** i_layer),
+                                    patches_resolution[1] // (2 ** i_layer)),
+                depth=self.depths[i_layer],
+                num_heads=self.num_heads[i_layer],
+                window_size=self.window_size,
+                mlp_ratio=self.mlp_ratio,
+                qkv_bias=self.qkv_bias, qk_scale=self.qk_scale,
+                drop=self.drop_rate, attn_drop=self.attn_drop_rate,
+                drop_path=dpr[sum(self.depths[:i_layer]):sum(self.depths[:i_layer + 1])],
+                norm_layer=self.norm_layer,
+                downsample=PatchMerging if (i_layer < self.num_layers - 1) else None,
+                use_checkpoint=use_checkpoint,
+                norm_before_mlp=self.norm_before_mlp)
+            self.layers.append(layer)
+
+        self.norm = self.norm_layer(self.num_features)
+        self.avgpool = nn.AdaptiveAvgPool1d(1)
+        self.maxpool = nn.AdaptiveMaxPool1d(1)
+        
+        SF = self.spec_size // (2 ** (len(self.depths) - 1)) // self.patch_stride[0] // self.freq_ratio
+        self.tscam_conv = nn.Conv2d(
+            in_channels = self.num_features,
+            out_channels = self.num_classes,
+            kernel_size = (SF,3),
+            padding = (0,1)
+        )
+        self.head = nn.Linear(num_classes, num_classes)
+
+        if (self.enable_fusion) and (self.fusion_type in ['daf_1d','aff_1d','iaff_1d']):
+            self.mel_conv1d = nn.Sequential(
+                nn.Conv1d(64, 64, kernel_size=5, stride=3, padding=2),
+                nn.BatchNorm1d(64)
+            )
+            if self.fusion_type == 'daf_1d':
+                self.fusion_model = DAF()
+            elif self.fusion_type == 'aff_1d':
+                self.fusion_model = AFF(channels=64, type='1D')
+            elif self.fusion_type == 'iaff_1d':
+                self.fusion_model = iAFF(channels=64, type='1D')
+                
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        pass
+        # if isinstance(m, nn.Linear):
+        #     trunc_normal_(m.weight, std=.02)
+        #     if isinstance(m, nn.Linear) and m.bias is not None:
+        #         nn.init.constant_(m.bias, 0)
+        # elif isinstance(m, nn.LayerNorm):
+        #     nn.init.constant_(m.bias, 0)
+        #     nn.init.constant_(m.weight, 1.0)
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {'absolute_pos_embed'}
+
+    @torch.jit.ignore
+    def no_weight_decay_keywords(self):
+        return {'relative_position_bias_table'}
+
+
+    def forward_features(self, x, longer_idx = None):
+        # A deprecated optimization for using a hierarchical output from different blocks
+
+        frames_num = x.shape[2]        
+        x = self.patch_embed(x, longer_idx = longer_idx)
+        if self.ape:
+            x = x + self.absolute_pos_embed
+        x = self.pos_drop(x)
+        for i, layer in enumerate(self.layers):
+            x, attn = layer(x)
+        # for x
+        x = self.norm(x)
+        B, N, C = x.shape
+        SF = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[0]
+        ST = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[1]
+        x = x.permute(0,2,1).contiguous().reshape(B, C, SF, ST)
+        B, C, F, T = x.shape
+        # group 2D CNN
+        c_freq_bin = F // self.freq_ratio
+        x = x.reshape(B, C, F // c_freq_bin, c_freq_bin, T)
+        x = x.permute(0,1,3,2,4).contiguous().reshape(B, C, c_freq_bin, -1)
+        # get latent_output
+        fine_grained_latent_output = torch.mean(x, dim = 2)
+        fine_grained_latent_output = interpolate(fine_grained_latent_output.permute(0,2,1).contiguous(), 8 * self.patch_stride[1]) 
+        
+        latent_output = self.avgpool(torch.flatten(x,2))
+        latent_output = torch.flatten(latent_output, 1)
+
+        # display the attention map, if needed
+
+        x = self.tscam_conv(x)
+        x = torch.flatten(x, 2) # B, C, T
+ 
+        fpx = interpolate(torch.sigmoid(x).permute(0,2,1).contiguous(), 8 * self.patch_stride[1]) 
+            
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+
+        output_dict = {
+            'framewise_output': fpx, # already sigmoided
+            'clipwise_output': torch.sigmoid(x),
+            'fine_grained_embedding': fine_grained_latent_output,
+            'embedding': latent_output
+        }
+
+        return output_dict
+
+    def crop_wav(self, x, crop_size, spe_pos = None):
+        time_steps = x.shape[2]
+        tx = torch.zeros(x.shape[0], x.shape[1], crop_size, x.shape[3]).to(x.device)
+        for i in range(len(x)):
+            if spe_pos is None:
+                crop_pos = random.randint(0, time_steps - crop_size - 1)
+            else:
+                crop_pos = spe_pos
+            tx[i][0] = x[i, 0, crop_pos:crop_pos + crop_size,:]
+        return tx
+
+    # Reshape the wavform to a img size, if you want to use the pretrained swin transformer model
+    def reshape_wav2img(self, x):
+        B, C, T, F = x.shape
+        target_T = int(self.spec_size * self.freq_ratio)
+        target_F = self.spec_size // self.freq_ratio
+        assert T <= target_T and F <= target_F, "the wav size should less than or equal to the swin input size"
+        # to avoid bicubic zero error
+        if T < target_T:
+            x = nn.functional.interpolate(x, (target_T, x.shape[3]), mode="bicubic", align_corners=True)
+        if F < target_F:
+            x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)
+        x = x.permute(0,1,3,2).contiguous()
+        x = x.reshape(x.shape[0], x.shape[1], x.shape[2], self.freq_ratio, x.shape[3] // self.freq_ratio)
+        # print(x.shape)
+        x = x.permute(0,1,3,2,4).contiguous()
+        x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3], x.shape[4])
+        return x
+    
+    # Repeat the wavform to a img size, if you want to use the pretrained swin transformer model
+    def repeat_wat2img(self, x, cur_pos):
+        B, C, T, F = x.shape
+        target_T = int(self.spec_size * self.freq_ratio)
+        target_F = self.spec_size // self.freq_ratio
+        assert T <= target_T and F <= target_F, "the wav size should less than or equal to the swin input size"
+        # to avoid bicubic zero error
+        if T < target_T:
+            x = nn.functional.interpolate(x, (target_T, x.shape[3]), mode="bicubic", align_corners=True)
+        if F < target_F:
+            x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)  
+        x = x.permute(0,1,3,2).contiguous() # B C F T
+        x = x[:,:,:,cur_pos:cur_pos + self.spec_size]
+        x = x.repeat(repeats = (1,1,4,1))
+        return x
+
+    def forward(self, x: torch.Tensor, mixup_lambda = None, infer_mode = False, device=None):# out_feat_keys: List[str] = None):
+
+        if self.enable_fusion and x["longer"].sum() == 0:
+            # if no audio is longer than 10s, then randomly select one audio to be longer
+            x["longer"][torch.randint(0, x["longer"].shape[0], (1,))] = True
+
+        if not self.enable_fusion:
+            x = x["waveform"].to(device=device, non_blocking=True)
+            x = self.spectrogram_extractor(x)   # (batch_size, 1, time_steps, freq_bins)
+            x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
+            x = x.transpose(1, 3)
+            x = self.bn0(x)
+            x = x.transpose(1, 3)
+            if self.training:
+                x = self.spec_augmenter(x)
+
+            if self.training and mixup_lambda is not None:
+                x = do_mixup(x, mixup_lambda)
+                
+            x = self.reshape_wav2img(x)
+            output_dict = self.forward_features(x)
+        else:
+            longer_list = x["longer"].to(device=device, non_blocking=True)
+            x = x["mel_fusion"].to(device=device, non_blocking=True)
+            x = x.transpose(1, 3)
+            x = self.bn0(x)
+            x = x.transpose(1, 3)
+            longer_list_idx = torch.where(longer_list)[0]
+            if self.fusion_type in ['daf_1d','aff_1d','iaff_1d']:
+                new_x = x[:,0:1,:,:].clone().contiguous()
+                if len(longer_list_idx) > 0:
+                # local processing
+                    fusion_x_local = x[longer_list_idx,1:,:,:].clone().contiguous()
+                    FB,FC,FT,FF = fusion_x_local.size()
+                    fusion_x_local = fusion_x_local.view(FB * FC, FT, FF)
+                    fusion_x_local = torch.permute(fusion_x_local, (0,2,1)).contiguous()
+                    fusion_x_local = self.mel_conv1d(fusion_x_local)
+                    fusion_x_local = fusion_x_local.view(FB,FC,FF,fusion_x_local.size(-1))
+                    fusion_x_local = torch.permute(fusion_x_local, (0,2,1,3)).contiguous().flatten(2)
+                    if fusion_x_local.size(-1) < FT:
+                        fusion_x_local = torch.cat([fusion_x_local, torch.zeros((FB,FF,FT- fusion_x_local.size(-1)), device=device)], dim=-1)
+                    else:
+                        fusion_x_local = fusion_x_local[:,:,:FT]
+                    # 1D fusion
+                    new_x = new_x.squeeze(1).permute((0,2,1)).contiguous()
+                    new_x[longer_list_idx] = self.fusion_model(new_x[longer_list_idx], fusion_x_local)
+                    x = new_x.permute((0,2,1)).contiguous()[:,None,:,:]
+                else:
+                    x = new_x
+
+            elif self.fusion_type in ['daf_2d','aff_2d','iaff_2d','channel_map']:
+                x = x # no change
+
+            if self.training:
+                x = self.spec_augmenter(x)
+            if self.training and mixup_lambda is not None:
+                x = do_mixup(x, mixup_lambda)
+
+            x = self.reshape_wav2img(x)
+            output_dict = self.forward_features(x, longer_idx = longer_list_idx)
+       
+
+        return output_dict
