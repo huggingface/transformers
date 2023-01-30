@@ -380,7 +380,7 @@ class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
 class GraphormerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_graph_classification(self):
-        model = GraphormerForGraphClassification.from_pretrained("graphormer-base-pcqm4mv2")
+        model = GraphormerForGraphClassification.from_pretrained("clefourrier/graphormer-base-pcqm4mv2")
 
         # Actual real graph data from the MUTAG dataset
         # fmt: off
