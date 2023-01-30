@@ -1,6 +1,7 @@
 import importlib
 
 import torch
+
 import yaml
 from omegaconf import OmegaConf
 from taming.models.vqgan import VQModel

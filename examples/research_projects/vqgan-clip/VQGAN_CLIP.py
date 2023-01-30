@@ -10,7 +10,7 @@ import imageio
 import wandb
 from img_processing import custom_to_pil, loop_post_process, preprocess, preprocess_vqgan
 from loaders import load_vqgan
-from transformers import CLIPModel, CLIPProcessor, CLIPTokenizerFast
+from transformers import CLIPModel, CLIPTokenizerFast
 from utils import get_device, get_timestamp, show_pil
 
 
@@ -23,7 +23,6 @@ class ProcessorGradientFlow:
 
     def __init__(self, device: str = "cpu", clip_model: str = "openai/clip-vit-large-patch14") -> None:
         self.device = device
-        # self.processor = CLIPProcessor.from_pretrained(clip_model)
         self.tokenizer = CLIPTokenizerFast.from_pretrained(clip_model)
         self.image_mean = [0.48145466, 0.4578275, 0.40821073]
         self.image_std = [0.26862954, 0.26130258, 0.27577711]
@@ -104,8 +103,9 @@ class VQGAN_CLIP(nn.Module):
         paths = list(sorted(glob(input_path + "/*")))
         if not len(paths):
             raise ValueError(
-            "No images found in save path, aborting (did you pass save_intermediate=True to the generate function?)"
-        )
+                "No images found in save path, aborting (did you pass save_intermediate=True to the generate"
+                " function?)"
+            )
         if len(paths) == 1:
             print("Only one image found in save path, (did you pass save_intermediate=True to the generate function?)")
         frame_duration = total_duration / len(paths)
