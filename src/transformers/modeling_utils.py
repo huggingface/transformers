@@ -670,7 +670,7 @@ def _load_state_dict_into_meta_model(
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
         splits = weights_name.split(".")
-        splits = splits[:-1] + [variant] + splits[-1]
+        splits = splits[:-1] + [variant] + splits[-1:]
         weights_name = ".".join(splits)
 
     return weights_name
