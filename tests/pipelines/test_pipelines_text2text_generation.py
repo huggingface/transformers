@@ -34,7 +34,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         generator = Text2TextGenerationPipeline(model=model, tokenizer=tokenizer)
         return generator, ["Something to write", "Something else"]
 

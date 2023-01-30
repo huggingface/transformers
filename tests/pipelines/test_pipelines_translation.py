@@ -34,7 +34,7 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         if isinstance(model.config, MBartConfig):
             src_lang, tgt_lang = list(tokenizer.lang_code_to_id.keys())[:2]
             translator = TranslationPipeline(model=model, tokenizer=tokenizer, src_lang=src_lang, tgt_lang=tgt_lang)

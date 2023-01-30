@@ -60,7 +60,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
     }
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:
             # Side effect of no Fast Tokenizer class for these model, so skipping
             # But the slow tokenizer test should still run as they're quite small
@@ -69,7 +69,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             # return None, None
 
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+            model=model, tokenizer=tokenizer, feature_extractor=processor
         )
 
         # test with a raw waveform
@@ -133,7 +133,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             )
         else:
             # Non CTC models cannot use return_timestamps
-            with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
+            with self.assertRaisesRegex(
+                ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+            ):
                 outputs = speech_recognizer(audio, return_timestamps="char")
 
     @require_torch

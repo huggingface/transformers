@@ -31,7 +31,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
