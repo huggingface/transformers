@@ -154,7 +154,7 @@ ACT2CLS = {
     "gelu_10": (ClippedGELUActivation, {"min": -10, "max": 10}),
     "gelu_fast": FastGELUActivation,
     "gelu_new": NewGELUActivation,
-    "gelu_python_tanh": (nn.GELU, {"approximate": "tanh"}),
+    "gelu_pytorch_tanh": (nn.GELU, {"approximate": "tanh"}),
     "gelu_python": (GELUActivation, {"use_gelu_python": True}),
     "linear": LinearActivation,
     "mish": MishActivation,
