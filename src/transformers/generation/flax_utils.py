@@ -275,6 +275,7 @@ class FlaxGenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # set init values
@@ -733,14 +734,17 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
+            if early_stopping == "never" and length_penalty > 0.0:
+                best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
+            else:
+                best_running_score = state.running_scores[:, -1:] / (cur_len**length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
-            improvement_still_possible = jnp.all(worst_finished_score < best_running_score)
+            improvement_still_possible = jnp.any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(jnp.all(state.is_sent_finished) & early_stopping)
+            still_open_beam = ~(jnp.all(state.is_sent_finished) & early_stopping is True)
 
             return not_max_length_yet & still_open_beam & improvement_still_possible
 
