@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # pcqm4mv1 now deprecated
-    "graphormer-base": "https://huggingface.co/graphormer-base-pcqm4mv2/resolve/main/config.json",
+    "graphormer-base": "https://huggingface.co/clefourrier/graphormer-base-pcqm4mv2/resolve/main/config.json",
     # See all Graphormer models at https://huggingface.co/models?filter=graphormer
 }
 
