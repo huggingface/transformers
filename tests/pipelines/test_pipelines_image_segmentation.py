@@ -81,10 +81,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
     }
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
-        image_segmenter = ImageSegmentationPipeline(
-            model=model, feature_extractor=feature_extractor, image_processor=image_processor
-        )
+    def get_test_pipeline(self, model, tokenizer, processor):
+        image_segmenter = ImageSegmentationPipeline(model=model, image_processor=processor)
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
