@@ -667,6 +667,15 @@ def _load_state_dict_into_meta_model(
     return error_msgs, offload_index, state_dict_index
 
 
+def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
+    if variant is not None:
+        splits = weights_name.split(".")
+        splits = splits[:-1] + [variant] + splits[-1]
+        weights_name = ".".join(splits)
+
+    return weights_name
+
+
 class ModuleUtilsMixin:
     """
     A few utilities for `torch.nn.Modules`, to be used as a mixin.
@@ -1567,6 +1576,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         push_to_hub: bool = False,
         max_shard_size: Union[int, str] = "10GB",
         safe_serialization: bool = False,
+        variant: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -1604,6 +1614,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             safe_serialization (`bool`, *optional*, defaults to `False`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
+            variant (`str`, *optional*):
+                If specified, weights are saved in the format pytorch_model.<variant>.bin.
 
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -1675,6 +1687,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Shard the model if it is too big.
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+        weights_name = _add_variant(weights_name, variant)
+
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
 
         # Clean the folder from a previous save
@@ -1701,10 +1715,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 save_function(shard, os.path.join(save_directory, shard_file))
 
         if index is None:
-            logger.info(f"Model weights saved in {os.path.join(save_directory, WEIGHTS_NAME)}")
+            path_to_weights = os.path.join(save_directory, _add_variant(WEIGHTS_NAME))
+            logger.info(f"Model weights saved in {path_to_weights}")
         else:
             save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
-            save_index_file = os.path.join(save_directory, save_index_file)
+            save_index_file = os.path.join(save_directory, _add_variant(save_index_file))
             # Save the index as well
             with open(save_index_file, "w", encoding="utf-8") as f:
                 content = json.dumps(index, indent=2, sort_keys=True) + "\n"
@@ -1927,6 +1942,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            variant (`str`, *optional*):
+                If specified load weights from `variant` filename, *e.g.* pytorch_model.<variant>.bin. `variant` is
+                ignored when using `from_tf` or `from_flax`. available an error is thrown.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -2013,6 +2031,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         load_in_8bit_skip_modules = kwargs.pop("load_in_8bit_skip_modules", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
+        variant = kwargs.pop("variant", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -2113,7 +2132,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             is_local = os.path.isdir(pretrained_model_name_or_path)
             if is_local:
                 if from_tf and os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
+                    os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(TF_WEIGHTS_NAME + ".index"))
                 ):
                     # Load from a TF 1.0 checkpoint in priority if from_tf
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
