@@ -1041,7 +1041,7 @@ class DagsHubCallback(MLflowCallback):
         self.remote = os.getenv("MLFLOW_TRACKING_URI") or input("Please input a remote url.")
         self.repo = self.Repo(
             owner=self.remote.split(os.sep)[-2],
-            name=self.remote.split(os.sep)[-1].split(".")[-1],
+            name=self.remote.split(os.sep)[-1].split(".")[0],
             branch=os.getenv("BRANCH") or "main",
         )
         self.paths = {
