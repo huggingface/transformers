@@ -796,10 +796,11 @@ class ProbSparseAttention(nn.Module):
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
+        # TODO
         # calculate the sampled Q_K
-        import pdb
+        # import pdb
 
-        pdb.set_trace()
+        # pdb.set_trace()
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
