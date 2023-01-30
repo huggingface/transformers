@@ -2,6 +2,7 @@ import enum
 import warnings
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
+from ..generation.utils import GenerateOutput
 
 from ..utils import add_end_docstrings, is_tf_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
@@ -250,6 +251,10 @@ class TextGenerationPipeline(Pipeline):
         prompt_text = model_inputs.pop("prompt_text")
         # BS x SL
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+        if generate_kwargs['return_dict_in_generate']:
+            # Instance check does not work until Python 3.10, e.g. `isinstance(generated_sequence, GenerateOutput):`
+            # https://peps.python.org/pep-0604/#isinstance-and-issubclass
+            generated_sequence = generated_sequence.sequences
         out_b = generated_sequence.shape[0]
         if self.framework == "pt":
             generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])

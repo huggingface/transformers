@@ -312,3 +312,25 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device=0, torch_dtype=torch.float16)
         pipe("This is a test")
+
+    @require_torch
+    def test_return_dict_in_generate(self):
+        greedy_search_inference_config = {'do_sample': False, 'num_return_sequences': 1, 'num_beams': 1}
+        pipe = pipeline(task='text-generation', model="hf-internal-testing/tiny-random-gpt2")
+        pipe('hello', return_dict_in_generate=True, **greedy_search_inference_config)
+
+        beam_search_inference_config = {'do_sample': False, 'num_return_sequences': 1, 'num_beams': 3}
+        pipe = pipeline(task='text-generation', model="hf-internal-testing/tiny-random-gpt2")
+        pipe('hello', return_dict_in_generate=True, **beam_search_inference_config)
+
+        top_p_inference_config = {'do_sample': True, 'num_return_sequences': 1, 'num_beams': 1, 'top_p': 0.9}
+        pipe = pipeline(task='text-generation', model="hf-internal-testing/tiny-random-gpt2")
+        pipe('hello', return_dict_in_generate=True, **top_p_inference_config)
+
+        contrastive_inference_config = {'do_sample': True, 'num_return_sequences': 1, 'num_beams': 1, 'top_k': 4, 'penalty_alpha': 0.6}
+        pipe = pipeline(task='text-generation', model="hf-internal-testing/tiny-random-gpt2")
+        pipe('hello', return_dict_in_generate=True, **contrastive_inference_config)
+
+        eta_sampling = {'do_sample': True, 'num_return_sequences': 1, 'eta_cutoff': 0.002}
+        pipe = pipeline(task='text-generation', model="hf-internal-testing/tiny-random-gpt2")
+        pipe('hello', return_dict_in_generate=True, **eta_sampling)
