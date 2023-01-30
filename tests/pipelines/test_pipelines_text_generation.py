@@ -331,6 +331,6 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         pipe = pipeline(task='text-generation', model="hf-internal-testing/tiny-random-gpt2")
         pipe('hello', return_dict_in_generate=True, **contrastive_inference_config)
 
-        eta_sampling = {'do_sample': True, 'num_return_sequences': 1, 'eta_cutoff': 0.002}
+        eta_sampling_inference_config = {'do_sample': True, 'num_return_sequences': 1, 'eta_cutoff': 0.002}
         pipe = pipeline(task='text-generation', model="hf-internal-testing/tiny-random-gpt2")
-        pipe('hello', return_dict_in_generate=True, **eta_sampling)
+        pipe('hello', return_dict_in_generate=True, **eta_sampling_inference_config)

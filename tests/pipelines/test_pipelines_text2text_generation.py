@@ -143,6 +143,6 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         pipe = pipeline(task='text2text-generation', model="patrickvonplaten/t5-tiny-random")
         pipe('hello', return_dict_in_generate=True, **contrastive_inference_config)
 
-        eta_sampling = {'do_sample': True, 'num_return_sequences': 1, 'eta_cutoff': 0.002}
+        eta_sampling_inference_config = {'do_sample': True, 'num_return_sequences': 1, 'eta_cutoff': 0.002}
         pipe = pipeline(task='text2text-generation', model="patrickvonplaten/t5-tiny-random")
-        pipe('hello', return_dict_in_generate=True, **eta_sampling)
+        pipe('hello', return_dict_in_generate=True, **eta_sampling_inference_config)
