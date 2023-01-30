@@ -19,7 +19,7 @@ import copy
 import inspect
 import warnings
 from functools import partial
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
@@ -634,7 +634,7 @@ class FlaxGenerationMixin:
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         length_penalty: Optional[float] = None,
-        early_stopping: Optional[bool] = None,
+        early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
@@ -734,6 +734,9 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
+            # early_stopping == False -> apply heuristic = always get the best score from `cur_len`
+            # early_stopping == "never" -> compute the best score from max_length or cur_len, depending on the sign of
+            #   length_penalty. Positive length_penalty favors longer sequences, thus we use max_length there.
             if early_stopping == "never" and length_penalty > 0.0:
                 best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
             else:
@@ -746,7 +749,7 @@ class FlaxGenerationMixin:
             # 3. is there still a beam that has not finished?
             still_open_beam = ~(jnp.all(state.is_sent_finished) & (early_stopping is True))
 
-            return not_max_length_yet & still_open_beam & improvement_still_possible
+            return not_max_length_yet & (still_open_beam | improvement_still_possible)
 
         def beam_search_body_fn(state, input_ids_length=1):
             """beam search state update fn."""
@@ -828,10 +831,9 @@ class FlaxGenerationMixin:
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
             topk_log_probs = topk_log_probs / (state.cur_len**length_penalty)
-            beams_in_batch_are_full = (
-                jnp.broadcast_to(state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape)
-                & early_stopping
-            )
+            beams_in_batch_are_full = jnp.broadcast_to(
+                state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape
+            ) & (early_stopping is True)
             add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
             topk_log_probs += add_penalty * np.array(-1.0e7)
 
