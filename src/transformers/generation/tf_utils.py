@@ -2020,7 +2020,7 @@ class TFGenerationMixin:
             if early_stopping == "never" and length_penalty > 0.0:
                 best_running_score = running_scores[:, :1] / (max_length**length_penalty)
             else:
-                best_running_score = running_scores[:, :1] / (cur_len**length_penalty)
+                best_running_score = running_scores[:, :1] / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
             worst_finished_score = tf.where(
                 is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e9
             )
