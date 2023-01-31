@@ -796,11 +796,27 @@ class ProbSparseAttention(nn.Module):
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
-        # TODO
-        # calculate the sampled Q_K
-        # import pdb
+        # c*ln(L_k)
+        L_K = key_states.size(1)
+        U_part = min(self.factor * np.ceil(np.log1p(L_K)).astype("int").item(), L_K)
 
-        # pdb.set_trace()
+        # c*ln(L_q)
+        L_Q = query_states.size(1)
+        u = min(self.factor * np.ceil(np.log1p(L_Q)).astype("int").item(), L_Q)
+
+        # calculate the sampled Q_K
+        K_expand = key_states.unsqueeze(2).expand(-1, L_Q, L_K, -1)
+        index_sample = torch.randint(0, L_K, (L_Q, U_part))
+        # real U = U_part(factor*ln(L_k))*L_q
+        K_sample = K_expand[:, torch.arange(L_Q).unsqueeze(1), index_sample, :]
+        Q_K_sample = torch.bmm(query_states, key_states.transpose(1, 2))
+
+        # find the Top_k query with sparisty measurement
+        M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
+        M_top = M.topk(u, sorted=False)[1]
+
+        # use the reduced Q to calculate Q_K
+        # TODO
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
