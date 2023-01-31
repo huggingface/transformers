@@ -168,6 +168,7 @@ _deps = [
     "tokenizers>=0.11.1,!=0.11.3,<0.14",
     "torch>=1.7,!=1.12.0",
     "torchaudio",
+    "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
@@ -285,6 +286,7 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("decord")
@@ -331,6 +333,7 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
@@ -351,6 +354,7 @@ extras["dev-torch"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]

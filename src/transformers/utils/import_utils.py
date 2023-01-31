@@ -288,6 +288,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_torchvision_available():
+    return importlib.util.find_spec("torchvision") is not None
+
+
 def is_pyctcdecode_available():
     return _pyctcdecode_available
 
@@ -803,6 +807,14 @@ installation page: https://pytorch.org/get-started/locally/ and follow the ones 
 Please note that you may need to restart your runtime after installation.
 """
 
+
+# docstyle-ignore
+TORCHVISION_IMPORT_ERROR = """
+{0} requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
+installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
+"""
+
 # docstyle-ignore
 PYTORCH_IMPORT_ERROR_WITH_TF = """
 {0} requires the PyTorch library but it was not found in your environment.
@@ -1009,6 +1021,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
+        ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
