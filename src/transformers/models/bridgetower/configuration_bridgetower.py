@@ -260,8 +260,6 @@ class BridgeTowerConfig(PretrainedConfig):
     Args:
         share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
             Whether cross modal transformer layers are shared.
-        drop_rate (`float`, *optional*, defaults to 0.1):
-            Drop out probability.
         head_hidden_scale (`int`, *optional*, defaults to 2):
             Scale of hidden layers head.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -271,8 +269,6 @@ class BridgeTowerConfig(PretrainedConfig):
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        is_encoder_decoder (`bool`, *optional*, defaults to `False`):
-            Whether this is an encoder/decoder model
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         share_link_tower_layers (`bool`, *optional*, defaults to `False`):
@@ -311,12 +307,10 @@ class BridgeTowerConfig(PretrainedConfig):
     def __init__(
         self,
         share_cross_modal_transformer_layers=True,
-        drop_rate=0.1,
         head_hidden_scale=2,
         hidden_act="gelu",
         hidden_size=768,
         initializer_factor=1,
-        is_encoder_decoder=False,
         layer_norm_eps=1e-05,
         share_link_tower_layers=False,
         link_tower_type="add",
@@ -330,12 +324,10 @@ class BridgeTowerConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
-        self.drop_rate = drop_rate
         self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
         self.initializer_factor = initializer_factor
-        self.is_encoder_decoder = is_encoder_decoder
         self.layer_norm_eps = layer_norm_eps
         self.share_link_tower_layers = share_link_tower_layers
         self.link_tower_type = link_tower_type

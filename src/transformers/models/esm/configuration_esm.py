@@ -81,8 +81,6 @@ class EsmConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         emb_layer_norm_before (`bool`, *optional*):
             Whether to apply layer normalization after embeddings but before the main stem of the network.
         token_dropout (`bool`, defaults to `False`):
@@ -117,7 +115,6 @@ class EsmConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         emb_layer_norm_before=None,
         token_dropout=False,
         is_folding_model=False,
@@ -139,7 +136,6 @@ class EsmConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.emb_layer_norm_before = emb_layer_norm_before
         self.token_dropout = token_dropout
         self.is_folding_model = is_folding_model

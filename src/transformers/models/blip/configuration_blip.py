@@ -77,10 +77,10 @@ class BlipTextConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float``, *optional*, defaults to 1):
@@ -211,8 +211,6 @@ class BlipVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -250,7 +248,6 @@ class BlipVisionConfig(PretrainedConfig):
         patch_size=16,
         hidden_act="gelu",
         layer_norm_eps=1e-5,
-        dropout=0.0,
         attention_dropout=0.0,
         initializer_range=1e-10,
         initializer_factor=1.0,
@@ -261,7 +258,6 @@ class BlipVisionConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
