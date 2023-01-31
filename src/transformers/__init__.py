@@ -1851,6 +1851,7 @@ else:
     _import_structure["models.mpnet"].extend(
         [
             "MPNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MPNetForCausalLM",
             "MPNetForMaskedLM",
             "MPNetForMultipleChoice",
             "MPNetForQuestionAnswering",
@@ -5033,6 +5034,7 @@ if TYPE_CHECKING:
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MPNetForCausalLM,
             MPNetForMaskedLM,
             MPNetForMultipleChoice,
             MPNetForQuestionAnswering,
