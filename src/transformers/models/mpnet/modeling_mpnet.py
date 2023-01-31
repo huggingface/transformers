@@ -191,7 +191,6 @@ class MPNetSelfAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions=False,
     ) -> Tuple[torch.Tensor]:
-        print(f'before: {hidden_states=},{encoder_hidden_states=},{past_key_value=}')
         q = self.q(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -233,7 +232,7 @@ class MPNetSelfAttention(nn.Module):
         attention_scores = torch.matmul(q, k.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        print(f'after: {q=},{k=},{v=}')
+        print(f'after: {q.shape},{k.shape},{v.shape}')
         # Apply relative position embedding (precomputed in MPNetEncoder) if provided.
         if position_bias is not None:
             attention_scores += position_bias
