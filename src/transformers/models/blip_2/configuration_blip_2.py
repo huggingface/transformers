@@ -38,11 +38,11 @@ class Blip2QFormerConfig(PretrainedConfig):
     [...](https://huggingface.co/...) architecture. Configuration objects inherit from [`PretrainedConfig`] and can be
     used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
-    Note that [`Blip2QFormerModel`] is very similar to [`BertLMHeadModel`] with `config.add_cross_attention = True`.
+    Note that [`Blip2QFormerModel`] is very similar to [`BertLMHeadModel`] with interleaved cross-attention.
 
     Args:
-        num_query_tokens (`int`, *optional*, defaults to 32):
-            The number of query tokens passed through the Transformer.
+        cross_attention_frequency (`int`, *optional*, defaults to 2):
+            The frequency of adding cross-attention to the Transformer layers.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`BertModel`] or [`TFBertModel`].
@@ -64,8 +64,6 @@ class Blip2QFormerConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`] or [`TFBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -76,13 +74,10 @@ class Blip2QFormerConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        encoder_hidden_size (`int`, *optional*, defaults to 1408):
+            The hidden size of the hidden states for cross-attention.
 
     Examples:
 
@@ -101,7 +96,7 @@ class Blip2QFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_query_tokens=32,
+        cross_attention_frequency=2,
         vocab_size=30522,
         hidden_size=768,
         num_hidden_layers=12,
@@ -111,20 +106,17 @@ class Blip2QFormerConfig(PretrainedConfig):
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
-        type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
         position_embedding_type="absolute",
-        use_cache=True,
         classifier_dropout=None,
-        is_decoder=True,
-        add_cross_attention=True,
+        encoder_hidden_size=1408,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
-        self.num_query_tokens = num_query_tokens
+        self.cross_attention_frequency = cross_attention_frequency
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -134,14 +126,11 @@ class Blip2QFormerConfig(PretrainedConfig):
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
-        self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
+        self.encoder_hidden_size = encoder_hidden_size
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -197,6 +186,8 @@ class Blip2VisionConfig(PretrainedConfig):
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries and values in the self-attention layers.
 
     Example:
 
@@ -223,7 +214,7 @@ class Blip2VisionConfig(PretrainedConfig):
         num_hidden_layers=39,
         num_attention_heads=16,
         num_channels=3,
-        image_size=384,
+        image_size=224,
         patch_size=14,
         hidden_act="gelu",
         layer_norm_eps=0.00001,
@@ -231,6 +222,7 @@ class Blip2VisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=1e-10,
         initializer_factor=1.0,
+        qkv_bias=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -249,6 +241,7 @@ class Blip2VisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.qkv_bias = qkv_bias
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -285,6 +278,8 @@ class Blip2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
+        num_query_tokens (`int`, *optional*, defaults to 32):
+            The number of query tokens passed through the Transformer.
 
         kwargs (*optional*):
             Dictionary of keyword arguments.
@@ -316,7 +311,7 @@ class Blip2Config(PretrainedConfig):
     model_type = "blip-2"
     is_composition = True
 
-    def __init__(self, text_config=None, qformer_config=None, vision_config=None, **kwargs):
+    def __init__(self, text_config=None, qformer_config=None, vision_config=None, num_query_tokens=32, **kwargs):
         super().__init__(**kwargs)
 
         # If `_config_dict` exist, we use them for the backward compatibility.
@@ -347,8 +342,8 @@ class Blip2Config(PretrainedConfig):
         self.qformer_config = Blip2QFormerConfig(**qformer_config)
         self.text_config = CONFIG_MAPPING["opt"](**text_config)
 
+        self.num_query_tokens = num_query_tokens
         self.text_config.encoder_hidden_size = self.vision_config.hidden_size
-
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 
