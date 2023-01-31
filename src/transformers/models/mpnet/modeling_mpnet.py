@@ -197,28 +197,24 @@ class MPNetSelfAttention(nn.Module):
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
-        print('q',q.shape)
+
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
             k = past_key_value[0]
             v = past_key_value[1]
             attention_mask = encoder_attention_mask
-            print('case 1', k.shape, v.shape)
         elif is_cross_attention:
             k = self.transpose_for_scores(self.k(encoder_hidden_states))
             v = self.transpose_for_scores(self.v(encoder_hidden_states))
             attention_mask = encoder_attention_mask
-            print('case 2', k.shape, v.shape)
         elif past_key_value is not None:
             k = self.transpose_for_scores(self.k(hidden_states))
             v = self.transpose_for_scores(self.v(hidden_states))
             k = torch.cat([past_key_value[0], k], dim=2)
             v = torch.cat([past_key_value[1], v], dim=2)
-            print('case 3', k.shape, v.shape)
         else:
             k = self.transpose_for_scores(self.k(hidden_states))
             v = self.transpose_for_scores(self.v(hidden_states))
-            print('case 4', k.shape, v.shape)
 
         q = self.transpose_for_scores(q)
 
@@ -373,7 +369,6 @@ class MPNetLayer(nn.Module):
         output_attentions: Optional[bool] = False
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        print('attention')
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
@@ -401,7 +396,6 @@ class MPNetLayer(nn.Module):
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            print('cross attention')
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
@@ -464,7 +458,7 @@ class MPNetEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
-            position_bias = self.compute_position_bias(hidden_states)
+            position_bias = self.compute_position_bias(hidden_states, encoder_hidden_states)
 
             if self.gradient_checkpointing and self.training:
 
@@ -533,8 +527,11 @@ class MPNetEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
-    def compute_position_bias(self, hidden_states, num_buckets=32):
-        bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
+    def compute_position_bias(self, hidden_states, encoder_hidden_states=None, num_buckets=32):
+        if encoder_hidden_states is None:
+            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
+        else:
+            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), encoder_hidden_states.size(1)
 
         context_position = torch.arange(qlen, dtype=torch.long)[:, None]
         memory_position = torch.arange(klen, dtype=torch.long)[None, :]
@@ -886,7 +883,7 @@ class MPNetForCausalLM(MPNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, MPNetForCasualLM, AutoConfig
+        >>> from transformers import AutoTokenizer, MPNetForCausalLM, AutoConfig
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/mpnet-base")
