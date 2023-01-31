@@ -2772,7 +2772,8 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechT5ProcessorForSpeechToSpeech, SpeechT5ForSpeechToSpeech, SpeechT5HiFiGAN
+        >>> from transformers import SpeechT5ForSpeechToSpeech, SpeechT5HiFiGAN
+        >>> from transformers import SpeechT5WaveformFeatureExtractor, SpeechT5SpectrogramFeatureExtractor, SpeechT5ProcessorForSpeechToSpeech
         >>> from datasets import load_dataset
         >>> import torch
 
@@ -2780,7 +2781,10 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> processor = SpeechT5ProcessorForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
+        >>> waveform_feature_extractor = SpeechT5WaveformFeatureExtractor()
+        >>> spectrogram_feature_extractor = SpeechT5SpectrogramFeatureExtractor()
+        >>> processor = SpeechT5ProcessorForSpeechToSpeech(waveform_feature_extractor, spectrogram_feature_extractor)
+
         >>> model = SpeechT5ForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
         >>> vocoder = SpeechT5HiFiGAN.from_pretrained("Matthijs/speecht5_hifigan")
 

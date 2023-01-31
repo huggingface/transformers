@@ -55,6 +55,8 @@ if is_torch_available():
         SpeechT5ProcessorForSpeechToSpeech,
         SpeechT5ProcessorForSpeechToText,
         SpeechT5ProcessorForTextToSpeech,
+        SpeechT5SpectrogramFeatureExtractor,
+        SpeechT5WaveformFeatureExtractor,
     )
 
 
@@ -1414,7 +1416,9 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return SpeechT5ProcessorForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
+        waveform_feature_extractor = SpeechT5WaveformFeatureExtractor()
+        spectrogram_feature_extractor = SpeechT5SpectrogramFeatureExtractor()
+        return SpeechT5ProcessorForSpeechToSpeech(waveform_feature_extractor, spectrogram_feature_extractor)
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset

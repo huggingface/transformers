@@ -245,3 +245,10 @@ class SpeechT5ProcessorForSpeechToSpeech(ProcessorMixin):
             if decoder_attention_mask is not None:
                 encoder_inputs["decoder_attention_mask"] = decoder_attention_mask
             return encoder_inputs
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        raise NotImplementedError(f"`from_pretrained` is not currently available for SpeechT5ProcessorForSpeechToSpeech")
+
+    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
+        raise NotImplementedError(f"`save_pretrained` is not currently available for SpeechT5ProcessorForSpeechToSpeech")
