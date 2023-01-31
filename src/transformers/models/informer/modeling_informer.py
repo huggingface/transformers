@@ -1647,8 +1647,16 @@ class InformerEncoder(InformerPreTrainedModel):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer
 class InformerDecoder(InformerPreTrainedModel):
+    """
+    Informer decoder consisting of *config.decoder_layers* layers. Each layer is a
+    [`InformerDecoderLayer`]
+
+    Args:
+        config: InformerConfig
+    """
+    
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
