@@ -348,6 +348,8 @@ class MPNetOutput(nn.Module):
 class MPNetLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
         self.attention = MPNetAttention(config)
 
         self.is_decoder = config.is_decoder
