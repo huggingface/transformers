@@ -29,7 +29,7 @@ from transformers import AutoTokenizer, Blip2Config, Blip2ForConditionalGenerati
 
 def load_demo_image(image_size, device):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    raw_image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     transform = transforms.Compose(
         [
@@ -38,8 +38,9 @@ def load_demo_image(image_size, device):
             transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
         ]
     )
-    image = transform(raw_image).unsqueeze(0).to(device)
-    return image
+    pixel_values = transform(image).unsqueeze(0).to(device)
+
+    return pixel_values
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
@@ -143,12 +144,13 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     assert unexpected_keys == ['qformer.embeddings.position_ids']
 
     image_size = 224
-    image = load_demo_image(image_size=image_size, device="cpu")
+    pixel_values = load_demo_image(image_size=image_size, device="cpu")
     tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b")
-    input_ids = tokenizer(["a picture of"]).input_ids
+    input_ids = tokenizer(["a picture of"], return_tensors="pt").input_ids
 
-    outputs = hf_model.generate(image, input_ids)
-    print(tokenizer.batch_decode(outputs[0], skip_special_tokens=True))
+    with torch.no_grad():
+        outputs = hf_model(pixel_values, input_ids)
+        print("Outputs:", outputs.keys())
 
     # TODO assert values
     # out_itm = hf_itm_model(question_input_ids, image, use_itm_head=True)
@@ -156,6 +158,9 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     # assert out[0].item() == 0.2110687494277954
     # assert torch.nn.functional.softmax(out_itm[0], dim=1)[:, 1].item() == 0.45698845386505127
+
+    # outputs = hf_model.generate(image, input_ids)
+    # print(tokenizer.batch_decode(outputs[0], skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
         hf_model.save_pretrained(pytorch_dump_folder_path)
