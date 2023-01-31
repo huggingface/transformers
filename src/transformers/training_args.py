@@ -1317,10 +1317,7 @@ class TrainingArguments:
                 self.fsdp_config = json.load(f)
 
         if self.fsdp_min_num_params > 0:
-            warnings.warn(
-                "using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ",
-                FutureWarning
-            )
+            warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
 
         self.fsdp_config["fsdp_min_num_params"] = max(
             getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
