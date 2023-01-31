@@ -252,6 +252,7 @@ class CLAPAudioConfig(PretrainedConfig):
         swin_absolute_positional_embedding=False,
         swin_hidden_act="gelu",
         aff_block_r=4,
+        enable_patch_fusion=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -292,6 +293,7 @@ class CLAPAudioConfig(PretrainedConfig):
         self.patch_embed_input_channels = patch_embed_input_channels
         self.swin_hidden_act = swin_hidden_act
         self.aff_block_r = aff_block_r
+        self.enable_patch_fusion = enable_patch_fusion
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

@@ -275,7 +275,7 @@ class CLAPAudioPatchEmbed(nn.Module):
         self.grid_size = (img_size[0] // patch_stride[0], img_size[1] // patch_stride[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.flatten = config.flatten_patch_embeds
-        self.enable_fusion = config.enable_patch_layer_norm
+        self.enable_fusion = config.enable_patch_fusion
         self.fusion_type = config.fusion_type
 
         padding = ((patch_size[0] - patch_stride[0]) // 2, (patch_size[1] - patch_stride[1]) // 2)
