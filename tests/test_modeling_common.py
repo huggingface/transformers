@@ -3036,7 +3036,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
 
             for i in range(1, 6):
-                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00006"] + ["bin"])
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00006"] + ["safetensors"])
                 weights_name_file = os.path.join(tmp_dir, weights_name)
                 self.assertTrue(os.path.isfile(weights_name_file))
 
