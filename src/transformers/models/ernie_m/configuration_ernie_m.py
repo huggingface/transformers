@@ -166,6 +166,7 @@ class ErnieMConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         pad_token_id: int = 1,
         layer_norm_eps: float =  1e-05,
+        classifier_dropout=None,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -181,3 +182,4 @@ class ErnieMConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.classifier_dropout = classifier_dropout

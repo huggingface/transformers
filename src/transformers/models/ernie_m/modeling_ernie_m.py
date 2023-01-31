@@ -173,7 +173,6 @@ class ErnieMEncoder(nn.Module):
             attentions=attentions
         )
 
-
 class ErnieMEncoderLayer(nn.Module):
     def __init__(self, config, act_dropout=0):
         super().__init__()
@@ -371,567 +370,22 @@ class ErnieMModel(ErnieMPreTrainedModel):
                 attentions=attentions
             )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class ErnieMOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
-class ErnieMPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-class ErnieMLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = ErnieMPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-class ErnieMOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = ErnieMLMPredictionHead(config)
-
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
-
-
-
-
-
-# class ErnieMModel(ErnieMPreTrainedModel):
-#     """
-#
-#     The model can behave as an encoder (with only self-attention) as well
-#     as a decoder, in which case a layer of cross-attention is added between
-#     the self-attention layers, following the architecture described in [Attention is
-#     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani,
-#     Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-#
-#     To behave as an decoder the model needs to be initialized with the
-#     `is_decoder` argument of the configuration set to `True`.
-#     To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder`
-#     argument and `add_cross_attention` set to `True`; an
-#     `encoder_hidden_states` is then expected as an input to the forward pass.
-#     """
-#
-#     def __init__(self, config):
-#         super().__init__(config)
-#         self.config = config
-#
-#         self.embeddings = ErnieMEmbeddings(config)
-#         self.encoder = ErnieMEncoder(config)
-#
-#         # Initialize weights and apply final processing
-#         self.post_init()
-#
-#     def get_input_embeddings(self):
-#         return self.embeddings.word_embeddings
-#
-#     def set_input_embeddings(self, value):
-#         self.embeddings.word_embeddings = value
-#
-#     def _prune_heads(self, heads_to_prune):
-#         """Prunes heads of the model.
-#         heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-#         See base class PreTrainedModel
-#         """
-#         for layer, heads in heads_to_prune.items():
-#             self.encoder.layer[layer].attention.prune_heads(heads)
-#
-#     @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-#     @add_code_sample_docstrings(
-#         processor_class=_TOKENIZER_FOR_DOC,
-#         checkpoint=_CHECKPOINT_FOR_DOC,
-#         output_type=BaseModelOutputWithPastAndCrossAttentions,
-#         config_class=_CONFIG_FOR_DOC,
-#     )
-#     def forward(
-#         self,
-#         input_ids=None,
-#         attention_mask=None,
-#         token_type_ids=None,
-#         position_ids=None,
-#         head_mask=None,
-#         inputs_embeds=None,
-#         encoder_hidden_states=None,
-#         encoder_attention_mask=None,
-#         past_key_values=None,
-#         use_cache=None,
-#         output_attentions=None,
-#         output_hidden_states=None,
-#         return_dict=None,
-#     ):
-#         r"""
-#         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-#             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-#             if the model is configured as a decoder.
-#         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-#             Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-#             is used in the cross-attention if the model is configured as a decoder.
-#             Mask values selected in `[0, 1]`:
-#
-#             - 1 for tokens that are **not masked**,
-#             - 0 for tokens that are **masked**.
-#         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-#             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-#             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-#             (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-#             instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-#         use_cache (`bool`, *optional*):
-#             If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-#             decoding (see `past_key_values`).
-#         """
-#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-#         output_hidden_states = (
-#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-#         )
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-#
-#         if self.config.is_decoder:
-#             use_cache = use_cache if use_cache is not None else self.config.use_cache
-#         else:
-#             use_cache = False
-#
-#         if input_ids is not None and inputs_embeds is not None:
-#             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-#         elif input_ids is not None:
-#             input_shape = input_ids.size()
-#         elif inputs_embeds is not None:
-#             input_shape = inputs_embeds.size()[:-1]
-#         else:
-#             raise ValueError("You have to specify either input_ids or inputs_embeds")
-#
-#         batch_size, seq_length = input_shape
-#         device = input_ids.device if input_ids is not None else inputs_embeds.device
-#
-#         # past_key_values_length
-#         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-#
-#
-#         if attention_mask is None:
-#             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-#
-#         if token_type_ids is None:
-#             if hasattr(self.embeddings, "token_type_ids"):
-#                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-#                 buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-#                 token_type_ids = buffered_token_type_ids_expanded
-#             else:
-#                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-#
-#         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-#         # ourselves in which case we just need to make it broadcastable to all heads.
-#         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-#
-#         # If a 2D or 3D attention mask is provided for the cross-attention
-#         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-#         if self.config.is_decoder and encoder_hidden_states is not None:
-#             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-#             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-#             if encoder_attention_mask is None:
-#                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-#             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-#         else:
-#             encoder_extended_attention_mask = None
-#
-#         # Prepare head mask if needed
-#         # 1.0 in head_mask indicate we keep the head
-#         # attention_probs has shape bsz x n_heads x N x N
-#         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-#         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-#         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-#
-#         embedding_output = self.embeddings(
-#             input_ids=input_ids,
-#             position_ids=position_ids,
-#             token_type_ids=token_type_ids,
-#             inputs_embeds=inputs_embeds,
-#             past_key_values_length=past_key_values_length,
-#         )
-#         encoder_outputs = self.encoder(
-#             embedding_output,
-#             attention_mask=extended_attention_mask,
-#             head_mask=head_mask,
-#             encoder_hidden_states=encoder_hidden_states,
-#             encoder_attention_mask=encoder_extended_attention_mask,
-#             past_key_values=past_key_values,
-#             use_cache=use_cache,
-#             output_attentions=output_attentions,
-#             output_hidden_states=output_hidden_states,
-#             return_dict=return_dict,
-#         )
-#         sequence_output = encoder_outputs[0]
-#
-#         if not return_dict:
-#             return (sequence_output,) + encoder_outputs[1:]
-#
-#         return BaseModelOutputWithPastAndCrossAttentions(
-#             last_hidden_state=sequence_output,
-#             past_key_values=encoder_outputs.past_key_values,
-#             hidden_states=encoder_outputs.hidden_states,
-#             attentions=encoder_outputs.attentions,
-#             cross_attentions=encoder_outputs.cross_attentions,
-#         )
-#
-
-@add_start_docstrings("""ErnieM Model with a `language modeling` head on top. """, ERNIE_M_START_DOCSTRING)
-class ErnieMForMaskedLM(ErnieMPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        if config.is_decoder:
-            logger.warning(
-                "If you want to use `ErnieMForMaskedLM` make sure `config.is_decoder=False` for "
-                "bi-directional self-attention."
-            )
-
-        self.ernie_m = ErnieMModel(config)
-        self.cls = ErnieMOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.cls.predictions.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-
-    @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss.
-            Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
-            Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
-            in `[0, ..., config.vocab_size]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.ernie_m(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
-
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
-        return MaskedLMOutput(
-            loss=masked_lm_loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
-
-        #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
-        dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-        )
-        input_ids = torch.cat([input_ids, dummy_token], dim=1)
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-
-@add_start_docstrings(
-    """ErnieM Model with a `language modeling` head on top for CLM fine-tuning. """, ERNIE_M_START_DOCSTRING
-)
-class ErnieMForCausalLM(ErnieMPreTrainedModel):
-
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `ErnieMForCausalLM` as a standalone, add `is_decoder=True.`")
-
-        self.ernie_m = ErnieMModel(config)
-        self.cls = ErnieMOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.cls.predictions.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-
-    @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
-    def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
-    ):
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
-            tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
-            tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two
-            additional tensors are only required when the model is used as a decoder in a Sequence to Sequence
-            model.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-            cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
-            decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import ErnieMTokenizer, ErnieMForCausalLM, ErnieMConfig
-        >>> import torch
-
-        >>> tokenizer = ErnieMTokenizer.from_pretrained('ernie-m')
-        >>> config = ErnieMConfig.from_pretrained("ernie-m")
-        >>> config.is_decoder = True
-        >>> model = ErnieMForCausalLM.from_pretrained('ernie-m', config=config)
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
-        ```
-"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.ernie_m(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
-
-        lm_loss = None
-        if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
-
-        return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
-        )
-
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
-
-    def _reorder_cache(self, past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
-        return reordered_past
-
-class ErnieMClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.config = config
-
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = ACT2FN[self.config.hidden_act](x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
-
 @add_start_docstrings(
     """ErnieM Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
     ERNIE_M_START_DOCSTRING,
 )
+#Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py
 class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.ernie_m = ErnieMModel(config)
-        self.classifier = ErnieMClassificationHead(config)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -947,9 +401,7 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
             self,
             input_ids=None,
             attention_mask=None,
-            token_type_ids=None,
             position_ids=None,
-            head_mask=None,
             inputs_embeds=None,
             labels=None,
             output_attentions=None,
@@ -968,16 +420,14 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
         outputs = self.ernie_m(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs[1]
         logits = self.classifier(sequence_output)
 
         loss = None
@@ -1014,107 +464,21 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
         )
 
 @add_start_docstrings(
-    """ErnieM Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    ERNIE_M_START_DOCSTRING,
-)
-class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.ernie_m = ErnieMModel(config)
-        self.sequence_summary = SequenceSummary(config)
-        self.classifier = nn.Linear(config.hidden_size, 1)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in `[0, ..., num_choices-1]` where `num_choices` is the size of the second dimension
-            of the input tensors. (See `input_ids` above)
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
-        inputs_embeds = (
-            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
-            if inputs_embeds is not None
-            else None
-        )
-
-        outputs = self.ernie_m(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        pooled_output = self.sequence_summary(sequence_output)
-        logits = self.classifier(pooled_output)
-        reshaped_logits = logits.view(-1, num_choices)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
     """ErnieM Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     ERNIE_M_START_DOCSTRING,
 )
+#Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py
 class ErnieMForTokenClassification(ErnieMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
         self.ernie_m = ErnieMModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1131,9 +495,7 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
@@ -1150,9 +512,7 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
         outputs = self.ernie_m(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1170,7 +530,7 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
@@ -1180,12 +540,12 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-
 @add_start_docstrings(
     """ErnieM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     ERNIE_M_START_DOCSTRING,
 )
+#Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py
 class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1210,9 +570,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
@@ -1235,9 +593,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
         outputs = self.ernie_m(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1248,8 +604,8 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1269,7 +625,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
+            output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
@@ -1279,3 +635,151 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+@add_start_docstrings(
+    """ErnieM Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    ERNIE_M_START_DOCSTRING,
+)
+#Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py
+class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.ernie_m = ErnieMModel(config)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+            self,
+            input_ids=None,
+            attention_mask=None,
+            position_ids=None,
+            inputs_embeds=None,
+            labels=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss.
+            Indices should be in `[0, ..., num_choices-1]` where `num_choices` is the size of the second dimension
+            of the input tensors. (See `input_ids` above)
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+
+        outputs = self.ernie_m(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        reshaped_logits = logits.view(-1, num_choices)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
+
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+@add_start_docstrings(
+    """ErnieMUIEM is a Ernie-M Model with two linear layer on top of the hidden-states output to 
+    compute `start_prob` and `end_prob`, designed for Universal Information Extraction. """,
+    ERNIE_M_START_DOCSTRING,
+)
+#Copied from https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/modeling.py#L774
+class ErnieMUIEM(ErnieMPreTrainedModel):
+    """
+    Ernie-M Model with two linear layer on top of the hidden-states
+    output to compute `start_prob` and `end_prob`,
+    designed for Universal Information Extraction.
+    Args:
+        config (:class:`ErnieMConfig`):
+            An instance of ErnieMConfig used to construct UIEM.
+    """
+
+    def __init__(self, config):
+        super(ErnieMUIEM, self).__init__(config)
+        self.ernie_m = ErnieMModel(config)
+        self.linear_start = nn.Linear(config.hidden_size, 1)
+        self.linear_end = nn.Linear(config.hidden_size, 1)
+        self.sigmoid = nn.Sigmoid()
+        self.post_init()
+
+    def forward(self, input_ids, position_ids=None, attention_mask=None):
+        r"""
+        Args:
+            input_ids (Tensor):
+                See :class:`ErnieMModel`.
+            position_ids (Tensor, optional):
+                See :class:`ErnieMModel`.
+            attention_mask (Tensor, optional):
+                See :class:`ErnieMModel`.
+        Example:
+            .. code-block::
+                import torch
+                from transformers import ErnieMUIEM, ErnieMTokenizer
+                ##TODO
+                change the weights to converted uiem weights which has linear layers weights(pretrained)
+                ##TODO
+                tokenizer = ErnieMTokenizer.from_pretrained('susnato/ernie-m-base_pytorch')
+                model = UIEM.from_pretrained('susnato/ernie-m-base_pytorch')
+                inputs = tokenizer("Welcome to use Huggingface!", return_tensors="pt")
+                start_prob, end_prob = model(**inputs)
+        """
+        sequence_output, _ = self.ernie_m(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+        )
+        start_logits = self.linear_start(sequence_output)
+        start_logits = start_logits.squeeze(-1)
+        start_prob = self.sigmoid(start_logits)
+        end_logits = self.linear_end(sequence_output)
+        end_logits = end_logits.squeeze(-1)
+        end_prob = self.sigmoid(end_logits)
+
+        return start_prob, end_prob

@@ -14,17 +14,49 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The ErnieM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The ErnieM model was proposed in [ERNIE-M: Enhanced Multilingual Representation by Aligning
+Cross-lingual Semantics with Monolingual Corpora](https://arxiv.org/abs/2012.15674)  by Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun,
+Hao Tian, Hua Wu, Haifeng Wang.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Recent studies have demonstrated that pre-
+trained cross-lingual models achieve impres-
+sive performance in downstream cross-lingual
+tasks. This improvement benefits from learn-
+ing a large amount of monolingual and par-
+allel corpora. Although it is generally ac-
+knowledged that parallel corpora are critical
+for improving the model performance, ex-
+isting methods are often constrained by the
+size of parallel corpora, especially for low-
+resource languages. In this paper, we pro-
+pose ERNIE-M, a new training method that
+encourages the model to align the representa-
+tion of multiple languages with monolingual
+corpora, to overcome the constraint that the
+parallel corpus size places on the model per-
+formance. Our key insight is to integrate
+back-translation into the pre-training process.
+We generate pseudo-parallel sentence pairs on
+a monolingual corpus to enable the learning
+of semantic alignments between different lan-
+guages, thereby enhancing the semantic mod-
+eling of cross-lingual models. Experimental
+results show that ERNIE-M outperforms ex-
+isting cross-lingual models and delivers new
+state-of-the-art results in various cross-lingual
+downstream tasks.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+1. Ernie-M is BERT-like model so it is stacked Transformer Encoder.
+2. Instead of using MaskedLM for pretraining(like BERT) the authors used two novel techniques such as `Cross-attention Masked Language Modeling` and `Back-translation Masked Language Modeling`
+3. It is a multilingual language model.
+4. NSP was not used in pretraining process.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+
+This model was contributed by [Susnato Dhar](https://huggingface.co/susnato). The original code can be found [here](https://github.com/PaddlePaddle/PaddleNLP/tree/develop/paddlenlp/transformers/ernie_m).
 
 ## ErnieMConfig
 
@@ -45,23 +77,11 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 [[autodoc]] ErnieMModel
     - forward
 
-
-## ErnieMForCausalLM
-
-[[autodoc]] ErnieMForCausalLM
-    - forward
-
-
-## ErnieMForMaskedLM
-
-[[autodoc]] ErnieMForMaskedLM
-    - forward
-
-
 ## ErnieMForSequenceClassification
 
 [[autodoc]] transformers.ErnieMForSequenceClassification
     - forward
+
 
 ## ErnieMForMultipleChoice
 
@@ -78,4 +98,9 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 ## ErnieMForQuestionAnswering
 
 [[autodoc]] ErnieMForQuestionAnswering
+    - forward
+
+## ErnieMUIEM
+
+[[autodoc]] ErnieMUIEM
     - forward

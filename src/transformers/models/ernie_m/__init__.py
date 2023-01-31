@@ -45,15 +45,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_ernie_m"] = [
         "ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ErnieMForMaskedLM",
-        "ErnieMForCausalLM",
         "ErnieMForMultipleChoice",
         "ErnieMForQuestionAnswering",
         "ErnieMForSequenceClassification",
         "ErnieMForTokenClassification",
-        "ErnieMLayer",
         "ErnieMModel",
-        "ErnieMPreTrainedModel"
+        "ErnieMPreTrainedModel",
+        "ErnieMUIEM"
     ]
 
 
@@ -79,16 +77,13 @@ if TYPE_CHECKING:
     else:
         from .modeling_ernie_m import (
             ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ErnieMForMaskedLM,
-            ErnieMForCausalLM,
             ErnieMForMultipleChoice,
             ErnieMForQuestionAnswering,
             ErnieMForSequenceClassification,
             ErnieMForTokenClassification,
-            ErnieMLayer,
             ErnieMModel,
             ErnieMPreTrainedModel,
-            load_tf_weights_in_ernie_m,
+            ErnieMUIEM,
         )
 
 

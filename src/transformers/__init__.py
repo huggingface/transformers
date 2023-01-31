@@ -945,16 +945,13 @@ else:
     _import_structure["models.ernie_m"].extend(
         [
             "ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ErnieMForMaskedLM",
-            "ErnieMForCausalLM",
             "ErnieMForMultipleChoice",
             "ErnieMForQuestionAnswering",
             "ErnieMForSequenceClassification",
             "ErnieMForTokenClassification",
-            "ErnieMLayer",
             "ErnieMModel",
             "ErnieMPreTrainedModel",
-            "load_tf_weights_in_ernie_m",
+            "ErnieMUIEM"
         ]
     )
     _import_structure["models.albert"].extend(
@@ -4369,16 +4366,13 @@ if TYPE_CHECKING:
 
         from .models.ernie_m import (
             ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ErnieMForMaskedLM,
-            ErnieMForCausalLM,
             ErnieMForMultipleChoice,
             ErnieMForQuestionAnswering,
             ErnieMForSequenceClassification,
             ErnieMForTokenClassification,
-            ErnieMLayer,
             ErnieMModel,
             ErnieMPreTrainedModel,
-            load_tf_weights_in_ernie_m,
+            ErnieMUIEM,
         )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
