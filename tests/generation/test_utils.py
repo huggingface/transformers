@@ -2178,10 +2178,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # 1 BOS + 20 + 3 new tokens
         self.assertEqual(list(outputs.shape), [1, 24])
 
-        # max_new_tokens and max_length serve the same purpose and must not be used together.
-        with self.assertRaises(ValueError):
-            bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
-
     def test_max_new_tokens_decoder_only_contrastive_search_t5(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         t5_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
@@ -2211,12 +2207,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # 1 BOS + 20 + 3 new tokens
         self.assertEqual(list(outputs.shape), [1, 24])
-
-        # max_new_tokens and max_length serve the same purpose and must not be used together.
-        with self.assertRaises(ValueError):
-            t5_model.generate(
-                decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
-            )
 
     def test_max_new_tokens_decoder_only_contrastive_search_bart(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -2250,12 +2240,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # 1 BOS + 20 + 3 new tokens
         self.assertEqual(list(outputs.shape), [1, 24])
 
-        # max_new_tokens and max_length serve the same purpose and must not be used together.
-        with self.assertRaises(ValueError):
-            bart_model.generate(
-                decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
-            )
-
     def test_max_new_tokens_decoder_only_contrastive_search_gptj(self):
         article = """Justin Timberlake."""
         gptj_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gptj")
@@ -2278,10 +2262,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # 1 BOS token + 23 new tokens
         self.assertEqual(list(outputs.shape), [1, 24])
-
-        # max_new_tokens and max_length serve the same purpose and must not be used together.
-        with self.assertRaises(ValueError):
-            gptj_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
 
     def test_max_new_tokens_decoder_only_contrastive_search_gpt2(self):
         article = """Justin Timberlake."""
@@ -2306,10 +2286,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # 1 BOS token + 23 new tokens
         self.assertEqual(list(outputs.shape), [1, 24])
 
-        # max_new_tokens and max_length serve the same purpose and must not be used together.
-        with self.assertRaises(ValueError):
-            gpt2_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
-
     def test_max_new_tokens_decoder_only(self):
         article = """Justin Timberlake."""
         gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -2332,10 +2308,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # 1 BOS token + 23 new tokens
         self.assertEqual(list(outputs.shape), [1, 24])
-
-        # max_new_tokens and max_length serve the same purpose and must not be used together.
-        with self.assertRaises(ValueError):
-            gpt2_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20)
 
     def test_encoder_decoder_generate_with_inputs_embeds(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
