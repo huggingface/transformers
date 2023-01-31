@@ -198,8 +198,7 @@ skip_first_batches = None
 if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
 
-    # Change this to >= 0.16 once the release is out
-    if version.parse(accelerate_version) > version.parse("0.15"):
+    if version.parse(accelerate_version) >= version.parse("0.16"):
         from accelerate import skip_first_batches
 
 
