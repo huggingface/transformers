@@ -866,18 +866,6 @@ class ProbSparseAttention(nn.Module):
 # are from the original Informer repository (see the exact source below)
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/utils/masking.py
-class TriangularCausalMask:
-    def __init__(self, B, L, device="cpu"):
-        mask_shape = [B, 1, L, L]
-        with torch.no_grad():
-            self._mask = torch.triu(torch.ones(mask_shape, dtype=torch.bool), diagonal=1).to(device)
-
-    @property
-    def mask(self):
-        return self._mask
-
-
-# source: https://github.com/zhouhaoyi/Informer2020/blob/main/utils/masking.py
 class ProbMask:
     def __init__(self, B, H, L, index, scores, device="cpu"):
         _mask = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(device).triu(1)
