@@ -749,7 +749,7 @@ class FlaxGenerationMixin:
             # 3. is there still a beam that has not finished?
             still_open_beam = ~(jnp.all(state.is_sent_finished) & (early_stopping is True))
 
-            return not_max_length_yet & (still_open_beam | improvement_still_possible)
+            return not_max_length_yet & still_open_beam & improvement_still_possible
 
         def beam_search_body_fn(state, input_ids_length=1):
             """beam search state update fn."""
