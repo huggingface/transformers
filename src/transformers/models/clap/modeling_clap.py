@@ -1676,8 +1676,8 @@ class CLAPModel(CLAPPreTrainedModel):
         text_config = config.text_config
         vision_config = config.vision_config
 
-        self.logit_scale_a = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        self.logit_scale_t = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.logit_scale_a = nn.Parameter(torch.ones([]) * np.log(config.logit_scale_init_value))
+        self.logit_scale_t = nn.Parameter(torch.ones([]) * np.log(config.logit_scale_init_value))
 
         self.projection_dim = config.projection_dim
         self.text_hidden_size = text_config.hidden_size

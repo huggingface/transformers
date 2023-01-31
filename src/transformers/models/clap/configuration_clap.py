@@ -364,7 +364,7 @@ class CLAPConfig(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        logit_scale_init_value=2.6592,
+        logit_scale_init_value=(1 / 0.07),
         fusion_num_hidden_layers=2,
         projection_dim=512,
         projection_hidden_act="relu",
