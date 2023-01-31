@@ -1063,13 +1063,13 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
             n_points=4,
         )
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.dropout = config.dropout
         self.activation_fn = nn.functional.relu
         self.activation_dropout = config.dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_feedforward_dim)
         self.fc2 = nn.Linear(config.encoder_feedforward_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
         self.is_training = config.is_training
 
@@ -1634,11 +1634,13 @@ class OneFormerAttention(nn.Module):
 
 
 class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
-    def __init__(self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False):
+    def __init__(
+        self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False, layer_norm_eps=1e-05
+    ):
         super().__init__()
         self.self_attn = OneFormerAttention(embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, is_decoder=True)
 
-        self.norm = nn.LayerNorm(embed_dim)
+        self.norm = nn.LayerNorm(embed_dim, eps=layer_norm_eps)
         self.dropout = nn.Dropout(dropout)
 
         self.activation = ACT2FN[activation]
@@ -1690,11 +1692,13 @@ class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
 
 
 class OneFormerTransformerDecoderCrossAttentionLayer(nn.Module):
-    def __init__(self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False):
+    def __init__(
+        self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False, layer_norm_eps=1e-05
+    ):
         super().__init__()
         self.multihead_attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout)
 
-        self.norm = nn.LayerNorm(embed_dim)
+        self.norm = nn.LayerNorm(embed_dim, eps=layer_norm_eps)
         self.dropout = nn.Dropout(dropout)
 
         self.activation = ACT2FN[activation]
@@ -1760,14 +1764,22 @@ class OneFormerTransformerDecoderCrossAttentionLayer(nn.Module):
 
 
 class OneFormerTransformerDecoderFFNLayer(nn.Module):
-    def __init__(self, d_model, dim_feedforward=2048, dropout=0.0, activation="relu", normalize_before=False):
+    def __init__(
+        self,
+        d_model,
+        dim_feedforward=2048,
+        dropout=0.0,
+        activation="relu",
+        normalize_before=False,
+        layer_norm_eps=1e-05,
+    ):
         super().__init__()
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(dim_feedforward, d_model)
 
-        self.norm = nn.LayerNorm(d_model)
+        self.norm = nn.LayerNorm(d_model, eps=layer_norm_eps)
 
         self.activation = ACT2FN[activation]
         self.normalize_before = normalize_before
@@ -1836,6 +1848,7 @@ class OneFormerTransformerDecoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             dropout=0.0,
             normalize_before=config.pre_norm,
+            layer_norm_eps=config.layer_norm_eps,
         )
 
         self.self_attn = OneFormerTransformerDecoderSelfAttentionLayer(
@@ -1843,6 +1856,7 @@ class OneFormerTransformerDecoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             dropout=0.0,
             normalize_before=config.pre_norm,
+            layer_norm_eps=config.layer_norm_eps,
         )
 
         self.ffn = OneFormerTransformerDecoderFFNLayer(
@@ -1850,6 +1864,7 @@ class OneFormerTransformerDecoderLayer(nn.Module):
             dim_feedforward=config.dim_feedforward,
             dropout=0.0,
             normalize_before=config.pre_norm,
+            layer_norm_eps=config.layer_norm_eps,
         )
 
     def forward(
@@ -1965,6 +1980,7 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
         dropout=0.1,
         activation="relu",
         normalize_before=False,
+        layer_norm_eps=1e-05,
     ):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -1974,9 +1990,9 @@ class OneFormerTransformerDecoderQueryTransformerDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(dim_feedforward, d_model)
 
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
+        self.norm1 = nn.LayerNorm(d_model, eps=layer_norm_eps)
+        self.norm2 = nn.LayerNorm(d_model, eps=layer_norm_eps)
+        self.norm3 = nn.LayerNorm(d_model, eps=layer_norm_eps)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         self.dropout3 = nn.Dropout(dropout)
@@ -2094,13 +2110,14 @@ class OneFormerTransformerDecoderQueryTransformer(nn.Module):
         activation="relu",
         normalize_before=False,
         return_intermediate_dec=False,
+        layer_norm_eps=1e-05,
     ):
         super().__init__()
 
         decoder_layer = OneFormerTransformerDecoderQueryTransformerDecoderLayer(
-            d_model, nhead, dim_feedforward, dropout, activation, normalize_before
+            d_model, nhead, dim_feedforward, dropout, activation, normalize_before, layer_norm_eps
         )
-        decoder_norm = nn.LayerNorm(d_model)
+        decoder_norm = nn.LayerNorm(d_model, eps=layer_norm_eps)
         self.decoder = OneFormerTransformerDecoderQueryTransformerDecoder(
             decoder_layer,
             num_decoder_layers,
@@ -2151,9 +2168,10 @@ class OneFormerTransformerDecoder(nn.Module):
             num_decoder_layers=config.query_dec_layers,
             normalize_before=config.pre_norm,
             return_intermediate_dec=False,
+            layer_norm_eps=config.layer_norm_eps,
         )
 
-        self.decoder_norm = nn.LayerNorm(config.hidden_dim)
+        self.decoder_norm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
 
         self.num_feature_levels = 3
 
@@ -2456,14 +2474,15 @@ class OneFormerTextTransformerDecoderLayer(nn.Module):
         d_model,
         nhead,
         dropout=0.1,
+        layer_norm_eps=1e-05,
     ):
         super().__init__()
         self.self_attn = OneFormerTextMapperAttention(d_model, nhead, proj_drop=dropout)
         self.cross_attn = OneFormerTextMapperAttention(d_model, nhead, proj_drop=dropout)
 
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
+        self.norm1 = nn.LayerNorm(d_model, eps=layer_norm_eps)
+        self.norm2 = nn.LayerNorm(d_model, eps=layer_norm_eps)
+        self.norm3 = nn.LayerNorm(d_model, eps=layer_norm_eps)
         self.dropout = nn.Dropout(dropout)
 
         self.mlp = nn.Sequential(
@@ -2481,29 +2500,38 @@ class OneFormerTextTransformerDecoderLayer(nn.Module):
 
 class OneFormerTextContextDecoder(nn.Module):
     def __init__(
-        self, transformer_width=256, transformer_heads=4, transformer_layers=6, visual_dim=1024, dropout=0.1, **kwargs
+        self,
+        transformer_width=256,
+        transformer_heads=4,
+        transformer_layers=6,
+        visual_dim=1024,
+        dropout=0.1,
+        layer_norm_eps=1e-05,
+        **kwargs
     ):
         super().__init__()
 
         self.memory_proj = nn.Sequential(
-            nn.LayerNorm(visual_dim),
+            nn.LayerNorm(visual_dim, eps=layer_norm_eps),
             nn.Linear(visual_dim, transformer_width),
-            nn.LayerNorm(transformer_width),
+            nn.LayerNorm(transformer_width, eps=layer_norm_eps),
         )
 
         self.text_proj = nn.Sequential(
-            nn.LayerNorm(visual_dim),
+            nn.LayerNorm(visual_dim, eps=layer_norm_eps),
             nn.Linear(visual_dim, transformer_width),
         )
 
         self.decoder = nn.ModuleList(
             [
-                OneFormerTextTransformerDecoderLayer(transformer_width, transformer_heads, dropout)
+                OneFormerTextTransformerDecoderLayer(transformer_width, transformer_heads, dropout, layer_norm_eps)
                 for _ in range(transformer_layers)
             ]
         )
 
-        self.out_proj = nn.Sequential(nn.LayerNorm(transformer_width), nn.Linear(transformer_width, visual_dim))
+        self.out_proj = nn.Sequential(
+            nn.LayerNorm(transformer_width, eps=layer_norm_eps), nn.Linear(transformer_width, visual_dim)
+        )
 
     def forward(self, text, visual):
         visual = self.memory_proj(visual)
@@ -2538,12 +2566,12 @@ class OneFormerTextMLP(nn.Module):
 
 
 class OneFormerTextTransformerLayer(nn.Module):
-    def __init__(self, width: int, heads: int, attn_mask: torch.Tensor):
+    def __init__(self, width: int, heads: int, attn_mask: torch.Tensor, layer_norm_eps=1e-05):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(width, heads)
-        self.layer_norm1 = nn.LayerNorm(width)
+        self.layer_norm1 = nn.LayerNorm(width, eps=layer_norm_eps)
         self.mlp = OneFormerTextMLP(width, width * 4, width)
-        self.layer_norm2 = nn.LayerNorm(width)
+        self.layer_norm2 = nn.LayerNorm(width, eps=layer_norm_eps)
         self.attn_mask = attn_mask
 
     def forward(
@@ -2572,11 +2600,21 @@ class OneFormerTextTransformerLayer(nn.Module):
 
 
 class OneFormerTextTransformer(nn.Module):
-    def __init__(self, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, use_checkpoint=False):
+    def __init__(
+        self,
+        width: int,
+        layers: int,
+        heads: int,
+        attn_mask: torch.Tensor = None,
+        use_checkpoint=False,
+        layer_norm_eps=1e-05,
+    ):
         super().__init__()
         self.width = width
         self.num_layers = layers
-        self.layers = nn.Sequential(*[OneFormerTextTransformerLayer(width, heads, attn_mask) for _ in range(layers)])
+        self.layers = nn.Sequential(
+            *[OneFormerTextTransformerLayer(width, heads, attn_mask, layer_norm_eps) for _ in range(layers)]
+        )
         self.use_checkpoint = use_checkpoint
 
     def forward(self, hidden_states: torch.Tensor):
@@ -2596,6 +2634,7 @@ class OneFormerTextEncoder(nn.Module):
         layers: int,
         vocab_size,
         use_checkpoint=False,
+        layer_norm_eps=1e-05,
     ):
         super().__init__()
         heads = width // 64
@@ -2607,10 +2646,11 @@ class OneFormerTextEncoder(nn.Module):
             heads=heads,
             attn_mask=self.build_attention_mask(),
             use_checkpoint=use_checkpoint,
+            layer_norm_eps=layer_norm_eps,
         )
 
         self.positional_embedding = nn.Parameter(torch.empty(self.context_length, width))
-        self.ln_final = nn.LayerNorm(width)
+        self.ln_final = nn.LayerNorm(width, eps=layer_norm_eps)
         self.token_embedding = nn.Embedding(vocab_size, width)
 
     def build_attention_mask(self):
@@ -2641,6 +2681,7 @@ class OneFormerTextMapper(nn.Module):
             width=config.text_encoder_width,
             layers=config.text_encoder_num_layers,
             vocab_size=config.text_encoder_vocab_size,
+            layer_norm_eps=config.layer_norm_eps,
         )
 
         self.text_projector = OneFormerMLPPredictionHead(
