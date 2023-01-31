@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Salesforce Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2023 The Salesforce Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BLIP model."""
+""" PyTorch BLIP-2 model."""
 
 import math
 from dataclasses import dataclass
@@ -40,17 +40,10 @@ from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionCo
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
+_CHECKPOINT_FOR_DOC = "Salesforce/blip2-opt-2.7b"
 
 BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/blip-vqa-base",
-    "Salesforce/blip-vqa-capfit-large",
-    "Salesforce/blip-image-captioning-base",
-    "Salesforce/blip-image-captioning-large",
-    "Salesforce/blip-itm-base-coco",
-    "Salesforce/blip-itm-large-coco",
-    "Salesforce/blip-itm-base-flikr",
-    "Salesforce/blip-itm-large-flikr",
+    "Salesforce/blip2-opt-2.7b",
     # See all BLIP-2 models at https://huggingface.co/models?filter=blip
 ]
 
@@ -1126,7 +1119,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         super().__init__(config)
 
         self.vision_model = Blip2VisionModel(config.vision_config)
-        
+
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         # TODO support AutoModelForSeq2SeqLM here as well
