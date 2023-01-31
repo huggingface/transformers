@@ -907,24 +907,6 @@ class TrainingArguments:
             )
         },
     )
-    fsdp_backward_prefetch: str = field(
-        default="backward_pre",
-        metadata={
-            "help": (
-                "Which  `backward_prefetch` mode to use out of 'backward_pre' or 'backward post' when using PyTorch"
-                " Fully Sharded Data Parallel (FSDP) training (in distributed training only)."
-            ),
-        },
-    )
-    fsdp_forward_prefetch: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": (
-                "If True, then FSDP explicitly prefetches the next upcoming all-gather"
-                "while executing in the forward pass"
-            ),
-        },
-    )
     fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
         default=None,
         metadata={
@@ -1333,6 +1315,12 @@ class TrainingArguments:
         if isinstance(self.fsdp_config, str):
             with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
+
+        if self.fsdp_min_num_params > 0:
+            warnings.warn(
+                "using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ",
+                FutureWarning
+            )
 
         self.fsdp_config["fsdp_min_num_params"] = max(
             getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
