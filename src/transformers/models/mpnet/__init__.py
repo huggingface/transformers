@@ -49,7 +49,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mpnet"] = [
         "MPNET_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MPNetLMHeadModel",
+        "MPNetForCausalLM",
         "MPNetForMaskedLM",
         "MPNetForMultipleChoice",
         "MPNetForQuestionAnswering",
