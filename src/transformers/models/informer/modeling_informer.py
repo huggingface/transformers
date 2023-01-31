@@ -1516,8 +1516,16 @@ INFORMER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerEncoder with TimeSeriesTransformer->Informer
 class InformerEncoder(InformerPreTrainedModel):
+    """
+    Informer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    [`InformerEncoderLayer`].
+
+    Args:
+        config: InformerConfig
+    """
+
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
@@ -1656,7 +1664,7 @@ class InformerDecoder(InformerPreTrainedModel):
     Args:
         config: InformerConfig
     """
-    
+
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
