@@ -536,13 +536,11 @@ class MPNetEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
-    def compute_position_bias(self, x, past_key_value=None, num_buckets=32):
+    def compute_position_bias(self, hidden_states, past_key_value=None, num_buckets=32):
         if past_key_value is None:
-            bsz, qlen, klen = x.size(0), x.size(1), x.size(1)
+            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
         else:
-            bsz, qlen, klen = x.size(0), x.size(1), x.size(1)
-            qlen = qlen + past_key_value[0].shape[2]
-            klen = klen + past_key_value[0].shape[2]
+            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), past_key_value[0].shape[2]
 
         context_position = torch.arange(qlen, dtype=torch.long)[:, None]
         memory_position = torch.arange(klen, dtype=torch.long)[None, :]
@@ -550,7 +548,7 @@ class MPNetEncoder(nn.Module):
         relative_position = memory_position - context_position
 
         rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
-        rp_bucket = rp_bucket.to(x.device)
+        rp_bucket = rp_bucket.to(hidden_states.device)
         values = self.relative_attention_bias(rp_bucket)
         values = values.permute([2, 0, 1]).unsqueeze(0)
         values = values.expand((bsz, -1, qlen, klen)).contiguous()
