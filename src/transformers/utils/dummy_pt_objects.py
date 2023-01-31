@@ -1991,6 +1991,30 @@ class DeiTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+DETA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DetaForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DetaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DetaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 DINAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

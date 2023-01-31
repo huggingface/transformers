@@ -40,6 +40,7 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
     logging,
 )
@@ -236,6 +237,7 @@ _import_structure = {
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
+    "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
@@ -589,6 +591,7 @@ _import_structure = {
         "is_torch_available",
         "is_torch_neuroncore_available",
         "is_torch_tpu_available",
+        "is_torchvision_available",
         "is_vision_available",
         "logging",
     ],
@@ -797,6 +800,7 @@ else:
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
+    _import_structure["models.deta"].append("DetaImageProcessor")
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
@@ -1341,6 +1345,14 @@ else:
             "DeiTForMaskedImageModeling",
             "DeiTModel",
             "DeiTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deta"].extend(
+        [
+            "DETA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DetaForObjectDetection",
+            "DetaModel",
+            "DetaPreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -3681,6 +3693,7 @@ if TYPE_CHECKING:
     )
     from .models.deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
+    from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -4008,6 +4021,7 @@ if TYPE_CHECKING:
         is_torch_available,
         is_torch_neuroncore_available,
         is_torch_tpu_available,
+        is_torchvision_available,
         is_vision_available,
         logging,
     )
@@ -4168,6 +4182,7 @@ if TYPE_CHECKING:
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
+        from .models.deta import DetaImageProcessor
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
@@ -4628,6 +4643,12 @@ if TYPE_CHECKING:
             DeiTForMaskedImageModeling,
             DeiTModel,
             DeiTPreTrainedModel,
+        )
+        from .models.deta import (
+            DETA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DetaForObjectDetection,
+            DetaModel,
+            DetaPreTrainedModel,
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
