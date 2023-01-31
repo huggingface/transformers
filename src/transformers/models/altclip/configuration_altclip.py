@@ -173,8 +173,9 @@ class AltCLIPVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -213,7 +214,7 @@ class AltCLIPVisionConfig(PretrainedConfig):
         image_size=224,
         patch_size=32,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
+        layer_norm_eps=1e-5,
         dropout=0.0,
         attention_dropout=0.0,
         initializer_range=0.02,
