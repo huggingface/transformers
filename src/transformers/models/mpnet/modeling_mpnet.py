@@ -546,12 +546,13 @@ class MPNetEncoder(nn.Module):
         memory_position = torch.arange(klen, dtype=torch.long)[None, :]
 
         relative_position = memory_position - context_position
-
+        
         rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
         rp_bucket = rp_bucket.to(hidden_states.device)
         values = self.relative_attention_bias(rp_bucket)
         values = values.permute([2, 0, 1]).unsqueeze(0)
         values = values.expand((bsz, -1, qlen, klen)).contiguous()
+        print(relative_position.shape, values.shape)
         return values
 
     @staticmethod
