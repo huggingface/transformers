@@ -74,7 +74,7 @@ TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitModelOutputWithPooling with Beit->Data2VecVision
 class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     """
-    Class for outputs of [`Data2VecVisionModel`].
+    Class for outputs of [`TFData2VecVisionModel`].
 
     Args:
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -460,7 +460,7 @@ class TFData2VecVisionOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitLayer with Beit->Data2VecVision,beit->data2vec_vision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitLayer with Beit->Data2VecVision
 class TFData2VecVisionLayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -823,7 +823,7 @@ class TFData2VecVisionPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision
 class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -928,7 +928,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -991,7 +991,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     DATA2VEC_VISION_START_DOCSTRING,
 )
 class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TFSequenceClassificationLoss):
-    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
+    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1084,7 +1084,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
             dilation_rate=dilation,
             name="conv",
         )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn")
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
         self.activation = tf.nn.relu
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -1467,7 +1467,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
     DATA2VEC_VISION_START_DOCSTRING,
 )
 class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
-    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
+    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1490,6 +1490,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         self.auxiliary_head = (
             TFData2VecVisionFCNHead(config, name="auxiliary_head") if config.use_auxiliary_head else None
         )
+
     # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation.compute_loss with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
     def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size

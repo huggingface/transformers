@@ -525,7 +525,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_22k(self):
-        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k", from_pt=True)
+        model = TFBeitForImageClassification.from_pretrained(
+            "microsoft/beit-large-patch16-224-pt22k-ft22k", from_pt=True
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -548,7 +550,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640", from_pt=True)
+        model = TFBeitForSemanticSegmentation.from_pretrained(
+            "microsoft/beit-base-finetuned-ade-640-640", from_pt=True
+        )
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
@@ -587,7 +591,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_post_processing_semantic_segmentation(self):
-        model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640", from_pt=True)
+        model = TFBeitForSemanticSegmentation.from_pretrained(
+            "microsoft/beit-base-finetuned-ade-640-640", from_pt=True
+        )
 
         image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
 
