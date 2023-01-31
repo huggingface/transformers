@@ -437,7 +437,7 @@ class MPNetEncoder(nn.Module):
         self.config = config
         self.n_heads = config.num_attention_heads
         self.relative_attention_bias = nn.Embedding(config.relative_attention_num_buckets, self.n_heads)
-        self.layer = nn.ModuleList([MPNetLayer(config, self.relative_attention_bias) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([MPNetLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
