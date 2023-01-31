@@ -71,7 +71,7 @@ class TvltImageProcessor(BaseImageProcessor):
     r"""
     Constructs a TVLT image processor.
 
-    This processor can input either videos or images by converting images to 1-frame videos.
+    This processor can be used to prepare either videos or images for the model by converting images to 1-frame videos.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
