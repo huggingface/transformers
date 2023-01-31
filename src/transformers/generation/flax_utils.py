@@ -738,9 +738,9 @@ class FlaxGenerationMixin:
             # early_stopping == "never" -> compute the best score from max_length or cur_len, depending on the sign of
             #   length_penalty. Positive length_penalty favors longer sequences, thus we use max_length there.
             if early_stopping == "never" and length_penalty > 0.0:
-                best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
+                best_running_score = state.running_scores[:, :1] / (max_length**length_penalty)
             else:
-                best_running_score = state.running_scores[:, -1:] / (cur_len**length_penalty)
+                best_running_score = state.running_scores[:, :1] / (state.cur_len**length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
@@ -820,7 +820,7 @@ class FlaxGenerationMixin:
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
-            next_topk_indices = jnp.flip(lax.top_k(running_topk_log_probs, k=num_beams)[1], axis=1)
+            next_topk_indices = lax.top_k(running_topk_log_probs, k=num_beams)[1]
             next_running_sequences, next_running_scores = gather_beams(
                 [topk_sequences, running_topk_log_probs], next_topk_indices, batch_size, num_beams
             )
@@ -844,7 +844,7 @@ class FlaxGenerationMixin:
             merged_sequences = jnp.concatenate([state.sequences, topk_sequences], axis=1)
             merged_scores = jnp.concatenate([state.scores, topk_log_probs], axis=1)
             merged_is_sent_finished = jnp.concatenate([state.is_sent_finished, did_topk_just_finished], axis=1)
-            topk_merged_indices = jnp.flip(lax.top_k(merged_scores, k=num_beams)[1], axis=1)
+            topk_merged_indices = lax.top_k(merged_scores, k=num_beams)[1]
             next_sequences, next_scores, next_is_sent_finished = gather_beams(
                 [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices, batch_size, num_beams
             )
@@ -883,7 +883,7 @@ class FlaxGenerationMixin:
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
         # take best beam for each batch
-        sequences = sequences[:, -1]
-        scores = scores[:, -1]
+        sequences = sequences[:, 0]
+        scores = scores[:, 0]
 
         return FlaxBeamSearchOutput(sequences=sequences, scores=scores)

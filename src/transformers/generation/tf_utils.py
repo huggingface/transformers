@@ -2247,7 +2247,7 @@ class TFGenerationMixin:
         sequences = tf.where(none_finished[:, None, None], sequences, running_sequences)
         scores = tf.where(none_finished[:, None], scores, running_scores)
 
-        # Take best beams for each batch (the score is sorted in ascending order)
+        # Take best beams for each batch (the score is sorted in descending order)
         sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
         scores = flatten_beam_dim(scores[:, :num_return_sequences])
 
