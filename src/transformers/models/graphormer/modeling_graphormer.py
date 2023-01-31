@@ -798,9 +798,11 @@ class GraphormerModel(GraphormerPreTrainedModel):
         attn_edge_type,
         perturb=None,
         masked_tokens=None,
-        return_dict: Optional[bool] = True,
+        return_dict: Optional[bool] = None,
         **unused
     ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         inner_states, graph_rep = self.graph_encoder(
             input_nodes, input_edges, attn_bias, in_degree, out_degree, spatial_pos, attn_edge_type, perturb=perturb
         )
@@ -819,7 +821,7 @@ class GraphormerModel(GraphormerPreTrainedModel):
             input_nodes = torch.nn.functional.linear(input_nodes, self.graph_encoder.embed_tokens.weight)
 
         if not return_dict:
-            return (input_nodes, inner_states)
+            return tuple(x for x in [input_nodes, inner_states] if x is not None)
         return BaseModelOutputWithNoAttention(last_hidden_state=input_nodes, hidden_states=inner_states)
 
     def max_nodes(self):
@@ -860,9 +862,11 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         spatial_pos,
         attn_edge_type,
         labels: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = True,
+        return_dict: Optional[bool] = None,
         **unused,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         encoder_outputs = self.encoder(
             input_nodes,
             input_edges,
@@ -871,12 +875,14 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
             out_degree,
             spatial_pos,
             attn_edge_type,
+            return_dict=True,
         )
         outputs, hidden_states = encoder_outputs["last_hidden_state"], encoder_outputs["hidden_states"]
 
         head_outputs = self.classifier(outputs)
         logits = head_outputs[:, 0, :].contiguous()
 
+        loss = None
         if labels is not None:
             mask = ~torch.isnan(labels)
 
@@ -891,5 +897,5 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
                 loss = loss_fct(logits[mask], labels[mask])
 
         if not return_dict:
-            return (loss, logits, hidden_states)
+            return tuple(x for x in [loss, logits, hidden_states] if x is not None)
         return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=hidden_states, attentions=None)
