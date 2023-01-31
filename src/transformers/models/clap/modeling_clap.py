@@ -209,8 +209,10 @@ class CLAPAudioAFFBlock(nn.Module):
     TODO: add docstring
     """
 
-    def __init__(self, channels=64, r=4):
+    def __init__(self, config: CLAPAudioConfig):
         super(CLAPAudioAFFBlock, self).__init__()
+        channels = config.patch_embeds_hidden_size
+        r = config.aff_block_r
         inter_channels = int(channels // r)
 
         self.local_att = nn.Sequential(
@@ -278,26 +280,19 @@ class CLAPAudioPatchEmbed(nn.Module):
 
         padding = ((patch_size[0] - patch_stride[0]) // 2, (patch_size[1] - patch_stride[1]) // 2)
 
-        if (self.enable_fusion) and (self.fusion_type == "channel_map"):
-            self.proj = nn.Conv2d(
-                config.patch_embed_input_channels * 4,
-                config.patch_embeds_hidden_size,
-                kernel_size=patch_size,
-                stride=patch_stride,
-                padding=padding,
-            )
-        else:
-            self.proj = nn.Conv2d(
-                config.patch_embed_input_channels,
-                config.patch_embeds_hidden_size,
-                kernel_size=patch_size,
-                stride=patch_stride,
-                padding=padding,
-            )
+        scale_factor = 4 if (self.enable_fusion) and (self.fusion_type == "channel_map") else 1
+
+        self.proj = nn.Conv2d(
+            config.patch_embed_input_channels * scale_factor,
+            config.patch_embeds_hidden_size,
+            kernel_size=patch_size,
+            stride=patch_stride,
+            padding=padding,
+        )
 
         self.norm = nn.LayerNorm(config.patch_embeds_hidden_size) if config.enable_patch_layer_norm else nn.Identity()
         if self.enable_fusion:
-            self.fusion_model = CLAPAudioAFFBlock(channels=config.patch_embeds_hidden_size)
+            self.fusion_model = CLAPAudioAFFBlock(config)
 
     def forward(self, x, longer_idx=None):
         if self.enable_fusion:
@@ -400,11 +395,8 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
     \text{std}^2)` with values outside :math:`[a, b]` redrawn until they are within the bounds. The method used for
     generating the random values works best when :math:`a \leq \text{mean} \leq b`.
-        tensor: an n-dimensional `torch.Tensor`
-        mean: the mean of the normal distribution
-        std: the standard deviation of the normal distribution
-        a: the minimum cutoff value
-        b: the maximum cutoff value
+        tensor: an n-dimensional `torch.Tensor` mean: the mean of the normal distribution std: the standard deviation
+        of the normal distribution a: the minimum cutoff value b: the maximum cutoff value
     Examples:
         >>> w = torch.empty(3, 5) >>> nn.init.trunc_normal_(w)
     """
@@ -469,13 +461,13 @@ def window_reverse(windows, window_size, H, W):
 
 
 class CLAPAudioWindowAttention(nn.Module):
-    def __init__(self, dim, window_size, num_heads, config=None):
+    def __init__(self, config, hidden_dim, window_size, num_heads):
 
         super().__init__()
-        self.dim = dim
+        self.hidden_dim = hidden_dim
         self.window_size = window_size  # Wh, Ww
         self.num_heads = num_heads
-        head_dim = dim // num_heads
+        head_dim = self.hidden_dim // num_heads
         self.scale = head_dim**-0.5
 
         # define a parameter table of relative position bias
@@ -496,9 +488,9 @@ class CLAPAudioWindowAttention(nn.Module):
         relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
         self.register_buffer("relative_position_index", relative_position_index)
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=config.swin_qkv_bias)
+        self.qkv = nn.Linear(self.hidden_dim, self.hidden_dim * 3, bias=config.swin_qkv_bias)
         self.attn_drop = nn.Dropout(config.swin_attention_drop_rate)
-        self.proj = nn.Linear(dim, dim)
+        self.proj = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.proj_drop = nn.Dropout(config.swin_drop_rate)
 
         trunc_normal_(self.relative_position_bias_table, std=0.02)
@@ -545,17 +537,16 @@ class CLAPAudioWindowAttention(nn.Module):
 class CLAPAudioSwinTransformerBlock(nn.Module):
     def __init__(
         self,
-        hidden_dim,
+        config,
         input_resolution,
-        num_heads,
         shift_size=0,
         drop_path=0.0,
-        config=None,
+        idx_layer=0,
     ):
         super().__init__()
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = config.hidden_size * 2**idx_layer
         self.input_resolution = input_resolution
-        self.num_heads = num_heads
+        self.num_heads = config.num_heads[idx_layer]
         self.window_size = config.window_size
         self.shift_size = shift_size
         self.mlp_ratio = config.swin_mlp_ratio
@@ -567,20 +558,23 @@ class CLAPAudioSwinTransformerBlock(nn.Module):
             self.window_size = min(self.input_resolution)
         assert 0 <= self.shift_size < self.window_size, "shift_size must in 0-window_size"
 
-        self.norm1 = nn.LayerNorm(hidden_dim)
+        self.norm1 = nn.LayerNorm(self.hidden_dim)
         self.attn = CLAPAudioWindowAttention(
-            hidden_dim, window_size=to_2tuple(self.window_size), num_heads=num_heads, config=config
+            config=config,
+            hidden_dim=self.hidden_dim,
+            window_size=to_2tuple(self.window_size),
+            num_heads=self.num_heads,
         )
 
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         if self.norm_before_mlp == "ln":
-            self.norm2 = nn.LayerNorm(hidden_dim)
+            self.norm2 = nn.LayerNorm(self.hidden_dim)
         elif self.norm_before_mlp == "bn":
-            self.norm2 = lambda x: nn.BatchNorm1d(hidden_dim)(x.transpose(1, 2)).transpose(1, 2)
+            self.norm2 = lambda x: nn.BatchNorm1d(self.hidden_dim)(x.transpose(1, 2)).transpose(1, 2)
         else:
             raise NotImplementedError
-        mlp_hidden_dim = int(hidden_dim * self.mlp_ratio)
-        self.mlp = CLAPAudioMLP(in_features=hidden_dim, hidden_features=mlp_hidden_dim, config=config)
+        mlp_hidden_dim = int(self.hidden_dim * self.mlp_ratio)
+        self.mlp = CLAPAudioMLP(in_features=self.hidden_dim, hidden_features=mlp_hidden_dim, config=config)
 
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
@@ -1599,7 +1593,7 @@ class CLAPPreTrainedModel(PreTrainedModel):
     config_class = CLAPConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t", r"vision_model.*"]
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t"]
 
     def _init_weights(self, module):
         pass
@@ -1968,31 +1962,12 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
 
 
 class CLAPAudioLayer(nn.Module):
-    """A basic Swin Transformer layer for one stage.
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resolution.
-        depth (int): Number of blocks.
-        num_heads (int): Number of attention heads.
-        window_size (int): Local window size.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
-        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
-        drop (float, optional): Dropout rate. Default: 0.0
-        attn_drop (float, optional): Attention dropout rate. Default: 0.0
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
-        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
-        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
-    """
-
     def __init__(self, config, idx_layer=0, patches_resolution=0):
         super().__init__()
 
         hidden_dim = config.hidden_size * 2**idx_layer
         input_resolution = (patches_resolution[0] // (2**idx_layer), patches_resolution[1] // (2**idx_layer))
         depth = config.depths[idx_layer]
-        num_heads = config.num_heads[idx_layer]
         window_size = config.window_size
         norm_layer = nn.LayerNorm if config.enable_patch_layer_norm else None
 
@@ -2013,12 +1988,11 @@ class CLAPAudioLayer(nn.Module):
         self.blocks = nn.ModuleList(
             [
                 CLAPAudioSwinTransformerBlock(
-                    hidden_dim=hidden_dim,
+                    config,
                     input_resolution=input_resolution,
-                    num_heads=num_heads,
                     shift_size=0 if (i % 2 == 0) else window_size // 2,
                     drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                    config=config,
+                    idx_layer=idx_layer,
                 )
                 for i in range(depth)
             ]
@@ -2048,13 +2022,6 @@ class CLAPAudioLayer(nn.Module):
 
 
 class CLAPAudioPatchMerging(nn.Module):
-    r"""Patch Merging Layer.
-    Args:
-        input_resolution (tuple[int]): Resolution of input feature.
-        dim (int): Number of input channels.
-        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
-    """
-
     def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
         super().__init__()
         self.input_resolution = input_resolution
