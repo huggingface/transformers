@@ -528,7 +528,7 @@ class MPNetEncoder(nn.Module):
         )
 
     def compute_position_bias(self, x, past_key_value=None, num_buckets=32):
-        if past_key_value is not None:
+        if past_key_value is None:
             bsz, qlen, klen = x.size(0), x.size(1), x.size(1)
         else:
             bsz, qlen, klen = x.size(0), x.size(1), x.size(1)
