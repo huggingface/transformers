@@ -138,6 +138,7 @@ from .utils import (
     can_return_loss,
     find_labels,
     get_full_repo_name,
+    is_accelerate_available,
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
@@ -191,6 +192,15 @@ if is_sagemaker_mp_enabled():
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
+
+
+skip_first_batches = None
+if is_accelerate_available():
+    from accelerate import __version__ as accelerate_version
+
+    # Change this to >= 0.16 once the release is out
+    if version.parse(accelerate_version) > version.parse("0.15"):
+        from accelerate import skip_first_batches
 
 
 if TYPE_CHECKING:
@@ -1691,12 +1701,20 @@ class Trainer:
             logger.info(f"  Continuing training from epoch {epochs_trained}")
             logger.info(f"  Continuing training from global step {self.state.global_step}")
             if not args.ignore_data_skip:
-                logger.info(
-                    f"  Will skip the first {epochs_trained} epochs then the first {steps_trained_in_current_epoch} "
-                    "batches in the first epoch. If this takes a lot of time, you can add the `--ignore_data_skip` "
-                    "flag to your launch command, but you will resume the training on data already seen by your model."
-                )
-                if self.is_local_process_zero() and not args.disable_tqdm:
+                if skip_first_batches is None:
+                    logger.info(
+                        f"  Will skip the first {epochs_trained} epochs then the first"
+                        f" {steps_trained_in_current_epoch} batches in the first epoch. If this takes a lot of time,"
+                        " you can install the latest version of Accelerate with `pip install -U accelerate`.You can"
+                        " also add the `--ignore_data_skip` flag to your launch command, but you will resume the"
+                        " training on data already seen by your model."
+                    )
+                else:
+                    logger.info(
+                        f"  Will skip the first {epochs_trained} epochs then the first"
+                        f" {steps_trained_in_current_epoch} batches in the first epoch."
+                    )
+                if self.is_local_process_zero() and not args.disable_tqdm and skip_first_batches is None:
                     steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
                     steps_trained_progress_bar.set_description("Skipping the first batches")
 
@@ -1768,6 +1786,11 @@ class Trainer:
                 else args.max_steps * args.gradient_accumulation_steps
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
+
+            if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
+                print("Fast skip batches")
+                epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
+                steps_trained_in_current_epoch = 0
 
             if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
                 self._load_rng_state(resume_from_checkpoint)
