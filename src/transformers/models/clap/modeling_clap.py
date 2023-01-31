@@ -461,18 +461,18 @@ def window_reverse(windows, window_size, H, W):
 
 
 class CLAPAudioWindowAttention(nn.Module):
-    def __init__(self, config, hidden_dim, window_size, num_heads):
+    def __init__(self, config, hidden_dim, num_heads):
 
         super().__init__()
         self.hidden_dim = hidden_dim
-        self.window_size = window_size  # Wh, Ww
+        self.window_size = to_2tuple(config.window_size)  # Wh, Ww
         self.num_heads = num_heads
         head_dim = self.hidden_dim // num_heads
         self.scale = head_dim**-0.5
 
         # define a parameter table of relative position bias
         self.relative_position_bias_table = nn.Parameter(
-            torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads)
+            torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
         )  # 2*Wh-1 * 2*Ww-1, nH
 
         # get pair-wise relative position index for each token inside the window
@@ -547,8 +547,8 @@ class CLAPAudioSwinTransformerBlock(nn.Module):
         self.hidden_dim = config.hidden_size * 2**idx_layer
         self.input_resolution = input_resolution
         self.num_heads = config.num_heads[idx_layer]
-        self.window_size = config.window_size
         self.shift_size = shift_size
+        self.window_size = config.window_size
         self.mlp_ratio = config.swin_mlp_ratio
         self.norm_before_mlp = config.swin_norm_before_mlp
 
@@ -562,7 +562,6 @@ class CLAPAudioSwinTransformerBlock(nn.Module):
         self.attn = CLAPAudioWindowAttention(
             config=config,
             hidden_dim=self.hidden_dim,
-            window_size=to_2tuple(self.window_size),
             num_heads=self.num_heads,
         )
 
