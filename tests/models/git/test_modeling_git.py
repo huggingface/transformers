@@ -508,9 +508,8 @@ class GitModelIntegrationTest(unittest.TestCase):
 
         # we have to prepare `input_ids` with the same batch size as `pixel_values`
         start_token_id = model.config.bos_token_id
-        generated_ids = model.generate(
-            pixel_values=pixel_values, input_ids=torch.tensor([[start_token_id], [start_token_id]]), max_length=50
-        )
+        input_ids = torch.tensor([[start_token_id], [start_token_id]], device=torch_device)
+        generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
         generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         self.assertEquals(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
