@@ -19,8 +19,6 @@ import inspect
 import tempfile
 import unittest
 
-import numpy as np
-
 from transformers import SpeechT5Config, SpeechT5HiFiGANConfig
 from transformers.testing_utils import (
     is_torch_available,

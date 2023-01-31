@@ -16,9 +16,8 @@
 
 
 import os
-from itertools import groupby
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -182,4 +181,3 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
-

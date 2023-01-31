@@ -390,7 +390,7 @@ def convert_speecht5_checkpoint(
         )
         feature_extractor_decoder = SpeechT5SpectrogramFeatureExtractor()
         processor = SpeechT5ProcessorForSpeechToSpeech(feature_extractor_encoder, feature_extractor_decoder)
-        #processor.save_pretrained(pytorch_dump_folder_path)
+        # processor.save_pretrained(pytorch_dump_folder_path)
 
     fairseq_checkpoint = torch.load(checkpoint_path)
     recursively_load_weights(fairseq_checkpoint["model"], model, task)

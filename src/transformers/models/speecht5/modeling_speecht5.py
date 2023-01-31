@@ -29,20 +29,13 @@ from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutput,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     Seq2SeqSpectrogramOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_hifigan import SpeechT5HiFiGANConfig
 from .configuration_speecht5 import SpeechT5Config
 
@@ -2773,7 +2766,11 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
 
         ```python
         >>> from transformers import SpeechT5ForSpeechToSpeech, SpeechT5HiFiGAN
-        >>> from transformers import SpeechT5WaveformFeatureExtractor, SpeechT5SpectrogramFeatureExtractor, SpeechT5ProcessorForSpeechToSpeech
+        >>> from transformers import (
+        ...     SpeechT5WaveformFeatureExtractor,
+        ...     SpeechT5SpectrogramFeatureExtractor,
+        ...     SpeechT5ProcessorForSpeechToSpeech,
+        ... )
         >>> from datasets import load_dataset
         >>> import torch
 
