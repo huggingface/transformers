@@ -28,7 +28,6 @@ GIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-# Copied from transformers.models.clip.configuration_clip.CLIPVisionConfig with CLIPVision->GitVision, CLIP->GIT, clip->git, openai/git-vit-base-patch32->microsoft/git-base, 32->16
 class GitVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitVisionModel`]. It is used to instantiate a GIT
