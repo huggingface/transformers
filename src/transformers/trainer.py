@@ -408,7 +408,7 @@ class Trainer:
             if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.12.0"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
-            from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
+            from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, ShardingStrategy
 
             if FSDPOption.FULL_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.FULL_SHARD
@@ -416,6 +416,14 @@ class Trainer:
                 self.fsdp = ShardingStrategy.SHARD_GRAD_OP
             elif FSDPOption.NO_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.NO_SHARD
+
+            self.backward_prefetch = BackwardPrefetch.BACKWARD_PRE
+            if "backward_prefetch" in self.args.fsdp_config and "backward_pos" not in self.backward_prefetch:
+                self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
+
+            self.forword_prefetch = False
+            if "forword_prefetch" in self.args.fsdp_config and self.backward_prefetch:
+                self.forword_prefetch = True
 
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
@@ -1401,10 +1409,11 @@ class Trainer:
                 cpu_offload = CPUOffload(offload_params=False)
 
             auto_wrap_policy = None
+
             if FSDPOption.AUTO_WRAP in self.args.fsdp:
-                if self.args.fsdp_min_num_params > 0:
+                if self.args.fsdp_config["fsdp_min_num_params"] > 0:
                     auto_wrap_policy = functools.partial(
-                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_min_num_params
+                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                     )
                 elif self.args.fsdp_transformer_layer_cls_to_wrap is not None:
                     transformer_cls_to_wrap = get_module_class_from_name(
@@ -1434,6 +1443,8 @@ class Trainer:
                     auto_wrap_policy=auto_wrap_policy,
                     mixed_precision=mixed_precision_policy,
                     device_id=self.args.device,
+                    backward_prefetch=self.backward_prefetch,
+                    forward_prefetch=self.forword_prefetch,
                 )
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
