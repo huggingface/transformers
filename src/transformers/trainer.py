@@ -1787,16 +1787,14 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
-            if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
-                epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
-                steps_trained_in_current_epoch = 0
-
             if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
                 self._load_rng_state(resume_from_checkpoint)
 
+            if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
+                epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch - 1)
+                steps_trained_in_current_epoch = 1
             step = -1
             for step, inputs in enumerate(epoch_iterator):
-
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
