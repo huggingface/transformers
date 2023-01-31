@@ -18,6 +18,7 @@ import copy
 import os
 from typing import Union
 
+from ..auto import CONFIG_MAPPING
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -29,229 +30,128 @@ BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Blip2TextConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Blip2TextModel`]. It is used to instantiate a
-    BLIP_2 text model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the `Blip2Text` used by the [base
-    architectures](https://huggingface.co/Salesforce/blip_2-vqa-base).
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the `Blip2` text model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`Blip2Model`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        encoder_hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers from the vision model.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        bos_token_id (`int`, *optional*, defaults to 30522):
-            The id of the `beginning-of-sequence` token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the `end-of-sequence` token.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The id of the `padding` token.
-        sep_token_id (`int`, *optional*, defaults to 102):
-            The id of the `separator` token.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-
-    Example:
-
-    ```python
-    >>> from transformers import Blip2TextConfig, Blip2TextModel
-
-    >>> # Initializing a Blip2TextConfig with Salesforce/blip_2-vqa-base style configuration
-    >>> configuration = Blip2TextConfig()
-
-    >>> # Initializing a Blip2TextModel (with random weights) from the Salesforce/blip_2-vqa-base style configuration
-    >>> model = Blip2TextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-    model_type = "blip_2_text_model"
-
-    def __init__(
-        self,
-        vocab_size=30524,
-        hidden_size=768,
-        encoder_hidden_size=768,
-        intermediate_size=3072,
-        projection_dim=768,
-        num_hidden_layers=12,
-        num_attention_heads=8,
-        max_position_embeddings=512,
-        hidden_act="gelu",
-        layer_norm_eps=1e-12,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        bos_token_id=30522,
-        eos_token_id=2,
-        pad_token_id=0,
-        sep_token_id=102,
-        is_decoder=True,
-        use_cache=True,
-        **kwargs
-    ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.encoder_hidden_size = encoder_hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.is_decoder = is_decoder
-        self.use_cache = use_cache
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from Blip2Config
-        if config_dict.get("model_type") == "blip_2":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
 class Blip2QFormerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Blip2QFormerModel`]. It is used to instantiate a
-    BLIP-2 Querying Transformer (Q-Former) model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration defaults will yield a similar configuration to that of the BLIP-2
-    [Salesforce/blip_2-vqa-base](https://huggingface.co/Salesforce/blip_2-vqa-base) architecture.
-
+    This is the configuration class to store the configuration of a [`Blip2QFormerModel`]. It is used to
+    instantiate a BLIP-2 Querying Transformer (Q-Former) model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the BLIP-2
+    [...](https://huggingface.co/...) architecture.
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
+    Note that [`Blip2QFormerModel`] is very similar to [`BertLMHeadModel`] with `config.add_cross_attention = True`.
+    
     Args:
+        num_query_tokens (`int`, *optional*, defaults to 32):
+            The number of query tokens passed through the Transformer.
+        vocab_size (`int`, *optional*, defaults to 30522):
+            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`BertModel`] or [`TFBertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        max_position_embeddings (`int`, *optional*, defaults to 512):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`] or [`TFBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
-    Example:
-
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
+    
+    Examples:
+    
     ```python
-    >>> from transformers import Blip2VisionConfig, Blip2VisionModel
-
-    >>> # Initializing a Blip2VisionConfig with Salesforce/blip_2-vqa-base style configuration
-    >>> configuration = Blip2VisionConfig()
-
-    >>> # Initializing a Blip2VisionModel (with random weights) from the Salesforce/blip_2-vqa-base style configuration
-    >>> model = Blip2VisionModel(configuration)
-
+    >>> from transformers import Blip2QFormerConfig, Blip2QFormerModel
+    
+    >>> # Initializing a BLIP-2 ... style configuration
+    >>> configuration = Blip2QFormerConfig()
+    
+    >>> # Initializing a model (with random weights) from the ... style configuration
+    >>> model = Blip2QFormerModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
-    model_type = "blip_2_vision_model"
+    model_type = "blip_2_qformer"
 
     def __init__(
         self,
+        num_query_tokens=32,
+        vocab_size=30522,
         hidden_size=768,
-        intermediate_size=3072,
-        projection_dim=512,
         num_hidden_layers=12,
-        num_attention_heads=16,
+        num_attention_heads=12,
+        intermediate_size=3072,
         hidden_act="gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
-        attention_dropout=0.0,
-        initializer_range=1e-10,
-        initializer_factor=1.0,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=2,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        pad_token_id=0,
+        position_embedding_type="absolute",
+        use_cache=True,
+        classifier_dropout=None,
+        is_decoder=True,
+        add_cross_attention=True,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
 
+        self.num_query_tokens = num_query_tokens
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.position_embedding_type = position_embedding_type
+        self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from Blip2Config
+        # get the qformer config dict if we are loading from Blip2Config
         if config_dict.get("model_type") == "blip_2":
-            config_dict = config_dict["vision_config"]
+            config_dict = config_dict["qformer_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -265,9 +165,9 @@ class Blip2QFormerConfig(PretrainedConfig):
 class Blip2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Blip2VisionModel`]. It is used to instantiate a
-    BLIP_2 vision model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration defaults will yield a similar configuration to that of the Blip2-base
-    [Salesforce/blip_2-vqa-base](https://huggingface.co/Salesforce/blip_2-vqa-base) architecture.
+    BLIP-2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration defaults will yield a similar configuration to that of the BLIP-2
+    [...](https://huggingface.co/Salesforce/...) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -372,102 +272,110 @@ class Blip2VisionConfig(PretrainedConfig):
 class Blip2Config(PretrainedConfig):
     r"""
     [`Blip2Config`] is the configuration class to store the configuration of a [`Blip2Model`]. It is used to
-    instantiate a BLIP_2 model according to the specified arguments, defining the text model and vision model configs.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the BLIP_2-base
-    [Salesforce/blip_2-vqa-base](https://huggingface.co/Salesforce/blip_2-vqa-base) architecture.
+    instantiate a BLIP-2 model according to the specified arguments, defining the vision model, Q-Former model
+    and language model configs. Instantiating a configuration with the defaults will yield a similar configuration
+    to that of the BLIP-2 [Salesforce/...](https://huggingface.co/Salesforce/...) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Blip2TextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Blip2VisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original BLIP_2 implementation.
-        image_text_hidden_size (`int`, *optional*, defaults to 768):
-            Dimentionality of the hidden state of the image-text fusion layer.
+        qformer_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
+        
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
     Example:
 
     ```python
-    >>> from transformers import Blip2Config, Blip2Model
+    >>> from transformers import Blip2VisionConfig, Blip2QFormerConfig, OPTConfig, Blip2Config, Blip2Model
 
-    >>> # Initializing a Blip2Config with Salesforce/blip_2-vqa-base style configuration
+    >>> # Initializing a Blip2Config with ... style configuration
     >>> configuration = Blip2Config()
 
-    >>> # Initializing a Blip2PModel (with random weights) from the Salesforce/blip_2-vqa-base style configuration
+    >>> # Initializing a Blip2Model (with random weights) from the ... style configuration
     >>> model = Blip2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a Blip2Config from a Blip2TextConfig and a Blip2VisionConfig
+    >>> # We can also initialize a Blip2Config from a Blip2VisionConfig, Blip2QFormerConfig and any PretrainedConfig
 
-    >>> # Initializing a BLIP_2Text and BLIP_2Vision configuration
-    >>> config_text = Blip2TextConfig()
-    >>> config_vision = Blip2VisionConfig()
+    >>> # Initializing BLIP-2 vision, BLIP-2 Q-Former and language model configurations
+    >>> vision_config = Blip2VisionConfig()
+    >>> qformer_config = Blip2QFormerConfig()
+    >>> text_config = OPTConfig()
 
-    >>> config = Blip2Config.from_text_vision_configs(config_text, config_vision)
+    >>> config = Blip2Config.from_text_vision_configs(vision_config, qformer_config, text_config)
     ```"""
 
     model_type = "blip-2"
     is_composition = True
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        projection_dim=512,
-        logit_scale_init_value=2.6592,
-        image_text_hidden_size=256,
-        **kwargs
-    ):
+    def __init__(self, text_config=None, qformer_config=None, vision_config=None, **kwargs):
         super().__init__(**kwargs)
 
         # If `_config_dict` exist, we use them for the backward compatibility.
-        text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
-        if text_config_dict is not None:
-            text_config = text_config_dict
+        qformer_config_dict = kwargs.pop("qformer_config_dict", None)
+        text_config_dict = kwargs.pop("text_config_dict", None)
+        
         if vision_config_dict is not None:
             vision_config = vision_config_dict
-
-        if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the Blip2TextConfig with default values.")
-
+        if qformer_config_dict is not None:
+            qformer_config = qformer_config_dict
+        if text_config_dict is not None:
+            text_config = text_config_dict
+        
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the Blip2VisionConfig with default values.")
 
-        self.text_config = Blip2TextConfig(**text_config)
+        if qformer_config is None:
+            qformer_config = {}
+            logger.info("qformer_config is None. Initializing the Blip2QFormerConfig with default values.")
+        
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. Initializing the Blip2TextConfig with default values.")
+
+        
         self.vision_config = Blip2VisionConfig(**vision_config)
+        self.qformer_config = Blip2QFormerConfig(**qformer_config)
+        self.text_config = CONFIG_MAPPING["opt"](**text_config)
 
         self.text_config.encoder_hidden_size = self.vision_config.hidden_size
 
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
-        self.image_text_hidden_size = image_text_hidden_size
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: Blip2TextConfig, vision_config: Blip2VisionConfig, **kwargs):
+    def from_vision_qformer_text_configs(
+        cls,
+        vision_config: Blip2VisionConfig,
+        qformer_config: Blip2QFormerConfig,
+        text_config: PretrainedConfig,
+        **kwargs
+    ):
         r"""
-        Instantiate a [`Blip2Config`] (or a derived class) from blip_2 text model configuration and blip_2 vision model
-        configuration.
+        Instantiate a [`Blip2Config`] (or a derived class) from a BLIP-2 vision model, Q-Former and language model
+        configurations.
 
         Returns:
             [`Blip2Config`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            qformer_config=qformer_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
     def to_dict(self):
         """
@@ -477,7 +385,8 @@ class Blip2Config(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
         output["vision_config"] = self.vision_config.to_dict()
+        output["qformer_config"] = self.qformer_config.to_dict()
+        output["text_config"] = self.text_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
