@@ -77,12 +77,8 @@ class AltCLIPTextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         project_dim (`int`, *optional*, defaults to 768):
             The dimentions of the teacher model before the mapping layer.
-        pooler_fn (`str`, *optional*, defaults to `"cls"`):
-            Type of pooler we use. We take the first token as pooled output.
 
     Examples:
 
@@ -120,9 +116,7 @@ class AltCLIPTextConfig(PretrainedConfig):
         eos_token_id=2,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         project_dim=768,
-        pooler_fn="cls",
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -142,9 +136,7 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.project_dim = project_dim
-        self.pooler_fn = pooler_fn
 
 
 class AltCLIPVisionConfig(PretrainedConfig):
@@ -176,8 +168,6 @@ class AltCLIPVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -215,7 +205,6 @@ class AltCLIPVisionConfig(PretrainedConfig):
         patch_size=32,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
-        dropout=0.0,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
@@ -226,7 +215,6 @@ class AltCLIPVisionConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
