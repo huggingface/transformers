@@ -1790,11 +1790,18 @@ class Trainer:
             if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
                 self._load_rng_state(resume_from_checkpoint)
 
+            rng_to_sync = False
             if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
-                epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch - 1)
-                steps_trained_in_current_epoch = 1
+                epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
+                steps_trained_in_current_epoch = 0
+                rng_to_sync = True
+
             step = -1
             for step, inputs in enumerate(epoch_iterator):
+                if rng_to_sync:
+                    self._load_rng_state(resume_from_checkpoint)
+                    rng_to_sync = False
+
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
