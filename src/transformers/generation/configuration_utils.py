@@ -63,14 +63,12 @@ class GenerationConfig(PushToHubMixin):
 
         max_length (`int`, *optional*, defaults to 20):
             The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
-            `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in the
-            prompt.
+            `max_new_tokens`. Its effect is overridden by `max_new_tokens`, if also set.
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         min_length (`int`, *optional*, defaults to 0):
             The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
-            `min_new_tokens`. In general, prefer the use of `min_new_tokens`, which ignores the number of tokens in the
-            prompt.
+            `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
         min_new_tokens (`int`, *optional*):
             The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         early_stopping (`bool`, *optional*, defaults to `False`):
@@ -337,7 +335,7 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
@@ -347,7 +345,11 @@ class GenerationConfig(PushToHubMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
     @classmethod
