@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -232,7 +232,6 @@ class MPNetSelfAttention(nn.Module):
         attention_scores = torch.matmul(q, k.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        print(f'after: {q.shape},{k.shape},{v.shape}')
         # Apply relative position embedding (precomputed in MPNetEncoder) if provided.
         if position_bias is not None:
             attention_scores += position_bias
@@ -346,10 +345,9 @@ class MPNetOutput(nn.Module):
 
 
 class MPNetLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, relative_attention_bias):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
+        self.relative_attention_bias = relative_attention_bias
         self.attention = MPNetAttention(config)
 
         self.is_decoder = config.is_decoder
@@ -365,7 +363,6 @@ class MPNetLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        position_bias=None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -373,11 +370,12 @@ class MPNetLayer(nn.Module):
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_position_bias = self.compute_position_bias(hidden_states, self_attn_past_key_value)
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             head_mask,
-            position_bias=position_bias,
+            position_bias=self_attn_position_bias,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
         )
@@ -400,11 +398,12 @@ class MPNetLayer(nn.Module):
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            cross_attn_position_bias = self.compute_position_bias(attention_output, cross_attn_past_key_value)
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
                 head_mask,
-                position_bias,
+                cross_attn_position_bias,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 cross_attn_past_key_value,
@@ -417,9 +416,8 @@ class MPNetLayer(nn.Module):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
         outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
@@ -428,19 +426,51 @@ class MPNetLayer(nn.Module):
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+    def compute_position_bias(self, hidden_states, past_key_value=None, num_buckets=32):
+        if past_key_value is None:
+            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
+        else:
+            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), past_key_value[0].shape[2]
 
+        context_position = torch.arange(qlen, dtype=torch.long)[:, None]
+        memory_position = torch.arange(klen, dtype=torch.long)[None, :]
+
+        relative_position = memory_position - context_position
+        
+        rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
+        rp_bucket = rp_bucket.to(hidden_states.device)
+        values = self.relative_attention_bias(rp_bucket)
+        values = values.permute([2, 0, 1]).unsqueeze(0)
+        values = values.expand((bsz, -1, qlen, klen)).contiguous()
+        return values
+
+    @staticmethod
+    def relative_position_bucket(relative_position, num_buckets=32, max_distance=128):
+        ret = 0
+        n = -relative_position
+
+        num_buckets //= 2
+        ret += (n < 0).to(torch.long) * num_buckets
+        n = torch.abs(n)
+
+        max_exact = num_buckets // 2
+        is_small = n < max_exact
+
+        val_if_large = max_exact + (
+            torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact)
+        ).to(torch.long)
+
+        val_if_large = torch.min(val_if_large, torch.full_like(val_if_large, num_buckets - 1))
+        ret += torch.where(is_small, n, val_if_large)
+        return ret
 
 class MPNetEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.n_heads = config.num_attention_heads
-        self.layer = nn.ModuleList([MPNetLayer(config) for _ in range(config.num_hidden_layers)])
         self.relative_attention_bias = nn.Embedding(config.relative_attention_num_buckets, self.n_heads)
+        self.layer = nn.ModuleList([MPNetLayer(config, self.relative_attention_bias) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -467,7 +497,6 @@ class MPNetEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
-            position_bias = self.compute_position_bias(hidden_states, past_key_value)
 
             if self.gradient_checkpointing and self.training:
 
@@ -488,7 +517,6 @@ class MPNetEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    position_bias,
                     encoder_hidden_states,
                     encoder_attention_mask,
                 )
@@ -497,7 +525,6 @@ class MPNetEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    position_bias,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     past_key_value,
@@ -535,45 +562,6 @@ class MPNetEncoder(nn.Module):
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
         )
-
-    def compute_position_bias(self, hidden_states, past_key_value=None, num_buckets=32):
-        if past_key_value is None:
-            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
-        else:
-            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), past_key_value[0].shape[2]
-
-        context_position = torch.arange(qlen, dtype=torch.long)[:, None]
-        memory_position = torch.arange(klen, dtype=torch.long)[None, :]
-
-        relative_position = memory_position - context_position
-        
-        rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
-        rp_bucket = rp_bucket.to(hidden_states.device)
-        values = self.relative_attention_bias(rp_bucket)
-        values = values.permute([2, 0, 1]).unsqueeze(0)
-        values = values.expand((bsz, -1, qlen, klen)).contiguous()
-        print(relative_position.shape, values.shape)
-        return values
-
-    @staticmethod
-    def relative_position_bucket(relative_position, num_buckets=32, max_distance=128):
-        ret = 0
-        n = -relative_position
-
-        num_buckets //= 2
-        ret += (n < 0).to(torch.long) * num_buckets
-        n = torch.abs(n)
-
-        max_exact = num_buckets // 2
-        is_small = n < max_exact
-
-        val_if_large = max_exact + (
-            torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact)
-        ).to(torch.long)
-
-        val_if_large = torch.min(val_if_large, torch.full_like(val_if_large, num_buckets - 1))
-        ret += torch.where(is_small, n, val_if_large)
-        return ret
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
