@@ -1743,60 +1743,24 @@ class CLAPModel(CLAPPreTrainedModel):
         return text_features
 
     @add_start_docstrings_to_model_forward(CLAP_VISION_INPUTS_DOCSTRING)
-    def get_image_features(
+    def get_audio_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        input_values: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLAPVisionModel`].
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLAPModel
-
-        >>> model = CLAPModel.from_pretrained("laion-ai/base")
-        >>> processor = AutoProcessor.from_pretrained("laion-ai/base")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> image_features = model.get_image_features(**inputs)
-        ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
-
-        return image_features
+        """
+        pass
 
     @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLAPOutput, config_class=CLAPConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
@@ -1835,8 +1799,9 @@ class CLAPModel(CLAPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
+        vision_outputs = self.audio_model(
+            input_values=input_values,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
