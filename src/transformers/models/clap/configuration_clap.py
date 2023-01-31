@@ -16,16 +16,9 @@
 
 import copy
 import os
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -149,9 +142,6 @@ class CLAPTextConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.projection_hidden_size = projection_hidden_size
 
-
-
-
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
 
@@ -170,7 +160,7 @@ class CLAPTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class CLAPVisionConfig(PretrainedConfig):
+class CLAPAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLAPVisionModel`]. It is used to instantiate a
     CLAP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -195,8 +185,8 @@ class CLAPVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"relu"`,
-            `"relu"`, `"selu"` and `"relu_new"` ``"relu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
+            `"relu"`, `"selu"` and `"relu_new"` ``"relu"` are supported. layer_norm_eps (`float`, *optional*, defaults
+            to 1e-5): The epsilon used by the layer normalization layers.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -210,10 +200,10 @@ class CLAPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLAPVisionConfig, CLAPVisionModel
+    >>> from transformers import CLAPAudioConfig, CLAPVisionModel
 
-    >>> # Initializing a CLAPVisionConfig with laion-ai/base style configuration
-    >>> configuration = CLAPVisionConfig()
+    >>> # Initializing a CLAPAudioConfig with laion-ai/base style configuration
+    >>> configuration = CLAPAudioConfig()
 
     >>> # Initializing a CLAPVisionModel (with random weights) from the laion-ai/base style configuration
     >>> model = CLAPVisionModel(configuration)
@@ -223,29 +213,44 @@ class CLAPVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "clap_vision_model"
+
     def __init__(
         self,
-        sample_rate = 48000,
-        audio_length = 1024,
-        window_size = 8,
-        hop_size = 1024,
-        fmin = 50,
-        fmax = 14000,
-        class_num = 527,
-        mel_bins = 64,
-        clip_samples = 480000,
+        sample_rate=48000,
+        audio_length=1024,
+        window_size=8,
+        hop_size=1024,
+        fmin=50,
+        fmax=14000,
+        mel_bins=64,
+        clip_samples=480000,
         spec_size=256,
         hidden_act="relu",
         patch_size=4,
-        patch_stride=(4,4),
+        patch_stride=(4, 4),
         num_classes=527,
         hidden_size=96,
         projection_hidden_size=768,
-        depths=[2,2,6,2],
-        num_heads=[4,8,16,32],
-        enable_fusion=True,
+        depths=[2, 2, 6, 2],
+        num_heads=[4, 8, 16, 32],
+        enable_fusion=False,
         hidden_dropout_prob=0.1,
         fusion_type=None,
+        image_size=224,
+        input_channels=3,
+        patch_embed_input_channels=1,
+        flatten_patch_embeds=True,
+        patch_embeds_hidden_size=96,
+        enable_patch_layer_norm=True,
+        swin_drop_rate=0.0,
+        swin_attention_drop_rate=0.0,
+        swin_drop_path_rate=0.1,
+        swin_qkv_bias=True,
+        swin_norm_before_mlp="ln",
+        swin_mlp_ratio=4.0,
+        swin_use_checkpoint=False,
+        swin_absolute_positional_embedding=False,
+        swin_hidden_act="gelu",
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -255,7 +260,6 @@ class CLAPVisionConfig(PretrainedConfig):
         self.hop_size = hop_size
         self.fmin = fmin
         self.fmax = fmax
-        self.class_num = class_num
         self.mel_bins = mel_bins
         self.clip_samples = clip_samples
         self.spec_size = spec_size
@@ -271,8 +275,22 @@ class CLAPVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.projection_hidden_size = projection_hidden_size
+        self.image_size = image_size
+        self.input_channels = input_channels
+        self.flatten_patch_embeds = flatten_patch_embeds
+        self.patch_embeds_hidden_size = patch_embeds_hidden_size
+        self.enable_patch_layer_norm = enable_patch_layer_norm
+        self.swin_drop_rate = swin_drop_rate
+        self.swin_attention_drop_rate = swin_attention_drop_rate
+        self.swin_drop_path_rate = swin_drop_path_rate
+        self.swin_qkv_bias = swin_qkv_bias
+        self.swin_norm_before_mlp = swin_norm_before_mlp
+        self.swin_mlp_ratio = swin_mlp_ratio
+        self.swin_use_checkpoint = swin_use_checkpoint
+        self.swin_absolute_positional_embedding = swin_absolute_positional_embedding
+        self.patch_embed_input_channels = patch_embed_input_channels
+        self.swin_hidden_act = swin_hidden_act
 
-        
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
 
@@ -305,7 +323,7 @@ class CLAPConfig(PretrainedConfig):
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLAPTextConfig`].
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLAPVisionConfig`].
+            Dictionary of configuration options used to initialize [`CLAPAudioConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
@@ -327,12 +345,12 @@ class CLAPConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a CLAPConfig from a CLAPTextConfig and a CLAPVisionConfig
-    >>> from transformers import CLAPTextConfig, CLAPVisionConfig
+    >>> # We can also initialize a CLAPConfig from a CLAPTextConfig and a CLAPAudioConfig
+    >>> from transformers import CLAPTextConfig, CLAPAudioConfig
 
     >>> # Initializing a CLAPText and CLAPVision configuration
     >>> config_text = CLAPTextConfig()
-    >>> config_vision = CLAPVisionConfig()
+    >>> config_vision = CLAPAudioConfig()
 
     >>> config = CLAPConfig.from_text_vision_configs(config_text, config_vision)
     ```"""
@@ -341,12 +359,12 @@ class CLAPConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, 
-        text_config=None, 
-        vision_config=None, 
-        logit_scale_init_value=2.6592, 
+        self,
+        text_config=None,
+        vision_config=None,
+        logit_scale_init_value=2.6592,
         fusion_num_hidden_layers=2,
-        projection_dim=512, 
+        projection_dim=512,
         projection_hidden_act="relu",
         **kwargs
     ):
@@ -366,10 +384,10 @@ class CLAPConfig(PretrainedConfig):
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the CLAPVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the CLAPAudioConfig with default values.")
 
         self.text_config = CLAPTextConfig(**text_config)
-        self.vision_config = CLAPVisionConfig(**vision_config)
+        self.vision_config = CLAPAudioConfig(**vision_config)
 
         self.text_config.fusion_num_hidden_layers = fusion_num_hidden_layers
         self.vision_config.fusion_num_hidden_layers = fusion_num_hidden_layers
@@ -388,7 +406,7 @@ class CLAPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: CLAPTextConfig, vision_config: CLAPVisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: CLAPTextConfig, vision_config: CLAPAudioConfig, **kwargs):
         r"""
         Instantiate a [`CLAPConfig`] (or a derived class) from clap text model configuration and clap vision model
         configuration.

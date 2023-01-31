@@ -24,7 +24,7 @@ import numpy as np
 
 import requests
 import transformers
-from transformers import CLAPConfig, CLAPTextConfig, CLAPVisionConfig
+from transformers import CLAPAudioConfig, CLAPConfig, CLAPTextConfig
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
@@ -119,7 +119,7 @@ class CLAPVisionModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return CLAPVisionConfig(
+        return CLAPAudioConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -181,7 +181,7 @@ class CLAPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLAPVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLAPVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLAPAudioConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -559,10 +559,10 @@ class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Save CLAPConfig and check if we can load CLAPVisionConfig from it
+        # Save CLAPConfig and check if we can load CLAPAudioConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            vision_config = CLAPVisionConfig.from_pretrained(tmp_dir_name)
+            vision_config = CLAPAudioConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
         # Save CLAPConfig and check if we can load CLAPTextConfig from it

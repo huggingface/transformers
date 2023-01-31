@@ -15,22 +15,26 @@
 """ PyTorch CLAP model."""
 import collections
 import math
-
+import random
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union, List
-import numpy as np
-
-
 from itertools import repeat
+from typing import Any, List, Optional, Tuple, Union
+
+import numpy as np
 import torch
-import torch.utils.checkpoint
 import torch.nn.functional as F
+import torch.utils.checkpoint as checkpoint
 from torch import nn
+from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ...activations import ACT2FN
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+)
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -38,12 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...activations import ACT2FN, gelu
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
-)
-from .configuration_clap import CLAPConfig, CLAPTextConfig, CLAPVisionConfig
+from .configuration_clap import CLAPAudioConfig, CLAPConfig, CLAPTextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -54,6 +53,36 @@ CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "laion-ai/base",
     # See all clap models at https://huggingface.co/models?filter=clap
 ]
+
+
+def do_mixup(x, mixup_lambda):
+    """
+    Args:
+      x: (batch_size , ...)
+      mixup_lambda: (batch_size,)
+    Returns:
+      out: (batch_size, ...)
+    """
+    out = (
+        x.transpose(0, -1) * mixup_lambda + torch.flip(x, dims=[0]).transpose(0, -1) * (1 - mixup_lambda)
+    ).transpose(0, -1)
+    return out
+
+
+def interpolate(x, ratio):
+    """Interpolate data in time domain. This is used to compensate the
+    resolution reduction in downsampling of a CNN.
+
+    Args:
+      x: (batch_size, time_steps, classes_num)
+      ratio: int, ratio to interpolate
+    Returns:
+      upsampled: (batch_size, time_steps * ratio, classes_num)
+    """
+    (batch_size, time_steps, classes_num) = x.shape
+    upsampled = x[:, :, None, :].repeat(1, 1, ratio, 1)
+    upsampled = upsampled.reshape(batch_size, time_steps * ratio, classes_num)
+    return upsampled
 
 
 # Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
@@ -71,7 +100,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
-
 
 
 @dataclass
@@ -142,14 +170,15 @@ class CLAPOutput(ModelOutput):
         )
 
 
-
 # from PyTorch internals
 def _ntuple(n):
     def parse(x):
         if isinstance(x, collections.abc.Iterable):
             return x
         return tuple(repeat(x, n))
+
     return parse
+
 
 to_1tuple = _ntuple(1)
 to_2tuple = _ntuple(2)
@@ -158,15 +187,14 @@ to_4tuple = _ntuple(4)
 to_ntuple = _ntuple
 
 
-def drop_path(x, drop_prob: float = 0., training: bool = False):
+def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
+    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
     """
-    if drop_prob == 0. or not training:
+    if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
     shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
@@ -176,9 +204,52 @@ def drop_path(x, drop_prob: float = 0., training: bool = False):
     return output
 
 
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
+class CLAPAudioAFFBlock(nn.Module):
+    r"""
+    TODO: add docstring
     """
+
+    def __init__(self, channels=64, r=4):
+        super(CLAPAudioAFFBlock, self).__init__()
+        inter_channels = int(channels // r)
+
+        self.local_att = nn.Sequential(
+            nn.Conv2d(channels, inter_channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(inter_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(inter_channels, channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(channels),
+        )
+        self.global_att = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, inter_channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(inter_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(inter_channels, channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(channels),
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x, residual):
+        flag = False
+        xa = x + residual
+        if xa.size(0) == 1:
+            xa = torch.cat([xa, xa], dim=0)
+            flag = True
+        xl = self.local_att(xa)
+        xg = self.global_att(xa)
+        xlg = xl + xg
+        wei = self.sigmoid(xlg)
+        xo = 2 * x * wei + 2 * residual * (1 - wei)
+        if flag:
+            xo = xo[0].unsqueeze(0)
+        return xo
+
+
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
     def __init__(self, drop_prob=None):
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob
@@ -186,92 +257,101 @@ class DropPath(nn.Module):
     def forward(self, x):
         return drop_path(x, self.drop_prob, self.training)
 
-class PatchEmbed(nn.Module):
-    """ 2D Image to Patch Embedding
-    """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, hidden_size=768, norm_layer=None, flatten=True, patch_stride = 16,
-        enable_fusion=False, fusion_type='None'):
+
+class CLAPAudioPatchEmbed(nn.Module):
+    """2D Image to Patch Embedding"""
+
+    def __init__(self, config: CLAPAudioConfig):
         super().__init__()
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        patch_stride = to_2tuple(patch_stride)
+        img_size = to_2tuple(config.spec_size)
+        patch_size = to_2tuple(config.patch_size)
+        patch_stride = to_2tuple(config.patch_stride)
+
         self.img_size = img_size
-        self.patch_size = patch_size
         self.patch_stride = patch_stride
+
         self.grid_size = (img_size[0] // patch_stride[0], img_size[1] // patch_stride[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
-        self.flatten = flatten
-        self.in_chans = in_chans
-        self.hidden_size = hidden_size
+        self.flatten = config.flatten_patch_embeds
+        self.enable_fusion = config.enable_patch_layer_norm
+        self.fusion_type = config.fusion_type
 
-        self.enable_fusion = enable_fusion
-        self.fusion_type = fusion_type
-        
         padding = ((patch_size[0] - patch_stride[0]) // 2, (patch_size[1] - patch_stride[1]) // 2)
 
-        if (self.enable_fusion) and (self.fusion_type == 'channel_map'):
-            self.proj = nn.Conv2d(in_chans*4, hidden_size, kernel_size=patch_size, stride=patch_stride, padding=padding)
+        if (self.enable_fusion) and (self.fusion_type == "channel_map"):
+            self.proj = nn.Conv2d(
+                config.patch_embed_input_channels * 4,
+                config.patch_embeds_hidden_size,
+                kernel_size=patch_size,
+                stride=patch_stride,
+                padding=padding,
+            )
         else:
-            self.proj = nn.Conv2d(in_chans, hidden_size, kernel_size=patch_size, stride=patch_stride, padding=padding)
-        self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
+            self.proj = nn.Conv2d(
+                config.patch_embed_input_channels,
+                config.patch_embeds_hidden_size,
+                kernel_size=patch_size,
+                stride=patch_stride,
+                padding=padding,
+            )
 
-        if (self.enable_fusion) and (self.fusion_type in ['daf_2d','aff_2d','iaff_2d']):
-            self.mel_conv2d = nn.Conv2d(in_chans, hidden_size, kernel_size=(patch_size[0], patch_size[1]*3), stride=(patch_stride[0], patch_stride[1] * 3), padding=padding)
-            if self.fusion_type == 'daf_2d':
-                self.fusion_model = DAF()
-            elif self.fusion_type == 'aff_2d':
-                self.fusion_model = AFF(channels=hidden_size, type='2D')
-            elif self.fusion_type == 'iaff_2d':
-                self.fusion_model = iAFF(channels=hidden_size, type='2D')    
-    def forward(self, x, longer_idx = None):
-        if (self.enable_fusion) and (self.fusion_type in ['daf_2d','aff_2d','iaff_2d']):
-            global_x = x[:,0:1,:,:]
-            
+        self.norm = nn.LayerNorm(config.patch_embeds_hidden_size) if config.enable_patch_layer_norm else nn.Identity()
+        if self.enable_fusion:
+            self.fusion_model = CLAPAudioAFFBlock(channels=config.patch_embeds_hidden_size)
+
+    def forward(self, x, longer_idx=None):
+        if self.enable_fusion:
+            global_x = x[:, 0:1, :, :]
 
             # global processing
             B, C, H, W = global_x.shape
-            assert H == self.img_size[0] and W == self.img_size[1], \
-                f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+            assert (
+                H == self.img_size[0] and W == self.img_size[1]
+            ), f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
             global_x = self.proj(global_x)
             TW = global_x.size(-1)
             if len(longer_idx) > 0:
                 # local processing
-                local_x = x[longer_idx,1:,:,:].contiguous()
+                local_x = x[longer_idx, 1:, :, :].contiguous()
                 B, C, H, W = local_x.shape
-                local_x = local_x.view(B*C,1,H,W)
+                local_x = local_x.view(B * C, 1, H, W)
                 local_x = self.mel_conv2d(local_x)
-                local_x = local_x.view(B,C,local_x.size(1),local_x.size(2),local_x.size(3))
-                local_x = local_x.permute((0,2,3,1,4)).contiguous().flatten(3)
-                TB,TC,TH,_ = local_x.size()
+                local_x = local_x.view(B, C, local_x.size(1), local_x.size(2), local_x.size(3))
+                local_x = local_x.permute((0, 2, 3, 1, 4)).contiguous().flatten(3)
+                TB, TC, TH, _ = local_x.size()
                 if local_x.size(-1) < TW:
-                    local_x = torch.cat([local_x, torch.zeros((TB,TC,TH,TW-local_x.size(-1)), device=global_x.device)], dim=-1)
+                    local_x = torch.cat(
+                        [local_x, torch.zeros((TB, TC, TH, TW - local_x.size(-1)), device=global_x.device)], dim=-1
+                    )
                 else:
-                    local_x = local_x[:,:,:,:TW]
-                
-                global_x[longer_idx] = self.fusion_model(global_x[longer_idx],local_x)
+                    local_x = local_x[:, :, :, :TW]
+
+                global_x[longer_idx] = self.fusion_model(global_x[longer_idx], local_x)
             x = global_x
         else:
             B, C, H, W = x.shape
-            assert H == self.img_size[0] and W == self.img_size[1], \
-                f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+            assert (
+                H == self.img_size[0] and W == self.img_size[1]
+            ), f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
             x = self.proj(x)
-        
+
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
         x = self.norm(x)
         return x
 
-class Mlp(nn.Module):
-    """ MLP as used in Vision Transformer, MLP-Mixer and related networks
-    """
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+
+class CLAPAudioMLP(nn.Module):
+    """MLP as used in Vision Transformer, MLP-Mixer and related networks"""
+
+    def __init__(self, in_features, hidden_features=None, out_features=None, config=None):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
+        self.act = ACT2FN[config.swin_hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
+        self.drop = nn.Dropout(config.swin_drop_rate)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -281,17 +361,13 @@ class Mlp(nn.Module):
         x = self.drop(x)
         return x
 
+
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     def norm_cdf(x):
         # Computes standard normal cumulative distribution function
-        return (1. + math.erf(x / math.sqrt(2.))) / 2.
-
-    if (mean < a - 2 * std) or (mean > b + 2 * std):
-        warnings.warn("mean is more than 2 std from [a, b] in nn.init.trunc_normal_. "
-                      "The distribution of values may be incorrect.",
-                      stacklevel=2)
+        return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
     with torch.no_grad():
         # Values are generated by using a truncated uniform distribution and
@@ -309,7 +385,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         tensor.erfinv_()
 
         # Transform to proper mean, std
-        tensor.mul_(std * math.sqrt(2.))
+        tensor.mul_(std * math.sqrt(2.0))
         tensor.add_(mean)
 
         # Clamp to ensure it's in the proper range
@@ -317,41 +393,38 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         return tensor
 
 
-def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
+def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # type: (Tensor, float, float, float, float) -> Tensor
     r"""Fills the input Tensor with values drawn from a truncated
-    normal distribution. The values are effectively drawn from the
-    normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
-    with values outside :math:`[a, b]` redrawn until they are within
-    the bounds. The method used for generating the random values works
-    best when :math:`a \leq \text{mean} \leq b`.
     Args:
+    normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
+    \text{std}^2)` with values outside :math:`[a, b]` redrawn until they are within the bounds. The method used for
+    generating the random values works best when :math:`a \leq \text{mean} \leq b`.
         tensor: an n-dimensional `torch.Tensor`
         mean: the mean of the normal distribution
         std: the standard deviation of the normal distribution
         a: the minimum cutoff value
         b: the maximum cutoff value
     Examples:
-        >>> w = torch.empty(3, 5)
-        >>> nn.init.trunc_normal_(w)
+        >>> w = torch.empty(3, 5) >>> nn.init.trunc_normal_(w)
     """
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
 
-def variance_scaling_(tensor, scale=1.0, mode='fan_in', distribution='normal'):
+def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
-    if mode == 'fan_in':
+    if mode == "fan_in":
         denom = fan_in
-    elif mode == 'fan_out':
+    elif mode == "fan_out":
         denom = fan_out
-    elif mode == 'fan_avg':
+    elif mode == "fan_avg":
         denom = (fan_in + fan_out) / 2
 
     variance = scale / denom
 
     if distribution == "truncated_normal":
         # constant is stddev of standard normal truncated to (-2, 2)
-        trunc_normal_(tensor, std=math.sqrt(variance) / .87962566103423978)
+        trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
     elif distribution == "normal":
         tensor.normal_(std=math.sqrt(variance))
     elif distribution == "uniform":
@@ -362,7 +435,8 @@ def variance_scaling_(tensor, scale=1.0, mode='fan_in', distribution='normal'):
 
 
 def lecun_normal_(tensor):
-    variance_scaling_(tensor, mode='fan_in', distribution='truncated_normal')
+    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
 
 def window_partition(x, window_size):
     """
@@ -394,31 +468,20 @@ def window_reverse(windows, window_size, H, W):
     return x
 
 
-class WindowAttention(nn.Module):
-    r""" Window based multi-head self attention (W-MSA) module with relative position bias.
-    It supports both of shifted and non-shifted window.
-    Args:
-        dim (int): Number of input channels.
-        window_size (tuple[int]): The height and width of the window.
-        num_heads (int): Number of attention heads.
-        qkv_bias (bool, optional):  If True, add a learnable bias to query, key, value. Default: True
-        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set
-        attn_drop (float, optional): Dropout ratio of attention weight. Default: 0.0
-        proj_drop (float, optional): Dropout ratio of output. Default: 0.0
-    """
-
-    def __init__(self, dim, window_size, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0., proj_drop=0.):
+class CLAPAudioWindowAttention(nn.Module):
+    def __init__(self, dim, window_size, num_heads, config=None):
 
         super().__init__()
         self.dim = dim
         self.window_size = window_size  # Wh, Ww
         self.num_heads = num_heads
         head_dim = dim // num_heads
-        self.scale = qk_scale or head_dim ** -0.5
+        self.scale = head_dim**-0.5
 
         # define a parameter table of relative position bias
         self.relative_position_bias_table = nn.Parameter(
-            torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads))  # 2*Wh-1 * 2*Ww-1, nH
+            torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads)
+        )  # 2*Wh-1 * 2*Ww-1, nH
 
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
@@ -433,12 +496,12 @@ class WindowAttention(nn.Module):
         relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
         self.register_buffer("relative_position_index", relative_position_index)
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
+        self.qkv = nn.Linear(dim, dim * 3, bias=config.swin_qkv_bias)
+        self.attn_drop = nn.Dropout(config.swin_attention_drop_rate)
         self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.proj_drop = nn.Dropout(config.swin_drop_rate)
 
-        trunc_normal_(self.relative_position_bias_table, std=.02)
+        trunc_normal_(self.relative_position_bias_table, std=0.02)
         self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, x, mask=None):
@@ -452,10 +515,11 @@ class WindowAttention(nn.Module):
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
         q = q * self.scale
-        attn = (q @ k.transpose(-2, -1))
+        attn = q @ k.transpose(-2, -1)
 
         relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
-            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1)  # Wh*Ww,Wh*Ww,nH
+            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
+        )  # Wh*Ww,Wh*Ww,nH
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
         attn = attn + relative_position_bias.unsqueeze(0)
 
@@ -475,69 +539,63 @@ class WindowAttention(nn.Module):
         return x, attn
 
     def extra_repr(self):
-        return f'dim={self.dim}, window_size={self.window_size}, num_heads={self.num_heads}'
+        return f"dim={self.dim}, window_size={self.window_size}, num_heads={self.num_heads}"
 
 
-class SwinTransformerBlock(nn.Module):
-    r""" Swin Transformer Block.
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resulotion.
-        num_heads (int): Number of attention heads.
-        window_size (int): Window size.
-        shift_size (int): Shift size for SW-MSA.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
-        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
-        drop (float, optional): Dropout rate. Default: 0.0
-        attn_drop (float, optional): Attention dropout rate. Default: 0.0
-        drop_path (float, optional): Stochastic depth rate. Default: 0.0
-        act_layer (nn.Module, optional): Activation layer. Default: nn.GELU
-        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
-    """
-
-    def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
-                 mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
-                 act_layer=nn.GELU, norm_layer=nn.LayerNorm, norm_before_mlp='ln'):
+class CLAPAudioSwinTransformerBlock(nn.Module):
+    def __init__(
+        self,
+        hidden_dim,
+        input_resolution,
+        num_heads,
+        shift_size=0,
+        drop_path=0.0,
+        config=None,
+    ):
         super().__init__()
-        self.dim = dim
+        self.hidden_dim = hidden_dim
         self.input_resolution = input_resolution
         self.num_heads = num_heads
-        self.window_size = window_size
+        self.window_size = config.window_size
         self.shift_size = shift_size
-        self.mlp_ratio = mlp_ratio
-        self.norm_before_mlp = norm_before_mlp
+        self.mlp_ratio = config.swin_mlp_ratio
+        self.norm_before_mlp = config.swin_norm_before_mlp
+
         if min(self.input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
             self.shift_size = 0
             self.window_size = min(self.input_resolution)
         assert 0 <= self.shift_size < self.window_size, "shift_size must in 0-window_size"
 
-        self.norm1 = norm_layer(dim)
-        self.attn = WindowAttention(
-            dim, window_size=to_2tuple(self.window_size), num_heads=num_heads,
-            qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+        self.norm1 = nn.LayerNorm(hidden_dim)
+        self.attn = CLAPAudioWindowAttention(
+            hidden_dim, window_size=to_2tuple(self.window_size), num_heads=num_heads, config=config
+        )
 
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        if self.norm_before_mlp == 'ln':
-            self.norm2 = nn.LayerNorm(dim)
-        elif self.norm_before_mlp == 'bn':
-            self.norm2 = lambda x: nn.BatchNorm1d(dim)(x.transpose(1, 2)).transpose(1, 2)
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        if self.norm_before_mlp == "ln":
+            self.norm2 = nn.LayerNorm(hidden_dim)
+        elif self.norm_before_mlp == "bn":
+            self.norm2 = lambda x: nn.BatchNorm1d(hidden_dim)(x.transpose(1, 2)).transpose(1, 2)
         else:
             raise NotImplementedError
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+        mlp_hidden_dim = int(hidden_dim * self.mlp_ratio)
+        self.mlp = CLAPAudioMLP(in_features=hidden_dim, hidden_features=mlp_hidden_dim, config=config)
 
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
             H, W = self.input_resolution
             img_mask = torch.zeros((1, H, W, 1))  # 1 H W 1
-            h_slices = (slice(0, -self.window_size),
-                        slice(-self.window_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            w_slices = (slice(0, -self.window_size),
-                        slice(-self.window_size, -self.shift_size),
-                        slice(-self.shift_size, None))
+            h_slices = (
+                slice(0, -self.window_size),
+                slice(-self.window_size, -self.shift_size),
+                slice(-self.shift_size, None),
+            )
+            w_slices = (
+                slice(0, -self.window_size),
+                slice(-self.window_size, -self.shift_size),
+                slice(-self.shift_size, None),
+            )
             cnt = 0
             for h in h_slices:
                 for w in w_slices:
@@ -597,8 +655,10 @@ class SwinTransformerBlock(nn.Module):
         return x, attn
 
     def extra_repr(self):
-        return f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, " \
-               f"window_size={self.window_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
+        return (
+            f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, "
+            f"window_size={self.window_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
+        )
 
 
 # contrastive loss function, adapted from
@@ -751,7 +811,7 @@ class CLAPFusionBlock(nn.Module):
         hidden_size = config.projection_dim
         self.activation = ACT2FN[config.hidden_act]
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        
+
         self.linear = nn.Linear(hidden_size, hidden_size)
 
     def forward(self, hidden_states):
@@ -767,7 +827,7 @@ class CLAPProjectionLayer(nn.Module):
         self.config = config
         hidden_size = config.projection_hidden_size
         projection_dim = config.projection_dim
-        
+
         self.linear1 = nn.Linear(hidden_size, projection_dim)
         self.activation = ACT2FN[config.projection_hidden_act]
         self.linear2 = nn.Linear(projection_dim, projection_dim)
@@ -783,7 +843,7 @@ class CLAPFusionLayer(nn.Module):
     def __init__(self, config: CLAPTextConfig):
         super().__init__()
         self.config = config
-        
+
         self.layers = nn.ModuleList([CLAPFusionBlock(config) for _ in range(config.fusion_num_hidden_layers)])
 
     def forward(self, hidden_states):
@@ -1311,13 +1371,12 @@ class CLAPTextPooler(nn.Module):
         return pooled_output
 
 
-
-
 class CLAPTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = CLAPTextConfig
     base_model_prefix = "claptext"
     supports_gradient_checkpointing = True
@@ -1530,7 +1589,6 @@ class CLAPTextModel(CLAPTextPreTrainedModel):
         )
 
 
-
 # Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->CLAP,clip->clap
 class CLAPPreTrainedModel(PreTrainedModel):
     """
@@ -1597,10 +1655,9 @@ class CLAPPreTrainedModel(PreTrainedModel):
         # if isinstance(module, nn.Linear) and module.bias is not None:
         #     module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CLAPEncoder):
-            module.gradient_checkpointing = value
-
+    # def _set_gradient_checkpointing(self, module, value=False):
+    #     if isinstance(module, CLAPEncoder):
+    #         module.gradient_checkpointing = value
 
 
 @add_start_docstrings(CLAP_START_DOCSTRING)
@@ -1616,9 +1673,9 @@ class CLAPModel(CLAPPreTrainedModel):
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, CLAPVisionConfig):
+        if not isinstance(config.vision_config, CLAPAudioConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type CLAPVisionConfig but is of type"
+                "config.vision_config is expected to be of type CLAPAudioConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
@@ -1632,14 +1689,13 @@ class CLAPModel(CLAPPreTrainedModel):
         self.text_hidden_size = text_config.hidden_size
         self.vision_hidden_size = vision_config.hidden_size
 
-
         self.text_model = CLAPTextModel(text_config)
         self.text_transform = CLAPFusionLayer(text_config)
-        self.text_projection = CLAPProjectionLayer(text_config) 
+        self.text_projection = CLAPProjectionLayer(text_config)
 
-        self.audio_model = HTSAT_Swin_Transformer(config=vision_config)
+        self.audio_model = CLAPSwinTransformer(config=vision_config)
         self.audio_transform = CLAPFusionLayer(vision_config)
-        self.audio_projection = CLAPProjectionLayer(vision_config) 
+        self.audio_projection = CLAPProjectionLayer(vision_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1834,6 +1890,7 @@ class CLAPModel(CLAPPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
+
 @add_start_docstrings(
     """
     CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
@@ -1910,8 +1967,8 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
         )
 
 
-class BasicLayer(nn.Module):
-    """ A basic Swin Transformer layer for one stage.
+class CLAPAudioLayer(nn.Module):
+    """A basic Swin Transformer layer for one stage.
     Args:
         dim (int): Number of input channels.
         input_resolution (tuple[int]): Input resolution.
@@ -1929,32 +1986,47 @@ class BasicLayer(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
     """
 
-    def __init__(self, dim, input_resolution, depth, num_heads, window_size,
-                 mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., norm_layer=nn.LayerNorm, downsample=None, use_checkpoint=False,
-                 norm_before_mlp='ln'):
-
+    def __init__(self, config, idx_layer=0, patches_resolution=0):
         super().__init__()
-        self.dim = dim
+
+        hidden_dim = config.hidden_size * 2**idx_layer
+        input_resolution = (patches_resolution[0] // (2**idx_layer), patches_resolution[1] // (2**idx_layer))
+        depth = config.depths[idx_layer]
+        num_heads = config.num_heads[idx_layer]
+        window_size = config.window_size
+        norm_layer = nn.LayerNorm if config.enable_patch_layer_norm else None
+
+        use_checkpoint = config.swin_use_checkpoint
+        downsample = CLAPAudioPatchMerging if (idx_layer < len(config.depths) - 1) else None
+
+        dpr = [
+            x.item() for x in torch.linspace(0, config.swin_drop_path_rate, sum(config.depths))
+        ]  # stochastic depth decay rule
+        drop_path = dpr[sum(config.depths[:idx_layer]) : sum(config.depths[: idx_layer + 1])]
+
+        # self.dim = dim
         self.input_resolution = input_resolution
         self.depth = depth
         self.use_checkpoint = use_checkpoint
 
         # build blocks
-        self.blocks = nn.ModuleList([
-            SwinTransformerBlock(dim=dim, input_resolution=input_resolution,
-                                 num_heads=num_heads, window_size=window_size,
-                                 shift_size=0 if (i % 2 == 0) else window_size // 2,
-                                 mlp_ratio=mlp_ratio,
-                                 qkv_bias=qkv_bias, qk_scale=qk_scale,
-                                 drop=drop, attn_drop=attn_drop,
-                                 drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                                 norm_layer=norm_layer, norm_before_mlp=norm_before_mlp)
-            for i in range(depth)])
+        self.blocks = nn.ModuleList(
+            [
+                CLAPAudioSwinTransformerBlock(
+                    hidden_dim=hidden_dim,
+                    input_resolution=input_resolution,
+                    num_heads=num_heads,
+                    shift_size=0 if (i % 2 == 0) else window_size // 2,
+                    drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
+                    config=config,
+                )
+                for i in range(depth)
+            ]
+        )
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=norm_layer)
+            self.downsample = downsample(input_resolution, dim=hidden_dim, norm_layer=norm_layer)
         else:
             self.downsample = None
 
@@ -1970,12 +2042,13 @@ class BasicLayer(nn.Module):
         if self.downsample is not None:
             x = self.downsample(x)
         if not self.training:
-            attn = torch.cat(attns, dim = 0)
-            attn = torch.mean(attn, dim = 0)
+            attn = torch.cat(attns, dim=0)
+            attn = torch.mean(attn, dim=0)
         return x, attn
 
-class PatchMerging(nn.Module):
-    r""" Patch Merging Layer.
+
+class CLAPAudioPatchMerging(nn.Module):
+    r"""Patch Merging Layer.
     Args:
         input_resolution (tuple[int]): Resolution of input feature.
         dim (int): Number of input channels.
@@ -2016,155 +2089,76 @@ class PatchMerging(nn.Module):
         return f"input_resolution={self.input_resolution}, dim={self.dim}"
 
 
-
-
 # The Core of HTSAT
-class HTSAT_Swin_Transformer(nn.Module):
-    r"""HTSAT based on the Swin Transformer
-    Args:
-        spec_size (int | tuple(int)): Input Spectrogram size. Default 256
-        patch_size (int | tuple(int)): Patch size. Default: 4
-        path_stride (iot | tuple(int)): Patch Stride for Frequency and Time Axis. Default: 4
-        in_chans (int): Number of input image channels. Default: 1 (mono)
-        num_classes (int): Number of classes for classification head. Default: 527
-        hidden_size (int): Patch embedding dimension. Default: 96
-        depths (tuple(int)): Depth of each HTSAT-Swin Transformer layer.
-        num_heads (tuple(int)): Number of attention heads in different layers.
-        window_size (int): Window size. Default: 8
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim. Default: 4
-        qkv_bias (bool): If True, add a learnable bias to query, key, value. Default: True
-        qk_scale (float): Override default qk scale of head_dim ** -0.5 if set. Default: None
-        drop_rate (float): Dropout rate. Default: 0
-        attn_drop_rate (float): Attention dropout rate. Default: 0
-        drop_path_rate (float): Stochastic depth rate. Default: 0.1
-        norm_layer (nn.Module): Normalization layer. Default: nn.LayerNorm.
-        ape (bool): If True, add absolute position embedding to the patch embedding. Default: False
-        patch_norm (bool): If True, add normalization after patch embedding. Default: True
-        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
-        config (module): The configuration Module from config.py
-    """
-
-    def __init__(self, spec_size=256, patch_size=4, patch_stride=(4,4), 
-                in_chans=1, num_classes=527,
-                 hidden_size=96, depths=[2, 2, 6, 2], num_heads=[4, 8, 16, 32],
-                 window_size=8, mlp_ratio=4., qkv_bias=True, qk_scale=None,
-                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
-                 norm_layer=nn.LayerNorm, 
-                 ape=False, patch_norm=True,
-                 use_checkpoint=False, norm_before_mlp='ln', config = None, 
-                 enable_fusion = False, fusion_type = 'None', **kwargs):
-        super(HTSAT_Swin_Transformer, self).__init__()
+class CLAPSwinTransformer(nn.Module):
+    def __init__(self, config: CLAPAudioConfig):
+        super(CLAPSwinTransformer, self).__init__()
 
         self.config = config
-        self.spec_size = spec_size 
-        self.patch_stride = patch_stride
-        self.patch_size = patch_size
-        self.window_size = window_size
-        self.hidden_size = hidden_size
-        self.depths = depths
-        self.ape = ape
-        self.in_chans = in_chans
-        self.num_classes = num_classes
-        self.num_heads = num_heads
+        self.spec_size = config.spec_size
+        self.patch_stride = config.patch_stride
+        self.window_size = config.window_size
+        self.hidden_size = config.hidden_size
+        self.depths = config.depths
+        self.use_absolute_pos_embedding = config.swin_absolute_positional_embedding
+        self.in_chans = config.input_channels
+        self.num_classes = config.num_classes
+        self.num_heads = config.num_heads
         self.num_layers = len(self.depths)
         self.num_features = int(self.hidden_size * 2 ** (self.num_layers - 1))
-        
-        self.drop_rate = drop_rate
-        self.attn_drop_rate = attn_drop_rate
-        self.drop_path_rate = drop_path_rate
 
-        self.qkv_bias = qkv_bias
-        self.qk_scale = None
+        self.drop_rate = config.swin_drop_rate
+        self.attn_drop_rate = config.swin_attention_drop_rate
+        self.drop_path_rate = config.swin_drop_path_rate
 
-        self.patch_norm = patch_norm
-        self.norm_layer = norm_layer if self.patch_norm else None
-        self.norm_before_mlp = norm_before_mlp
-        self.mlp_ratio = mlp_ratio
+        self.qkv_bias = config.swin_qkv_bias
 
-        self.use_checkpoint = use_checkpoint
+        self.patch_norm = nn.LayerNorm if config.enable_patch_layer_norm else None
+        self.norm_layer = nn.LayerNorm if self.patch_norm else None
+        self.norm_before_mlp = config.swin_norm_before_mlp
+        self.mlp_ratio = config.swin_mlp_ratio
 
-        self.enable_fusion = enable_fusion
-        self.fusion_type = fusion_type
+        self.use_checkpoint = config.swin_use_checkpoint
+
+        self.enable_fusion = config.enable_fusion
+        self.fusion_type = config.fusion_type
 
         #  process mel-spec ; used only once
         self.freq_ratio = self.spec_size // self.config.mel_bins
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
-        self.interpolate_ratio = 32     # Downsampled ratio
+
+        self.interpolate_ratio = 32  # Downsampled ratio
         # Spectrogram extractor
         self.bn0 = nn.BatchNorm2d(self.config.mel_bins)
 
-
         # split spctrogram into non-overlapping patches
-        self.patch_embed = PatchEmbed(
-            img_size=self.spec_size, patch_size=self.patch_size, in_chans=self.in_chans, 
-            hidden_size=self.hidden_size, norm_layer=self.norm_layer, patch_stride = patch_stride,
-            enable_fusion=self.enable_fusion, fusion_type=self.fusion_type
-            )
+        self.patch_embed = CLAPAudioPatchEmbed(config)
 
         num_patches = self.patch_embed.num_patches
         patches_resolution = self.patch_embed.grid_size
         self.patches_resolution = patches_resolution
 
         # absolute position embedding
-        if self.ape:
+        if self.use_absolute_pos_embedding:
             self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, self.hidden_size))
-            trunc_normal_(self.absolute_pos_embed, std=.02)
+            trunc_normal_(self.absolute_pos_embed, std=0.02)
 
         self.pos_drop = nn.Dropout(p=self.drop_rate)
-
-        # stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, sum(self.depths))]  # stochastic depth decay rule
 
         # build layers
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
-            layer = BasicLayer(dim=int(self.hidden_size * 2 ** i_layer),
-                input_resolution=(patches_resolution[0] // (2 ** i_layer),
-                                    patches_resolution[1] // (2 ** i_layer)),
-                depth=self.depths[i_layer],
-                num_heads=self.num_heads[i_layer],
-                window_size=self.window_size,
-                mlp_ratio=self.mlp_ratio,
-                qkv_bias=self.qkv_bias, qk_scale=self.qk_scale,
-                drop=self.drop_rate, attn_drop=self.attn_drop_rate,
-                drop_path=dpr[sum(self.depths[:i_layer]):sum(self.depths[:i_layer + 1])],
-                norm_layer=self.norm_layer,
-                downsample=PatchMerging if (i_layer < self.num_layers - 1) else None,
-                use_checkpoint=use_checkpoint,
-                norm_before_mlp=self.norm_before_mlp)
+            layer = CLAPAudioLayer(config=config, patches_resolution=patches_resolution, idx_layer=i_layer)
             self.layers.append(layer)
 
         self.norm = self.norm_layer(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         self.maxpool = nn.AdaptiveMaxPool1d(1)
-        
+
         SF = self.spec_size // (2 ** (len(self.depths) - 1)) // self.patch_stride[0] // self.freq_ratio
         self.tscam_conv = nn.Conv2d(
-            in_channels = self.num_features,
-            out_channels = self.num_classes,
-            kernel_size = (SF,3),
-            padding = (0,1)
+            in_channels=self.num_features, out_channels=self.num_classes, kernel_size=(SF, 3), padding=(0, 1)
         )
-        self.head = nn.Linear(num_classes, num_classes)
-
-        if (self.enable_fusion) and (self.fusion_type in ['daf_1d','aff_1d','iaff_1d']):
-            self.mel_conv1d = nn.Sequential(
-                nn.Conv1d(64, 64, kernel_size=5, stride=3, padding=2),
-                nn.BatchNorm1d(64)
-            )
-            if self.fusion_type == 'daf_1d':
-                self.fusion_model = DAF()
-            elif self.fusion_type == 'aff_1d':
-                self.fusion_model = AFF(channels=64, type='1D')
-            elif self.fusion_type == 'iaff_1d':
-                self.fusion_model = iAFF(channels=64, type='1D')
-                
-        self.apply(self._init_weights)
+        self.head = nn.Linear(self.num_classes, self.num_classes)
 
     def _init_weights(self, m):
         pass
@@ -2178,19 +2172,18 @@ class HTSAT_Swin_Transformer(nn.Module):
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        return {'absolute_pos_embed'}
+        return {"absolute_pos_embed"}
 
     @torch.jit.ignore
     def no_weight_decay_keywords(self):
-        return {'relative_position_bias_table'}
+        return {"relative_position_bias_table"}
 
-
-    def forward_features(self, x, longer_idx = None):
+    def forward_features(self, x, longer_idx=None):
         # A deprecated optimization for using a hierarchical output from different blocks
 
-        frames_num = x.shape[2]        
-        x = self.patch_embed(x, longer_idx = longer_idx)
-        if self.ape:
+        frames_num = x.shape[2]
+        x = self.patch_embed(x, longer_idx=longer_idx)
+        if self.use_absolute_pos_embedding:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
         for i, layer in enumerate(self.layers):
@@ -2200,39 +2193,41 @@ class HTSAT_Swin_Transformer(nn.Module):
         B, N, C = x.shape
         SF = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[0]
         ST = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[1]
-        x = x.permute(0,2,1).contiguous().reshape(B, C, SF, ST)
+        x = x.permute(0, 2, 1).contiguous().reshape(B, C, SF, ST)
         B, C, F, T = x.shape
         # group 2D CNN
         c_freq_bin = F // self.freq_ratio
         x = x.reshape(B, C, F // c_freq_bin, c_freq_bin, T)
-        x = x.permute(0,1,3,2,4).contiguous().reshape(B, C, c_freq_bin, -1)
+        x = x.permute(0, 1, 3, 2, 4).contiguous().reshape(B, C, c_freq_bin, -1)
         # get latent_output
-        fine_grained_latent_output = torch.mean(x, dim = 2)
-        fine_grained_latent_output = interpolate(fine_grained_latent_output.permute(0,2,1).contiguous(), 8 * self.patch_stride[1]) 
-        
-        latent_output = self.avgpool(torch.flatten(x,2))
+        fine_grained_latent_output = torch.mean(x, dim=2)
+        fine_grained_latent_output = interpolate(
+            fine_grained_latent_output.permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1]
+        )
+
+        latent_output = self.avgpool(torch.flatten(x, 2))
         latent_output = torch.flatten(latent_output, 1)
 
         # display the attention map, if needed
 
         x = self.tscam_conv(x)
-        x = torch.flatten(x, 2) # B, C, T
- 
-        fpx = interpolate(torch.sigmoid(x).permute(0,2,1).contiguous(), 8 * self.patch_stride[1]) 
-            
+        x = torch.flatten(x, 2)  # B, C, T
+
+        fpx = interpolate(torch.sigmoid(x).permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1])
+
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
 
         output_dict = {
-            'framewise_output': fpx, # already sigmoided
-            'clipwise_output': torch.sigmoid(x),
-            'fine_grained_embedding': fine_grained_latent_output,
-            'embedding': latent_output
+            "framewise_output": fpx,  # already sigmoided
+            "clipwise_output": torch.sigmoid(x),
+            "fine_grained_embedding": fine_grained_latent_output,
+            "embedding": latent_output,
         }
 
         return output_dict
 
-    def crop_wav(self, x, crop_size, spe_pos = None):
+    def crop_wav(self, x, crop_size, spe_pos=None):
         time_steps = x.shape[2]
         tx = torch.zeros(x.shape[0], x.shape[1], crop_size, x.shape[3]).to(x.device)
         for i in range(len(x)):
@@ -2240,7 +2235,7 @@ class HTSAT_Swin_Transformer(nn.Module):
                 crop_pos = random.randint(0, time_steps - crop_size - 1)
             else:
                 crop_pos = spe_pos
-            tx[i][0] = x[i, 0, crop_pos:crop_pos + crop_size,:]
+            tx[i][0] = x[i, 0, crop_pos : crop_pos + crop_size, :]
         return tx
 
     # Reshape the wavform to a img size, if you want to use the pretrained swin transformer model
@@ -2254,13 +2249,13 @@ class HTSAT_Swin_Transformer(nn.Module):
             x = nn.functional.interpolate(x, (target_T, x.shape[3]), mode="bicubic", align_corners=True)
         if F < target_F:
             x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)
-        x = x.permute(0,1,3,2).contiguous()
+        x = x.permute(0, 1, 3, 2).contiguous()
         x = x.reshape(x.shape[0], x.shape[1], x.shape[2], self.freq_ratio, x.shape[3] // self.freq_ratio)
         # print(x.shape)
-        x = x.permute(0,1,3,2,4).contiguous()
+        x = x.permute(0, 1, 3, 2, 4).contiguous()
         x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3], x.shape[4])
         return x
-    
+
     # Repeat the wavform to a img size, if you want to use the pretrained swin transformer model
     def repeat_wat2img(self, x, cur_pos):
         B, C, T, F = x.shape
@@ -2271,13 +2266,15 @@ class HTSAT_Swin_Transformer(nn.Module):
         if T < target_T:
             x = nn.functional.interpolate(x, (target_T, x.shape[3]), mode="bicubic", align_corners=True)
         if F < target_F:
-            x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)  
-        x = x.permute(0,1,3,2).contiguous() # B C F T
-        x = x[:,:,:,cur_pos:cur_pos + self.spec_size]
-        x = x.repeat(repeats = (1,1,4,1))
+            x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)
+        x = x.permute(0, 1, 3, 2).contiguous()  # B C F T
+        x = x[:, :, :, cur_pos : cur_pos + self.spec_size]
+        x = x.repeat(repeats=(1, 1, 4, 1))
         return x
 
-    def forward(self, x: torch.Tensor, mixup_lambda = None, infer_mode = False, device=None):# out_feat_keys: List[str] = None):
+    def forward(
+        self, x: torch.Tensor, mixup_lambda=None, infer_mode=False, device=None
+    ):  # out_feat_keys: List[str] = None):
 
         if self.enable_fusion and x["longer"].sum() == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
@@ -2285,8 +2282,8 @@ class HTSAT_Swin_Transformer(nn.Module):
 
         if not self.enable_fusion:
             x = x["waveform"].to(device=device, non_blocking=True)
-            x = self.spectrogram_extractor(x)   # (batch_size, 1, time_steps, freq_bins)
-            x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
+            x = self.spectrogram_extractor(x)  # (batch_size, 1, time_steps, freq_bins)
+            x = self.logmel_extractor(x)  # (batch_size, 1, time_steps, mel_bins)
             x = x.transpose(1, 3)
             x = self.bn0(x)
             x = x.transpose(1, 3)
@@ -2295,7 +2292,7 @@ class HTSAT_Swin_Transformer(nn.Module):
 
             if self.training and mixup_lambda is not None:
                 x = do_mixup(x, mixup_lambda)
-                
+
             x = self.reshape_wav2img(x)
             output_dict = self.forward_features(x)
         else:
@@ -2305,30 +2302,33 @@ class HTSAT_Swin_Transformer(nn.Module):
             x = self.bn0(x)
             x = x.transpose(1, 3)
             longer_list_idx = torch.where(longer_list)[0]
-            if self.fusion_type in ['daf_1d','aff_1d','iaff_1d']:
-                new_x = x[:,0:1,:,:].clone().contiguous()
+            if self.fusion_type in ["daf_1d", "aff_1d", "iaff_1d"]:
+                new_x = x[:, 0:1, :, :].clone().contiguous()
                 if len(longer_list_idx) > 0:
-                # local processing
-                    fusion_x_local = x[longer_list_idx,1:,:,:].clone().contiguous()
-                    FB,FC,FT,FF = fusion_x_local.size()
+                    # local processing
+                    fusion_x_local = x[longer_list_idx, 1:, :, :].clone().contiguous()
+                    FB, FC, FT, FF = fusion_x_local.size()
                     fusion_x_local = fusion_x_local.view(FB * FC, FT, FF)
-                    fusion_x_local = torch.permute(fusion_x_local, (0,2,1)).contiguous()
+                    fusion_x_local = torch.permute(fusion_x_local, (0, 2, 1)).contiguous()
                     fusion_x_local = self.mel_conv1d(fusion_x_local)
-                    fusion_x_local = fusion_x_local.view(FB,FC,FF,fusion_x_local.size(-1))
-                    fusion_x_local = torch.permute(fusion_x_local, (0,2,1,3)).contiguous().flatten(2)
+                    fusion_x_local = fusion_x_local.view(FB, FC, FF, fusion_x_local.size(-1))
+                    fusion_x_local = torch.permute(fusion_x_local, (0, 2, 1, 3)).contiguous().flatten(2)
                     if fusion_x_local.size(-1) < FT:
-                        fusion_x_local = torch.cat([fusion_x_local, torch.zeros((FB,FF,FT- fusion_x_local.size(-1)), device=device)], dim=-1)
+                        fusion_x_local = torch.cat(
+                            [fusion_x_local, torch.zeros((FB, FF, FT - fusion_x_local.size(-1)), device=device)],
+                            dim=-1,
+                        )
                     else:
-                        fusion_x_local = fusion_x_local[:,:,:FT]
+                        fusion_x_local = fusion_x_local[:, :, :FT]
                     # 1D fusion
-                    new_x = new_x.squeeze(1).permute((0,2,1)).contiguous()
+                    new_x = new_x.squeeze(1).permute((0, 2, 1)).contiguous()
                     new_x[longer_list_idx] = self.fusion_model(new_x[longer_list_idx], fusion_x_local)
-                    x = new_x.permute((0,2,1)).contiguous()[:,None,:,:]
+                    x = new_x.permute((0, 2, 1)).contiguous()[:, None, :, :]
                 else:
                     x = new_x
 
-            elif self.fusion_type in ['daf_2d','aff_2d','iaff_2d','channel_map']:
-                x = x # no change
+            elif self.enable_fusion:
+                x = x  # no change
 
             if self.training:
                 x = self.spec_augmenter(x)
@@ -2336,7 +2336,6 @@ class HTSAT_Swin_Transformer(nn.Module):
                 x = do_mixup(x, mixup_lambda)
 
             x = self.reshape_wav2img(x)
-            output_dict = self.forward_features(x, longer_idx = longer_list_idx)
-       
+            output_dict = self.forward_features(x, longer_idx=longer_list_idx)
 
         return output_dict

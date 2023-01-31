@@ -29,10 +29,10 @@ from ...utils import (
 _import_structure = {
     "configuration_clap": [
         "CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLAPAudioConfig",
         "CLAPConfig",
         "CLAPOnnxConfig",
         "CLAPTextConfig",
-        "CLAPVisionConfig",
     ],
     "processing_clap": ["CLAPProcessor"],
     "tokenization_clap": ["CLAPTokenizer"],
@@ -74,10 +74,10 @@ else:
 if TYPE_CHECKING:
     from .configuration_clap import (
         CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLAPAudioConfig,
         CLAPConfig,
         CLAPOnnxConfig,
         CLAPTextConfig,
-        CLAPVisionConfig,
     )
     from .processing_clap import CLAPProcessor
     from .tokenization_clap import CLAPTokenizer

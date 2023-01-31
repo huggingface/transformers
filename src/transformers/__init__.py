@@ -204,11 +204,11 @@ _import_structure = {
     ],
     "models.clap": [
         "CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLAPAudioConfig",
         "CLAPConfig",
         "CLAPProcessor",
         "CLAPTextConfig",
         "CLAPTokenizer",
-        "CLAPVisionConfig",
     ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -3668,11 +3668,11 @@ if TYPE_CHECKING:
     )
     from .models.clap import (
         CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLAPAudioConfig,
         CLAPConfig,
         CLAPProcessor,
         CLAPTextConfig,
         CLAPTokenizer,
-        CLAPVisionConfig,
     )
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,

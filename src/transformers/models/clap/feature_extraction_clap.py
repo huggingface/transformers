@@ -26,6 +26,7 @@ from ...utils import TensorType, logging
 
 logger = logging.get_logger(__name__)
 
+
 # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor with Whisper->CLAP
 class CLAPFeatureExtractor(SequenceFeatureExtractor):
     r"""

@@ -61,8 +61,8 @@ class CLAPProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to CLAPTokenizerFast's [`~CLAPTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
-        CLAPFeatureExtractor's [`~CLAPFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
+        CLAPFeatureExtractor's [`~CLAPFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
+        doctsring of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -70,9 +70,9 @@ class CLAPProcessor(ProcessorMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             audios (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a
-                number of channels, and T the sample length of the audio.
+                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
+                of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
+                and T the sample length of the audio.
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
@@ -132,7 +132,8 @@ class CLAPProcessor(ProcessorMixin):
     @property
     def feature_extractor_class(self):
         warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v5. Use `feature_extractor_class` instead.",
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `feature_extractor_class`"
+            " instead.",
             FutureWarning,
         )
         return self.feature_extractor_class
