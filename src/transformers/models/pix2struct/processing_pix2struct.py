@@ -40,7 +40,7 @@ class Pix2StructProcessor(ProcessorMixin):
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Pix2StructImageProcessor"
-    tokenizer_class = ("Pix2StructTokenizer", "Pix2StructTokenizerFast")
+    tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
@@ -101,7 +101,7 @@ class Pix2StructProcessor(ProcessorMixin):
             return text_encoding
 
         # add pixel_values
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors, **kwargs)
 
         if text is not None:
             text_encoding = self.tokenizer(

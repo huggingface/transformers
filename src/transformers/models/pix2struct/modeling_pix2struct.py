@@ -79,88 +79,6 @@ PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Adapted from https://discuss.pytorch.org/t/tf-extract-image-patches-in-pytorch/43837/8
-def torch_extract_patches(
-    x, patch_height, patch_width
-):
-    x = x.unsqueeze(0)
-
-    patches = x.unfold(2, patch_height, patch_height).unfold(3, patch_width, patch_width)
-    # Permute so that channels are next to patch dimension
-    patches = patches.permute(0, 2, 3, 1, 4, 5).contiguous()  # [128, 32, 32, 16, 3, 3]
-    # View as [batch_size, height, width, channels*kh*kw]
-    patches = patches.view(*patches.size()[:3], -1)
-    return patches
-
-
-
-def convert_patches(
-        image: torch.FloatTensor,
-        patch_size: Tuple[int, int],
-        max_patches: int = 2048,
-    ):
-        if isinstance(patch_size, tuple):
-            patch_height, patch_width = patch_size
-        else:
-            patch_height = patch_width = patch_size
-        image_shape = image.shape
-        image_height = image_shape[1]
-        image_width = image_shape[2]
-        image_channels = image_shape[0]
-        image_height = float(image_height)
-        image_width = float(image_width)
-
-        # maximize scale s.t.
-        scale = math.sqrt(
-            max_patches * (patch_height / image_height) * (patch_width / image_width))
-        num_feasible_rows = max(min(
-            math.floor(scale * image_height / patch_height), max_patches), 1)
-        num_feasible_cols = max(min(
-            math.floor(scale * image_width / patch_width), max_patches), 1)
-        resized_height = max(
-            num_feasible_rows * patch_height, 1)
-        resized_width = max(
-            num_feasible_cols * patch_width, 1)
-        
-        image = torch.nn.functional.interpolate(
-            image.unsqueeze(0),
-            size=(resized_height, resized_width),
-            mode='bilinear',
-            align_corners=False).squeeze(0)
-        
-        # [1, rows, columns, patch_height * patch_width * image_channels]
-        patches_ = torch_extract_patches(image, patch_height, patch_width)
-        
-        patches_shape = patches_.shape
-        rows = patches_shape[1]
-        columns = patches_shape[2]
-        depth = patches_shape[3]
-        
-        # [rows * columns, patch_height * patch_width * image_channels]
-        patches = patches_.reshape([rows * columns, depth])
-        
-        # [rows * columns, 1]
-        row_ids = torch.arange(rows).reshape([rows, 1]).repeat(1, columns).reshape([rows * columns, 1])
-        col_ids = torch.arange(columns).reshape([1, columns]).repeat(rows, 1).reshape([rows * columns, 1])
-        
-        # Offset by 1 so the ids do not contain zeros, which represent padding.
-        row_ids += 1
-        col_ids += 1
-        
-        # Prepare additional patch features.
-        # [rows * columns, 1]
-        row_ids = row_ids.to(torch.float32)
-        col_ids = col_ids.to(torch.float32)
-
-        # [rows * columns, 2 + patch_height * patch_width * image_channels]
-        result = torch.cat([row_ids, col_ids, patches], -1)
-
-        # [max_patches, 2 + patch_height * patch_width * image_channels]
-        result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)])
-
-        return result
-
-
 # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->Pix2StructEncoder
 class Pix2StructEncoderEmbeddings(nn.Module):
     """
@@ -173,15 +91,13 @@ class Pix2StructEncoderEmbeddings(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = Pix2StructEncoderPatchEmbeddings(config)
 
-        self.embedder_0 = nn.Parameter(torch.zeros(config.hidden_size, config.seq_len))
-        self.embedder_1 = nn.Parameter(torch.zeros(config.hidden_size, config.seq_len))
+        # self.embedder_0 = nn.Parameter(torch.zeros(config.hidden_size, config.seq_len))
+        self.embedder_0 = nn.Embedding(config.seq_len, config.hidden_size)
+        # self.embedder_1 = nn.Parameter(torch.zeros(config.hidden_size, config.seq_len))
+        self.embedder_1 = nn.Embedding(config.seq_len, config.hidden_size)
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
-
-    def to_patches(self, pixel_values):
-        output_tensors = [convert_patches(image, self.config.patch_size, self.config.seq_len) for image in pixel_values]
-        return torch.stack(output_tensors)
 
 
     def forward(
@@ -189,26 +105,10 @@ class Pix2StructEncoderEmbeddings(nn.Module):
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
     ) -> torch.Tensor:
-        # batch_size, num_channels, height, width = pixel_values.shape
-
-        pixel_values = self.to_patches(pixel_values)
-
         # TODO: fix this
         pixel_values = pixel_values[:, :, :-2]
 
         embeddings = self.patch_embeddings.projection(pixel_values)
-
-        # if bool_masked_pos is not None:
-        #     seq_length = embeddings.shape[1]
-        #     mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-        #     # replace the masked visual tokens by mask_tokens
-        #     mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-        #     embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
-
-        # # add the [CLS] token to the embedded patch tokens
-        # cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        # embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
 
         embeddings = self.dropout(embeddings)
 

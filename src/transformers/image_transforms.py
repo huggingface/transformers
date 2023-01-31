@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import math
 import warnings
 from typing import Iterable, List, Optional, Tuple, Union
 
@@ -707,3 +707,86 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
 
     image = image.convert("RGB")
     return image
+
+
+
+# adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
+def torch_extract_patches(
+    x, patch_height, patch_width, padding=None
+):
+    """TODO: @younesbelkada docstring"""
+    requires_backends(torch_extract_patches, ["torch"])
+
+    x = x.unsqueeze(0)
+    patches = torch.nn.functional.unfold(x, (patch_height, patch_width), stride=(patch_height, patch_width))
+    patches = patches.reshape(x.size(0), x.size(1), patch_height, patch_width, -1)
+    patches = patches.permute(0, 4, 2, 3, 1).reshape(x.size(2)//patch_height, x.size(3)//patch_width, x.size(1)*patch_height*patch_width)
+    return patches.unsqueeze(0)
+
+
+def extract_flattened_patches(image, max_patches, patch_size):
+    """TODO: @younesbelkada docstring"""
+    requires_backends(extract_flattened_patches, ["torch"])
+
+    # convert to torch if 
+    if not isinstance(image, torch.Tensor):
+        image = torch.from_numpy(image).permute(2, 0, 1)
+
+
+    patch_height, patch_width = patch_size
+    image_shape = image.shape
+    image_height = image_shape[1]
+    image_width = image_shape[2]
+    image_channels = image_shape[0]
+    image_height = float(image_height)
+    image_width = float(image_width)
+
+    # maximize scale s.t.
+    scale = math.sqrt(
+        max_patches * (patch_height / image_height) * (patch_width / image_width))
+    num_feasible_rows = max(min(
+        math.floor(scale * image_height / patch_height), max_patches), 1)
+    num_feasible_cols = max(min(
+        math.floor(scale * image_width / patch_width), max_patches), 1)
+    resized_height = max(
+        num_feasible_rows * patch_height, 1)
+    resized_width = max(
+        num_feasible_cols * patch_width, 1)
+    
+    image = torch.nn.functional.interpolate(
+        image.unsqueeze(0),
+        size=(resized_height, resized_width),
+        mode='bilinear',
+        align_corners=False).squeeze(0)
+    
+    # [1, rows, columns, patch_height * patch_width * image_channels]
+    patches = torch_extract_patches(image, patch_height, patch_width, padding="SAME")
+    
+    patches_shape = patches.shape
+    rows = patches_shape[1]
+    columns = patches_shape[2]
+    depth = patches_shape[3]
+    
+    # [rows * columns, patch_height * patch_width * image_channels]
+    patches = patches.reshape([rows * columns, depth])
+    
+    # [rows * columns, 1]
+    row_ids = torch.arange(rows).reshape([rows, 1]).repeat(1, columns).reshape([rows * columns, 1])
+    col_ids = torch.arange(columns).reshape([1, columns]).repeat(rows, 1).reshape([rows * columns, 1])
+    
+    # Offset by 1 so the ids do not contain zeros, which represent padding.
+    row_ids += 1
+    col_ids += 1
+    
+    # Prepare additional patch features.
+    # [rows * columns, 1]
+    row_ids = row_ids.to(torch.float32)
+    col_ids = col_ids.to(torch.float32)
+
+    # [rows * columns, 2 + patch_height * patch_width * image_channels]
+    result = torch.cat([row_ids, col_ids, patches], -1)
+
+    # [max_patches, 2 + patch_height * patch_width * image_channels]
+    result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)])
+
+    return result.float().numpy()

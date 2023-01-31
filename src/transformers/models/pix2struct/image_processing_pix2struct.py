@@ -22,7 +22,7 @@ from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format, extract_flattened_patches
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -54,15 +54,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Wwhether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
@@ -82,11 +73,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        do_resize: bool = True,
+        do_extract_flattened_patches: bool = True,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        patch_size: Dict[str, int] = (16, 16),
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -98,64 +87,26 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"height": 384, "width": 384}
         size = get_size_dict(size, default_to_square=True)
 
-        self.do_resize = do_resize
         self.size = size
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
+        self.patch_size = patch_size
+        self.do_extract_flattened_patches = do_extract_flattened_patches
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else [127, 127, 127] 
+        self.image_std = image_std if image_std is not None else [127, 127, 127]
         self.do_convert_rgb = do_convert_rgb
 
-    def resize(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+    def extract_flattened_patches(
+        self, image: np.ndarray, max_patches: int, **kwargs
     ) -> np.ndarray:
         """
-        Resize an image.
-
-        Resizes the shorter side of the image to `size["shortest_edge"]` while preserving the aspect ratio. If the
-        longer side is larger than the max size `(int(`size["shortest_edge"]` * 1333 / 800))`, the longer side is then
-        resized to the max size while preserving the aspect ratio.
+        Extract flattened patches from an image.
 
         Args:
             image (`np.ndarray`):
-                Image to resize.
-            size (`Dict[str, int]`):
-                Controls the size of the output image. Should be of the form `{"shortest_edge": int}`.
-            resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                Image to extract flattened patches from.
         """
-        size = get_size_dict(size, default_to_square=True)
-        output_size = (size["width"], size["height"])
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return extract_flattened_patches(image, patch_size=self.patch_size, max_patches=max_patches, **kwargs)
 
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ):
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
     def normalize(
         self,
@@ -183,11 +134,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
+        do_extract_flattened_patches: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
+        max_patches: Optional[int] = None,
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -202,8 +151,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image to preprocess.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Controls the size of the image after `resize`. The shortest edge of the image is resized to
                 `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
@@ -211,8 +158,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 edge equal to `int(size["shortest_edge"] * (1333 / 800))`.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
@@ -235,11 +180,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        do_extract_flattened_patches = do_extract_flattened_patches if do_extract_flattened_patches is not None else self.do_extract_flattened_patches
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
@@ -256,12 +198,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
@@ -272,16 +208,16 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
-
-        if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
-
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+        
+        if do_extract_flattened_patches:
+            # convert to torch tensor and permute
+            images = [self.extract_flattened_patches(image=image, max_patches=max_patches) for image in images]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        # images = [to_channel_dimension_format(image, data_format) for image in images]
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
         encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
