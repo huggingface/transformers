@@ -18,9 +18,9 @@ import copy
 import os
 from typing import Union
 
-from ..auto import CONFIG_MAPPING
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -32,15 +32,14 @@ BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Blip2QFormerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Blip2QFormerModel`]. It is used to
-    instantiate a BLIP-2 Querying Transformer (Q-Former) model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`Blip2QFormerModel`]. It is used to instantiate a
+    BLIP-2 Querying Transformer (Q-Former) model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the BLIP-2
-    [...](https://huggingface.co/...) architecture.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    [...](https://huggingface.co/...) architecture. Configuration objects inherit from [`PretrainedConfig`] and can be
+    used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Note that [`Blip2QFormerModel`] is very similar to [`BertLMHeadModel`] with `config.add_cross_attention = True`.
-    
+
     Args:
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
@@ -84,15 +83,15 @@ class Blip2QFormerConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-    
+
     Examples:
-    
+
     ```python
     >>> from transformers import Blip2QFormerConfig, Blip2QFormerModel
-    
+
     >>> # Initializing a BLIP-2 ... style configuration
     >>> configuration = Blip2QFormerConfig()
-    
+
     >>> # Initializing a model (with random weights) from the ... style configuration
     >>> model = Blip2QFormerModel(configuration)
     >>> # Accessing the model configuration
@@ -272,9 +271,9 @@ class Blip2VisionConfig(PretrainedConfig):
 class Blip2Config(PretrainedConfig):
     r"""
     [`Blip2Config`] is the configuration class to store the configuration of a [`Blip2Model`]. It is used to
-    instantiate a BLIP-2 model according to the specified arguments, defining the vision model, Q-Former model
-    and language model configs. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the BLIP-2 [Salesforce/...](https://huggingface.co/Salesforce/...) architecture.
+    instantiate a BLIP-2 model according to the specified arguments, defining the vision model, Q-Former model and
+    language model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
+    of the BLIP-2 [Salesforce/...](https://huggingface.co/Salesforce/...) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -286,7 +285,7 @@ class Blip2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
-        
+
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -324,14 +323,14 @@ class Blip2Config(PretrainedConfig):
         vision_config_dict = kwargs.pop("vision_config_dict", None)
         qformer_config_dict = kwargs.pop("qformer_config_dict", None)
         text_config_dict = kwargs.pop("text_config_dict", None)
-        
+
         if vision_config_dict is not None:
             vision_config = vision_config_dict
         if qformer_config_dict is not None:
             qformer_config = qformer_config_dict
         if text_config_dict is not None:
             text_config = text_config_dict
-        
+
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the Blip2VisionConfig with default values.")
@@ -339,12 +338,11 @@ class Blip2Config(PretrainedConfig):
         if qformer_config is None:
             qformer_config = {}
             logger.info("qformer_config is None. Initializing the Blip2QFormerConfig with default values.")
-        
+
         if text_config is None:
             text_config = {}
             logger.info("text_config is None. Initializing the Blip2TextConfig with default values.")
 
-        
         self.vision_config = Blip2VisionConfig(**vision_config)
         self.qformer_config = Blip2QFormerConfig(**qformer_config)
         self.text_config = CONFIG_MAPPING["opt"](**text_config)

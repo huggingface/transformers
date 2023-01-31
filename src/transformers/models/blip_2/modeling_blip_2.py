@@ -23,7 +23,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
