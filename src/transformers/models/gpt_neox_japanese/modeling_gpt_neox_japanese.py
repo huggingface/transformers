@@ -182,7 +182,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
     def _create_casual_mask(self, key_length, query_length):
         casual_mask = torch.tril(
-            torch.ones((self.max_positions, self.max_positions), dtype=torch.uint8).view(
+            torch.ones((self.max_positions, self.max_positions), dtype=torch.bool).view(
                 1, 1, self.max_positions, self.max_positions
             )
         )

@@ -890,12 +890,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         bucket_idx = _stable_argsort(concat_buckets, dim=-1)
 
         # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
-        assert bucket_idx.shape == (
-            batch_size,
-            self.num_attention_heads,
-            num_hashes,
-            sequence_length,
-        ), (
+        assert bucket_idx.shape == (batch_size, self.num_attention_heads, num_hashes, sequence_length,), (
             f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but"
             f" has shape {bucket_idx.shape}."
         )
@@ -2163,8 +2158,8 @@ class ReformerModel(ReformerPreTrainedModel):
         else:
             attention_mask = torch.cat(
                 [
-                    torch.ones(input_shape, device=device, dtype=torch.uint8),
-                    torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.uint8),
+                    torch.ones(input_shape, device=device, dtype=torch.bool),
+                    torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.bool),
                 ],
                 dim=-1,
             )
