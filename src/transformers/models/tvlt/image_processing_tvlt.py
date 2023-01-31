@@ -110,8 +110,8 @@ class TvltImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         init_mask_generator (`bool`, *optional*, defaults to False):
-            Whether to initialize random generator for creating masked audio_mask_position_permutation, set to true
-            when using from_pretrained.
+            Whether to initialize random generator for creating masked audio_mask_position_permutation, set to `True`
+            when using [`~from_pretrained`].
         seed (`int`, *optional*, defaults to 1):
             The seed of random generator for creating masked pixel_mask_position_permutation
     """
