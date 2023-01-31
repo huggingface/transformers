@@ -293,8 +293,6 @@
         title: I-BERT
       - local: model_doc/jukebox
         title: Jukebox
-      - local: model_doc/layoutlm
-        title: LayoutLM
       - local: model_doc/led
         title: LED
       - local: model_doc/lilt
@@ -375,8 +373,6 @@
         title: T5
       - local: model_doc/t5v1.1
         title: T5v1.1
-      - local: model_doc/tapas
-        title: TAPAS
       - local: model_doc/tapex
         title: TAPEX
       - local: model_doc/transfo-xl
@@ -538,6 +534,8 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/layoutlm
+        title: LayoutLM
       - local: model_doc/layoutlmv2
         title: LayoutLMV2
       - local: model_doc/layoutlmv3
@@ -554,6 +552,8 @@
         title: Perceiver
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
+      - local: model_doc/tapas
+        title: TAPAS
       - local: model_doc/trocr
         title: TrOCR
       - local: model_doc/vilt
