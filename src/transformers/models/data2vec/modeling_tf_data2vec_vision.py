@@ -55,6 +55,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Data2VecVisionConfig"
+_IMAGE_PROCESSOR_FOR_DOC = "BeitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/data2vec-vision-base"
@@ -942,6 +943,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
+        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFData2VecVisionModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -1009,6 +1011,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
+        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
