@@ -419,15 +419,9 @@ def main():
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
-        if data_args.streaming:
-            column_names = raw_datasets["train"].features.keys()
-        else:
-            column_names = raw_datasets["train"].column_names
+        column_names = list(raw_datasets["train"].features)
     else:
-        if data_args.streaming:
-            column_names = raw_datasets["validation"].features.keys()
-        else:
-            column_names = raw_datasets["validation"].column_names
+        column_names = list(raw_datasets["validation"].features)
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
