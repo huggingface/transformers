@@ -877,7 +877,6 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("mctct", "MCTCTForCTC"),
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
-        ("speecht5", "SpeechT5ForCTC"),
         ("unispeech", "UniSpeechForCTC"),
         ("unispeech-sat", "UniSpeechSatForCTC"),
         ("wav2vec2", "Wav2Vec2ForCTC"),

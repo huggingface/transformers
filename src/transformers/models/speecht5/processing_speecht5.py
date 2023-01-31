@@ -123,25 +123,6 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
 
-class SpeechT5ProcessorForCTC(SpeechT5ProcessorForSpeechToText):
-    r"""
-    Constructs a SpeechT5 processor which wraps a waveform feature extractor and a CTC tokenizer into a single
-    processor.
-
-    [`SpeechT5ProcessorForSpeechToText`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and
-    [`SpeechT5CTCTokenizer`]. See the docstring of [`~SpeechT5ProcessorForSpeechToText.__call__`] and
-    [`~SpeechT5ProcessorForSpeechToText.decode`] for more information.
-
-    Args:
-        feature_extractor (`SpeechT5WaveformFeatureExtractor`):
-            An instance of [`SpeechT5WaveformFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`SpeechT5CTCTokenizer`):
-            An instance of [`SpeechT5CTCTokenizer`]. The tokenizer is a required input.
-    """
-    feature_extractor_class = "SpeechT5WaveformFeatureExtractor"
-    tokenizer_class = "SpeechT5CTCTokenizer"
-
-
 class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
     r"""
     Constructs a SpeechT5 processor which wraps a tokenizer and a spectrogram feature extractor into a single

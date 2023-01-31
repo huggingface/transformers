@@ -33,14 +33,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "spm_char.model"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "Matthijs/speecht5_asr": "https://huggingface.co/Matthijs/speecht5_asr/resolve/main/spm_char.model",
-        "Matthijs/speecht5_ctc": "https://huggingface.co/Matthijs/speecht5_ctc/resolve/main/spm_char.model",
         "Matthijs/speecht5_tts": "https://huggingface.co/Matthijs/speecht5_tts/resolve/main/spm_char.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "Matthijs/speecht5_asr": 1024,
-    "Matthijs/speecht5_ctc": 1024,
     "Matthijs/speecht5_tts": 1024,
 }
 
@@ -185,153 +183,3 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-
-class SpeechT5CTCTokenizer(SpeechT5Tokenizer):
-    """
-    Construct a SpeechtT5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
-
-    This tokenizer inherits from [`SpeechT5Tokenizer`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
-
-    Args:
-        word_delimiter_token (`str`, *optional*, defaults to `"▁"`):
-            The token used for defining the end of a word.
-        replace_word_delimiter_char (`str`, *optional*, defaults to `" "`):
-            The character that replaces occurences of the `word_delimiter_token` in the final string.
-        blank_token (`str`, *optional*, defaults to `"<ctc_blank>"`):
-            The CTC blank token.
-        do_lower_case (`bool`, *optional*, defaults to `False`):
-            Whether or not to accept lowercase input and lowercase the output when decoding.
-    """
-
-    def __init__(
-        self,
-        vocab_file,
-        bos_token="<s>",
-        eos_token="</s>",
-        unk_token="<unk>",
-        pad_token="<pad>",
-        word_delimiter_token="▁",
-        replace_word_delimiter_char=" ",
-        blank_token="<ctc_blank>",
-        do_lower_case=False,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> None:
-        super().__init__(
-            vocab_file,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            word_delimiter_token=word_delimiter_token,
-            replace_word_delimiter_char=replace_word_delimiter_char,
-            blank_token=blank_token,
-            do_lower_case=do_lower_case,
-            sp_model_kwargs=sp_model_kwargs,
-            **kwargs,
-        )
-
-        self._word_delimiter_token = word_delimiter_token
-        self.replace_word_delimiter_char = replace_word_delimiter_char
-        self.do_lower_case = do_lower_case
-        self.blank_token = blank_token
-
-    @property
-    def word_delimiter_token(self) -> str:
-        """
-        `str`: Word delimiter token. Log an error if used while not having been set.
-        """
-        if self._word_delimiter_token is None and self.verbose:
-            logger.error("Using word_delimiter_token, but it is not set yet.")
-            return None
-        return str(self._word_delimiter_token)
-
-    @property
-    def word_delimiter_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has not been
-        set.
-        """
-        if self._word_delimiter_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.word_delimiter_token)
-
-    @word_delimiter_token.setter
-    def word_delimiter_token(self, value):
-        self._word_delimiter_token = value
-
-    @word_delimiter_token_id.setter
-    def word_delimiter_token_id(self, value):
-        self._word_delimiter_token = self.convert_tokens_to_ids(value)
-
-    @property
-    def blank_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the CTC blank token in the vocabulary. Returns `None` if the token has not been set.
-        """
-        if self.blank_token is None:
-            return None
-        return self._convert_token_to_id_with_added_voc(self.blank_token)
-
-    def convert_tokens_to_string(
-        self,
-        tokens: List[str],
-        group_tokens: bool = True,
-        spaces_between_special_tokens: bool = False,
-    ) -> Dict[str, Union[str, float]]:
-        """
-        Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
-        """
-        if len(tokens) == 0:
-            return {"text": "", "char_offsets": [], "word_offsets": []}
-
-        # group same tokens into non-repeating tokens in CTC style decoding
-        if group_tokens:
-            chars = [token for token, _ in groupby(tokens)]
-        else:
-            chars = tokens
-
-        # filter the CTC-blank token
-        processed_chars = list(filter(lambda char: char != self.blank_token, chars))
-
-        # replace delimiter token
-        processed_chars = [
-            self.replace_word_delimiter_char if char == self.word_delimiter_token else char for char in processed_chars
-        ]
-
-        # join to string
-        join_char = " " if spaces_between_special_tokens else ""
-        string = join_char.join(processed_chars).strip()
-
-        if self.do_lower_case:
-            string = string.lower()
-
-        return string
-
-    def _decode(
-        self,
-        token_ids: List[int],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
-        group_tokens: bool = True,
-        spaces_between_special_tokens: bool = False,
-    ) -> str:
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-
-        result = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            result.append(token)
-
-        text = self.convert_tokens_to_string(
-            result,
-            group_tokens=group_tokens,
-            spaces_between_special_tokens=spaces_between_special_tokens,
-        )
-
-        if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
-
-        return text

@@ -20,12 +20,9 @@ import torch
 
 from transformers import (
     SpeechT5Config,
-    SpeechT5CTCTokenizer,
-    SpeechT5ForCTC,
     SpeechT5ForSpeechToSpeech,
     SpeechT5ForSpeechToText,
     SpeechT5ForTextToSpeech,
-    SpeechT5ProcessorForCTC,
     SpeechT5ProcessorForSpeechToSpeech,
     SpeechT5ProcessorForSpeechToText,
     SpeechT5ProcessorForTextToSpeech,
@@ -111,11 +108,6 @@ MAPPING_S2T = {
     **MAPPING_TEXT_DECODER_PRENET,
     **MAPPING_TEXT_DECODER_POSTNET,
 }
-MAPPING_CTC = {
-    **MAPPING_SPEECH_ENCODER_PRENET,
-    **MAPPING_ENCODER,
-    "encoder.proj": "lm_head",
-}
 MAPPING_T2S = {
     **MAPPING_TEXT_ENCODER_PRENET,
     **MAPPING_ENCODER,
@@ -145,14 +137,6 @@ IGNORE_KEYS = [
 IGNORE_KEYS_S2T = IGNORE_KEYS + [
     "encoder.proj",
     "text_encoder_prenet.*",
-    "speech_decoder_prenet.*",
-    "speech_decoder_postnet.*",
-]
-IGNORE_KEYS_CTC = IGNORE_KEYS + [
-    "decoder.layers.*",
-    "text_encoder_prenet.*",
-    "text_decoder_prenet.*",
-    "text_decoder_postnet.*",
     "speech_decoder_prenet.*",
     "speech_decoder_postnet.*",
 ]
@@ -226,10 +210,6 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
         feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
         MAPPING = MAPPING_S2T
         IGNORE_KEYS = IGNORE_KEYS_S2T
-    elif task == "ctc":
-        feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
-        MAPPING = MAPPING_CTC
-        IGNORE_KEYS = IGNORE_KEYS_CTC
     elif task == "t2s":
         feature_encoder = None
         MAPPING = MAPPING_T2S
@@ -362,12 +342,6 @@ def convert_speecht5_checkpoint(
         config.max_length = config.max_text_positions
         processor_class = SpeechT5ProcessorForSpeechToText
         model = SpeechT5ForSpeechToText(config)
-    elif task == "ctc":
-        config.max_length = config.max_text_positions
-        config.is_encoder_decoder = False
-        tokenizer_class = SpeechT5CTCTokenizer
-        processor_class = SpeechT5ProcessorForCTC
-        model = SpeechT5ForCTC(config)
     elif task == "t2s":
         config.max_speech_positions = 1876
         config.max_text_positions = 600
@@ -383,14 +357,14 @@ def convert_speecht5_checkpoint(
     if vocab_path:
         tokenizer = tokenizer_class(vocab_path, model_max_length=config.max_text_positions)
 
-        if task in ["pretrain", "ctc"]:
+        if task == "pretrain":
             # Mask token behaves like a normal word, i.e. include the space before it
             mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
             tokenizer.mask_token = mask_token
             tokenizer.add_special_tokens({"mask_token": mask_token})
             tokenizer.add_tokens(["<ctc_blank>"])
 
-    if task in ["s2t", "ctc"]:
+    if task == "s2t":
         feature_extractor = SpeechT5WaveformFeatureExtractor(
             feature_size=1,
             sampling_rate=16000,
@@ -435,7 +409,7 @@ if __name__ == "__main__":
         "--task",
         default="s2t",
         type=str,
-        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 't2s', 's2s'.",
+        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 't2s', 's2s'.",
     )
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--vocab_path", default=None, type=str, help="Path to SentencePiece model")

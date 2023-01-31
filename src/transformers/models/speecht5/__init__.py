@@ -37,7 +37,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_speecht5"] = ["SpeechT5CTCTokenizer", "SpeechT5Tokenizer"]
+    _import_structure["tokenization_speecht5"] = ["SpeechT5Tokenizer"]
 
 try:
     if not is_speech_available():
@@ -57,7 +57,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["processing_speecht5"] = [
-        "SpeechT5ProcessorForCTC",
         "SpeechT5ProcessorForSpeechToSpeech",
         "SpeechT5ProcessorForSpeechToText",
         "SpeechT5ProcessorForTextToSpeech",
@@ -71,7 +70,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_speecht5"] = [
         "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SpeechT5ForCTC",
         "SpeechT5ForSpeechToText",
         "SpeechT5ForSpeechToSpeech",
         "SpeechT5ForTextToSpeech",
@@ -90,7 +88,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_speecht5 import SpeechT5CTCTokenizer, SpeechT5Tokenizer
+        from .tokenization_speecht5 import SpeechT5Tokenizer
 
     try:
         if not is_speech_available():
@@ -107,7 +105,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .processing_speecht5 import (
-            SpeechT5ProcessorForCTC,
             SpeechT5ProcessorForSpeechToSpeech,
             SpeechT5ProcessorForSpeechToText,
             SpeechT5ProcessorForTextToSpeech,
@@ -121,7 +118,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_speecht5 import (
             SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SpeechT5ForCTC,
             SpeechT5ForSpeechToSpeech,
             SpeechT5ForSpeechToText,
             SpeechT5ForTextToSpeech,

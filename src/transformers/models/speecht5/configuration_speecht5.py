@@ -25,7 +25,6 @@ logger = logging.get_logger(__name__)
 
 SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Matthijs/speecht5_asr": "https://huggingface.co/Matthijs/speecht5_asr/resolve/main/config.json",
-    "Matthijs/speecht5_ctc": "https://huggingface.co/Matthijs/speecht5_ctc/resolve/main/config.json",
     "Matthijs/speecht5_tts": "https://huggingface.co/Matthijs/speecht5_tts/resolve/main/config.json",
     "Matthijs/speecht5_vc": "https://huggingface.co/Matthijs/speecht5_vc/resolve/main/config.json",
 }
@@ -77,8 +76,6 @@ class SpeechT5Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for activations inside the fully connected layer.
-        final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the final projection layer of [`SpeechT5ForCTC`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
@@ -170,13 +167,6 @@ class SpeechT5Config(PretrainedConfig):
             Maximum distance for relative position embedding in the encoder.
         decoder_max_relative_position (`int`, *optional*, defaults to 160):
             Maximum distance for relative position embedding in the dencoder.
-        ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
-            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`SpeechT5ForCTC`].
-        ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`SpeechT5ForCTC`].
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -214,7 +204,6 @@ class SpeechT5Config(PretrainedConfig):
         hidden_dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.1,
-        final_dropout=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         scale_embedding=False,
@@ -252,8 +241,6 @@ class SpeechT5Config(PretrainedConfig):
         max_text_positions=450,
         encoder_max_relative_position=160,
         decoder_max_relative_position=160,
-        ctc_loss_reduction="sum",
-        ctc_zero_infinity=False,
         use_cache=True,
         is_encoder_decoder=True,
         **kwargs
@@ -273,7 +260,6 @@ class SpeechT5Config(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.final_dropout = final_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.scale_embedding = scale_embedding
@@ -321,10 +307,6 @@ class SpeechT5Config(PretrainedConfig):
         self.speech_decoder_postnet_kernel = speech_decoder_postnet_kernel
         self.speech_decoder_postnet_dropout = speech_decoder_postnet_dropout
         self.reduction_factor = reduction_factor
-
-        # ctc loss
-        self.ctc_loss_reduction = ctc_loss_reduction
-        self.ctc_zero_infinity = ctc_zero_infinity
 
         self.max_speech_positions = max_speech_positions
         self.max_text_positions = max_text_positions

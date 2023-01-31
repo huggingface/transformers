@@ -141,7 +141,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5EncoderWithoutPrenet",  # Building part of bigger (tested) model.
     "SpeechT5EncoderWithSpeechPrenet",  # Building part of bigger (tested) model.
     "SpeechT5EncoderWithTextPrenet",  # Building part of bigger (tested) model.
-    "SpeechT5EncoderWrapper",  # Building part of bigger (tested) model.
     "SpeechT5SpeechDecoder",  # Building part of bigger (tested) model.
     "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
     "SpeechT5TextDecoder",  # Building part of bigger (tested) model.

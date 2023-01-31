@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import SPIECE_UNDERLINE
-from transformers.models.speecht5 import SpeechT5CTCTokenizer, SpeechT5Tokenizer
+from transformers.models.speecht5 import SpeechT5Tokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 from transformers.tokenization_utils import AddedToken
 
@@ -183,86 +183,5 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             expected_encoding=expected_encoding,
             model_name="Matthijs/speecht5_asr",
             revision="63f2ee29f0d4653c691069ed190536fba977678b",
-            sequences=sequences,
-        )
-
-
-@require_sentencepiece
-@require_tokenizers
-class SpeechT5CTCTokenizerTest(SpeechT5TokenizerTest):
-    tokenizer_class = SpeechT5CTCTokenizer
-
-    def setUp(self):
-        super().setUp()
-
-        # We have a SentencePiece fixture for testing
-        tokenizer = SpeechT5CTCTokenizer(SAMPLE_VOCAB)
-
-        mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
-        tokenizer.mask_token = mask_token
-        tokenizer.add_special_tokens({"mask_token": mask_token})
-        tokenizer.add_tokens(["<ctc_blank>"])
-
-        tokenizer.save_pretrained(self.tmpdirname)
-
-    def test_get_vocab(self):
-        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
-
-        self.assertEqual(vocab_keys[0], "<s>")
-        self.assertEqual(vocab_keys[1], "<pad>")
-        self.assertEqual(vocab_keys[-4], "œ")
-        self.assertEqual(vocab_keys[-2], "<mask>")
-        self.assertEqual(vocab_keys[-1], "<ctc_blank>")
-        self.assertEqual(len(vocab_keys), 81)
-
-    def test_tokenizer_decode(self):
-        tokenizer = self.get_tokenizer()
-
-        sample_ids = [
-            [11, 5, 15, tokenizer.blank_token_id, 15, 8],
-            [4, 25, 22, 5, tokenizer.word_delimiter_token_id, 25, 22, 5],
-        ]
-        tokens = tokenizer.decode(sample_ids[0])
-        batch_tokens = tokenizer.batch_decode(sample_ids)
-        self.assertEqual(tokens, batch_tokens[0])
-        self.assertEqual(batch_tokens, ["hello", "bye bye"])
-
-    def test_tokenizer_decode_special(self):
-        tokenizer = self.get_tokenizer()
-
-        # fmt: off
-        sample_ids = [
-            [11, 5, 15, tokenizer.blank_token_id, 15, 8],
-            [4, 25, 22, 5, tokenizer.word_delimiter_token_id, 25, 22, 5],
-        ]
-        sample_ids_2 = [
-            [11, 5, 5, 5, 5, 5, 15, 15, 15, tokenizer.blank_token_id, 15, 8, 8, 8],
-            [4, 25, 22, 5, tokenizer.blank_token_id, tokenizer.blank_token_id, tokenizer.blank_token_id, tokenizer.word_delimiter_token_id, 25, 22, 5, tokenizer.word_delimiter_token_id],
-        ]
-        # fmt: on
-
-        batch_tokens = tokenizer.batch_decode(sample_ids)
-        batch_tokens_2 = tokenizer.batch_decode(sample_ids_2)
-        self.assertEqual(batch_tokens, batch_tokens_2)
-        self.assertEqual(batch_tokens, ["hello", "bye bye"])
-
-    @slow
-    def test_tokenizer_integration(self):
-        # Use custom sequence because this tokenizer eats up repeating characters
-        # unless separated by a CTC blank character.
-        sequences = [
-            "BERT is designed to pre-train bidirectional representations from unlabeled text by jointly "
-            "conditioning on both left and right context in the layers.",
-            "The quick brown fox jumps over the lazy dog.",
-        ]
-
-        # fmt: off
-        expected_encoding = {'input_ids': [[4, 40, 47, 54, 32, 4, 10, 12, 4, 14, 5, 12, 10, 21, 9, 5, 14, 4, 6, 8, 4, 24, 13, 5, 39, 6, 13, 7, 10, 9, 4, 25, 10, 14, 10, 13, 5, 17, 6, 10, 8, 9, 7, 15, 4, 13, 5, 24, 13, 5, 12, 5, 9, 6, 7, 6, 10, 8, 9, 12, 4, 19, 13, 8, 18, 4, 16, 9, 15, 7, 25, 5, 15, 5, 14, 4, 6, 5, 37, 6, 4, 25, 22, 4, 46, 8, 10, 9, 6, 15, 22, 4, 17, 8, 9, 14, 10, 6, 10, 8, 9, 10, 9, 21, 4, 8, 9, 4, 25, 8, 6, 11, 4, 15, 5, 19, 6, 4, 7, 9, 14, 4, 13, 10, 21, 11, 6, 4, 17, 8, 9, 6, 5, 37, 6, 4, 10, 9, 4, 6, 11, 5, 4, 15, 7, 22, 5, 13, 12, 26], [4, 32, 11, 5, 4, 45, 16, 10, 17, 28, 4, 25, 13, 8, 20, 9, 4, 19, 8, 37, 4, 46, 16, 18, 24, 12, 4, 8, 27, 5, 13, 4, 6, 11, 5, 4, 15, 7, 57, 22, 4, 14, 8, 21, 26, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}
-        # fmt: on
-
-        self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding,
-            model_name="Matthijs/speecht5_ctc",
-            revision="009f21ef7f29ccaebc24bbd9bbfc8ada9259d2ba",
             sequences=sequences,
         )

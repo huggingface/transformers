@@ -637,7 +637,7 @@ else:
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
-    _import_structure["models.speecht5"].extend(["SpeechT5CTCTokenizer", "SpeechT5Tokenizer"])
+    _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
@@ -783,7 +783,6 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
     _import_structure["models.speecht5"].extend(
         [
-            "SpeechT5ProcessorForCTC",
             "SpeechT5ProcessorForSpeechToSpeech",
             "SpeechT5ProcessorForSpeechToText",
             "SpeechT5ProcessorForTextToSpeech",
@@ -2217,7 +2216,6 @@ else:
     _import_structure["models.speecht5"].extend(
         [
             "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SpeechT5ForCTC",
             "SpeechT5ForSpeechToSpeech",
             "SpeechT5ForSpeechToText",
             "SpeechT5ForTextToSpeech",
@@ -4088,7 +4086,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
-        from .models.speecht5 import SpeechT5CTCTokenizer, SpeechT5Tokenizer
+        from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
@@ -4200,7 +4198,6 @@ if TYPE_CHECKING:
     else:
         from .models.speech_to_text import Speech2TextProcessor
         from .models.speecht5 import (
-            SpeechT5ProcessorForCTC,
             SpeechT5ProcessorForSpeechToSpeech,
             SpeechT5ProcessorForSpeechToText,
             SpeechT5ProcessorForTextToSpeech,
@@ -5374,7 +5371,6 @@ if TYPE_CHECKING:
         from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
         from .models.speecht5 import (
             SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SpeechT5ForCTC,
             SpeechT5ForSpeechToSpeech,
             SpeechT5ForSpeechToText,
             SpeechT5ForTextToSpeech,

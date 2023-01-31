@@ -5528,13 +5528,6 @@ class Speech2Text2PreTrainedModel(metaclass=DummyObject):
 SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SpeechT5ForCTC(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SpeechT5ForSpeechToSpeech(metaclass=DummyObject):
     _backends = ["torch"]
 
