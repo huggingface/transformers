@@ -71,8 +71,6 @@ class OwlViTTextConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -105,7 +103,6 @@ class OwlViTTextConfig(PretrainedConfig):
         max_position_embeddings=16,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
-        dropout=0.0,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
@@ -124,7 +121,6 @@ class OwlViTTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
-        self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
@@ -177,8 +173,6 @@ class OwlViTVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -215,7 +209,6 @@ class OwlViTVisionConfig(PretrainedConfig):
         patch_size=32,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
-        dropout=0.0,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
@@ -232,7 +225,6 @@ class OwlViTVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
-        self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
