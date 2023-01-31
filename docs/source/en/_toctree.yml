@@ -295,8 +295,6 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
-      - local: model_doc/lilt
-        title: LiLT
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -542,6 +540,8 @@
         title: LayoutLMV3
       - local: model_doc/layoutxlm
         title: LayoutXLM
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/oneformer
