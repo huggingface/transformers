@@ -1788,7 +1788,6 @@ class Trainer:
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
             if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
-                print("Fast skip batches")
                 epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
                 steps_trained_in_current_epoch = 0
 
