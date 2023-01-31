@@ -27,6 +27,9 @@ import torch.utils.checkpoint as checkpoint
 from torch import nn
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
+from torchlibrosa.stft import Spectrogram, LogmelFilterBank
+from torchlibrosa.augmentation import SpecAugmentation
+
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1744,7 +1747,9 @@ class CLAPModel(CLAPPreTrainedModel):
     @add_start_docstrings_to_model_forward(CLAP_VISION_INPUTS_DOCSTRING)
     def get_audio_features(
         self,
-        input_values: Optional[torch.Tensor] = None,
+        mel_fusion: Optional[torch.Tensor] = None,
+        longer: Optional[torch.Tensor] = None,
+        waveform: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1752,7 +1757,28 @@ class CLAPModel(CLAPPreTrainedModel):
     ) -> torch.FloatTensor:
         r"""
         """
-        pass
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        audio_outputs = self.audio_model(
+            mel_fusion=mel_fusion,
+            longer=longer,
+            waveform=waveform,
+            # attention_mask=attention_mask,
+            # output_attentions=output_attentions,
+            # output_hidden_states=output_hidden_states,
+            # return_dict=return_dict,
+        )
+
+        pooled_output = audio_outputs[1]
+
+        audio_features = self.audio_projection(pooled_output)
+        audio_features = F.normalize(audio_features, dim=-1)
+
+        return audio_features
 
     @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLAPOutput, config_class=CLAPConfig)
@@ -2091,6 +2117,35 @@ class CLAPSwinTransformer(nn.Module):
         )
         self.head = nn.Linear(self.num_classes, self.num_classes)
 
+        self.spectrogram_extractor = Spectrogram(
+            n_fft=config.spectrogram_window_size, 
+            hop_length=config.hop_size, 
+            win_length=config.spectrogram_window_size, 
+            window=config.spectrogram_window, 
+            center=config.spectrogram_center, 
+            pad_mode=config.spectrogram_pad_mode, 
+            freeze_parameters=config.spectrogram_freeze_parameters
+        )
+        # Logmel feature extractor
+        self.logmel_extractor = LogmelFilterBank(
+            sr=config.sample_rate, 
+            n_fft=config.spectrogram_window_size, 
+            n_mels=config.mel_bins, 
+            fmin=config.fmin, 
+            fmax=config.fmax, 
+            ref=config.spectrogram_ref, 
+            amin=config.spectrogram_amin, 
+            top_db=config.spectrogram_top_db, 
+            freeze_parameters=config.spectrogram_freeze_parameters,
+        )
+        # Spec augmenter
+        self.spec_augmenter = SpecAugmentation(
+            time_drop_width=config.spectrogram_time_drop_width, 
+            time_stripes_num=config.spectrogram_time_stripes_num, 
+            freq_drop_width=config.spectrogram_freq_drop_width, 
+            freq_stripes_num=config.spectrogram_freq_stripes_num,
+        ) 
+
     def _init_weights(self, m):
         pass
         # if isinstance(m, nn.Linear):
@@ -2100,14 +2155,6 @@ class CLAPSwinTransformer(nn.Module):
         # elif isinstance(m, nn.LayerNorm):
         #     nn.init.constant_(m.bias, 0)
         #     nn.init.constant_(m.weight, 1.0)
-
-    @torch.jit.ignore
-    def no_weight_decay(self):
-        return {"absolute_pos_embed"}
-
-    @torch.jit.ignore
-    def no_weight_decay_keywords(self):
-        return {"relative_position_bias_table"}
 
     def forward_features(self, x, longer_idx=None):
         # A deprecated optimization for using a hierarchical output from different blocks
@@ -2187,32 +2234,21 @@ class CLAPSwinTransformer(nn.Module):
         x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3], x.shape[4])
         return x
 
-    # Repeat the wavform to a img size, if you want to use the pretrained swin transformer model
-    def repeat_wat2img(self, x, cur_pos):
-        B, C, T, F = x.shape
-        target_T = int(self.spec_size * self.freq_ratio)
-        target_F = self.spec_size // self.freq_ratio
-        assert T <= target_T and F <= target_F, "the wav size should less than or equal to the swin input size"
-        # to avoid bicubic zero error
-        if T < target_T:
-            x = nn.functional.interpolate(x, (target_T, x.shape[3]), mode="bicubic", align_corners=True)
-        if F < target_F:
-            x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)
-        x = x.permute(0, 1, 3, 2).contiguous()  # B C F T
-        x = x[:, :, :, cur_pos : cur_pos + self.spec_size]
-        x = x.repeat(repeats=(1, 1, 4, 1))
-        return x
-
     def forward(
-        self, x: torch.Tensor, mixup_lambda=None, infer_mode=False, device=None
+        self, 
+        mel_fusion=None,
+        longer=None,
+        waveform=None,
+        mixup_lambda=None, 
+        device=None
     ):  # out_feat_keys: List[str] = None):
 
-        if self.enable_fusion and x["longer"].sum() == 0:
+        if self.enable_fusion and longer.sum() == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
-            x["longer"][torch.randint(0, x["longer"].shape[0], (1,))] = True
+            longer[torch.randint(0, longer.shape[0], (1,))] = True
 
         if not self.enable_fusion:
-            x = x["waveform"].to(device=device, non_blocking=True)
+            x = waveform.to(device=device, non_blocking=True)
             x = self.spectrogram_extractor(x)  # (batch_size, 1, time_steps, freq_bins)
             x = self.logmel_extractor(x)  # (batch_size, 1, time_steps, mel_bins)
             x = x.transpose(1, 3)
@@ -2227,39 +2263,13 @@ class CLAPSwinTransformer(nn.Module):
             x = self.reshape_wav2img(x)
             output_dict = self.forward_features(x)
         else:
-            longer_list = x["longer"].to(device=device, non_blocking=True)
-            x = x["mel_fusion"].to(device=device, non_blocking=True)
+            longer_list = longer.to(device=device, non_blocking=True)
+            x = mel_fusion.to(device=device, non_blocking=True)
             x = x.transpose(1, 3)
             x = self.bn0(x)
             x = x.transpose(1, 3)
             longer_list_idx = torch.where(longer_list)[0]
-            if self.fusion_type in ["daf_1d", "aff_1d", "iaff_1d"]:
-                new_x = x[:, 0:1, :, :].clone().contiguous()
-                if len(longer_list_idx) > 0:
-                    # local processing
-                    fusion_x_local = x[longer_list_idx, 1:, :, :].clone().contiguous()
-                    FB, FC, FT, FF = fusion_x_local.size()
-                    fusion_x_local = fusion_x_local.view(FB * FC, FT, FF)
-                    fusion_x_local = torch.permute(fusion_x_local, (0, 2, 1)).contiguous()
-                    fusion_x_local = self.mel_conv1d(fusion_x_local)
-                    fusion_x_local = fusion_x_local.view(FB, FC, FF, fusion_x_local.size(-1))
-                    fusion_x_local = torch.permute(fusion_x_local, (0, 2, 1, 3)).contiguous().flatten(2)
-                    if fusion_x_local.size(-1) < FT:
-                        fusion_x_local = torch.cat(
-                            [fusion_x_local, torch.zeros((FB, FF, FT - fusion_x_local.size(-1)), device=device)],
-                            dim=-1,
-                        )
-                    else:
-                        fusion_x_local = fusion_x_local[:, :, :FT]
-                    # 1D fusion
-                    new_x = new_x.squeeze(1).permute((0, 2, 1)).contiguous()
-                    new_x[longer_list_idx] = self.fusion_model(new_x[longer_list_idx], fusion_x_local)
-                    x = new_x.permute((0, 2, 1)).contiguous()[:, None, :, :]
-                else:
-                    x = new_x
 
-            elif self.enable_fusion:
-                x = x  # no change
 
             if self.training:
                 x = self.spec_augmenter(x)

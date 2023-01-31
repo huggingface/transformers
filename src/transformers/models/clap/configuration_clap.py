@@ -253,6 +253,18 @@ class CLAPAudioConfig(PretrainedConfig):
         swin_hidden_act="gelu",
         aff_block_r=4,
         enable_patch_fusion=False,
+        spectrogram_window_size=1024,
+        spectrogram_window='hann',
+        spectrogram_center=True,
+        spectrogram_pad_mode='reflect',
+        spectrogram_freeze_parameters=True,
+        spectrogram_ref=1.0,
+        spectrogram_amin=1e-10,
+        spectrogram_top_db=None,
+        spectrogram_time_drop_width=64, 
+        spectrogram_time_stripes_num=2, 
+        spectrogram_freq_drop_width=8, 
+        spectrogram_freq_stripes_num=2,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -294,6 +306,18 @@ class CLAPAudioConfig(PretrainedConfig):
         self.swin_hidden_act = swin_hidden_act
         self.aff_block_r = aff_block_r
         self.enable_patch_fusion = enable_patch_fusion
+        self.spectrogram_window_size = spectrogram_window_size
+        self.spectrogram_window = spectrogram_window
+        self.spectrogram_center = spectrogram_center
+        self.spectrogram_pad_mode = spectrogram_pad_mode
+        self.spectrogram_freeze_parameters = spectrogram_freeze_parameters
+        self.spectrogram_ref = spectrogram_ref
+        self.spectrogram_amin = spectrogram_amin
+        self.spectrogram_top_db = spectrogram_top_db
+        self.spectrogram_time_drop_width = spectrogram_time_drop_width
+        self.spectrogram_time_stripes_num = spectrogram_time_stripes_num
+        self.spectrogram_freq_drop_width = spectrogram_freq_drop_width
+        self.spectrogram_freq_stripes_num = spectrogram_freq_stripes_num
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
